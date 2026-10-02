@@ -1,0 +1,47 @@
+.section {
+  padding: 28px 0;
+}
+
+.carouselContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.carousel {
+  display: flex;
+  gap: 24px;
+  width: 100%;
+}
+
+.navButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--color-white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #12303A;
+  z-index: 10;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.navButton:hover {
+  background-color: var(--color-bg-light);
+  color: var(--color-primary);
+}
+
+.leftNav {
+  left: -20px;
+}
+
+.rightNav {
+  right: -20px;
+}

@@ -1,0 +1,126 @@
+.footer {
+  background-color: var(--color-bg-light);
+  padding: 64px 0 24px;
+  border-top: 1px solid var(--color-border);
+  margin-top: 40px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 48px;
+}
+
+.brandSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.logoGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.logoIcon {
+  background-color: var(--color-bg-mint);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoText h2 {
+  font-size: 18px;
+  color: var(--color-primary);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.logoText p {
+  font-size: 11px;
+  color: var(--color-body);
+  line-height: 1.2;
+}
+
+.description {
+  font-size: 14px;
+  color: var(--color-body);
+  line-height: 1.6;
+  margin-bottom: 24px;
+  max-width: 320px;
+}
+
+.socialLinks {
+  display: flex;
+  gap: 16px;
+}
+
+.socialLinks a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--color-white);
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+  transition: all 0.2s ease;
+}
+
+.socialLinks a:hover {
+  background-color: var(--color-primary);
+  color: var(--color-white);
+  transform: translateY(-2px);
+}
+
+.linkSection h3 {
+  font-size: 16px;
+  color: var(--color-heading);
+  margin-bottom: 20px;
+  font-weight: 600;
+}
+
+.linkSection ul {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linkSection a {
+  font-size: 14px;
+  color: var(--color-body);
+  transition: color 0.2s ease;
+}
+
+.linkSection a:hover {
+  color: var(--color-primary);
+}
+
+.bottomBar {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+  text-align: center;
+}
+
+.bottomBar p {
+  font-size: 13px;
+  color: var(--color-body);
+}
+
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

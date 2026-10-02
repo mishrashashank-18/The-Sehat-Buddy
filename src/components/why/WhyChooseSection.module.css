@@ -1,0 +1,126 @@
+.section {
+  padding: 28px 0;
+}
+
+.wrapper {
+  background: linear-gradient(90deg, #EAF6F3, #F4FAF9);
+  border-radius: 20px;
+  height: 340px;
+  border: 1px solid #E3F0ED;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.leftContent {
+  flex: 0 0 38%;
+  position: relative;
+  background: linear-gradient(135deg, #BFE8E0, #A5DDD3);
+  border-top-right-radius: 120px;
+  border-bottom-right-radius: 60px;
+}
+
+.imageContainer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.image {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  object-position: bottom left;
+  z-index: 2;
+  mix-blend-mode: darken;
+}
+
+.playButtonWrapper {
+  position: absolute;
+  left: 60%;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.playButton {
+  width: 40px;
+  height: 40px;
+  background-color: var(--color-white);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.playButton:hover {
+  transform: scale(1.05);
+}
+
+.playText {
+  font-size: 12px;
+  font-weight: 500;
+  color: #12303A;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.rightContent {
+  flex: 1;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 600;
+  color: #12303A;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.featuresGrid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.divider {
+  width: 1px;
+  height: 80px;
+  background-color: #CFE5E0;
+  margin: 0 16px;
+}
+
+@media (max-width: 1024px) {
+  .wrapper {
+    flex-direction: column;
+    height: auto;
+  }
+  .leftContent {
+    flex: 1;
+    border-radius: 0;
+    min-height: 340px;
+  }
+  .featuresGrid {
+    flex-wrap: wrap;
+    gap: 24px;
+    justify-content: center;
+  }
+  .divider {
+    display: none;
+  }
+}

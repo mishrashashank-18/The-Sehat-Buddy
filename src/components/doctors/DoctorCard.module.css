@@ -1,0 +1,103 @@
+.card {
+  flex: 1;
+  background-color: var(--color-white);
+  border: 1px solid #E6EEF0;
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  gap: 14px;
+  height: 205px;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+}
+
+.imageWrapper {
+  width: 100px;
+  height: 140px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background-color: #EEF1F3;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #12303A;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.specialty {
+  font-size: 13px;
+  color: #5B6B73;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.experience {
+  font-size: 12px;
+  color: #5B6B73;
+  margin-top: 4px;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 0;
+  white-space: nowrap;
+}
+
+.score {
+  font-size: 12px;
+  font-weight: 600;
+  color: #12303A;
+}
+
+.reviews {
+  font-size: 11px;
+  color: #5B6B73;
+}
+
+.price {
+  font-size: 15px;
+  font-weight: 600;
+  color: #12303A;
+  margin-top: 8px;
+}
+
+.bookLink {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0E7C6B;
+  margin-top: auto;
+  white-space: nowrap;
+}
+
+.bookLink:hover {
+  opacity: 0.8;
+}

@@ -1,0 +1,58 @@
+:root {
+  /* Colors */
+  --color-primary: #0E7C6B;
+  --color-primary-dark: #095a4d;
+  --color-newsletter-bg: #0B6E5F;
+  --color-heading: #12303A;
+  --color-body: #5B6B73;
+  --color-bg-light: #F1FAF8;
+  --color-bg-mint: #EAF6F3;
+  --color-white: #FFFFFF;
+  --color-border: #E6EEF0;
+  
+  /* Services Icon Backgrounds */
+  --color-service-find: #EAF6F3;
+  --color-service-hospital: #EDF3FE;
+  --color-service-lab: #F4EFFD;
+  --color-service-surgery: #FDEDEE;
+  --color-service-senior: #FEF0EA;
+  --color-service-women: #FDEEF5;
+  --color-service-kid: #EAF8F1;
+
+  /* Services Icon Colors */
+  --color-icon-find: #0E7C6B;
+  --color-icon-hospital: #4680FF;
+  --color-icon-lab: #9747FF;
+  --color-icon-surgery: #F24E1E;
+  --color-icon-senior: #FF8A00;
+  --color-icon-women: #E03E8A;
+  --color-icon-kid: #0FA958;
+
+  /* Tag Colors */
+  --color-tag-red: #FDEEEF;
+  --color-tag-red-text: #F04455;
+  --color-tag-blue: #EEF3FD;
+  --color-tag-blue-text: #4680FF;
+  --color-tag-green: #EBF8F2;
+  --color-tag-green-text: #0FA958;
+  --color-tag-pink: #FDEEF5;
+  --color-tag-pink-text: #E03E8A;
+
+  /* Layout */
+  --max-width: 1280px;
+  --padding-x: 24px;
+  
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-card: 0 4px 20px rgba(14, 124, 107, 0.08);
+  --shadow-hover: 0 10px 30px rgba(14, 124, 107, 0.15);
+  --shadow-search: 0 16px 40px rgba(14, 124, 107, 0.12);
+
+  /* Typography */
+  --font-family: 'Poppins', sans-serif;
+}

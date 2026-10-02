@@ -1,0 +1,114 @@
+.navbar {
+  background-color: var(--color-white);
+  border-bottom: 1px solid var(--color-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 80px;
+}
+
+.logoGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.logoIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logoText h1 {
+  font-size: 20px;
+  color: var(--color-primary);
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.logoText p {
+  font-size: 11px;
+  color: var(--color-body);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.navLinks {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.navLinks a {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-body);
+  transition: color 0.2s ease;
+  padding: 8px 0;
+  white-space: nowrap;
+}
+
+.navLinks a:hover {
+  color: var(--color-primary);
+}
+
+.navLinks a.active {
+  color: var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+}
+
+.withDropdown {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.locationPill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  color: var(--color-body);
+  cursor: pointer;
+  background-color: var(--color-white);
+  white-space: nowrap;
+}
+
+.locationIcon {
+  color: var(--color-body);
+}
+
+.chevron {
+  color: var(--color-body);
+}
+
+@media (max-width: 1200px) {
+  .navLinks {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .navLinks {
+    display: none;
+  }
+}
