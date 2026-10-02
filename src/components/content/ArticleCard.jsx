@@ -5,7 +5,14 @@ const ArticleCard = ({ article }) => {
   return (
     <div className={styles.card}>
       <div className={styles.imageWrapper}>
-        <img src={article.image} alt={article.title} className={styles.image} />
+        <img
+          src={article.image}
+          alt={article.title}
+          className={styles.image}
+          onError={(e) => {
+            e.target.src = 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80';
+          }}
+        />
       </div>
       <div className={styles.content}>
         <div 

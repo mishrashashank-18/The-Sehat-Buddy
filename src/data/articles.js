@@ -41,3 +41,5 @@ export const articles = [
     image: art4
   }
 ];
+
+export const initialArticles = articles;

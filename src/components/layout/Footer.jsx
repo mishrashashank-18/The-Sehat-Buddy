@@ -3,6 +3,8 @@ import { HeartPulse } from 'lucide-react';
 import Container from './Container';
 import styles from './Footer.module.css';
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 const Footer = () => {
   return (
     <footer className={styles.footer}>
@@ -50,9 +52,9 @@ const Footer = () => {
           <div className={styles.linkSection}>
             <h3>For Providers</h3>
             <ul>
-              <li><a href="#">Join as a Doctor</a></li>
-              <li><a href="#">Partner Clinics</a></li>
-              <li><a href="#">Hospital Networking</a></li>
+              <li><a href="/doctor" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/doctor'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Doctor Portal</a></li>
+              <li><a href="/hospital" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/hospital'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Hospital Dashboard</a></li>
+              <li><a href="/admin" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/admin'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Admin Console</a></li>
               <li><a href="#">Provider Support</a></li>
             </ul>
           </div>
@@ -69,7 +71,7 @@ const Footer = () => {
         </div>
         
         <div className={styles.bottomBar}>
-          <p>&copy; {new Date().getFullYear()} The Sehat Buddy. All rights reserved.</p>
+          <p>&copy; {CURRENT_YEAR} The Sehat Buddy. All rights reserved.</p>
         </div>
       </Container>
     </footer>

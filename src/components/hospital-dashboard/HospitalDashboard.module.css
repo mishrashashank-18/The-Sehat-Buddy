@@ -1,0 +1,1119 @@
+.dashboardContainer {
+  min-height: 100vh;
+  background-color: #f7faf9;
+  font-family: var(--font-family, 'Poppins', sans-serif);
+  color: var(--color-heading);
+  display: flex;
+  flex-direction: column;
+}
+
+.toast {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  background: #0E7C6B;
+  color: #ffffff;
+  padding: 12px 18px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(14, 124, 107, 0.3);
+  z-index: 10001;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(50px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* Topbar */
+.topbar {
+  background: #ffffff;
+  border-bottom: 1px solid var(--color-border);
+  padding: 12px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.brandGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logoIcon {
+  width: 40px;
+  height: 40px;
+  background: #eff6ff;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.brandTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.portalBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+}
+
+.brandSub {
+  font-size: 0.78rem;
+  color: var(--color-body);
+  margin: 1px 0 0 0;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.hospitalSwitcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.switcherLabel {
+  font-size: 0.8rem;
+  color: var(--color-body);
+  font-weight: 500;
+}
+
+.selectWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.facilitySelect {
+  padding: 8px 30px 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  appearance: none;
+  cursor: pointer;
+}
+
+.selectIcon {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: #64748b;
+}
+
+.quickNavBtns {
+  display: flex;
+  gap: 8px;
+}
+
+.navLinkBtn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.navLinkBtn:hover {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+/* Main Container */
+.mainWrapper {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Facility Overview Banner */
+.facilityBanner {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 18px;
+  padding: 24px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.facilityInfo {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+  min-width: 300px;
+}
+
+.facilityImage {
+  width: 100px;
+  height: 80px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid #e2e8f0;
+}
+
+.facilityMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.titleRow h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--color-heading);
+}
+
+.ratingBadge {
+  background: #fefce8;
+  color: #b45309;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.facilityAddress {
+  font-size: 0.82rem;
+  color: var(--color-body);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tagGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.cityPill {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.emergencyPill {
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.phonePill {
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Occupancy Gauge Card */
+.occupancyGaugeCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 20px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gaugeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gaugeLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.gaugePercent {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.progressBar {
+  width: 100%;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.gaugeDetails {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* KPI Cards */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.kpiCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.kpiIconWrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kpiBlue { background: #eff6ff; color: #2563eb; }
+.kpiRed { background: #fef2f2; color: #dc2626; }
+.kpiGreen { background: #e6f6f3; color: var(--color-primary); }
+.kpiYellow { background: #fefce8; color: #ca8a04; }
+
+.kpiLabel {
+  font-size: 0.78rem;
+  color: var(--color-body);
+  font-weight: 500;
+}
+
+.kpiValue {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.kpiSub {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+/* Tabs Bar */
+.tabsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid #eef3f4;
+  padding-bottom: 12px;
+}
+
+.tabsList {
+  display: flex;
+  gap: 12px;
+}
+
+.tabBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tabBtn:hover {
+  background: #edf5f4;
+  color: var(--color-primary);
+}
+
+.tabBtnActive {
+  background: var(--color-bg-mint) !important;
+  color: var(--color-primary) !important;
+}
+
+.addPrimaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: 9px;
+  border: none;
+  background: var(--color-primary);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(14, 124, 107, 0.2);
+}
+
+.addPrimaryBtn:hover {
+  background: var(--color-primary-dark);
+}
+
+/* Content Area */
+.tabContentArea {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Wards Grid */
+.wardsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.wardCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.wardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.wardHeader h4 {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.wardHeadDoctor {
+  font-size: 0.75rem;
+  color: #64748b;
+  display: block;
+  margin-top: 2px;
+}
+
+.wardNormalBadge {
+  background: #f0fdf4;
+  color: #16a34a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.wardAlertBadge {
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.wardNumbersRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.occupiedCount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.totalCount {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.wardPercent {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.wardProgressBar {
+  width: 100%;
+  height: 6px;
+  background: #f1f5f9;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.wardProgressFill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 999px;
+  transition: width 0.3s;
+}
+
+.fillRed {
+  background: #dc2626 !important;
+}
+
+.wardCardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.vacantCount {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.wardActions {
+  display: flex;
+  gap: 6px;
+}
+
+.dischargeBtn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dischargeBtn:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.quickAdmitBtn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-bg-mint);
+  color: var(--color-primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quickAdmitBtn:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+/* Doctors Roster Table */
+.doctorsTableCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.tableHeaderRow {
+  padding: 18px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tableHeaderRow h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.tableCountBadge {
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.rosterTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.rosterTable th {
+  background: #f8fafc;
+  padding: 12px 20px;
+  font-size: 0.78rem;
+  color: #64748b;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.rosterTable td {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  font-size: 0.85rem;
+}
+
+.docCell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.docAvatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.docName {
+  display: block;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.docContact {
+  display: block;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.specialtyTag {
+  background: var(--color-bg-mint);
+  color: var(--color-primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.onDutyBadge {
+  background: #dcfce7;
+  color: #15803d;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.pageDoctorBtn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pageDoctorBtn:hover {
+  background: #f1f5f9;
+}
+
+/* Emergency & Ambulance Split */
+.emergencySplit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.erCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.boxHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.boxHeader h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.boxHeader p {
+  margin: 2px 0 0 0;
+  font-size: 0.8rem;
+  color: var(--color-body);
+}
+
+.erLiveBadge {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.fleetBadge {
+  background: #ecfdf5;
+  color: #059669;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.erList, .ambulanceList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.erItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background: #fafcfc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+}
+
+.triageIndicatorWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 80px;
+}
+
+.triageDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.triageRed { background: #ef4444; }
+.triageYellow { background: #f59e0b; }
+.triageGreen { background: #10b981; }
+
+.triageLabel {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #475569;
+  text-align: center;
+}
+
+.erDetails {
+  flex: 1;
+}
+
+.erPatientName {
+  font-size: 0.92rem;
+  color: var(--color-heading);
+}
+
+.erCondition {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 2px 0;
+}
+
+.erDoctor {
+  font-size: 0.72rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.erMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.erTime {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.erActionBtn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Ambulance Items */
+.ambItem {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  background: #fafcfc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+}
+
+.ambIconWrap {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #e6f6f3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ambInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ambInfo strong {
+  font-size: 0.88rem;
+}
+
+.ambDriver {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.ambLocation {
+  font-size: 0.74rem;
+  color: #0E7C6B;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.ambActionCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.ambStatusPill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.ambAvailable {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.ambDispatched {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.dispatchBtn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dispatchBtn:hover {
+  background: #1d4ed8;
+}
+
+.locateBtn {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Facility Settings */
+.settingsCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.settingsCard h3 {
+  margin: 0 0 4px 0;
+  font-size: 1.15rem;
+}
+
+.settingsCard p {
+  margin: 0 0 20px 0;
+  font-size: 0.85rem;
+  color: var(--color-body);
+}
+
+.settingsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formGroup label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.formGroup input,
+.formGroup select {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #d9e2e6;
+  font-size: 0.88rem;
+  font-family: inherit;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.settingsSaveRow {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.saveBtn {
+  padding: 10px 24px;
+  border-radius: 8px;
+  border: none;
+  background: var(--color-primary);
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.saveBtn:hover {
+  background: var(--color-primary-dark);
+}
+
+/* Modal */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 48, 58, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 16px;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modalHeader h3 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-body);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.modalForm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 1024px) {
+  .wardsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .emergencySplit {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 10px 16px;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .headerRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+  .wardsGrid {
+    grid-template-columns: 1fr;
+  }
+  .facilityBanner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .occupancyGaugeCard {
+    width: 100%;
+  }
+}

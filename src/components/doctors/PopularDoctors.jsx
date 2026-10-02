@@ -3,10 +3,11 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Container from '../layout/Container';
 import SectionHeader from '../common/SectionHeader';
 import DoctorCard from './DoctorCard';
-import { doctors } from '../../data/doctors';
+import { useData } from '../../context/useData';
 import styles from './PopularDoctors.module.css';
 
 const PopularDoctors = () => {
+  const { doctors } = useData();
   const scrollRef = useRef(null);
 
   const scroll = (direction) => {
@@ -18,9 +19,9 @@ const PopularDoctors = () => {
   };
 
   return (
-    <section className={styles.section}>
+    <section id="doctors-section" className={styles.section}>
       <Container>
-        <SectionHeader title="Popular Doctors" linkText="View All Doctors" />
+        <SectionHeader title="Popular Doctors" linkText={`View All Doctors (${doctors.length})`} />
         
         <div className={styles.carouselContainer}>
           <button className={`${styles.navButton} ${styles.leftNav}`} onClick={() => scroll('left')}>

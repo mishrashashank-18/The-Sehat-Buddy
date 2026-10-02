@@ -56,3 +56,5 @@ export const services = [
     iconTint: '#D6EFE5'
   }
 ];
+
+export const initialServices = services;

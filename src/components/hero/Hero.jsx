@@ -1,34 +1,43 @@
 import React from 'react';
 import Container from '../layout/Container';
 import HeroStats from './HeroStats';
+import { useData } from '../../context/useData';
 import styles from './Hero.module.css';
-import heroFamily from '../../assets/images/hero-family.jpg';
 
 const Hero = () => {
+  const { heroContent } = useData();
+
   return (
     <section className={styles.heroSection}>
       <Container className={styles.container}>
         <div className={styles.contentWrapper}>
           <div className={styles.textContent}>
             <div className={styles.badge}>
-              Your Health Partner, Every Step of the Way
+              {heroContent?.badge || 'Your Health Partner, Every Step of the Way'}
             </div>
             
             <h1 className={styles.title}>
-              Find Doctors, Book<br />
-              Appointments & Take<br />
-              Care of <span className={styles.highlight}>Your Health</span>
+              {heroContent?.titleLine1 || 'Find Doctors, Book'}<br />
+              {heroContent?.titleLine2 || 'Appointments & Take'}<br />
+              Care of <span className={styles.highlight}>{heroContent?.titleHighlight || 'Your Health'}</span>
             </h1>
             
             <p className={styles.description}>
-              The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.
+              {heroContent?.description || 'The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.'}
             </p>
             
             <HeroStats />
           </div>
           
           <div className={styles.imageContent}>
-            <img src={heroFamily} alt="Happy Indian family" className={styles.heroImg} />
+            <img
+              src={heroContent?.heroImage}
+              alt="Happy Indian family"
+              className={styles.heroImg}
+              onError={(e) => {
+                e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
+              }}
+            />
           </div>
         </div>
       </Container>

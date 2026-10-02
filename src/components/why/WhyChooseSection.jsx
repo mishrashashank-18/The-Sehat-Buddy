@@ -1,12 +1,14 @@
 import React from 'react';
 import Container from '../layout/Container';
 import FeatureItem from './FeatureItem';
-import { features } from '../../data/features';
+import { useData } from '../../context/useData';
 import { Play } from 'lucide-react';
 import styles from './WhyChooseSection.module.css';
 import whyDoctor from '../../assets/images/why-doctor.png';
 
 const WhyChooseSection = () => {
+  const { features, heroContent } = useData();
+
   return (
     <section className={styles.section}>
       <Container>
@@ -24,9 +26,9 @@ const WhyChooseSection = () => {
           </div>
           
           <div className={styles.rightContent}>
-            <h2 className={styles.title}>Why Choose The Sehat Buddy?</h2>
+            <h2 className={styles.title}>{heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?'}</h2>
             <div className={styles.featuresGrid}>
-              {features.map((feature, index) => (
+              {features?.map((feature, index) => (
                 <React.Fragment key={feature.id}>
                   <FeatureItem feature={feature} />
                   {index < features.length - 1 && <div className={styles.divider}></div>}
