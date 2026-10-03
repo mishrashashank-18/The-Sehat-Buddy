@@ -1,0 +1,152 @@
+{
+  "hero": {
+    "badge": "Your Health Partner, Every Step of the Way",
+    "titleLine1": "Find Doctors, Book",
+    "titleLine2": "Appointments & Take",
+    "titleHighlight": "Care of Your Health",
+    "description": "The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.",
+    "heroImage": "/src/assets/images/hero-family.jpg",
+    "stats": [
+      {
+        "id": 1,
+        "label": "Trusted by",
+        "value": "10M+ Users"
+      },
+      {
+        "id": 2,
+        "label": "Expert Doctors",
+        "value": "2,500+"
+      },
+      {
+        "id": 3,
+        "label": "Quick",
+        "value": "Appointments"
+      }
+    ],
+    "whyChooseTitle": "Why Choose The Sehat Buddy?",
+    "newsletterTitle": "Stay updated with\nhealth tips & offers",
+    "newsletterSubtitle": "Subscribe to our newsletter"
+  },
+  "services": [
+    {
+      "id": 1,
+      "title": "Find Doctors",
+      "subtitle": "Consult expert\ndoctors",
+      "iconPath": "/src/assets/images/icons/stethoscope.png",
+      "bgTint": "#EAF6F3",
+      "iconTint": "#D9F0EA"
+    },
+    {
+      "id": 2,
+      "title": "Hospitals",
+      "subtitle": "Find best hospitals\nnear you",
+      "iconPath": "/src/assets/images/icons/hospital.png",
+      "bgTint": "#EEF3FD",
+      "iconTint": "#DCE7FB"
+    },
+    {
+      "id": 3,
+      "title": "Lab Tests",
+      "subtitle": "Book lab tests &\nhealth packages",
+      "iconPath": "/src/assets/images/icons/flask.svg",
+      "bgTint": "#F4EFFC",
+      "iconTint": "#E6DDF8"
+    },
+    {
+      "id": 4,
+      "title": "Surgeries",
+      "subtitle": "Advanced surgical\ncare",
+      "iconPath": "/src/assets/images/icons/surgery.svg",
+      "bgTint": "#FDF0EE",
+      "iconTint": "#FBDDD8"
+    },
+    {
+      "id": 5,
+      "title": "Senior Care",
+      "subtitle": "Compassionate care\nfor elders",
+      "iconPath": "/src/assets/images/icons/elderly.svg",
+      "bgTint": "#FEF3E8",
+      "iconTint": "#FDE3C8"
+    },
+    {
+      "id": 6,
+      "title": "Women Care",
+      "subtitle": "Complete care for\nwomen",
+      "iconPath": "/src/assets/images/icons/women.svg",
+      "bgTint": "#FDEEF4",
+      "iconTint": "#FBD9E7"
+    },
+    {
+      "id": 7,
+      "title": "Kid Care",
+      "subtitle": "Special care\nfor children",
+      "iconPath": "/src/assets/images/icons/kid.svg",
+      "bgTint": "#EAF6F2",
+      "iconTint": "#D6EFE5"
+    }
+  ],
+  "features": [
+    {
+      "id": 1,
+      "title": "Verified Healthcare Professionals",
+      "description": "All doctors are verified and experienced",
+      "iconName": "ShieldCheck"
+    },
+    {
+      "id": 2,
+      "title": "Easy & Fast Bookings",
+      "description": "Book appointments in just a few clicks",
+      "iconName": "CalendarCheck"
+    },
+    {
+      "id": 3,
+      "title": "Secure & Reliable",
+      "description": "Your data is safe with us",
+      "iconName": "ShieldCheck"
+    },
+    {
+      "id": 4,
+      "title": "Comprehensive Care",
+      "description": "All your healthcare needs at one place",
+      "iconName": "MessageSquareText"
+    }
+  ],
+  "articles": [
+    {
+      "id": 1,
+      "category": "Heart Health",
+      "categoryColor": "#E0457B",
+      "categoryBg": "#FDE8EF",
+      "title": "5 Simple Steps for a Healthy Heart",
+      "readTime": "5 min read",
+      "image": "/src/assets/images/article-1.png"
+    },
+    {
+      "id": 2,
+      "category": "Mental Health",
+      "categoryColor": "#4F6BED",
+      "categoryBg": "#E8ECFD",
+      "title": "How to Manage Stress in Daily Life",
+      "readTime": "4 min read",
+      "image": "/src/assets/images/article-2.png"
+    },
+    {
+      "id": 3,
+      "category": "Nutrition",
+      "categoryColor": "#1E9E6A",
+      "categoryBg": "#E1F5EC",
+      "title": "Immunity Boosting Foods you should eat",
+      "readTime": "6 min read",
+      "image": "/src/assets/images/article-3.png"
+    },
+    {
+      "id": 4,
+      "category": "Women Care",
+      "categoryColor": "#A04FD0",
+      "categoryBg": "#F3E6FA",
+      "title": "Prenatal Care: Important Tips for Expecting Moms",
+      "readTime": "5 min read",
+      "image": "/src/assets/images/article-4.png"
+    }
+  ]
+}

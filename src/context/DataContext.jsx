@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DataContext } from './context';
+import { api } from '../services/api';
 import { initialDoctors } from '../data/doctors';
 import { initialHospitals } from '../data/hospitals';
 import { initialHeroContent } from '../data/heroContent';
@@ -106,6 +107,43 @@ export const DataProvider = ({ children }) => {
     return initialArticles;
   });
 
+  // Initial fetch from Backend API (if running)
+  useEffect(() => {
+    let isMounted = true;
+    const fetchBackendData = async () => {
+      try {
+        const [docsRes, hospsRes, contentRes] = await Promise.allSettled([
+          api.getDoctors(),
+          api.getHospitals(),
+          api.getContent()
+        ]);
+
+        if (!isMounted) return;
+
+        if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value) && docsRes.value.length > 0) {
+          setDoctors(docsRes.value);
+        }
+        if (hospsRes.status === 'fulfilled' && Array.isArray(hospsRes.value) && hospsRes.value.length > 0) {
+          setHospitals(hospsRes.value);
+        }
+        if (contentRes.status === 'fulfilled' && contentRes.value) {
+          const { hero, services: sList, features: fList, articles: aList } = contentRes.value;
+          if (hero) setHeroContent(prev => ({ ...prev, ...hero }));
+          if (Array.isArray(sList) && sList.length > 0) setServices(sList);
+          if (Array.isArray(fList) && fList.length > 0) setFeatures(fList);
+          if (Array.isArray(aList) && aList.length > 0) setArticles(aList);
+        }
+      } catch {
+        // Backend not available, seamlessly fall back to local storage and default data
+      }
+    };
+
+    fetchBackendData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Sync to localStorage
   useEffect(() => {
     try {
@@ -165,6 +203,7 @@ export const DataProvider = ({ children }) => {
       price: parseInt(doctorData.price, 10) || 500,
     };
     setDoctors(prev => [newDoctor, ...prev]);
+    api.addDoctor(newDoctor).catch(() => {});
     return newDoctor;
   };
 
@@ -172,12 +211,14 @@ export const DataProvider = ({ children }) => {
     setDoctors(prev =>
       prev.map(doc => {
         if (doc.id === id) {
-          return {
+          const merged = {
             ...doc,
             ...updatedData,
             rating: parseFloat(updatedData.rating) || doc.rating,
             price: parseInt(updatedData.price, 10) || doc.price,
           };
+          api.updateDoctor(id, merged).catch(() => {});
+          return merged;
         }
         return doc;
       })
@@ -186,6 +227,7 @@ export const DataProvider = ({ children }) => {
 
   const deleteDoctor = (id) => {
     setDoctors(prev => prev.filter(doc => doc.id !== id));
+    api.deleteDoctor(id).catch(() => {});
   };
 
   // Hospital CRUD operations
@@ -204,6 +246,7 @@ export const DataProvider = ({ children }) => {
             : [])
     };
     setHospitals(prev => [newHospital, ...prev]);
+    api.addHospital(newHospital).catch(() => {});
     return newHospital;
   };
 
@@ -211,7 +254,7 @@ export const DataProvider = ({ children }) => {
     setHospitals(prev =>
       prev.map(hosp => {
         if (hosp.id === id) {
-          return {
+          const merged = {
             ...hosp,
             ...updatedData,
             rating: parseFloat(updatedData.rating) || hosp.rating,
@@ -223,6 +266,8 @@ export const DataProvider = ({ children }) => {
                   ? updatedData.specialties.split(',').map(s => s.trim()).filter(Boolean)
                   : hosp.specialties)
           };
+          api.updateHospital(id, merged).catch(() => {});
+          return merged;
         }
         return hosp;
       })
@@ -231,11 +276,16 @@ export const DataProvider = ({ children }) => {
 
   const deleteHospital = (id) => {
     setHospitals(prev => prev.filter(hosp => hosp.id !== id));
+    api.deleteHospital(id).catch(() => {});
   };
 
   // Hero & General Content CRUD
   const updateHeroContent = (newFields) => {
-    setHeroContent(prev => ({ ...prev, ...newFields }));
+    setHeroContent(prev => {
+      const merged = { ...prev, ...newFields };
+      api.updateHero(merged).catch(() => {});
+      return merged;
+    });
   };
 
   // Services CRUD
@@ -246,18 +296,28 @@ export const DataProvider = ({ children }) => {
       bgTint: serviceData.bgTint || '#EAF6F3',
       iconTint: serviceData.iconTint || '#D9F0EA'
     };
-    setServices(prev => [...prev, newService]);
+    setServices(prev => {
+      const next = [...prev, newService];
+      api.updateServices(next).catch(() => {});
+      return next;
+    });
     return newService;
   };
 
   const updateService = (id, updatedData) => {
-    setServices(prev =>
-      prev.map(s => (s.id === id ? { ...s, ...updatedData } : s))
-    );
+    setServices(prev => {
+      const next = prev.map(s => (s.id === id ? { ...s, ...updatedData } : s));
+      api.updateServices(next).catch(() => {});
+      return next;
+    });
   };
 
   const deleteService = (id) => {
-    setServices(prev => prev.filter(s => s.id !== id));
+    setServices(prev => {
+      const next = prev.filter(s => s.id !== id);
+      api.updateServices(next).catch(() => {});
+      return next;
+    });
   };
 
   // Features ("Why Choose Us") CRUD
@@ -267,18 +327,28 @@ export const DataProvider = ({ children }) => {
       id: Date.now(),
       iconName: featureData.iconName || 'ShieldCheck'
     };
-    setFeatures(prev => [...prev, newFeature]);
+    setFeatures(prev => {
+      const next = [...prev, newFeature];
+      api.updateFeatures(next).catch(() => {});
+      return next;
+    });
     return newFeature;
   };
 
   const updateFeature = (id, updatedData) => {
-    setFeatures(prev =>
-      prev.map(f => (f.id === id ? { ...f, ...updatedData } : f))
-    );
+    setFeatures(prev => {
+      const next = prev.map(f => (f.id === id ? { ...f, ...updatedData } : f));
+      api.updateFeatures(next).catch(() => {});
+      return next;
+    });
   };
 
   const deleteFeature = (id) => {
-    setFeatures(prev => prev.filter(f => f.id !== id));
+    setFeatures(prev => {
+      const next = prev.filter(f => f.id !== id);
+      api.updateFeatures(next).catch(() => {});
+      return next;
+    });
   };
 
   // Articles & Health Content CRUD
@@ -291,18 +361,28 @@ export const DataProvider = ({ children }) => {
       categoryBg: articleData.categoryBg || '#EAF6F3',
       readTime: articleData.readTime || '4 min read'
     };
-    setArticles(prev => [newArticle, ...prev]);
+    setArticles(prev => {
+      const next = [newArticle, ...prev];
+      api.updateArticles(next).catch(() => {});
+      return next;
+    });
     return newArticle;
   };
 
   const updateArticle = (id, updatedData) => {
-    setArticles(prev =>
-      prev.map(a => (a.id === id ? { ...a, ...updatedData } : a))
-    );
+    setArticles(prev => {
+      const next = prev.map(a => (a.id === id ? { ...a, ...updatedData } : a));
+      api.updateArticles(next).catch(() => {});
+      return next;
+    });
   };
 
   const deleteArticle = (id) => {
-    setArticles(prev => prev.filter(a => a.id !== id));
+    setArticles(prev => {
+      const next = prev.filter(a => a.id !== id);
+      api.updateArticles(next).catch(() => {});
+      return next;
+    });
   };
 
   // Reset Front Page Defaults
