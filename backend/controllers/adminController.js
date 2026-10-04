@@ -44,14 +44,20 @@ export const registerAdmin = async (req, res) => {
 
 export const addDoctor = async (req, res) => {
   try {
-    const { name, email, password, specialization, experience, about, fees, address } = req.body;
-    let image = '';
+    const { name, email, password, specialization, experience, about, fees, address, reels, youtube_videos, instagram, facebook, rating, reviews, hospital, qualifications, contact_number, available } = req.body;
+    let image = req.body.image || '';
     if (req.file) {
       image = req.file.path;
     }
     
+    let parsedAddress = {};
+    if (address) {
+      parsedAddress = typeof address === 'string' ? JSON.parse(address) : address;
+    }
+
     const doctor = await Doctor.create({
-      name, email, password, specialization, experience, about, fees, address: JSON.parse(address), image
+      name, email, password: password || 'password123', specialization, experience, about, fees, address: parsedAddress, image, reels: reels || [], youtube_videos: youtube_videos || [], instagram, facebook,
+      rating: rating || 4.8, reviews: reviews || '50+', hospital, qualifications, contact_number, available: available !== undefined ? available : true
     });
     res.status(201).json({ success: true, message: 'Doctor added', data: doctor });
   } catch (error) {
@@ -85,3 +91,50 @@ export const getDashboardData = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const updateDoctor = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+    if (doctor) {
+      Object.assign(doctor, req.body);
+      if (req.body.reels !== undefined) {
+        doctor.reels = req.body.reels;
+        doctor.markModified('reels');
+      }
+      if (req.body.youtube_videos !== undefined) {
+        doctor.youtube_videos = req.body.youtube_videos;
+        doctor.markModified('youtube_videos');
+      }
+      if (req.body.instagram !== undefined) doctor.instagram = req.body.instagram;
+      if (req.body.facebook !== undefined) doctor.facebook = req.body.facebook;
+      
+      if (req.file) {
+        doctor.image = req.file.path;
+      } else if (req.body.image) {
+        doctor.image = req.body.image;
+      }
+      const updatedDoctor = await doctor.save();
+      res.json({ success: true, message: 'Doctor updated', data: updatedDoctor });
+    } else {
+      res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteDoctor = async (req, res) => {
+  try {
+    const doctor = await Doctor.findById(req.params.id);
+    if (doctor) {
+      await doctor.deleteOne();
+      res.json({ success: true, message: 'Doctor deleted' });
+    } else {
+      res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Added logging

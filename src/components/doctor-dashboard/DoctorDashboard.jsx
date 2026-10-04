@@ -617,6 +617,56 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               </div>
 
+              <h4 style={{ marginTop: '24px', marginBottom: '12px' }}>Social & Media (Optional)</h4>
+              <div className={styles.settingsGrid}>
+                <div className={styles.formGroup}>
+                  <label>Instagram URL</label>
+                  <input
+                    type="url"
+                    value={activeDoctor.instagram || ''}
+                    onChange={(e) => {
+                      updateDoctor(activeDoctor.id, { instagram: e.target.value });
+                    }}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Facebook URL</label>
+                  <input
+                    type="url"
+                    value={activeDoctor.facebook || ''}
+                    onChange={(e) => {
+                      updateDoctor(activeDoctor.id, { facebook: e.target.value });
+                    }}
+                  />
+                </div>
+                
+                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                  <label>Instagram Reels (Comma separated URLs, Max 5)</label>
+                  <input
+                    type="text"
+                    placeholder="https://inst..., https://inst..."
+                    value={Array.isArray(activeDoctor.reels) ? activeDoctor.reels.join(', ') : ''}
+                    onChange={(e) => {
+                      const reelsArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 5);
+                      updateDoctor(activeDoctor.id, { reels: reelsArr });
+                    }}
+                  />
+                </div>
+
+                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                  <label>YouTube Videos (Comma separated URLs, Max 2)</label>
+                  <input
+                    type="text"
+                    placeholder="https://youtube.com/..., https://youtube.com/..."
+                    value={Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos.join(', ') : ''}
+                    onChange={(e) => {
+                      const ytArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 2);
+                      updateDoctor(activeDoctor.id, { youtube_videos: ytArr });
+                    }}
+                  />
+                </div>
+              </div>
+
               <div className={styles.settingsSaveRow}>
                 <button
                   className={styles.saveBtn}

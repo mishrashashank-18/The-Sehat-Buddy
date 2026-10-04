@@ -18,6 +18,7 @@ import {
   Phone,
   Clock,
   ShieldCheck,
+  LogOut,
   LayoutTemplate
 } from 'lucide-react';
 import { useData } from '../../context/useData';
@@ -212,6 +213,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
           <button className={styles.viewSiteBtn} onClick={onExit}>
             <span>View Website</span>
             <ExternalLink size={16} />
+          </button>
+          <button 
+            className={styles.logoutBtn} 
+            onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              window.location.reload();
+            }}
+          >
+            <span>Log Out</span>
+            <LogOut size={16} />
           </button>
         </div>
       </header>

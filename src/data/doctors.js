@@ -18,7 +18,17 @@ export const initialDoctors = [
     phone: '+91 98101 23456',
     email: 'dr.rahul@sehatbuddy.com',
     availableDays: 'Mon, Wed, Fri (10:00 AM - 4:00 PM)',
-    about: 'Senior consultant cardiologist specializing in non-invasive cardiology and coronary interventions.'
+    about: 'Senior consultant cardiologist specializing in non-invasive cardiology and coronary interventions.',
+    instagram: 'https://www.instagram.com/thesehatbuddy/',
+    facebook: 'https://www.facebook.com/profile.php?id=61594704587784',
+    reels: [
+      'https://www.instagram.com/reel/C-U4Xo9MvjQ/',
+      'https://www.instagram.com/reel/C9_K5qXMO9e/'
+    ],
+    youtube_videos: [
+      'https://www.youtube.com/watch?v=zCCD52Pty4A',
+      'https://www.youtube.com/watch?v=FN3MFhYPWWo'
+    ]
   },
   {
     id: 2,
