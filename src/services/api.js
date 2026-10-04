@@ -1,11 +1,19 @@
 const resolveApiBase = () => {
   const envUrl = import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
-  if (!envUrl) return '/api';
+  if (!envUrl) return 'http://localhost:5000/api';
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 };
 
 const API_BASE = resolveApiBase();
+
+const getAuthHeaders = (isFormData = false) => {
+  const token = localStorage.getItem('token');
+  const headers = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  if (!isFormData) headers['Content-Type'] = 'application/json';
+  return headers;
+};
 
 const handleResponse = async (res) => {
   if (!res.ok) {
@@ -18,15 +26,15 @@ const handleResponse = async (res) => {
 export const api = {
   // Doctors
   async getDoctors() {
-    const res = await fetch(`${API_BASE}/doctors`);
+    const res = await fetch(`${API_BASE}/doctors/list`);
     const data = await handleResponse(res);
-    return data.data;
+    return data.data || data;
   },
 
   async addDoctor(doctorData) {
-    const res = await fetch(`${API_BASE}/doctors`, {
+    const res = await fetch(`${API_BASE}/admin/add-doctor`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(doctorData)
     });
     const data = await handleResponse(res);
@@ -34,9 +42,9 @@ export const api = {
   },
 
   async updateDoctor(id, doctorData) {
-    const res = await fetch(`${API_BASE}/doctors/${id}`, {
+    const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(doctorData)
     });
     const data = await handleResponse(res);
@@ -44,21 +52,24 @@ export const api = {
   },
 
   async deleteDoctor(id) {
-    const res = await fetch(`${API_BASE}/doctors/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/admin/delete-doctor/${id}`, { 
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
     return handleResponse(res);
   },
 
   // Hospitals
   async getHospitals() {
-    const res = await fetch(`${API_BASE}/hospitals`);
+    const res = await fetch(`${API_BASE}/hospitals/list`);
     const data = await handleResponse(res);
-    return data.data;
+    return data.data || data;
   },
 
   async addHospital(hospitalData) {
-    const res = await fetch(`${API_BASE}/hospitals`, {
+    const res = await fetch(`${API_BASE}/hospitals/register`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(hospitalData)
     });
     const data = await handleResponse(res);
@@ -68,7 +79,7 @@ export const api = {
   async updateHospital(id, hospitalData) {
     const res = await fetch(`${API_BASE}/hospitals/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(hospitalData)
     });
     const data = await handleResponse(res);
@@ -76,7 +87,10 @@ export const api = {
   },
 
   async deleteHospital(id) {
-    const res = await fetch(`${API_BASE}/hospitals/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/hospitals/${id}`, { 
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
     return handleResponse(res);
   },
 
@@ -90,7 +104,7 @@ export const api = {
   async updateHero(heroData) {
     const res = await fetch(`${API_BASE}/content/hero`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(heroData)
     });
     const data = await handleResponse(res);
@@ -100,7 +114,7 @@ export const api = {
   async updateServices(servicesList) {
     const res = await fetch(`${API_BASE}/content/services`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(servicesList)
     });
     const data = await handleResponse(res);
@@ -110,7 +124,7 @@ export const api = {
   async updateFeatures(featuresList) {
     const res = await fetch(`${API_BASE}/content/features`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(featuresList)
     });
     const data = await handleResponse(res);
@@ -120,7 +134,7 @@ export const api = {
   async updateArticles(articlesList) {
     const res = await fetch(`${API_BASE}/content/articles`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify(articlesList)
     });
     const data = await handleResponse(res);
@@ -129,7 +143,9 @@ export const api = {
 
   // Stats
   async getStats() {
-    const res = await fetch(`${API_BASE}/stats`);
+    const res = await fetch(`${API_BASE}/stats`, {
+      headers: getAuthHeaders()
+    });
     const data = await handleResponse(res);
     return data.data;
   }

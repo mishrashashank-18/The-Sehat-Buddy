@@ -33,7 +33,7 @@
   border-radius: 9px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  color: #475569;
+  color: #5B6B73;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -228,7 +228,7 @@
 }
 
 .statEditBox {
-  background: #f8fafc;
+  background: #F1FAF8;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 14px;
@@ -528,7 +528,7 @@
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  color: #475569;
+  color: #5B6B73;
   font-weight: 600;
   cursor: pointer;
 }

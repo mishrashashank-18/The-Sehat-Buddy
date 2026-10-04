@@ -20,7 +20,7 @@
 }
 
 .icon {
-  color: #0E7C6B;
+  color: var(--color-primary);
 }
 
 .title {

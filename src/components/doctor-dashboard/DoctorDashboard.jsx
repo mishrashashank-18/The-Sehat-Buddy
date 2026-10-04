@@ -233,7 +233,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       <header className={styles.topbar}>
         <div className={styles.brandGroup}>
           <div className={styles.logoIcon}>
-            <HeartPulse size={26} color="#0E7C6B" strokeWidth={2.5} />
+            <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
           </div>
           <div>
             <div className={styles.brandTitleWrap}>

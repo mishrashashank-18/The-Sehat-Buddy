@@ -16,7 +16,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #0E7C6B;
+  color: var(--color-primary);
   font-size: 14px;
   font-weight: 500;
   transition: opacity 0.2s ease;

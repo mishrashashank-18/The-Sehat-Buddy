@@ -11,7 +11,7 @@
   position: fixed;
   top: 24px;
   right: 24px;
-  background: #0E7C6B;
+  background: var(--color-primary);
   color: #ffffff;
   padding: 12px 18px;
   border-radius: 12px;
@@ -20,7 +20,7 @@
   gap: 8px;
   font-size: 0.88rem;
   font-weight: 500;
-  box-shadow: 0 10px 30px rgba(14, 124, 107, 0.3);
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3);
   z-index: 10001;
   animation: slideInRight 0.3s ease-out;
 }
@@ -143,8 +143,8 @@
   padding: 6px 14px;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
+  background: #F1FAF8;
+  color: #5B6B73;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -235,7 +235,7 @@
   align-items: center;
   gap: 5px;
   font-size: 0.82rem;
-  color: #0E7C6B;
+  color: var(--color-primary);
   margin: 4px 0 0 0;
   font-weight: 500;
 }
@@ -336,7 +336,7 @@
 }
 
 .kpiGreen { background: #e6f6f3; color: var(--color-primary); }
-.kpiBlue { background: #eff6ff; color: #2563eb; }
+.kpiBlue { background: #EAF8F1; color: #2563eb; }
 .kpiYellow { background: #fefce8; color: #ca8a04; }
 .kpiPurple { background: #f5f3ff; color: #7c3aed; }
 
@@ -408,7 +408,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(14, 124, 107, 0.2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .addPrimaryBtn:hover {
@@ -510,13 +510,13 @@
 }
 
 .videoBadge {
-  background: #eff6ff;
+  background: #EAF8F1;
   color: #2563eb;
 }
 
 .clinicBadge {
   background: #f1f5f9;
-  color: #475569;
+  color: #5B6B73;
 }
 
 .aptDetailsCol {
@@ -545,7 +545,7 @@
 
 .aptSymptoms {
   font-size: 0.84rem;
-  color: #475569;
+  color: #5B6B73;
   margin: 0;
 }
 
@@ -564,7 +564,7 @@
 }
 
 .statusBadgeConfirmed {
-  background: #e0f2fe;
+  background: #EAF6F3;
   color: #0369a1;
 }
 
@@ -691,7 +691,7 @@
 
 .rxValueText {
   font-size: 0.85rem;
-  color: #0E7C6B;
+  color: var(--color-primary);
   font-weight: 600;
   background: #f1f8f7;
   padding: 6px 10px;
@@ -713,7 +713,7 @@
 }
 
 .printBtn {
-  background: #f8fafc;
+  background: #F1FAF8;
   border: 1px solid #cbd5e1;
   color: #334155;
   padding: 4px 10px;
@@ -876,7 +876,7 @@
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  color: #475569;
+  color: #5B6B73;
   font-weight: 600;
   cursor: pointer;
 }

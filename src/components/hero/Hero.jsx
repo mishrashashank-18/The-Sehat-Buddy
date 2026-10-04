@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import Container from '../layout/Container';
 import HeroStats from './HeroStats';
 import { useData } from '../../context/useData';
@@ -19,7 +19,7 @@ const Hero = () => {
             <h1 className={styles.title}>
               {heroContent?.titleLine1 || 'Find Doctors, Book'}<br />
               {heroContent?.titleLine2 || 'Appointments & Take'}<br />
-              Care of <span className={styles.highlight}>{heroContent?.titleHighlight || 'Your Health'}</span>
+              <span className={styles.highlight}>{heroContent?.titleHighlight || 'Care of Your Health'}</span>
             </h1>
             
             <p className={styles.description}>
@@ -30,14 +30,17 @@ const Hero = () => {
           </div>
           
           <div className={styles.imageContent}>
-            <img
-              src={heroContent?.heroImage}
-              alt="Happy Indian family"
-              className={styles.heroImg}
-              onError={(e) => {
-                e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
-              }}
-            />
+            <div className={styles.dotsPattern}></div>
+            <div className={styles.imageShape}>
+              <img
+                src={heroContent?.heroImage}
+                alt="Happy Indian family"
+                className={styles.heroImg}
+                onError={(e) => {
+                  e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
+                }}
+              />
+            </div>
           </div>
         </div>
       </Container>

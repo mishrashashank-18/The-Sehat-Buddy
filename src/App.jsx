@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DataProvider } from './context/DataContext';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import Navbar from './components/layout/Navbar';
 import Hero from './components/hero/Hero';
 import SearchBar from './components/search/SearchBar';
@@ -13,12 +14,13 @@ import AdminPanel from './components/admin/AdminPanel';
 import DoctorDashboard from './components/doctor-dashboard/DoctorDashboard';
 import HospitalDashboard from './components/hospital-dashboard/HospitalDashboard';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import LoginPage from './components/auth/LoginPage';
 import './styles/global.css';
 
-function MainWebsite() {
+function MainWebsite({ onNavigate }) {
   return (
     <div className="app">
-      <Navbar />
+      <Navbar onNavigate={onNavigate} />
       <main>
         <Hero />
         <SearchBar />
@@ -46,6 +48,9 @@ const resolveCurrentView = () => {
   if (path === '/hospital' || path.startsWith('/hospital/') || hash === '#hospital' || hash === '#/hospital') {
     return 'hospital';
   }
+  if (path === '/login' || path.startsWith('/login/') || hash === '#login' || hash === '#/login') {
+    return 'user-login';
+  }
   return 'site';
 };
 
@@ -70,34 +75,47 @@ function AppContent() {
     if (viewName === 'admin') targetPath = '/admin';
     else if (viewName === 'doctor') targetPath = '/doctor';
     else if (viewName === 'hospital') targetPath = '/hospital';
+    else if (viewName === 'user-login') targetPath = '/login';
 
     window.history.pushState({}, '', targetPath);
     setCurrentView(viewName);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const token = localStorage.getItem('token');
+
   if (currentView === 'admin') {
+    if (!token) return <LoginPage role="admin" setView={navigateTo} />;
     return <AdminPanel onExit={() => navigateTo('site')} onNavigate={navigateTo} />;
   }
 
   if (currentView === 'doctor') {
+    if (!token) return <LoginPage role="doctor" setView={navigateTo} />;
     return <DoctorDashboard onNavigate={navigateTo} />;
   }
 
   if (currentView === 'hospital') {
+    if (!token) return <LoginPage role="hospital" setView={navigateTo} />;
     return <HospitalDashboard onNavigate={navigateTo} />;
   }
 
-  return <MainWebsite />;
+  if (currentView === 'user-login') {
+    return <LoginPage role="user" setView={navigateTo} />;
+  }
+
+  return <MainWebsite onNavigate={navigateTo} />;
 }
 
 function App() {
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID";
   return (
-    <ErrorBoundary>
-      <DataProvider>
-        <AppContent />
-      </DataProvider>
-    </ErrorBoundary>
+    <GoogleOAuthProvider clientId={clientId}>
+      <ErrorBoundary>
+        <DataProvider>
+          <AppContent />
+        </DataProvider>
+      </ErrorBoundary>
+    </GoogleOAuthProvider>
   );
 }
 

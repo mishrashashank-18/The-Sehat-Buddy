@@ -1,12 +1,12 @@
 .card {
   flex: 1;
+  min-width: 0;
   background-color: var(--color-white);
   border: 1px solid #E6EEF0;
   border-radius: 16px;
-  padding: 14px;
+  padding: 16px;
   display: flex;
-  gap: 14px;
-  height: 205px;
+  gap: 16px;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -16,9 +16,8 @@
 }
 
 .imageWrapper {
-  width: 100px;
-  height: 140px;
-  border-radius: 10px;
+  width: 110px;
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
   background-color: #EEF1F3;
@@ -40,64 +39,64 @@
 }
 
 .name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #12303A;
   margin-bottom: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .specialty {
-  font-size: 13px;
+  font-size: 14px;
   color: #5B6B73;
-  margin-bottom: 0;
-  white-space: nowrap;
+  margin-bottom: 4px;
 }
 
 .experience {
-  font-size: 12px;
+  font-size: 13px;
   color: #5B6B73;
-  margin-top: 4px;
-  margin-bottom: 6px;
-  white-space: nowrap;
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
 .rating {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 0;
-  white-space: nowrap;
+  gap: 6px;
+  margin-bottom: 12px;
 }
 
 .score {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: #12303A;
 }
 
 .reviews {
-  font-size: 11px;
+  font-size: 12px;
   color: #5B6B73;
 }
 
+.priceRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
 .price {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: #12303A;
-  margin-top: 8px;
 }
 
 .bookLink {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  color: #0E7C6B;
-  margin-top: auto;
-  white-space: nowrap;
+  color: var(--color-primary);
 }
 
 .bookLink:hover {
   opacity: 0.8;
+  text-decoration: underline;
 }

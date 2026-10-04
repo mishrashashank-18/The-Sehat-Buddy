@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { ShieldCheck, UserPlus, Clock } from 'lucide-react';
 import { useData } from '../../context/useData';
 import styles from './HeroStats.module.css';

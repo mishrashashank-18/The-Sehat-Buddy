@@ -2,46 +2,21 @@
   padding: 28px 0;
 }
 
-.carouselContainer {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.carousel {
-  display: flex;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
   width: 100%;
+  padding: 12px 4px 20px 4px;
 }
 
-.navButton {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: var(--color-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #12303A;
-  z-index: 10;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  transition: all 0.2s ease;
-  border: none;
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-
-.navButton:hover {
-  background-color: var(--color-bg-light);
-  color: var(--color-primary);
-}
-
-.leftNav {
-  left: -20px;
-}
-
-.rightNav {
-  right: -20px;
+@media (max-width: 640px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
 }

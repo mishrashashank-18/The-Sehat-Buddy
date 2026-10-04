@@ -357,7 +357,7 @@ export const DataProvider = ({ children }) => {
       ...articleData,
       id: Date.now(),
       category: articleData.category || 'Health Tips',
-      categoryColor: articleData.categoryColor || '#0E7C6B',
+      categoryColor: articleData.categoryColor || '#2563EB',
       categoryBg: articleData.categoryBg || '#EAF6F3',
       readTime: articleData.readTime || '4 min read'
     };

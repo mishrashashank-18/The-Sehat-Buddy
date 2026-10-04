@@ -79,7 +79,7 @@
 }
 
 .itemHighlight {
-  background: #f8fafc;
+  background: #F1FAF8;
   border: 1px dashed #cbd5e1;
   padding: 8px 14px;
   border-radius: 8px;
@@ -112,7 +112,7 @@
 }
 
 .cancelBtn:hover {
-  background: #f8fafc;
+  background: #F1FAF8;
 }
 
 .deleteBtn {

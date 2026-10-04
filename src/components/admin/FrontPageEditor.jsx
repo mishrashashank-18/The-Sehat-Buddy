@@ -505,7 +505,7 @@ const FrontPageEditor = ({ showToast }) => {
             {features?.map((feat) => (
               <div key={feat.id} className={styles.itemRowCard}>
                 <div className={styles.featureIconBadge}>
-                  <ShieldCheck size={22} color="#0E7C6B" />
+                  <ShieldCheck size={22} color="#2563EB" />
                 </div>
 
                 <div className={styles.itemInputGroup}>

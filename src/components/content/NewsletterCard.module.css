@@ -1,5 +1,5 @@
 .card {
-  background-color: #0B6E5F;
+  background-color: var(--color-newsletter-bg);
   border-radius: 16px;
   padding: 22px;
   color: var(--color-white);

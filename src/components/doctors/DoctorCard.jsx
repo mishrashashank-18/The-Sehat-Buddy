@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Star } from 'lucide-react';
 import styles from './DoctorCard.module.css';
 
@@ -20,7 +20,7 @@ const DoctorCard = ({ doctor }) => {
         <p className={styles.specialty}>{doctor.specialty}</p>
         <p className={styles.experience}>
           {doctor.experience}
-          {doctor.hospital ? ` • ${doctor.hospital}` : ''}
+          {doctor.hospital ? " • " + doctor.hospital : ""}
         </p>
         
         <div className={styles.rating}>
@@ -29,9 +29,10 @@ const DoctorCard = ({ doctor }) => {
           <span className={styles.reviews}>({doctor.reviews} reviews)</span>
         </div>
         
-        <div className={styles.price}>₹{doctor.price}</div>
-        
-        <a href="#" className={styles.bookLink}>Book Appointment</a>
+        <div className={styles.priceRow}>
+          <div className={styles.price}>₹{doctor.price}</div>
+          <a href="#" className={styles.bookLink}>Book Appointment</a>
+        </div>
       </div>
     </div>
   );

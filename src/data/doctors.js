@@ -51,22 +51,22 @@ export const initialDoctors = [
     email: 'dr.amit@sehatbuddy.com',
     availableDays: 'Mon to Fri (09:00 AM - 2:00 PM)',
     about: 'Specialized in joint reconstruction, arthroscopy, and minimally invasive sports trauma repairs.'
-  },
-  {
-    id: 4,
-    name: 'Dr. Pooja Malhotra',
-    specialty: 'Pediatrician',
-    experience: '8+ Years Experience',
-    rating: 4.9,
-    reviews: '1100+',
-    price: 600,
-    image: doc4,
-    hospital: 'Manipal Hospital & Trauma Center',
-    degree: 'MBBS, MD (Pediatrics), DNB',
-    phone: '+91 98404 56789',
-    email: 'dr.pooja@sehatbuddy.com',
-    availableDays: 'Mon, Tue, Thu, Sat (10:00 AM - 3:00 PM)',
-    about: 'Dedicated child health specialist with extensive experience in pediatric intensive care and vaccinations.'
+  } 
+  ,{ 
+    id: 4, 
+    name: 'Dr. Pooja Malhotra', 
+    specialty: 'Pediatrician', 
+    experience: '8+ Years Experience', 
+    rating: 4.9, 
+    reviews: '1100+', 
+    price: 600, 
+    image: doc4, 
+    hospital: 'Manipal Hospital & Trauma Center', 
+    degree: 'MBBS, MD (Pediatrics), DNB', 
+    phone: '+91 98404 56789', 
+    email: 'dr.pooja@sehatbuddy.com', 
+    availableDays: 'Mon, Tue, Thu, Sat (10:00 AM - 3:00 PM)', 
+    about: 'Dedicated child health specialist with extensive experience in pediatric intensive care and vaccinations.' 
   }
 ];
 

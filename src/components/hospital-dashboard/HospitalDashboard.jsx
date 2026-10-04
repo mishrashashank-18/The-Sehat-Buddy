@@ -131,7 +131,7 @@ const HospitalDashboard = ({ onNavigate }) => {
       <header className={styles.topbar}>
         <div className={styles.brandGroup}>
           <div className={styles.logoIcon}>
-            <HeartPulse size={26} color="#0E7C6B" strokeWidth={2.5} />
+            <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
           </div>
           <div>
             <div className={styles.brandTitleWrap}>
@@ -444,7 +444,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                         </td>
                         <td>{doc.degree || 'MBBS, MD'}</td>
                         <td>
-                          <strong style={{ color: '#0E7C6B' }}>₹{doc.price}</strong>
+                          <strong style={{ color: '#2563EB' }}>₹{doc.price}</strong>
                         </td>
                         <td>{doc.availableDays || 'Mon - Fri (10am - 4pm)'}</td>
                         <td>
@@ -535,7 +535,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                   {ambulances.map((amb) => (
                     <div key={amb.id} className={styles.ambItem}>
                       <div className={styles.ambIconWrap}>
-                        <Truck size={20} color="#0E7C6B" />
+                        <Truck size={20} color="#2563EB" />
                       </div>
 
                       <div className={styles.ambInfo}>

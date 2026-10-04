@@ -4,7 +4,7 @@ import Container from './Container';
 import Button from '../common/Button';
 import styles from './Navbar.module.css';
 
-const Navbar = () => {
+const Navbar = ({ onNavigate }) => {
   const scrollTo = (id) => {
     const el = document.getElementById(id);
     if (el) {
@@ -45,7 +45,7 @@ const Navbar = () => {
             <ChevronDown size={16} className={styles.chevron} />
           </div>
 
-          <Button>Login / Sign Up</Button>
+          <Button onClick={() => onNavigate && onNavigate('user-login')}>Login / Sign Up</Button>
         </div>
       </Container>
     </nav>

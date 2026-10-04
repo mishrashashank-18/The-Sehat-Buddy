@@ -11,7 +11,7 @@
   position: fixed;
   top: 24px;
   right: 24px;
-  background: #0E7C6B;
+  background: var(--color-primary);
   color: #ffffff;
   padding: 12px 18px;
   border-radius: 12px;
@@ -20,7 +20,7 @@
   gap: 8px;
   font-size: 0.88rem;
   font-weight: 500;
-  box-shadow: 0 10px 30px rgba(14, 124, 107, 0.3);
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.3);
   z-index: 10001;
   animation: slideInRight 0.3s ease-out;
 }
@@ -53,7 +53,7 @@
 .logoIcon {
   width: 40px;
   height: 40px;
-  background: #eff6ff;
+  background: #EAF8F1;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -76,7 +76,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #eff6ff;
+  background: #EAF8F1;
   color: #2563eb;
   font-size: 0.75rem;
   font-weight: 600;
@@ -143,8 +143,8 @@
   padding: 6px 14px;
   border-radius: 8px;
   border: 1px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
+  background: #F1FAF8;
+  color: #5B6B73;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -245,7 +245,7 @@
 
 .cityPill {
   background: #f1f5f9;
-  color: #475569;
+  color: #5B6B73;
   font-size: 0.75rem;
   font-weight: 600;
   padding: 2px 8px;
@@ -265,7 +265,7 @@
 }
 
 .phonePill {
-  background: #eff6ff;
+  background: #EAF8F1;
   color: #2563eb;
   font-size: 0.75rem;
   font-weight: 500;
@@ -278,7 +278,7 @@
 
 /* Occupancy Gauge Card */
 .occupancyGaugeCard {
-  background: #f8fafc;
+  background: #F1FAF8;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   padding: 16px 20px;
@@ -297,7 +297,7 @@
 .gaugeLabel {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #475569;
+  color: #5B6B73;
 }
 
 .gaugePercent {
@@ -357,7 +357,7 @@
   flex-shrink: 0;
 }
 
-.kpiBlue { background: #eff6ff; color: #2563eb; }
+.kpiBlue { background: #EAF8F1; color: #2563eb; }
 .kpiRed { background: #fef2f2; color: #dc2626; }
 .kpiGreen { background: #e6f6f3; color: var(--color-primary); }
 .kpiYellow { background: #fefce8; color: #ca8a04; }
@@ -430,7 +430,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(14, 124, 107, 0.2);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .addPrimaryBtn:hover {
@@ -565,7 +565,7 @@
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  color: #475569;
+  color: #5B6B73;
   font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
@@ -614,7 +614,7 @@
 }
 
 .tableCountBadge {
-  background: #eff6ff;
+  background: #EAF8F1;
   color: #2563eb;
   font-size: 0.75rem;
   font-weight: 700;
@@ -633,7 +633,7 @@
 }
 
 .rosterTable th {
-  background: #f8fafc;
+  background: #F1FAF8;
   padding: 12px 20px;
   font-size: 0.78rem;
   color: #64748b;
@@ -797,7 +797,7 @@
 .triageLabel {
   font-size: 0.7rem;
   font-weight: 700;
-  color: #475569;
+  color: #5B6B73;
   text-align: center;
 }
 
@@ -885,7 +885,7 @@
 
 .ambLocation {
   font-size: 0.74rem;
-  color: #0E7C6B;
+  color: var(--color-primary);
   display: flex;
   align-items: center;
   gap: 3px;
@@ -1079,7 +1079,7 @@
   border-radius: 8px;
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  color: #475569;
+  color: #5B6B73;
   font-weight: 600;
   cursor: pointer;
 }
