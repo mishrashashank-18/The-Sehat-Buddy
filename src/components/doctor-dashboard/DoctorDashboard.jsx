@@ -104,9 +104,16 @@ const INITIAL_PRESCRIPTIONS = [
 const DoctorDashboard = ({ onNavigate }) => {
   const { doctors, updateDoctor } = useData();
 
-  // Active doctor selection
-  const [selectedDoctorId, setSelectedDoctorId] = useState(() => doctors[0]?.id || 1);
-  const activeDoctor = doctors.find(d => d.id === selectedDoctorId) || doctors[0] || {};
+  // Active doctor selection (get from login if available)
+  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const [selectedDoctorId, setSelectedDoctorId] = useState(() => {
+    if (storedUser && storedUser._id) {
+      return storedUser._id;
+    }
+    return doctors[0]?.id || doctors[0]?._id || 1;
+  });
+  
+  const activeDoctor = doctors.find(d => String(d.id) === String(selectedDoctorId) || String(d._id) === String(selectedDoctorId)) || doctors[0] || {};
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState('Available');
@@ -120,6 +127,15 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Active Tab: 'appointments' | 'prescriptions' | 'profile'
   const [activeTab, setActiveTab] = useState('appointments');
+
+  // Local state for profile form to prevent API spam and CastErrors
+  const [profileForm, setProfileForm] = useState(activeDoctor);
+  React.useEffect(() => {
+    setProfileForm({
+      ...activeDoctor,
+      experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : activeDoctor.experience
+    });
+  }, [activeDoctor]);
 
   // Modals
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
@@ -246,25 +262,8 @@ const DoctorDashboard = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Doctor Selector & Portal Switcher */}
+        {/* Portal Switcher */}
         <div className={styles.headerRight}>
-          <div className={styles.doctorSwitcher}>
-            <span className={styles.switcherLabel}>Active Doctor:</span>
-            <div className={styles.selectWrap}>
-              <select
-                value={selectedDoctorId}
-                onChange={(e) => setSelectedDoctorId(Number(e.target.value))}
-                className={styles.doctorSelect}
-              >
-                {doctors.map(doc => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.name} ({doc.specialty})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className={styles.selectIcon} />
-            </div>
-          </div>
 
           <div className={styles.quickNavBtns}>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('site')}>
@@ -275,6 +274,13 @@ const DoctorDashboard = ({ onNavigate }) => {
             </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('admin')}>
               Admin
+            </button>
+            <button className={styles.navLinkBtn} style={{ color: '#dc2626', fontWeight: 600 }} onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              window.location.href = '/login';
+            }}>
+              Logout
             </button>
           </div>
         </div>
@@ -573,13 +579,56 @@ const DoctorDashboard = ({ onNavigate }) => {
 
               <div className={styles.settingsGrid}>
                 <div className={styles.formGroup}>
+                  <label>Full Name</label>
+                  <input
+                    type="text"
+                    value={profileForm.name || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                  />
+                </div>
+                
+                <div className={styles.formGroup}>
+                  <label>Specialty</label>
+                  <input
+                    type="text"
+                    value={profileForm.specialty || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, specialty: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Experience (Years)</label>
+                  <input
+                    type="number"
+                    value={profileForm.experience || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, experience: Number(e.target.value) })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Hospital Affiliation</label>
+                  <input
+                    type="text"
+                    value={profileForm.hospital || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, hospital: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Degrees / Qualifications</label>
+                  <input
+                    type="text"
+                    value={profileForm.degree || profileForm.qualifications || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, degree: e.target.value, qualifications: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
                   <label>Consultation Fee (₹)</label>
                   <input
                     type="number"
-                    value={activeDoctor.price || 700}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { price: Number(e.target.value) });
-                    }}
+                    value={profileForm.price || profileForm.fees || 700}
+                    onChange={(e) => setProfileForm({ ...profileForm, price: Number(e.target.value) })}
                   />
                 </div>
 
@@ -587,10 +636,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Contact Phone</label>
                   <input
                     type="text"
-                    value={activeDoctor.phone || ''}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { phone: e.target.value });
-                    }}
+                    value={profileForm.phone || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
                   />
                 </div>
 
@@ -598,10 +645,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Available Consultation Hours</label>
                   <input
                     type="text"
-                    value={activeDoctor.availableDays || ''}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { availableDays: e.target.value });
-                    }}
+                    value={profileForm.availableDays || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, availableDays: e.target.value })}
                   />
                 </div>
 
@@ -609,11 +654,39 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Professional Bio</label>
                   <textarea
                     rows={3}
-                    value={activeDoctor.about || ''}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { about: e.target.value });
-                    }}
+                    value={profileForm.about || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, about: e.target.value })}
                   />
+                </div>
+              </div>
+
+              <h4 style={{ marginTop: '24px', marginBottom: '12px' }}>Profile Photo</h4>
+              <div className={styles.settingsGrid}>
+                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <img 
+                      src={profileForm.image} 
+                      alt="Profile Preview" 
+                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }} 
+                      onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80'}
+                    />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setProfileForm(prev => ({ ...prev, image: reader.result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      style={{ flex: 1, padding: '8px', border: '1px dashed #cbd5e1', borderRadius: '8px', cursor: 'pointer', background: '#f8fafc' }}
+                    />
+                  </div>
+                  <small style={{ color: '#64748b', marginTop: '6px', display: 'block' }}>Upload a professional headshot. Changes will reflect instantly across the platform after saving.</small>
                 </div>
               </div>
 
@@ -623,46 +696,16 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Instagram URL</label>
                   <input
                     type="url"
-                    value={activeDoctor.instagram || ''}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { instagram: e.target.value });
-                    }}
+                    value={profileForm.instagram || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, instagram: e.target.value })}
                   />
                 </div>
                 <div className={styles.formGroup}>
                   <label>Facebook URL</label>
                   <input
                     type="url"
-                    value={activeDoctor.facebook || ''}
-                    onChange={(e) => {
-                      updateDoctor(activeDoctor.id, { facebook: e.target.value });
-                    }}
-                  />
-                </div>
-                
-                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                  <label>Instagram Reels (Comma separated URLs, Max 5)</label>
-                  <input
-                    type="text"
-                    placeholder="https://inst..., https://inst..."
-                    value={Array.isArray(activeDoctor.reels) ? activeDoctor.reels.join(', ') : ''}
-                    onChange={(e) => {
-                      const reelsArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 5);
-                      updateDoctor(activeDoctor.id, { reels: reelsArr });
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                  <label>YouTube Videos (Comma separated URLs, Max 2)</label>
-                  <input
-                    type="text"
-                    placeholder="https://youtube.com/..., https://youtube.com/..."
-                    value={Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos.join(', ') : ''}
-                    onChange={(e) => {
-                      const ytArr = e.target.value.split(',').map(s => s.trim()).filter(Boolean).slice(0, 2);
-                      updateDoctor(activeDoctor.id, { youtube_videos: ytArr });
-                    }}
+                    value={profileForm.facebook || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, facebook: e.target.value })}
                   />
                 </div>
               </div>
@@ -670,7 +713,15 @@ const DoctorDashboard = ({ onNavigate }) => {
               <div className={styles.settingsSaveRow}>
                 <button
                   className={styles.saveBtn}
-                  onClick={() => showToast('Profile settings saved successfully!')}
+                  onClick={() => {
+                    updateDoctor(activeDoctor.id || activeDoctor._id, {
+                      ...profileForm,
+                      specialization: profileForm.specialty,
+                      fees: profileForm.price,
+                      experience: parseInt(profileForm.experience) || 0
+                    });
+                    showToast('Profile settings saved successfully!');
+                  }}
                 >
                   Save Settings
                 </button>

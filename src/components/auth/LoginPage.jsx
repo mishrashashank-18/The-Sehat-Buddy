@@ -57,7 +57,8 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch(`http://localhost:5000/api/${role}/verify-otp`, {
+      const apiRole = role === 'doctor' ? 'doctors' : (role === 'hospital' ? 'hospitals' : role);
+      const response = await fetch(`http://localhost:5000/api/${apiRole}/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail, otp }),
@@ -87,7 +88,8 @@ const LoginPage = ({ role, setView }) => {
     setError('');
     setLoading(true);
 
-    const endpoint = isLogin ? `http://localhost:5000/api/${role}/login` : `http://localhost:5000/api/${role}/register`;
+    const apiRole = role === 'doctor' ? 'doctors' : (role === 'hospital' ? 'hospitals' : role);
+    const endpoint = isLogin ? `http://localhost:5000/api/${apiRole}/login` : `http://localhost:5000/api/${apiRole}/register`;
     const payload = isLogin ? { email, password } : { name, email, password };
 
     try {
