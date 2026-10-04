@@ -11,6 +11,9 @@ const LoginPage = ({ role, setView }) => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
 
   const roleInfo = {
     admin: {
@@ -48,6 +51,37 @@ const LoginPage = ({ role, setView }) => {
     user: 'home',
   };
 
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(`http://localhost:5000/api/${role}/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: pendingEmail, otp }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token);
+        if (data.user || data.data) {
+          localStorage.setItem('user', JSON.stringify(data.user || data.data));
+        }
+        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
+        window.location.href = targetPath;
+      } else {
+        setError(data.message || 'OTP verification failed.');
+      }
+    } catch (err) {
+      setError('An error occurred during OTP verification.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAuth = async (e) => {
     e.preventDefault();
     setError('');
@@ -66,12 +100,18 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
-        if (data.user || data.data) {
-          localStorage.setItem('user', JSON.stringify(data.user || data.data));
+        if (data.requires_verification) {
+          setPendingEmail(email);
+          setShowOtp(true);
+          setError('');
+        } else {
+          localStorage.setItem('token', data.token);
+          if (data.user || data.data) {
+            localStorage.setItem('user', JSON.stringify(data.user || data.data));
+          }
+          const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
+          window.location.href = targetPath;
         }
-        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
-        window.location.href = targetPath;
       } else {
         setError(data.message || `${isLogin ? 'Login' : 'Signup'} failed. Please try again.`);
       }
@@ -131,20 +171,45 @@ const LoginPage = ({ role, setView }) => {
         <div className={styles.formSection}>
           <button 
             className={styles.backBtn} 
-            onClick={() => setView ? setView('home') : window.location.pathname = '/'}
+            onClick={() => {
+              if (showOtp) setShowOtp(false);
+              else setView ? setView('home') : window.location.pathname = '/';
+            }}
           >
-            <ArrowLeft size={20} /> Back to Home
+            <ArrowLeft size={20} /> {showOtp ? 'Back to Login' : 'Back to Home'}
           </button>
           
           <div className={styles.formHeader}>
             <div className={styles.iconWrapper}>{icon}</div>
-            <h2>{isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`}</h2>
-            <p>{isLogin ? subtitle : 'Create your account to get started'}</p>
+            <h2>{showOtp ? 'Verify OTP' : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`)}</h2>
+            <p>{showOtp ? `Enter the 6-digit OTP sent to ${pendingEmail}` : (isLogin ? subtitle : 'Create your account to get started')}</p>
           </div>
           
           {error && <div className={styles.errorMsg}>{error}</div>}
 
-          <form className={styles.authForm} onSubmit={handleAuth}>
+          {showOtp ? (
+            <form className={styles.authForm} onSubmit={handleVerifyOtp}>
+              <div className={styles.inputGroup}>
+                <label htmlFor="otp">Enter OTP</label>
+                <div className={styles.inputWrapper}>
+                  <Lock size={20} className={styles.inputIcon} />
+                  <input
+                    type="text"
+                    id="otp"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    required
+                    placeholder="123456"
+                    maxLength={6}
+                  />
+                </div>
+              </div>
+              <button type="submit" className={styles.submitButton} disabled={loading}>
+                {loading ? 'Verifying...' : 'Verify Email'}
+              </button>
+            </form>
+          ) : (
+            <form className={styles.authForm} onSubmit={handleAuth}>
             {!isLogin && (
               <div className={styles.inputGroup}>
                 <label htmlFor="name">Full Name</label>
@@ -222,8 +287,9 @@ const LoginPage = ({ role, setView }) => {
               {loading ? 'Authenticating...' : (isLogin ? 'Sign In' : 'Sign Up')}
             </button>
           </form>
+          )}
 
-          {role === 'user' && (
+          {role === 'user' && !showOtp && (
             <>
               <div className={styles.divider}>
                 <span>or continue with</span>
@@ -243,7 +309,7 @@ const LoginPage = ({ role, setView }) => {
             </>
           )}
           
-          {role !== 'admin' && (
+          {role !== 'admin' && !showOtp && (
             <div className={styles.signupPrompt}>
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <a href="#" onClick={(e) => {
