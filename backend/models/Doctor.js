@@ -15,13 +15,22 @@ const doctorSchema = new mongoose.Schema({
     line1: { type: String },
     line2: { type: String },
   },
+  hospital: { type: String },
+  qualifications: { type: String },
+  contact_number: { type: String },
+  instagram: { type: String },
+  facebook: { type: String },
+  reels: [{ type: String }],
+  youtube_videos: [{ type: String }],
+  rating: { type: Number, default: 4.8 },
+  reviews: { type: String, default: '50+' },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });
 
-doctorSchema.pre('save', async function(next) {
+doctorSchema.pre('save', async function() {
   if (!this.isModified('password')) {
-    next();
+    return;
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

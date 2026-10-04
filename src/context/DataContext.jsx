@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DataContext } from './context';
 import { api } from '../services/api';
-import { initialDoctors } from '../data/doctors';
-import { initialHospitals } from '../data/hospitals';
 import { initialHeroContent } from '../data/heroContent';
 import { initialServices } from '../data/services';
 import { initialFeatures } from '../data/features';
@@ -16,33 +14,11 @@ const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
 
 export const DataProvider = ({ children }) => {
-  // 1. Doctors State
-  const [doctors, setDoctors] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DOCTORS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to parse doctors from localStorage', e);
-    }
-    return initialDoctors;
-  });
+  // 1. Doctors State (Fetched directly from DB)
+  const [doctors, setDoctors] = useState([]);
 
-  // 2. Hospitals State
-  const [hospitals, setHospitals] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_HOSPITALS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to parse hospitals from localStorage', e);
-    }
-    return initialHospitals;
-  });
+  // 2. Hospitals State (Fetched directly from DB)
+  const [hospitals, setHospitals] = useState([]);
 
   // 3. Hero & Front Page General Content State
   const [heroContent, setHeroContent] = useState(() => {
@@ -64,7 +40,7 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_SERVICES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error('Failed to parse services from localStorage', e);
@@ -78,7 +54,7 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_FEATURES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.map((item, idx) => ({
             id: item.id || idx + 1,
             title: item.title || 'Healthcare Feature',
@@ -99,7 +75,7 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_ARTICLES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       console.error('Failed to parse articles from localStorage', e);
@@ -120,11 +96,21 @@ export const DataProvider = ({ children }) => {
 
         if (!isMounted) return;
 
-        if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value) && docsRes.value.length > 0) {
-          setDoctors(docsRes.value);
+        if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)) {
+          setDoctors(docsRes.value.map(d => ({
+            ...d,
+            id: d._id || d.id,
+            specialty: d.specialization || d.specialty || 'General Physician',
+            price: d.fees || d.price || 500,
+            experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience')
+          })));
         }
-        if (hospsRes.status === 'fulfilled' && Array.isArray(hospsRes.value) && hospsRes.value.length > 0) {
-          setHospitals(hospsRes.value);
+        if (hospsRes.status === 'fulfilled' && Array.isArray(hospsRes.value)) {
+          setHospitals(hospsRes.value.map(h => ({
+            ...h,
+            id: h._id || h.id,
+            specialties: h.specialities || h.specialties || []
+          })));
         }
         if (contentRes.status === 'fulfilled' && contentRes.value) {
           const { hero, services: sList, features: fList, articles: aList } = contentRes.value;
@@ -145,22 +131,6 @@ export const DataProvider = ({ children }) => {
   }, []);
 
   // Sync to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(doctors));
-    } catch (e) {
-      console.error('Failed to save doctors to localStorage', e);
-    }
-  }, [doctors]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(hospitals));
-    } catch (e) {
-      console.error('Failed to save hospitals to localStorage', e);
-    }
-  }, [hospitals]);
-
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_HERO, JSON.stringify(heroContent));
@@ -399,8 +369,8 @@ export const DataProvider = ({ children }) => {
 
   // Reset Everything
   const resetToDefaults = () => {
-    setDoctors(initialDoctors);
-    setHospitals(initialHospitals);
+    setDoctors([]);
+    setHospitals([]);
     resetFrontPageDefaults();
     localStorage.removeItem(STORAGE_KEY_DOCTORS);
     localStorage.removeItem(STORAGE_KEY_HOSPITALS);

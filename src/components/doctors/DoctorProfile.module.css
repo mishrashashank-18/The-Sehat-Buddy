@@ -1,0 +1,330 @@
+.pageWrapper {
+  padding: 20px 0 80px;
+  background-color: #f8fafc;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-light);
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  margin-bottom: 16px;
+  padding: 0;
+}
+
+.backBtn:hover {
+  color: var(--color-primary);
+}
+
+.profileCard {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 24px 32px;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 24px;
+}
+
+.imageCol img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+
+.socialLinks {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  justify-content: center;
+}
+
+.socialLinks a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: var(--color-text);
+  transition: all 0.2s;
+}
+
+.socialLinks a:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+.infoCol {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.titleSection h1 {
+  font-size: 2rem;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.specialtyPill {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef9c3;
+  padding: 4px 10px;
+  border-radius: 100px;
+  color: #a16207;
+  font-weight: 600;
+}
+
+.detailsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.detailItem {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.detailIcon {
+  color: var(--color-primary);
+  margin-top: 2px;
+}
+
+.detailItem h4 {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+  margin-bottom: 2px;
+}
+
+.detailItem p {
+  font-size: 0.95rem;
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.about {
+  margin-bottom: 24px;
+}
+
+.about h3 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+  color: var(--color-text);
+}
+
+.about p {
+  color: var(--color-text-light);
+  line-height: 1.6;
+}
+
+.actionRow {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.price span {
+  font-size: 1rem;
+  font-weight: 400;
+  color: var(--color-text-light);
+}
+
+.bookBtn {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 14px 32px;
+  border-radius: var(--radius-md);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bookBtn:hover {
+  background-color: #1d4ed8;
+}
+
+.mediaSection {
+  margin-top: 60px;
+}
+
+.mediaSection h3 {
+  font-size: 1.5rem;
+  margin-bottom: 24px;
+  color: var(--color-text);
+}
+
+.reelsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  padding-bottom: 20px;
+  justify-items: center;
+}
+
+.reelCard {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 9/16;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  position: relative;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.reelCard iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none; /* Let click pass to overlay */
+}
+
+.reelOverlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.1);
+  transition: opacity 0.2s;
+  border-radius: var(--radius-md);
+}
+
+.reelCard:hover .reelOverlay {
+  background: rgba(0,0,0,0.3);
+}
+
+.youtubeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 32px;
+}
+
+.youtubeCard {
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: transparent;
+  aspect-ratio: 16/9;
+  position: relative;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  transition: transform 0.2s ease;
+}
+
+.youtubeCard:hover {
+  transform: translateY(-4px);
+}
+
+.youtubeCard iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
+}
+
+/* Modal */
+.modalOverlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.modalContent {
+  background: transparent;
+  width: 100%;
+  max-width: 400px;
+  height: 80vh;
+  position: relative;
+}
+
+.modalContent iframe {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: white;
+}
+
+.bookingModalContent {
+  background: white;
+  width: 100%;
+  max-width: 600px;
+  border-radius: 16px;
+  position: relative;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.closeModal {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 8px;
+}
+
+@media (max-width: 768px) {
+  .profileCard {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+  
+  .headerRow {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .detailsGrid, .youtubeGrid {
+    grid-template-columns: 1fr;
+  }
+}

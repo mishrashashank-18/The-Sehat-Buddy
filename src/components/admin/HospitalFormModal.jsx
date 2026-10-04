@@ -151,10 +151,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       totalBeds: parseInt(formData.totalBeds, 10) || 100,
       emergency24x7: Boolean(formData.emergency24x7),
       phone: formData.phone.trim(),
-      email: formData.email.trim(),
+      email: formData.email.trim() || `${formData.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@sehatbuddy.com`,
+      password: 'password123', // Default required password for DB
       establishedYear: parseInt(formData.establishedYear, 10) || 2000,
       description: formData.description.trim(),
       specialties: formData.specialties,
+      specialities: formData.specialties, // DB mapping
       image: finalImage,
     };
 

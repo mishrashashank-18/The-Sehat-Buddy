@@ -15,18 +15,20 @@ import DoctorDashboard from './components/doctor-dashboard/DoctorDashboard';
 import HospitalDashboard from './components/hospital-dashboard/HospitalDashboard';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import LoginPage from './components/auth/LoginPage';
+import FindDoctors from './components/doctors/FindDoctors';
+import DoctorProfile from './components/doctors/DoctorProfile';
 import './styles/global.css';
 
-function MainWebsite({ onNavigate }) {
+function MainWebsite({ onNavigate, currentView }) {
   return (
     <div className="app">
-      <Navbar onNavigate={onNavigate} />
+      <Navbar onNavigate={onNavigate} currentView={currentView} />
       <main>
         <Hero />
         <SearchBar />
         <ServicesSection />
         <WhyChooseSection />
-        <PopularDoctors />
+        <PopularDoctors onNavigate={onNavigate} />
         <TopHospitals />
         <HealthContentSection />
       </main>
@@ -51,11 +53,21 @@ const resolveCurrentView = () => {
   if (path === '/login' || path.startsWith('/login/') || hash === '#login' || hash === '#/login') {
     return 'user-login';
   }
+  if (path === '/doctors' || hash === '#doctors' || hash === '#/doctors') {
+    return 'find-doctors';
+  }
+  if (path.startsWith('/doctors/')) {
+    const segments = path.split('/');
+    if (segments.length >= 3) {
+      return 'doctor-profile:' + segments[2];
+    }
+  }
   return 'site';
 };
 
 function AppContent() {
   const [currentView, setCurrentView] = useState(resolveCurrentView);
+  const [redirectAfterLogin, setRedirectAfterLogin] = useState(null);
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -70,15 +82,21 @@ function AppContent() {
     };
   }, []);
 
-  const navigateTo = (viewName) => {
+  const navigateTo = (viewName, param) => {
     let targetPath = '/';
     if (viewName === 'admin') targetPath = '/admin';
     else if (viewName === 'doctor') targetPath = '/doctor';
     else if (viewName === 'hospital') targetPath = '/hospital';
     else if (viewName === 'user-login') targetPath = '/login';
+    else if (viewName === 'find-doctors') targetPath = '/doctors';
+    else if (viewName === 'doctor-profile') targetPath = `/doctors/${param}`;
+
+    if (viewName === 'user-login' && param) {
+      setRedirectAfterLogin(param);
+    }
 
     window.history.pushState({}, '', targetPath);
-    setCurrentView(viewName);
+    setCurrentView(viewName === 'doctor-profile' ? `doctor-profile:${param}` : viewName);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -100,10 +118,38 @@ function AppContent() {
   }
 
   if (currentView === 'user-login') {
-    return <LoginPage role="user" setView={navigateTo} />;
+    return <LoginPage role="user" setView={(view) => {
+      if ((view === 'site' || view === 'home') && redirectAfterLogin) {
+        navigateTo(redirectAfterLogin.view, redirectAfterLogin.param);
+        setRedirectAfterLogin(null);
+      } else {
+        navigateTo(view);
+      }
+    }} />;
   }
 
-  return <MainWebsite onNavigate={navigateTo} />;
+  if (currentView === 'find-doctors') {
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <FindDoctors onNavigate={navigateTo} />
+        <Footer />
+      </div>
+    );
+  }
+
+  if (currentView.startsWith('doctor-profile:')) {
+    const docId = currentView.split(':')[1];
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <DoctorProfile doctorId={docId} onNavigate={navigateTo} />
+        <Footer />
+      </div>
+    );
+  }
+
+  return <MainWebsite onNavigate={navigateTo} currentView={currentView} />;
 }
 
 function App() {

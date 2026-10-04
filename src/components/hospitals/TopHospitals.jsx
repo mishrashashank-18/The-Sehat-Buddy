@@ -17,7 +17,7 @@ const TopHospitals = () => {
         />
 
         <div className={styles.grid}>
-          {hospitals.map((hospital) => (
+          {hospitals.slice(0, 4).map((hospital) => (
             <div key={hospital.id} className={styles.card}>
               <div className={styles.imageWrapper}>
                 <img

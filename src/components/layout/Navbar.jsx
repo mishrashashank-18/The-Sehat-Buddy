@@ -4,8 +4,16 @@ import Container from './Container';
 import Button from '../common/Button';
 import styles from './Navbar.module.css';
 
-const Navbar = ({ onNavigate }) => {
+const Navbar = ({ onNavigate, currentView = 'site' }) => {
   const scrollTo = (id) => {
+    if (currentView !== 'site') {
+      onNavigate('site');
+      setTimeout(() => {
+        const el = document.getElementById(id);
+        if (el) el.scrollIntoView({ behavior: 'smooth' });
+      }, 300);
+      return;
+    }
     const el = document.getElementById(id);
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
@@ -15,7 +23,7 @@ const Navbar = ({ onNavigate }) => {
   return (
     <nav className={styles.navbar}>
       <Container className={styles.container}>
-        <div className={styles.logoGroup} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ cursor: 'pointer' }}>
+        <div className={styles.logoGroup} onClick={() => onNavigate('site')} style={{ cursor: 'pointer' }}>
           <div className={styles.logoIcon}>
             <HeartPulse size={36} color="var(--color-primary)" strokeWidth={2.5} />
           </div>
@@ -26,8 +34,8 @@ const Navbar = ({ onNavigate }) => {
         </div>
 
         <ul className={styles.navLinks}>
-          <li><a href="#" className={styles.active} onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Home</a></li>
-          <li><a href="#doctors-section" onClick={(e) => { e.preventDefault(); scrollTo('doctors-section'); }}>Find Doctors</a></li>
+          <li><a href="#" className={currentView === 'site' ? styles.active : ''} onClick={(e) => { e.preventDefault(); onNavigate('site'); }}>Home</a></li>
+          <li><a href="#" className={currentView === 'find-doctors' ? styles.active : ''} onClick={(e) => { e.preventDefault(); onNavigate('find-doctors'); }}>Find Doctors</a></li>
           <li><a href="#hospitals-section" onClick={(e) => { e.preventDefault(); scrollTo('hospitals-section'); }}>Hospitals</a></li>
           <li><a href="#services-section" onClick={(e) => { e.preventDefault(); scrollTo('services-section'); }}>Services</a></li>
           <li><a href="#health-content-section" onClick={(e) => { e.preventDefault(); scrollTo('health-content-section'); }}>Health Content</a></li>
@@ -41,7 +49,7 @@ const Navbar = ({ onNavigate }) => {
         <div className={styles.actions}>
           <div className={styles.locationPill}>
             <MapPin size={16} className={styles.locationIcon} />
-            <span>Delhi, India</span>
+            <span>Bengaluru</span>
             <ChevronDown size={16} className={styles.chevron} />
           </div>
 

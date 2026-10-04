@@ -16,9 +16,9 @@ const hospitalSchema = new mongoose.Schema({
   isVerified: { type: Boolean, default: false },
 }, { timestamps: true });
 
-hospitalSchema.pre('save', async function(next) {
+hospitalSchema.pre('save', async function() {
   if (!this.isModified('password')) {
-    next();
+    return;
   }
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);

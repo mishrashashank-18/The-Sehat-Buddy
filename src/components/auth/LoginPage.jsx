@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
-import { Mail, Lock, HeartPulse, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User } from 'lucide-react';
+import { Mail, Lock, HeartPulse, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User, Eye, EyeOff } from 'lucide-react';
 import styles from './LoginPage.module.css';
 
 const LoginPage = ({ role, setView }) => {
@@ -10,6 +10,7 @@ const LoginPage = ({ role, setView }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const roleInfo = {
     admin: {
@@ -69,9 +70,8 @@ const LoginPage = ({ role, setView }) => {
         if (data.user || data.data) {
           localStorage.setItem('user', JSON.stringify(data.user || data.data));
         }
-        
-        if (setView) setView(roleRedirects[role]);
-        else window.location.pathname = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
+        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
+        window.location.href = targetPath;
       } else {
         setError(data.message || `${isLogin ? 'Login' : 'Signup'} failed. Please try again.`);
       }
@@ -100,8 +100,8 @@ const LoginPage = ({ role, setView }) => {
         if (data.user || data.data) {
           localStorage.setItem('user', JSON.stringify(data.user || data.data));
         }
-        if (setView) setView(roleRedirects[role]);
-        else window.location.pathname = '/';
+        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
+        window.location.href = targetPath;
       } else {
         setError(data.message || 'Google login failed.');
       }
@@ -182,13 +182,33 @@ const LoginPage = ({ role, setView }) => {
               <div className={styles.inputWrapper}>
                 <Lock size={20} className={styles.inputIcon} />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   id="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
+                  style={{ paddingRight: '40px' }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: '#6B7280',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: 0
+                  }}
+                >
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
             </div>
 
@@ -223,16 +243,18 @@ const LoginPage = ({ role, setView }) => {
             </>
           )}
           
-          <div className={styles.signupPrompt}>
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <a href="#" onClick={(e) => {
-              e.preventDefault();
-              setIsLogin(!isLogin);
-              setError('');
-            }}>
-              {isLogin ? 'Sign up here' : 'Sign in here'}
-            </a>
-          </div>
+          {role !== 'admin' && (
+            <div className={styles.signupPrompt}>
+              {isLogin ? "Don't have an account? " : "Already have an account? "}
+              <a href="#" onClick={(e) => {
+                e.preventDefault();
+                setIsLogin(!isLogin);
+                setError('');
+              }}>
+                {isLogin ? 'Sign up here' : 'Sign in here'}
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>

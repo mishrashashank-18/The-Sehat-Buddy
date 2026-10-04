@@ -49,7 +49,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         email: doctorToEdit.email || '',
         availableDays: doctorToEdit.availableDays || 'Mon - Sat (9:00 AM - 1:00 PM)',
         about: doctorToEdit.about || '',
+        available: doctorToEdit.available !== undefined ? doctorToEdit.available : true,
         image: doctorToEdit.image || doc1,
+        instagram: doctorToEdit.instagram || '',
+        facebook: doctorToEdit.facebook || '',
+        reels: Array.isArray(doctorToEdit.reels) ? [...doctorToEdit.reels, '', '', '', '', ''].slice(0, 5) : ['', '', '', '', ''],
+        youtube_videos: Array.isArray(doctorToEdit.youtube_videos) ? [...doctorToEdit.youtube_videos, '', ''].slice(0, 2) : ['', '']
       };
     }
     return {
@@ -66,7 +71,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       email: '',
       availableDays: 'Mon - Sat (10:00 AM - 4:00 PM)',
       about: '',
+      available: true,
       image: doc1,
+      instagram: '',
+      facebook: '',
+      reels: ['', '', '', '', ''],
+      youtube_videos: ['', '']
     };
   });
 
@@ -123,8 +133,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     const payload = {
       name: formData.name.trim(),
       specialty: finalSpecialty,
-      experience: `${formData.experienceYears}+ Years Experience`,
-      price: Number(formData.price),
+      specialization: finalSpecialty,
+      experienceYears: parseInt(formData.experienceYears, 10) || 5,
+      experience: parseInt(formData.experienceYears, 10) || 5,
+      experienceText: `${parseInt(formData.experienceYears, 10) || 5}+ Years Experience`,
+      price: parseInt(formData.price, 10) || 500,
+      fees: parseInt(formData.price, 10) || 500,
       rating: parseFloat(formData.rating) || 4.8,
       reviews: formData.reviews || '50+',
       hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
@@ -134,10 +148,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       availableDays: formData.availableDays,
       about: formData.about,
       image: finalImage,
+      instagram: formData.instagram,
+      facebook: formData.facebook,
+      reels: formData.reels.filter(url => url.trim() !== ''),
+      youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
+      qualifications: formData.degree,
+      contact_number: formData.phone,
+      available: formData.available
     };
 
     if (doctorToEdit) {
-      updateDoctor(doctorToEdit.id, payload);
+      updateDoctor(doctorToEdit.id || doctorToEdit._id, payload);
     } else {
       addDoctor(payload);
     }
@@ -410,6 +431,77 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               onChange={(e) => setFormData({ ...formData, about: e.target.value })}
             />
           </div>
+
+          <div className={styles.formGroup} style={{ marginTop: '14px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={formData.available}
+                onChange={(e) => setFormData({ ...formData, available: e.target.checked })}
+                style={{ width: 'auto' }}
+              />
+              Active / Listed on Find Doctors page
+            </label>
+          </div>
+
+          {/* Social Links */}
+          <div className={styles.sectionHeader}>Social Profiles</div>
+          <div className={styles.grid2}>
+            <div className={styles.formGroup}>
+              <label>Instagram URL</label>
+              <input
+                type="url"
+                placeholder="https://instagram.com/..."
+                value={formData.instagram}
+                onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Facebook URL</label>
+              <input
+                type="url"
+                placeholder="https://facebook.com/..."
+                value={formData.facebook}
+                onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
+              />
+            </div>
+          </div>
+
+          {/* Instagram Reels */}
+          <div className={styles.sectionHeader}>Instagram Reels (Max 5)</div>
+          {[0, 1, 2, 3, 4].map((index) => (
+            <div className={styles.formGroup} key={`reel-${index}`}>
+              <label>Reel {index + 1} URL</label>
+              <input
+                type="url"
+                placeholder="https://www.instagram.com/reel/..."
+                value={formData.reels[index] || ''}
+                onChange={(e) => {
+                  const newReels = [...formData.reels];
+                  newReels[index] = e.target.value;
+                  setFormData({ ...formData, reels: newReels });
+                }}
+              />
+            </div>
+          ))}
+
+          {/* YouTube Videos */}
+          <div className={styles.sectionHeader}>YouTube Educational Videos (Max 2)</div>
+          {[0, 1].map((index) => (
+            <div className={styles.formGroup} key={`yt-${index}`}>
+              <label>Video {index + 1} URL</label>
+              <input
+                type="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                value={formData.youtube_videos[index] || ''}
+                onChange={(e) => {
+                  const newYt = [...formData.youtube_videos];
+                  newYt[index] = e.target.value;
+                  setFormData({ ...formData, youtube_videos: newYt });
+                }}
+              />
+            </div>
+          ))}
         </div>
 
         <div className={styles.footer}>
