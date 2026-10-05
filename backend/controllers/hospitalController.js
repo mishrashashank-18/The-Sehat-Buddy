@@ -9,6 +9,7 @@ export const authHospital = async (req, res) => {
       res.json({
         success: true,
         token: generateToken(hospital._id),
+        user: hospital
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });

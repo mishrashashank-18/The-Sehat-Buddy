@@ -10,6 +10,7 @@ export const authDoctor = async (req, res) => {
       res.json({
         success: true,
         token: generateToken(doctor._id),
+        user: doctor
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });

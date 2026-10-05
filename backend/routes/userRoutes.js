@@ -1,5 +1,5 @@
 import express from 'express';
-import { registerUser, authUser, googleLogin, getProfile, updateProfile, bookAppointment, listAppointments, cancelAppointment } from '../controllers/userController.js';
+import { registerUser, authUser, googleLogin, getProfile, updateProfile, bookAppointment, listAppointments, cancelAppointment, verifyOtp } from '../controllers/userController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
 
@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.post('/register', registerUser);
 router.post('/login', authUser);
+router.post('/verify-otp', verifyOtp);
 router.post('/google-login', googleLogin);
 router.get('/profile', protect, getProfile);
 router.post('/update-profile', protect, upload.single('image'), updateProfile);

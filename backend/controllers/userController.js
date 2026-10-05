@@ -4,22 +4,86 @@ import Appointment from '../models/Appointment.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
 export const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
   try {
     const userExists = await User.findOne({ email });
     if (userExists) {
+      if (!userExists.isVerified) {
+        // Resend OTP if not verified
+        const otp = generateOTP();
+        userExists.otp = otp;
+        userExists.otpExpires = Date.now() + 10 * 60 * 1000;
+        await userExists.save();
+        
+        try {
+          await sendEmail({
+            email: userExists.email,
+            subject: 'Verify your email - Sehat Buddy',
+            message: `Your OTP for registration is ${otp}. It is valid for 10 minutes.`,
+            html: `<h4>Hello ${userExists.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+          });
+        } catch (emailError) {
+          console.error('Error sending OTP email:', emailError.message);
+          console.log(`[MOCK EMAIL] OTP for ${userExists.email} is: ${otp}`);
+        }
+        
+        return res.status(200).json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
+      }
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
-    const user = await User.create({ name, email, password });
+    
+    const otp = generateOTP();
+    const user = await User.create({ name, email, password, otp, otpExpires: Date.now() + 10 * 60 * 1000 });
+    
     if (user) {
+      try {
+        await sendEmail({
+          email: user.email,
+          subject: 'Verify your email - Sehat Buddy',
+          message: `Hello ${user.name},\n\nYour OTP for registration is ${otp}. It is valid for 10 minutes.`,
+          html: `<h4>Hello ${user.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+        });
+      } catch (emailError) {
+        console.error('Error sending OTP email:', emailError.message);
+      }
+      console.log(`[MOCK EMAIL] OTP for ${user.email} is: ${otp}`);
+
       res.status(201).json({
         success: true,
-        token: generateToken(user._id),
+        requires_verification: true,
+        message: 'OTP sent to email.'
       });
     } else {
       res.status(400).json({ success: false, message: 'Invalid user data' });
     }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
+    if (user.otp !== otp || user.otpExpires < Date.now()) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+    
+    user.isVerified = true;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+    
+    res.json({
+      success: true,
+      token: generateToken(user._id),
+      user: { name: user.name, email: user.email, id: user._id }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -30,9 +94,42 @@ export const authUser = async (req, res) => {
   try {
     const user = await User.findOne({ email });
     if (user && (await user.matchPassword(password))) {
+      if (!user.isVerified) {
+        const otp = generateOTP();
+        user.otp = otp;
+        user.otpExpires = Date.now() + 10 * 60 * 1000;
+        await user.save();
+        
+        try {
+          await sendEmail({
+            email: user.email,
+            subject: 'Verify your email - Sehat Buddy',
+            message: `Hello ${user.name},\n\nYour OTP for login is ${otp}. It is valid for 10 minutes.`,
+            html: `<h4>Hello ${user.name},</h4><p>Your OTP for login is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+          });
+        } catch (emailError) {
+          console.error('Error sending OTP email:', emailError.message);
+        }
+        console.log(`[MOCK EMAIL] OTP for ${user.email} is: ${otp}`);
+        
+        return res.json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
+      }
+
+      try {
+        await sendEmail({
+          email: user.email,
+          subject: 'Login Alert - Sehat Buddy',
+          message: `Hello ${user.name},\n\nA new login was detected on your Sehat Buddy account.`,
+          html: `<h4>Hello ${user.name},</h4><p>A new login was detected on your Sehat Buddy account.</p>`
+        });
+      } catch (emailError) {
+        console.error('Error sending login alert email:', emailError);
+      }
+
       res.json({
         success: true,
         token: generateToken(user._id),
+        user: { name: user.name, email: user.email, id: user._id }
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -180,16 +277,29 @@ export const googleLogin = async (req, res) => {
       // If user exists but no googleId, link the account
       if (!user.googleId) {
         user.googleId = googleId;
-        await user.save();
       }
+      user.isVerified = true;
+      await user.save();
     } else {
       // Create new user if they don't exist
       user = await User.create({
         name,
         email,
         googleId,
+        isVerified: true,
         image: picture || "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg",
       });
+    }
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: 'Login Alert - Sehat Buddy',
+        message: `Hello ${user.name},\n\nA new Google login was detected on your Sehat Buddy account.`,
+        html: `<h4>Hello ${user.name},</h4><p>A new Google login was detected on your Sehat Buddy account.</p>`
+      });
+    } catch (emailError) {
+      console.error('Error sending login alert email:', emailError);
     }
 
     res.json({

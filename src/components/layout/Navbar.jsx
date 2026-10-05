@@ -20,6 +20,36 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
     }
   };
 
+  const [user, setUser] = React.useState(null);
+  const token = localStorage.getItem('token');
+
+  React.useEffect(() => {
+    if (token) {
+      // It might be a user, admin, doctor, or hospital token
+      // Usually the profile endpoint for users is /api/user/profile
+      // Since it's a general navbar, we try /api/user/profile first.
+      fetch('http://localhost:5000/api/user/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data) {
+          setUser(data.data);
+        }
+      })
+      .catch(err => console.error('Error fetching profile:', err));
+    }
+  }, [token]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    window.location.href = '/';
+  };
+
   return (
     <nav className={styles.navbar}>
       <Container className={styles.container}>
@@ -53,7 +83,14 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
             <ChevronDown size={16} className={styles.chevron} />
           </div>
 
-          <Button onClick={() => onNavigate && onNavigate('user-login')}>Login / Sign Up</Button>
+          {user && user.name ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontWeight: '500', color: 'var(--color-body)' }}>Hi, {user.name.split(' ')[0]}</span>
+              <Button onClick={handleLogout} style={{ padding: '8px 16px', fontSize: '14px', backgroundColor: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-primary)' }}>Logout</Button>
+            </div>
+          ) : (
+            <Button onClick={() => onNavigate && onNavigate('user-login')}>Login / Sign Up</Button>
+          )}
         </div>
       </Container>
     </nav>
