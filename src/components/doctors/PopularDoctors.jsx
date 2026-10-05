@@ -9,12 +9,13 @@ const PopularDoctors = ({ onNavigate }) => {
   const { doctors } = useData();
 
   // Remove Dr. Pooja Malhotra from this specific section
-  const displayDoctors = doctors.filter(doctor => !doctor.name.includes('Pooja Malhotra'));
+  const filteredDoctors = doctors.filter(doctor => !doctor.name.includes('Pooja Malhotra'));
+  const displayDoctors = filteredDoctors.slice(0, 3);
 
   return (
     <section id="doctors-section" className={styles.section}>
       <Container>
-        <SectionHeader title="Popular Doctors" linkText={`View All Doctors (${displayDoctors.length})`} onLinkClick={() => onNavigate('find-doctors')} />
+        <SectionHeader title="Popular Doctors" linkText={`View All Doctors (${filteredDoctors.length})`} onLinkClick={() => onNavigate('find-doctors')} />
         
         <div className={styles.grid}>
           {displayDoctors.map(doctor => (

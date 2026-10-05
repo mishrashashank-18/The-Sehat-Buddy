@@ -103,7 +103,7 @@ export const DataProvider = ({ children }) => {
     return initialArticles;
   });
 
-  // Initial fetch from Backend API (if running)
+  // Fetch from Backend API periodically for real-time updates
   useEffect(() => {
     let isMounted = true;
     const fetchBackendData = async () => {
@@ -149,8 +149,15 @@ export const DataProvider = ({ children }) => {
     };
 
     fetchBackendData();
+
+    // Poll every 10 seconds to keep data fresh without refreshing
+    const intervalId = setInterval(() => {
+      fetchBackendData();
+    }, 10000);
+
     return () => {
       isMounted = false;
+      clearInterval(intervalId);
     };
   }, []);
 
@@ -186,6 +193,22 @@ export const DataProvider = ({ children }) => {
       console.error('Failed to save articles to localStorage', e);
     }
   }, [articles]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(doctors));
+    } catch (e) {
+      console.error('Failed to save doctors to localStorage', e);
+    }
+  }, [doctors]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(hospitals));
+    } catch (e) {
+      console.error('Failed to save hospitals to localStorage', e);
+    }
+  }, [hospitals]);
 
   // Doctor CRUD operations
   const addDoctor = (doctorData) => {

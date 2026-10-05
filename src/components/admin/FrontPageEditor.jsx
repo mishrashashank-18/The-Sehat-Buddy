@@ -75,6 +75,26 @@ const FrontPageEditor = ({ showToast }) => {
     newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter'
   }));
 
+  React.useEffect(() => {
+    setHeroForm({
+      badge: heroContent?.badge || '',
+      titleLine1: heroContent?.titleLine1 || '',
+      titleLine2: heroContent?.titleLine2 || '',
+      titleHighlight: heroContent?.titleHighlight || '',
+      description: heroContent?.description || '',
+      heroImage: heroContent?.heroImage || heroFamily,
+      stat1Label: heroContent?.stats?.[0]?.label || 'Trusted by',
+      stat1Value: heroContent?.stats?.[0]?.value || '10M+ Users',
+      stat2Label: heroContent?.stats?.[1]?.label || 'Expert Doctors',
+      stat2Value: heroContent?.stats?.[1]?.value || '25,000+',
+      stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
+      stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
+      whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
+      newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
+      newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter'
+    });
+  }, [heroContent]);
+
   // Modals for adding items
   const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
   const [newService, setNewService] = useState({
