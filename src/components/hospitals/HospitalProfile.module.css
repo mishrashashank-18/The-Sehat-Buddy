@@ -1,0 +1,793 @@
+.pageWrapper {
+  padding: 24px 0 90px;
+  background-color: #f8fafc;
+  min-height: 80vh;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-light);
+  background: none;
+  border: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 20px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+.backBtn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  background: #eff6ff;
+}
+
+/* Hospital Hero Card */
+.profileCard {
+  background: white;
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 36px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid #edf2f7;
+  margin-bottom: 36px;
+}
+
+.imageCol {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.imageWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.imageWrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.emergencyBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: #dc2626;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
+}
+
+.cityBadge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(6px);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 100px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.contactBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.contactItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.contactItem:hover {
+  color: var(--color-primary);
+}
+
+.contactItem svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* Info Column */
+.infoCol {
+  display: flex;
+  flex-direction: column;
+}
+
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.titleSection h1 {
+  font-size: 2.1rem;
+  font-weight: 700;
+  color: var(--color-heading, #0f172a);
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.verifiedPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fef9c3;
+  padding: 6px 14px;
+  border-radius: 100px;
+  color: #854d0e;
+  font-weight: 700;
+  font-size: 0.95rem;
+  flex-shrink: 0;
+}
+
+.locationActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.addressRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--color-text-light);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 250px;
+}
+
+.addressRow svg {
+  color: var(--color-primary);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.getDirectionsBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.getDirectionsBtn:hover:not(:disabled) {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+.getDirectionsBtn:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.spinIcon {
+  animation: btnSpin 1s linear infinite;
+}
+
+@keyframes btnSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.directionsError {
+  font-size: 0.85rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 8px 14px;
+  border-radius: 8px;
+  margin-top: -10px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.statsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.statPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.statPill svg {
+  color: var(--color-primary);
+}
+
+.specialtiesSection {
+  margin-bottom: 20px;
+}
+
+.sectionSubLabel {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.specialtiesWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.specBadge {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #dbeafe;
+}
+
+.aboutBox {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.aboutBox p {
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Sections Common Header */
+.sectionBlock {
+  margin-top: 48px;
+}
+
+.sectionHeader {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+.sectionTitleGroup h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--color-heading, #0f172a);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.sectionTitleGroup p {
+  color: var(--color-text-light);
+  font-size: 0.95rem;
+}
+
+.countTag {
+  background: #2563eb;
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 100px;
+}
+
+/* Star Doctors Section */
+.doctorsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px;
+  align-items: stretch;
+}
+
+.doctorCard {
+  background: white;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+  transition: all 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.doctorCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.12);
+  border-color: #bfdbfe;
+}
+
+.docImageWrapper {
+  position: relative;
+  width: 100%;
+  height: 260px;
+  max-height: 260px;
+  background: #f8fafc;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.docImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.doctorCard:hover .docImage {
+  transform: scale(1.03);
+}
+
+.starBadge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 100px;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  z-index: 2;
+}
+
+.docCardBody {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.docNameRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.docName {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--color-heading, #0f172a);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.docRating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #854d0e;
+  background: #fef9c3;
+  padding: 2px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.docSpecialty {
+  display: block;
+  color: #2563eb;
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-height: 20px;
+}
+
+.docDegree {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  min-height: 20px;
+  width: 100%;
+}
+
+.docDegreeText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.docExperience {
+  font-size: 0.82rem;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  min-height: 20px;
+}
+
+.docExperienceText {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docFooter {
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.docFee {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-heading, #0f172a);
+  white-space: nowrap;
+}
+
+.docFee span {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.viewDocBtn {
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.viewDocBtn:hover {
+  background: #1d4ed8;
+}
+
+/* Instagram Reels Section */
+.reelsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+}
+
+.reelCard {
+  flex: 0 1 210px;
+  width: 210px;
+  max-width: 240px;
+  aspect-ratio: 9 / 16;
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  background: #0f172a;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* If single reel, make it slightly larger and prominent */
+.reelsGrid[data-count="1"] .reelCard {
+  flex: 0 1 280px;
+  max-width: 280px;
+}
+
+.reelCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.reelCard iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
+}
+
+.reelOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  transition: background 0.2s;
+}
+
+.reelCard:hover .reelOverlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.playCircle {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e1306c;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.reelCard:hover .playCircle {
+  transform: scale(1.1);
+}
+
+.reelIndexBadge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+/* YouTube Videos Section */
+.youtubeGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 24px;
+  width: 100%;
+}
+
+.youtubeCard {
+  flex: 0 1 360px;
+  max-width: 380px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f172a;
+  position: relative;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Customized width based on video count */
+.youtubeGrid[data-count="1"] .youtubeCard {
+  flex: 0 1 680px;
+  max-width: 680px;
+}
+
+.youtubeGrid[data-count="2"] .youtubeCard {
+  flex: 0 1 480px;
+  max-width: 500px;
+}
+
+.youtubeGrid[data-count="3"] .youtubeCard {
+  flex: 0 1 360px;
+  max-width: 380px;
+}
+
+.youtubeGrid[data-count="4"] .youtubeCard {
+  flex: 0 1 360px;
+  max-width: 440px;
+}
+
+.youtubeGrid[data-count="5"] .youtubeCard {
+  flex: 0 1 360px;
+  max-width: 380px;
+}
+
+.youtubeCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.youtubeCard iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  pointer-events: none;
+}
+
+.ytPlayCircle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+  transition: transform 0.2s ease;
+}
+
+.youtubeCard:hover .ytPlayCircle {
+  transform: scale(1.1);
+}
+
+/* Modal Popup Players */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 24px;
+}
+
+.modalContentReel {
+  width: 100%;
+  max-width: 420px;
+  height: 82vh;
+  position: relative;
+  background: transparent;
+}
+
+.modalContentReel iframe {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  border: none;
+  background: white;
+}
+
+.modalContentVideo {
+  width: 90%;
+  max-width: 960px;
+  aspect-ratio: 16 / 9;
+  position: relative;
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.modalContentVideo iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.closeModal {
+  position: absolute;
+  top: -44px;
+  right: 0;
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.closeModal:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .profileCard {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .doctorsGrid {
+    grid-template-columns: 1fr;
+  }
+}

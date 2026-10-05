@@ -41,6 +41,16 @@ export const api = {
     return data.data;
   },
 
+  async addDoctorByHospital(doctorData) {
+    const res = await fetch(`${API_BASE}/doctors/add-by-hospital`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(doctorData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
   async updateDoctor(id, doctorData) {
     const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
       method: 'PUT',
@@ -148,5 +158,31 @@ export const api = {
     });
     const data = await handleResponse(res);
     return data.data;
+  },
+
+  // Image Upload (Cloudinary)
+  async uploadImage(fileOrBase64, folder = 'sehatbuddy') {
+    let body;
+    let headers = {};
+    const token = localStorage.getItem('token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
+      const formData = new FormData();
+      formData.append('image', fileOrBase64);
+      formData.append('folder', folder);
+      body = formData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ image: fileOrBase64, folder });
+    }
+
+    const res = await fetch(`${API_BASE}/upload/image`, {
+      method: 'POST',
+      headers,
+      body
+    });
+    const data = await handleResponse(res);
+    return data.url;
   }
 };

@@ -1,3 +1,19 @@
+const sampleReels = [
+  'https://www.instagram.com/reel/DeArmJdSQa6/?stkn=MWhjZGczNGhyandlbA==',
+  'https://www.instagram.com/reel/DeAA8evMsBS/?stkn=cDQ0YXFpOG5kaDc1',
+  'https://www.instagram.com/reel/DdrR6vApDBK/?stkn=MXV6Yzg4NzM3cDdlbw==',
+  'https://www.instagram.com/reel/DdmEKEvTVC5/?utm_source=ig_web_copy_link&stkn=NTc4MTIwNjQ2YQ==',
+  'https://www.instagram.com/reel/DdeXVmDohij/?stkn=b2RzcXFveTY2azZv'
+];
+
+const sampleVideos = [
+  'https://www.youtube.com/watch?v=zCCD52Pty4A',
+  'https://www.youtube.com/watch?v=FN3MFhYPWWo',
+  'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+  'https://www.youtube.com/watch?v=kJQP7kiw5Fk',
+  'https://www.youtube.com/watch?v=JGwWNGJdvx8'
+];
+
 export const initialHospitals = [
   {
     id: 1,
@@ -13,7 +29,12 @@ export const initialHospitals = [
     specialties: ['Cardiology', 'Neurology', 'Oncology', 'Orthopedics', 'Pediatrics'],
     establishedYear: 1996,
     image: 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80',
-    description: 'Renowned multi-specialty tertiary care hospital known for world-class cardiac and transplant procedures.'
+    description: 'Renowned multi-specialty tertiary care hospital known for world-class cardiac and transplant procedures.',
+    reels: sampleReels,
+    youtube_videos: sampleVideos,
+    star_doctors: [1, 2, 3, 4],
+    latitude: 28.5355,
+    longitude: 77.2882
   },
   {
     id: 2,
@@ -29,7 +50,12 @@ export const initialHospitals = [
     specialties: ['Robotic Surgery', 'Neurosciences', 'Cardiology', 'Orthopedics', 'Gynecology'],
     establishedYear: 2001,
     image: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80',
-    description: 'State-of-the-art super-specialty hospital with leading international robotic surgeons and diagnostic tech.'
+    description: 'State-of-the-art super-specialty hospital with leading international robotic surgeons and diagnostic tech.',
+    reels: sampleReels,
+    youtube_videos: sampleVideos,
+    star_doctors: [1, 2, 3, 4],
+    latitude: 28.4595,
+    longitude: 77.0725
   },
   {
     id: 3,
@@ -45,7 +71,12 @@ export const initialHospitals = [
     specialties: ['Cardiac Sciences', 'Orthopedics', 'Pediatrics', 'Obstetrics & Gynae', 'Nephrology'],
     establishedYear: 2006,
     image: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80',
-    description: 'NABH and NABL accredited hospital offering comprehensive clinical programs and emergency critical care.'
+    description: 'NABH and NABL accredited hospital offering comprehensive clinical programs and emergency critical care.',
+    reels: sampleReels,
+    youtube_videos: sampleVideos,
+    star_doctors: [1, 2, 3, 4],
+    latitude: 28.5273,
+    longitude: 77.2120
   },
   {
     id: 4,
@@ -61,6 +92,11 @@ export const initialHospitals = [
     specialties: ['Trauma & Emergency', 'Cardiology', 'Dermatology', 'Neurology', 'Organ Transplant'],
     establishedYear: 1991,
     image: 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=800&q=80',
-    description: 'Flagship healthcare facility with quaternary care, intensive care units and patient-first care ethos.'
+    description: 'Flagship healthcare facility with quaternary care, intensive care units and patient-first care ethos.',
+    reels: sampleReels,
+    youtube_videos: sampleVideos,
+    star_doctors: [1, 2, 3, 4],
+    latitude: 12.9592,
+    longitude: 77.6534
   }
 ];

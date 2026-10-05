@@ -66,7 +66,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
         <ul className={styles.navLinks}>
           <li><a href="#" className={currentView === 'site' ? styles.active : ''} onClick={(e) => { e.preventDefault(); onNavigate('site'); }}>Home</a></li>
           <li><a href="#" className={currentView === 'find-doctors' ? styles.active : ''} onClick={(e) => { e.preventDefault(); onNavigate('find-doctors'); }}>Find Doctors</a></li>
-          <li><a href="#hospitals-section" onClick={(e) => { e.preventDefault(); scrollTo('hospitals-section'); }}>Hospitals</a></li>
+          <li><a href="#" className={currentView === 'find-hospitals' ? styles.active : ''} onClick={(e) => { e.preventDefault(); onNavigate('find-hospitals'); }}>Hospitals</a></li>
           <li><a href="#services-section" onClick={(e) => { e.preventDefault(); scrollTo('services-section'); }}>Services</a></li>
           <li><a href="#health-content-section" onClick={(e) => { e.preventDefault(); scrollTo('health-content-section'); }}>Health Content</a></li>
           <li>

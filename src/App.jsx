@@ -17,6 +17,8 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import LoginPage from './components/auth/LoginPage';
 import FindDoctors from './components/doctors/FindDoctors';
 import DoctorProfile from './components/doctors/DoctorProfile';
+import FindHospitals from './components/hospitals/FindHospitals';
+import HospitalProfile from './components/hospitals/HospitalProfile';
 import './styles/global.css';
 
 function MainWebsite({ onNavigate, currentView }) {
@@ -29,7 +31,7 @@ function MainWebsite({ onNavigate, currentView }) {
         <ServicesSection />
         <WhyChooseSection />
         <PopularDoctors onNavigate={onNavigate} />
-        <TopHospitals />
+        <TopHospitals onNavigate={onNavigate} />
         <HealthContentSection />
       </main>
       <Footer />
@@ -56,11 +58,24 @@ const resolveCurrentView = () => {
   if (path === '/doctors' || hash === '#doctors' || hash === '#/doctors') {
     return 'find-doctors';
   }
+  if (path === '/hospitals' || hash === '#hospitals' || hash === '#/hospitals') {
+    return 'find-hospitals';
+  }
   if (path.startsWith('/doctors/')) {
     const segments = path.split('/');
     if (segments.length >= 3) {
       return 'doctor-profile:' + segments[2];
     }
+  }
+  if (path.startsWith('/hospitals/')) {
+    const segments = path.split('/');
+    if (segments.length >= 3) {
+      return 'hospital-profile:' + segments[2];
+    }
+  }
+  if (hash.startsWith('#/hospitals/') || hash.startsWith('#hospitals/')) {
+    const clean = hash.replace(/^#\/?hospitals\//, '');
+    if (clean) return 'hospital-profile:' + clean;
   }
   return 'site';
 };
@@ -89,14 +104,22 @@ function AppContent() {
     else if (viewName === 'hospital') targetPath = '/hospital';
     else if (viewName === 'user-login') targetPath = '/login';
     else if (viewName === 'find-doctors') targetPath = '/doctors';
+    else if (viewName === 'find-hospitals') targetPath = '/hospitals';
     else if (viewName === 'doctor-profile') targetPath = `/doctors/${param}`;
+    else if (viewName === 'hospital-profile') targetPath = `/hospitals/${param}`;
 
     if (viewName === 'user-login' && param) {
       setRedirectAfterLogin(param);
     }
 
     window.history.pushState({}, '', targetPath);
-    setCurrentView(viewName === 'doctor-profile' ? `doctor-profile:${param}` : viewName);
+    setCurrentView(
+      viewName === 'doctor-profile' 
+        ? `doctor-profile:${param}` 
+        : viewName === 'hospital-profile'
+        ? `hospital-profile:${param}`
+        : viewName
+    );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -138,12 +161,33 @@ function AppContent() {
     );
   }
 
+  if (currentView === 'find-hospitals') {
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <FindHospitals onNavigate={navigateTo} />
+        <Footer />
+      </div>
+    );
+  }
+
   if (currentView.startsWith('doctor-profile:')) {
     const docId = currentView.split(':')[1];
     return (
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <DoctorProfile doctorId={docId} onNavigate={navigateTo} />
+        <Footer />
+      </div>
+    );
+  }
+
+  if (currentView.startsWith('hospital-profile:')) {
+    const hospId = currentView.split(':')[1];
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <HospitalProfile hospitalId={hospId} onNavigate={navigateTo} />
         <Footer />
       </div>
     );

@@ -717,7 +717,27 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           </div>
                         )}
 
+                        <div style={{ display: 'flex', gap: '8px', margin: '12px 0 8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                            📹 {(hosp.reels || []).filter(Boolean).length || 5} Reels
+                          </span>
+                          <span style={{ fontSize: '0.75rem', background: '#fef2f2', color: '#ef4444', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                            ▶️ {(hosp.youtube_videos || []).filter(Boolean).length || 5} Videos
+                          </span>
+                          <span style={{ fontSize: '0.75rem', background: '#fffbeb', color: '#d97706', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                            ⭐ {(hosp.star_doctors || []).length || 4} Star Doctors
+                          </span>
+                        </div>
+
                         <div className={styles.cardFooterActions}>
+                          <button
+                            className={styles.secondaryBtn}
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            onClick={() => onNavigate && onNavigate('hospital-profile', hosp.id || hosp._id)}
+                            title="Open public hospital center page"
+                          >
+                            <ExternalLink size={14} /> View Center
+                          </button>
                           <button
                             className={styles.editCardBtn}
                             onClick={() => handleOpenEditHospital(hosp)}

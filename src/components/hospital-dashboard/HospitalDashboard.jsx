@@ -13,9 +13,21 @@ import {
   CheckCircle,
   ChevronDown,
   AlertTriangle,
-  X
+  X,
+  Video,
+  Sparkles,
+  Star,
+  ExternalLink,
+  Globe,
+  Image as ImageIcon,
+  Trash2,
+  Upload,
+  Loader2,
+  Camera
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
+import HospitalLocationPicker from './HospitalLocationPicker';
 import styles from './HospitalDashboard.module.css';
 
 const INITIAL_WARDS = [
@@ -41,14 +53,53 @@ const INITIAL_AMBULANCES = [
 ];
 
 const HospitalDashboard = ({ onNavigate }) => {
-  const { hospitals, doctors, updateHospital } = useData();
+  const { hospitals, doctors, updateHospital, addDoctor } = useData();
 
   // Selected hospital
-  const [selectedHospitalId, setSelectedHospitalId] = useState(() => hospitals[0]?.id || 1);
-  const activeHospital = hospitals.find(h => h.id === selectedHospitalId) || hospitals[0] || {};
+  const [selectedHospitalId, setSelectedHospitalId] = useState(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user && (user._id || user.id)) return user._id || user.id;
+    } catch {}
+    return hospitals[0]?.id || hospitals[0]?._id || 1;
+  });
 
-  // Tabs: 'beds' | 'doctors' | 'emergency' | 'settings'
+  const activeHospital = hospitals.find(h => String(h.id || h._id) === String(selectedHospitalId)) || hospitals[0] || {};
+
+  // Tabs: 'beds' | 'doctors' | 'media' | 'emergency' | 'settings'
   const [activeTab, setActiveTab] = useState('beds');
+
+  // 5 Instagram Reels & 5 YouTube Videos state
+  const [reels, setReels] = useState(['', '', '', '', '']);
+  const [youtubeVideos, setYoutubeVideos] = useState(['', '', '', '', '']);
+  const [starDoctorIds, setStarDoctorIds] = useState([]);
+
+  // Photos & Gallery state (Profile, interior, exterior, custom photos)
+  const [photos, setPhotos] = useState([]);
+  const [newPhotoCategory, setNewPhotoCategory] = useState('interior');
+  const [newPhotoTitle, setNewPhotoTitle] = useState('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isUploadingProfile, setIsUploadingProfile] = useState(false);
+
+  React.useEffect(() => {
+    if (activeHospital) {
+      const curReels = Array.isArray(activeHospital.reels) ? [...activeHospital.reels] : [];
+      while (curReels.length < 5) curReels.push('');
+      setReels(curReels.slice(0, 5));
+
+      const curVideos = Array.isArray(activeHospital.youtube_videos) ? [...activeHospital.youtube_videos] : [];
+      while (curVideos.length < 5) curVideos.push('');
+      setYoutubeVideos(curVideos.slice(0, 5));
+
+      const curStarDocs = Array.isArray(activeHospital.star_doctors)
+        ? activeHospital.star_doctors.map(d => typeof d === 'object' ? (d._id || d.id) : d).filter(Boolean)
+        : [];
+      setStarDoctorIds(curStarDocs);
+
+      const curPhotos = Array.isArray(activeHospital.photos) ? [...activeHospital.photos] : [];
+      setPhotos(curPhotos);
+    }
+  }, [activeHospital?.id, activeHospital?._id]);
 
   // Wards & Bed state
   const [wards, setWards] = useState(INITIAL_WARDS);
@@ -63,10 +114,94 @@ const HospitalDashboard = ({ onNavigate }) => {
     diagnosis: ''
   });
 
+  // Add Doctor to Hospital modal
+  const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
+  const [newDoctorData, setNewDoctorData] = useState({
+    name: '',
+    email: '',
+    specialty: 'Cardiology',
+    experience: 5,
+    fees: 700,
+    degree: 'MBBS, MD',
+    isStarDoctor: false
+  });
+  const [isAddingDoc, setIsAddingDoc] = useState(false);
+
   const [toastMessage, setToastMessage] = useState('');
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  const handleAddDoctorSubmit = async (e) => {
+    e.preventDefault();
+    if (!newDoctorData.name.trim() || !newDoctorData.email.trim()) {
+      showToast('Please provide doctor name and email.');
+      return;
+    }
+
+    setIsAddingDoc(true);
+    try {
+      const res = await fetch('http://localhost:5000/api/doctors/add-by-hospital', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newDoctorData.name.trim(),
+          email: newDoctorData.email.trim().toLowerCase(),
+          specialization: newDoctorData.specialty,
+          experience: Number(newDoctorData.experience) || 5,
+          fees: Number(newDoctorData.fees) || 500,
+          degree: newDoctorData.degree || 'MBBS, MD',
+          isStarDoctor: newDoctorData.isStarDoctor,
+          hospitalId: activeHospital.id || activeHospital._id,
+          hospitalName: activeHospital.name
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const addedDoctor = data.data;
+
+        // If marked as star, update hospital's star_doctors list
+        if (newDoctorData.isStarDoctor && addedDoctor._id) {
+          const newStarIds = [...starDoctorIds, addedDoctor._id];
+          setStarDoctorIds(newStarIds);
+          await updateHospital(activeHospital.id || activeHospital._id, {
+            star_doctors: newStarIds
+          });
+        }
+
+        // Add to local state via DataContext
+        if (addDoctor) {
+          addDoctor({
+            ...addedDoctor,
+            id: addedDoctor._id || Date.now(),
+            price: addedDoctor.fees,
+            specialty: addedDoctor.specialization,
+            hospital: activeHospital.name
+          });
+        }
+
+        setIsAddDoctorModalOpen(false);
+        setNewDoctorData({
+          name: '',
+          email: '',
+          specialty: 'Cardiology',
+          experience: 5,
+          fees: 700,
+          degree: 'MBBS, MD',
+          isStarDoctor: false
+        });
+
+        showToast(`${addedDoctor.name} added to roster${newDoctorData.isStarDoctor ? ' and selected as Star Doctor!' : '!'}`);
+      } else {
+        showToast(data.message || 'Failed to add doctor.');
+      }
+    } catch (err) {
+      showToast('Error saving doctor. Please try again.');
+    } finally {
+      setIsAddingDoc(false);
+    }
   };
 
   // Doctors affiliated with this hospital
@@ -117,6 +252,109 @@ const HospitalDashboard = ({ onNavigate }) => {
     showToast(`Ambulance ${ambId} dispatched for immediate rescue.`);
   };
 
+  const handleSaveMedia = async () => {
+    const cleanedReels = reels.map(r => r.trim()).filter(Boolean);
+    const cleanedVideos = youtubeVideos.map(v => v.trim()).filter(Boolean);
+    try {
+      await updateHospital(activeHospital.id || activeHospital._id, {
+        reels: cleanedReels,
+        youtube_videos: cleanedVideos,
+        star_doctors: starDoctorIds,
+        photos: photos
+      });
+      showToast('Hospital reels, YouTube videos, and Star Doctors saved successfully!');
+    } catch {
+      showToast('Failed to save hospital media.');
+    }
+  };
+
+  // Upload hospital main profile photo via Cloudinary
+  const handleUploadProfilePhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingProfile(true);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/hospitals/profile');
+      await updateHospital(activeHospital.id || activeHospital._id, { image: url });
+      showToast('Hospital profile photo uploaded to Cloudinary & saved!');
+    } catch (err) {
+      console.error('Failed to upload profile photo to Cloudinary:', err);
+      // Fallback: Read as base64 data uri
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const localUri = reader.result;
+        await updateHospital(activeHospital.id || activeHospital._id, { image: localUri });
+        showToast('Hospital profile photo saved locally!');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingProfile(false);
+    }
+  };
+
+  // Upload interior / exterior / custom photo via Cloudinary
+  const handleUploadGalleryPhoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingPhoto(true);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/hospitals/gallery');
+      const newPhotoItem = {
+        url,
+        title: newPhotoTitle.trim() || `${newPhotoCategory.charAt(0).toUpperCase() + newPhotoCategory.slice(1)} View`,
+        category: newPhotoCategory,
+        createdAt: new Date().toISOString()
+      };
+      const updatedPhotos = [newPhotoItem, ...photos];
+      setPhotos(updatedPhotos);
+      await updateHospital(activeHospital.id || activeHospital._id, { photos: updatedPhotos });
+      setNewPhotoTitle('');
+      showToast(`${newPhotoCategory.toUpperCase()} photo uploaded to Cloudinary & saved!`);
+    } catch (err) {
+      console.error('Failed to upload gallery photo to Cloudinary:', err);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const localUri = reader.result;
+        const newPhotoItem = {
+          url: localUri,
+          title: newPhotoTitle.trim() || `${newPhotoCategory.charAt(0).toUpperCase() + newPhotoCategory.slice(1)} View`,
+          category: newPhotoCategory,
+          createdAt: new Date().toISOString()
+        };
+        const updatedPhotos = [newPhotoItem, ...photos];
+        setPhotos(updatedPhotos);
+        await updateHospital(activeHospital.id || activeHospital._id, { photos: updatedPhotos });
+        setNewPhotoTitle('');
+        showToast(`${newPhotoCategory.toUpperCase()} photo saved locally!`);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  // Delete a gallery photo
+  const handleDeletePhoto = async (photoIndex) => {
+    const updatedPhotos = photos.filter((_, idx) => idx !== photoIndex);
+    setPhotos(updatedPhotos);
+    await updateHospital(activeHospital.id || activeHospital._id, { photos: updatedPhotos });
+    showToast('Photo removed successfully!');
+  };
+
+  const toggleStarDoctor = (docId) => {
+    const sId = String(docId);
+    setStarDoctorIds(prev => {
+      const exists = prev.some(id => String(id) === sId);
+      if (exists) {
+        return prev.filter(id => String(id) !== sId);
+      } else {
+        return [...prev, docId];
+      }
+    });
+  };
+
   return (
     <div className={styles.dashboardContainer}>
       {/* Toast Alert */}
@@ -151,11 +389,11 @@ const HospitalDashboard = ({ onNavigate }) => {
             <div className={styles.selectWrap}>
               <select
                 value={selectedHospitalId}
-                onChange={(e) => setSelectedHospitalId(Number(e.target.value))}
+                onChange={(e) => setSelectedHospitalId(e.target.value)}
                 className={styles.facilitySelect}
               >
                 {hospitals.map(h => (
-                  <option key={h.id} value={h.id}>
+                  <option key={h.id || h._id} value={h.id || h._id}>
                     {h.name} ({h.city})
                   </option>
                 ))}
@@ -165,6 +403,14 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
 
           <div className={styles.quickNavBtns}>
+            <button
+              className={styles.navLinkBtn}
+              onClick={() => onNavigate && onNavigate('hospital-profile', activeHospital.id || activeHospital._id)}
+              style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              title="Open public hospital center page with reels, videos and star doctors"
+            >
+              <Globe size={13} /> View Public Center
+            </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('site')}>
               Website
             </button>
@@ -305,6 +551,22 @@ const HospitalDashboard = ({ onNavigate }) => {
             </button>
 
             <button
+              className={`${styles.tabBtn} ${activeTab === 'media' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('media')}
+            >
+              <Video size={18} />
+              <span>5 Reels, 5 Videos & Star Doctors</span>
+            </button>
+
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'photos' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('photos')}
+            >
+              <Camera size={18} />
+              <span>Photos & Gallery ({photos.length})</span>
+            </button>
+
+            <button
               className={`${styles.tabBtn} ${activeTab === 'emergency' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('emergency')}
             >
@@ -327,6 +589,16 @@ const HospitalDashboard = ({ onNavigate }) => {
               onClick={() => setIsAdmitModalOpen(true)}
             >
               <Plus size={16} /> Admit Patient
+            </button>
+          )}
+
+          {activeTab === 'doctors' && (
+            <button
+              className={styles.addPrimaryBtn}
+              onClick={() => setIsAddDoctorModalOpen(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={16} /> + Add Doctor to Roster
             </button>
           )}
         </div>
@@ -403,8 +675,22 @@ const HospitalDashboard = ({ onNavigate }) => {
           <div className={styles.tabContentArea}>
             <div className={styles.doctorsTableCard}>
               <div className={styles.tableHeaderRow}>
-                <h3>Medical Specialists Affiliated with {activeHospital.name}</h3>
-                <span className={styles.tableCountBadge}>{affiliatedDoctors.length} Doctors</span>
+                <div>
+                  <h3 style={{ margin: 0 }}>Medical Specialists Affiliated with {activeHospital.name}</h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                    Add doctors to your hospital roster and select star doctors to highlight on your public center page.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span className={styles.tableCountBadge}>{affiliatedDoctors.length} Doctors</span>
+                  <button
+                    className={styles.addPrimaryBtn}
+                    onClick={() => setIsAddDoctorModalOpen(true)}
+                    style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+                  >
+                    <Plus size={14} /> Add Doctor
+                  </button>
+                </div>
               </div>
 
               <div className={styles.tableWrap}>
@@ -417,51 +703,464 @@ const HospitalDashboard = ({ onNavigate }) => {
                       <th>Consultation Fee</th>
                       <th>Weekly Hours</th>
                       <th>Status</th>
+                      <th>Star Doctor</th>
                       <th>Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {affiliatedDoctors.map((doc) => (
-                      <tr key={doc.id}>
-                        <td>
-                          <div className={styles.docCell}>
-                            <img
-                              src={doc.image}
-                              alt={doc.name}
-                              className={styles.docAvatar}
-                              onError={(e) => {
-                                e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
-                              }}
-                            />
-                            <div>
-                              <span className={styles.docName}>{doc.name}</span>
-                              <span className={styles.docContact}>{doc.phone || '+91 98000 00000'}</span>
+                    {affiliatedDoctors.map((doc) => {
+                      const isStar = starDoctorIds.some(id => String(id) === String(doc.id || doc._id));
+                      return (
+                        <tr key={doc.id || doc._id}>
+                          <td>
+                            <div className={styles.docCell}>
+                              <img
+                                src={doc.image}
+                                alt={doc.name}
+                                className={styles.docAvatar}
+                                onError={(e) => {
+                                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                                }}
+                              />
+                              <div>
+                                <span className={styles.docName}>{doc.name}</span>
+                                <span className={styles.docContact}>{doc.phone || '+91 98000 00000'}</span>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={styles.specialtyTag}>{doc.specialty}</span>
-                        </td>
-                        <td>{doc.degree || 'MBBS, MD'}</td>
-                        <td>
-                          <strong style={{ color: '#2563EB' }}>₹{doc.price}</strong>
-                        </td>
-                        <td>{doc.availableDays || 'Mon - Fri (10am - 4pm)'}</td>
-                        <td>
-                          <span className={styles.onDutyBadge}>On Duty</span>
-                        </td>
-                        <td>
-                          <button
-                            className={styles.pageDoctorBtn}
-                            onClick={() => showToast(`Sent clinical emergency notification to ${doc.name}`)}
-                          >
-                            Page Doctor
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td>
+                            <span className={styles.specialtyTag}>{doc.specialty}</span>
+                          </td>
+                          <td>{doc.degree || 'MBBS, MD'}</td>
+                          <td>
+                            <strong style={{ color: '#2563EB' }}>₹{doc.price}</strong>
+                          </td>
+                          <td>{doc.availableDays || 'Mon - Fri (10am - 4pm)'}</td>
+                          <td>
+                            <span className={styles.onDutyBadge}>On Duty</span>
+                          </td>
+                          <td>
+                            <button
+                              className={`${styles.starToggleBtn} ${isStar ? styles.starToggleBtnActive : ''}`}
+                              onClick={async () => {
+                                const newStarIds = isStar
+                                  ? starDoctorIds.filter(id => String(id) !== String(doc.id || doc._id))
+                                  : [...starDoctorIds, doc.id || doc._id];
+                                setStarDoctorIds(newStarIds);
+                                await updateHospital(activeHospital.id || activeHospital._id, { star_doctors: newStarIds });
+                                showToast(`${doc.name} ${isStar ? 'removed from' : 'marked as'} Star Doctor!`);
+                              }}
+                            >
+                              <Star size={13} fill={isStar ? '#f59e0b' : 'none'} color={isStar ? '#f59e0b' : '#64748b'} />
+                              {isStar ? 'Star Doctor' : 'Mark Star'}
+                            </button>
+                          </td>
+                          <td>
+                            <button
+                              className={styles.pageDoctorBtn}
+                              onClick={() => showToast(`Sent clinical emergency notification to ${doc.name}`)}
+                            >
+                              Page Doctor
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: MEDIA & STAR DOCTORS MANAGEMENT */}
+        {activeTab === 'media' && (
+          <div className={styles.tabContentArea}>
+            <div className={styles.mediaGrid}>
+              {/* Instagram Reels Card */}
+              <div className={styles.mediaCard}>
+                <div className={styles.mediaCardHeader}>
+                  <div>
+                    <h3>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#e1306c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                      </svg>
+                      Instagram Reels (Max 5)
+                    </h3>
+                    <p>Add up to 5 Instagram reel links to appear on this hospital's public center page (leave blank if fewer).</p>
+                  </div>
+                  <button className={styles.saveBtn} onClick={handleSaveMedia}>
+                    Save Changes
+                  </button>
+                </div>
+
+                <div className={styles.mediaInputList}>
+                  {reels.map((reel, index) => (
+                    <div key={index} className={styles.mediaInputRow}>
+                      <span className={styles.mediaNumberBadge}>#{index + 1}</span>
+                      <input
+                        type="url"
+                        placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
+                        value={reel}
+                        onChange={(e) => {
+                          const updated = [...reels];
+                          updated[index] = e.target.value;
+                          setReels(updated);
+                        }}
+                      />
+                      {reel && (
+                        <a
+                          href={reel}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={styles.testLinkBtn}
+                        >
+                          <ExternalLink size={14} /> Preview
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* YouTube Videos Card */}
+              <div className={styles.mediaCard}>
+                <div className={styles.mediaCardHeader}>
+                  <div>
+                    <h3>
+                      <Video size={20} color="#ef4444" />
+                      YouTube Videos (Max 5)
+                    </h3>
+                    <p>Add up to 5 YouTube video links (regular video, watch link, or shorts) for virtual tours and health talks.</p>
+                  </div>
+                  <button className={styles.saveBtn} onClick={handleSaveMedia}>
+                    Save Changes
+                  </button>
+                </div>
+
+                <div className={styles.mediaInputList}>
+                  {youtubeVideos.map((video, index) => (
+                    <div key={index} className={styles.mediaInputRow}>
+                      <span className={styles.mediaNumberBadge} style={{ background: '#fef2f2', color: '#ef4444' }}>
+                        #{index + 1}
+                      </span>
+                      <input
+                        type="url"
+                        placeholder={`https://www.youtube.com/watch?v=... (Video ${index + 1})`}
+                        value={video}
+                        onChange={(e) => {
+                          const updated = [...youtubeVideos];
+                          updated[index] = e.target.value;
+                          setYoutubeVideos(updated);
+                        }}
+                      />
+                      {video && (
+                        <a
+                          href={video}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={styles.testLinkBtn}
+                        >
+                          <ExternalLink size={14} /> Preview
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Star Doctors of this Hospital Card */}
+              <div className={styles.mediaCard}>
+                <div className={styles.mediaCardHeader}>
+                  <div>
+                    <h3>
+                      <Sparkles size={20} color="#f59e0b" />
+                      Star Doctors of {activeHospital.name}
+                    </h3>
+                    <p>Select which doctors to highlight as verified Star Doctors for this hospital center.</p>
+                  </div>
+                  <button className={styles.saveBtn} onClick={handleSaveMedia}>
+                    Save Star Doctors
+                  </button>
+                </div>
+
+                <div className={styles.starDoctorsSelector}>
+                  {doctors.map((doc) => {
+                    const isSelected = starDoctorIds.some(id => String(id) === String(doc.id || doc._id));
+                    return (
+                      <div
+                        key={doc.id || doc._id}
+                        className={`${styles.starDoctorOption} ${isSelected ? styles.starDoctorOptionActive : ''}`}
+                        onClick={() => toggleStarDoctor(doc.id || doc._id)}
+                      >
+                        <img
+                          src={doc.image}
+                          alt={doc.name}
+                          className={styles.starDocAvatar}
+                          onError={(e) => {
+                            e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                          }}
+                        />
+                        <div className={styles.starDocMeta}>
+                          <h4>{doc.name}</h4>
+                          <p>{doc.specialty || doc.specialization} • {doc.hospital || activeHospital.name}</p>
+                        </div>
+                        <Star
+                          size={20}
+                          className={styles.starToggleIcon}
+                          fill={isSelected ? '#f59e0b' : 'none'}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: PHOTOS & GALLERY (PROFILE, INTERIOR, EXTERIOR, CUSTOM) */}
+        {activeTab === 'photos' && (
+          <div className={styles.tabContentArea}>
+            <div className={styles.mediaGrid}>
+              {/* Profile Photo Card */}
+              <div className={styles.mediaCard}>
+                <div className={styles.mediaCardHeader}>
+                  <div>
+                    <h3>
+                      <Camera size={20} color="#2563eb" />
+                      Hospital Main Profile / Cover Photo
+                    </h3>
+                    <p>Primary photo shown on the hospital card, banner, and search listings.</p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', padding: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div style={{ position: 'relative', width: '140px', height: '100px', borderRadius: '12px', overflow: 'hidden', border: '2px solid #e2e8f0', background: '#0f172a' }}>
+                      <img
+                        src={activeHospital.image}
+                        alt="Hospital Main Profile"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
+                        }}
+                      />
+                      {isUploadingProfile && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'rgba(0,0,0,0.6)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white'
+                        }}>
+                          <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, color: '#334155', marginBottom: '8px' }}>
+                        Change Hospital Cover Photo
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingProfile}
+                        onChange={handleUploadProfilePhoto}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          padding: '10px',
+                          border: '1px dashed #94a3b8',
+                          borderRadius: '8px',
+                          background: '#f8fafc',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <small style={{ color: '#64748b', marginTop: '6px', display: 'block' }}>
+                        Uploaded securely via Cloudinary API. Persists permanently across page refreshes.
+                      </small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Upload Interior, Exterior & Custom Photos Card */}
+              <div className={styles.mediaCard}>
+                <div className={styles.mediaCardHeader}>
+                  <div>
+                    <h3>
+                      <ImageIcon size={20} color="#059669" />
+                      Upload Interior, Exterior & Facility Photos
+                    </h3>
+                    <p>Add specialized facility photos for patients to see inside OT, wards, exterior building, and campus.</p>
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px', borderBottom: '1px solid #f1f5f9' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                        Photo Category
+                      </label>
+                      <select
+                        value={newPhotoCategory}
+                        onChange={(e) => setNewPhotoCategory(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
+                      >
+                        <option value="interior">Interior (OT, ICU, Rooms, Reception)</option>
+                        <option value="exterior">Exterior (Building, Campus, Parking)</option>
+                        <option value="facility">Facility & Tech (MRI, Lab, Cafeteria)</option>
+                        <option value="custom">Custom Showcase Photo</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                        Caption / Title (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Modern Cath Lab / Main Entrance"
+                        value={newPhotoTitle}
+                        onChange={(e) => setNewPhotoTitle(e.target.value)}
+                        style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.88rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, color: '#475569', marginBottom: '4px' }}>
+                      Select Photo File
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingPhoto}
+                        onChange={handleUploadGalleryPhoto}
+                        style={{
+                          flex: 1,
+                          padding: '10px',
+                          border: '1px dashed #2563eb',
+                          borderRadius: '8px',
+                          background: '#eff6ff',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      {isUploadingPhoto && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#2563eb', fontSize: '0.88rem', fontWeight: 600 }}>
+                          <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Uploading to Cloudinary...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Uploaded Gallery Grid */}
+                <div style={{ padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.95rem', color: '#1e293b' }}>
+                      Uploaded Facility Gallery ({photos.length} photos)
+                    </h4>
+                    <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                      Visible on Public Hospital Profile
+                    </span>
+                  </div>
+
+                  {photos.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '36px 16px', background: '#f8fafc', borderRadius: '10px', border: '1px dashed #e2e8f0', color: '#64748b' }}>
+                      <ImageIcon size={32} style={{ opacity: 0.4, marginBottom: '8px' }} />
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>No interior or exterior photos uploaded yet.</p>
+                      <small>Upload photos above to showcase your facility to patients.</small>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '14px' }}>
+                      {photos.map((item, pIdx) => {
+                        const imgUrl = typeof item === 'string' ? item : item.url;
+                        const title = typeof item === 'object' ? item.title : `Photo #${pIdx + 1}`;
+                        const category = typeof item === 'object' ? item.category : 'custom';
+
+                        return (
+                          <div
+                            key={pIdx}
+                            style={{
+                              position: 'relative',
+                              borderRadius: '10px',
+                              overflow: 'hidden',
+                              border: '1px solid #e2e8f0',
+                              background: '#0f172a',
+                              aspectRatio: '4 / 3',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                            }}
+                          >
+                            <img
+                              src={imgUrl}
+                              alt={title}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: '8px',
+                              left: '8px',
+                              background: 'rgba(0,0,0,0.65)',
+                              color: 'white',
+                              fontSize: '0.68rem',
+                              fontWeight: 700,
+                              textTransform: 'uppercase',
+                              padding: '2px 6px',
+                              borderRadius: '4px'
+                            }}>
+                              {category}
+                            </div>
+                            <button
+                              onClick={() => handleDeletePhoto(pIdx)}
+                              style={{
+                                position: 'absolute',
+                                top: '8px',
+                                right: '8px',
+                                background: 'rgba(239, 68, 68, 0.9)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '50%',
+                                width: '28px',
+                                height: '28px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s'
+                              }}
+                              title="Delete photo"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                            <div style={{
+                              position: 'absolute',
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
+                              color: 'white',
+                              padding: '12px 8px 6px',
+                              fontSize: '0.75rem',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis'
+                            }}>
+                              {title}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -645,6 +1344,15 @@ const HospitalDashboard = ({ onNavigate }) => {
                 </div>
               </div>
 
+              {/* HOSPITAL LOCATION MANAGEMENT (Leaflet Location Picker) */}
+              <HospitalLocationPicker
+                hospital={activeHospital}
+                onSaveLocation={(coords) => {
+                  updateHospital(activeHospital.id || activeHospital._id, coords);
+                  showToast('Hospital GPS coordinates saved and updated for public route directions!');
+                }}
+              />
+
               <div className={styles.settingsSaveRow}>
                 <button
                   className={styles.saveBtn}
@@ -714,6 +1422,148 @@ const HospitalDashboard = ({ onNavigate }) => {
                 </button>
                 <button type="submit" className={styles.saveBtn}>
                   Confirm Admission
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Doctor to Hospital Modal */}
+      {isAddDoctorModalOpen && (
+        <div className={styles.modalOverlay} onClick={() => setIsAddDoctorModalOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+            <div className={styles.modalHeader}>
+              <div>
+                <h3 style={{ margin: 0 }}>Add Doctor to {activeHospital.name}</h3>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Register a clinical specialist and select whether to highlight them as a Star Doctor.
+                </span>
+              </div>
+              <button onClick={() => setIsAddDoctorModalOpen(false)} className={styles.closeBtn}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddDoctorSubmit} className={styles.modalForm}>
+              <div className={styles.formGroup}>
+                <label>Doctor Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Dr. Rajesh Khanna"
+                  value={newDoctorData.name}
+                  onChange={(e) => setNewDoctorData({ ...newDoctorData, name: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Doctor Email Address *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="e.g. dr.khanna@hospital.com"
+                  value={newDoctorData.email}
+                  onChange={(e) => setNewDoctorData({ ...newDoctorData, email: e.target.value })}
+                />
+                <span style={{ fontSize: '0.76rem', color: '#64748b', marginTop: '2px' }}>
+                  💡 On their first login to the Doctor Portal, they will enter this email and set their password.
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className={styles.formGroup}>
+                  <label>Department / Specialty *</label>
+                  <select
+                    value={newDoctorData.specialty}
+                    onChange={(e) => setNewDoctorData({ ...newDoctorData, specialty: e.target.value })}
+                  >
+                    <option value="Cardiology">Cardiology</option>
+                    <option value="Neurology">Neurology</option>
+                    <option value="Orthopedics">Orthopedics</option>
+                    <option value="Pediatrics">Pediatrics</option>
+                    <option value="Gynecology">Gynecology</option>
+                    <option value="Oncology">Oncology</option>
+                    <option value="General Medicine">General Medicine</option>
+                    <option value="Dermatology">Dermatology</option>
+                  </select>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Degrees / Qualifications</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MBBS, MD, MS"
+                    value={newDoctorData.degree}
+                    onChange={(e) => setNewDoctorData({ ...newDoctorData, degree: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className={styles.formGroup}>
+                  <label>Experience (Years)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="60"
+                    value={newDoctorData.experience}
+                    onChange={(e) => setNewDoctorData({ ...newDoctorData, experience: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>Consultation Fee (₹)</label>
+                  <input
+                    type="number"
+                    min="100"
+                    step="50"
+                    value={newDoctorData.fees}
+                    onChange={(e) => setNewDoctorData({ ...newDoctorData, fees: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* STAR DOCTOR SELECTOR */}
+              <div style={{
+                background: newDoctorData.isStarDoctor ? '#fef3c7' : '#f8fafc',
+                border: newDoctorData.isStarDoctor ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                marginTop: '6px',
+                transition: 'all 0.2s ease'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: newDoctorData.isStarDoctor ? '#92400e' : '#334155', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Star size={16} fill={newDoctorData.isStarDoctor ? '#f59e0b' : 'none'} color={newDoctorData.isStarDoctor ? '#f59e0b' : '#64748b'} />
+                    Select as Star Doctor
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: newDoctorData.isStarDoctor ? '#b45309' : '#64748b', marginTop: '2px' }}>
+                    Featured prominently on your public hospital center page under "Star Doctors & Clinical Leaders".
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={newDoctorData.isStarDoctor}
+                  onChange={(e) => setNewDoctorData({ ...newDoctorData, isStarDoctor: e.target.checked })}
+                  style={{ width: '22px', height: '22px', cursor: 'pointer', accentColor: '#f59e0b' }}
+                />
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button
+                  type="button"
+                  className={styles.cancelBtn}
+                  onClick={() => setIsAddDoctorModalOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className={styles.saveBtn} disabled={isAddingDoc}>
+                  {isAddingDoc ? 'Adding Doctor...' : 'Add Doctor to Hospital'}
                 </button>
               </div>
             </form>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Building2, Upload, AlertCircle, Plus, Check } from 'lucide-react';
+import { X, Building2, Upload, AlertCircle, Plus, Check, Video, Sparkles, Star, Loader2 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
 import styles from './HospitalFormModal.module.css';
 
 const DEFAULT_SPECIALTIES = [
@@ -38,10 +39,20 @@ const PRESET_HOSPITAL_IMAGES = [
 ];
 
 const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
-  const { addHospital, updateHospital } = useData();
+  const { addHospital, updateHospital, doctors } = useData();
 
   const [formData, setFormData] = useState(() => {
     if (hospitalToEdit) {
+      const initReels = Array.isArray(hospitalToEdit.reels) ? [...hospitalToEdit.reels] : [];
+      while (initReels.length < 5) initReels.push('');
+
+      const initVideos = Array.isArray(hospitalToEdit.youtube_videos) ? [...hospitalToEdit.youtube_videos] : [];
+      while (initVideos.length < 5) initVideos.push('');
+
+      const initStarDocs = Array.isArray(hospitalToEdit.star_doctors)
+        ? hospitalToEdit.star_doctors.map(d => typeof d === 'object' ? (d._id || d.id) : d).filter(Boolean)
+        : [];
+
       return {
         name: hospitalToEdit.name || '',
         city: hospitalToEdit.city || 'Delhi',
@@ -56,6 +67,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         description: hospitalToEdit.description || '',
         image: hospitalToEdit.image || PRESET_HOSPITAL_IMAGES[0].url,
         specialties: hospitalToEdit.specialties || ['Cardiology'],
+        reels: initReels.slice(0, 5),
+        youtube_videos: initVideos.slice(0, 5),
+        star_doctors: initStarDocs,
+        latitude: hospitalToEdit.latitude !== undefined && hospitalToEdit.latitude !== null ? hospitalToEdit.latitude : '',
+        longitude: hospitalToEdit.longitude !== undefined && hospitalToEdit.longitude !== null ? hospitalToEdit.longitude : '',
+        staff_emails: Array.isArray(hospitalToEdit.staff_emails) ? [...hospitalToEdit.staff_emails] : []
       };
     }
     return {
@@ -72,6 +89,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       description: '',
       image: PRESET_HOSPITAL_IMAGES[0].url,
       specialties: ['Cardiology', 'Neurology', 'Orthopedics'],
+      reels: ['', '', '', '', ''],
+      youtube_videos: ['', '', '', '', ''],
+      star_doctors: [],
+      latitude: '',
+      longitude: '',
+      staff_emails: []
     };
   });
 
@@ -90,7 +113,27 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
   });
 
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
+  const [staffEmailInput, setStaffEmailInput] = useState('');
   const [errors, setErrors] = useState({});
+
+  const handleAddStaffEmail = () => {
+    if (!staffEmailInput.trim()) return;
+    const cleanEmail = staffEmailInput.trim().toLowerCase();
+    if (!formData.staff_emails.includes(cleanEmail)) {
+      setFormData({
+        ...formData,
+        staff_emails: [...formData.staff_emails, cleanEmail]
+      });
+    }
+    setStaffEmailInput('');
+  };
+
+  const handleRemoveStaffEmail = (emailToRemove) => {
+    setFormData({
+      ...formData,
+      staff_emails: formData.staff_emails.filter(e => e !== emailToRemove)
+    });
+  };
 
   const validate = () => {
     const newErrors = {};
@@ -107,14 +150,26 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleFileUpload = (e) => {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/hospitals');
+      setFormData(prev => ({ ...prev, image: url }));
+    } catch (err) {
+      console.error('Failed to upload to Cloudinary:', err);
+      // Fallback to data URI
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, image: reader.result }));
       };
       reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -158,10 +213,16 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       specialties: formData.specialties,
       specialities: formData.specialties, // DB mapping
       image: finalImage,
+      reels: formData.reels.map(r => r.trim()).filter(Boolean),
+      youtube_videos: formData.youtube_videos.map(v => v.trim()).filter(Boolean),
+      star_doctors: formData.star_doctors,
+      staff_emails: formData.staff_emails,
+      latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
+      longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
     };
 
     if (hospitalToEdit) {
-      updateHospital(hospitalToEdit.id, payload);
+      updateHospital(hospitalToEdit.id || hospitalToEdit._id, payload);
     } else {
       addHospital(payload);
     }
@@ -230,6 +291,30 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               className={errors.address ? styles.inputError : ''}
             />
             {errors.address && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.address}</span>}
+          </div>
+
+          <div className={styles.grid2}>
+            <div className={styles.formGroup}>
+              <label>Latitude (e.g. 12.9592)</label>
+              <input
+                type="number"
+                step="any"
+                placeholder="22.7196"
+                value={formData.latitude}
+                onChange={(e) => setFormData({ ...formData, latitude: e.target.value })}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Longitude (e.g. 77.6534)</label>
+              <input
+                type="number"
+                step="any"
+                placeholder="75.8577"
+                value={formData.longitude}
+                onChange={(e) => setFormData({ ...formData, longitude: e.target.value })}
+              />
+            </div>
           </div>
 
           <div className={styles.grid3}>
@@ -443,6 +528,180 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
             />
           </div>
+
+          {/* Instagram Reels */}
+          <div className={styles.sectionHeader} style={{ marginTop: '20px' }}>
+            Instagram Reels (Max 5 - Public Page)
+          </div>
+          <div className={styles.mediaInputList}>
+            {formData.reels.map((reel, index) => (
+              <div key={index} className={styles.mediaRow}>
+                <span className={styles.mediaIndex}>#{index + 1}</span>
+                <input
+                  type="url"
+                  placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
+                  value={reel}
+                  onChange={(e) => {
+                    const newReels = [...formData.reels];
+                    newReels[index] = e.target.value;
+                    setFormData({ ...formData, reels: newReels });
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* YouTube Videos */}
+          <div className={styles.sectionHeader} style={{ marginTop: '20px' }}>
+            YouTube Videos (Max 5 - Walkthroughs & Sessions)
+          </div>
+          <div className={styles.mediaInputList}>
+            {formData.youtube_videos.map((video, index) => (
+              <div key={index} className={styles.mediaRow}>
+                <span className={styles.mediaIndex} style={{ background: '#fef2f2', color: '#ef4444' }}>
+                  #{index + 1}
+                </span>
+                <input
+                  type="url"
+                  placeholder={`https://www.youtube.com/watch?v=... (Video ${index + 1})`}
+                  value={video}
+                  onChange={(e) => {
+                    const newVideos = [...formData.youtube_videos];
+                    newVideos[index] = e.target.value;
+                    setFormData({ ...formData, youtube_videos: newVideos });
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* Star Doctors Selection */}
+          <div className={styles.sectionHeader} style={{ marginTop: '20px' }}>
+            ⭐ Star Doctors of this Hospital
+          </div>
+          <div className={styles.starDoctorsGrid}>
+            {doctors.map((doc) => {
+              const isSelected = formData.star_doctors.some(id => String(id) === String(doc.id || doc._id));
+              return (
+                <div
+                  key={doc.id || doc._id}
+                  className={`${styles.starDocItem} ${isSelected ? styles.starDocItemActive : ''}`}
+                  onClick={() => {
+                    const docId = doc.id || doc._id;
+                    const exists = formData.star_doctors.some(id => String(id) === String(docId));
+                    const newDocs = exists
+                      ? formData.star_doctors.filter(id => String(id) !== String(docId))
+                      : [...formData.star_doctors, docId];
+                    setFormData({ ...formData, star_doctors: newDocs });
+                  }}
+                >
+                  <img
+                    src={doc.image}
+                    alt={doc.name}
+                    className={styles.starDocThumb}
+                    onError={(e) => {
+                      e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                    }}
+                  />
+                  <div className={styles.starDocInfo}>
+                    <h5>{doc.name}</h5>
+                    <p>{doc.specialty || doc.specialization}</p>
+                  </div>
+                  <Star
+                    size={16}
+                    color={isSelected ? '#f59e0b' : '#cbd5e1'}
+                    fill={isSelected ? '#f59e0b' : 'none'}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Hospital Staff Doctors (Invite by Email) */}
+          <div className={styles.sectionHeader} style={{ marginTop: '24px' }}>
+            Hospital Staff & Affiliated Doctors (Invite by Email)
+          </div>
+          <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
+            Add emails of doctors who work at this hospital. When they log in to the Doctor Portal for the first time, they will be prompted to set their password.
+          </p>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <input
+              type="email"
+              placeholder="e.g. doctor@hospital.com"
+              value={staffEmailInput}
+              onChange={(e) => setStaffEmailInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddStaffEmail();
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 14px',
+                borderRadius: '8px',
+                border: '1px solid #d9e2e6',
+                fontSize: '0.88rem'
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAddStaffEmail}
+              style={{
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '0 18px',
+                fontWeight: 600,
+                fontSize: '0.88rem',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              + Add Doctor Email
+            </button>
+          </div>
+
+          {formData.staff_emails && formData.staff_emails.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+              {formData.staff_emails.map((email, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    background: '#eff6ff',
+                    color: '#1e40af',
+                    border: '1px solid #bfdbfe',
+                    padding: '5px 12px',
+                    borderRadius: '20px',
+                    fontSize: '0.82rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <span>👨‍⚕️ {email}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveStaffEmail(email)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      padding: '0 2px',
+                      fontSize: '1rem',
+                      lineHeight: 1
+                    }}
+                    title="Remove email"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className={styles.footer}>

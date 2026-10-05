@@ -5,6 +5,7 @@ import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
 import doc3 from '../../assets/images/doctor-3.png';
 import doc4 from '../../assets/images/doctor-4.png';
+import { api } from '../../services/api';
 import styles from './DoctorFormModal.module.css';
 
 const PRESET_AVATARS = [
@@ -112,14 +113,25 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleFileUpload = (e) => {
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/doctors');
+      setFormData(prev => ({ ...prev, image: url }));
+    } catch (err) {
+      console.error('Failed to upload to Cloudinary:', err);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, image: reader.result }));
       };
       reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
     }
   };
 

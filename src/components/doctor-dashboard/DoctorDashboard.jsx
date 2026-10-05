@@ -14,9 +14,13 @@ import {
   ChevronDown,
   Activity,
   X,
-  Check
+  Check,
+  Upload,
+  Loader2,
+  Camera
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
 import styles from './DoctorDashboard.module.css';
 
 const INITIAL_APPOINTMENTS = [
@@ -136,6 +140,35 @@ const DoctorDashboard = ({ onNavigate }) => {
       experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : activeDoctor.experience
     });
   }, [activeDoctor]);
+
+  // Profile photo uploading state
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  // Profile photo zoom preview modal state
+  const [isPhotoZoomOpen, setIsPhotoZoomOpen] = useState(false);
+
+  // Common function to upload and save doctor photo to Cloudinary & DB
+  const handleDoctorPhotoUpload = async (file) => {
+    if (!file) return;
+    setIsUploadingImage(true);
+    try {
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/doctors');
+      setProfileForm(prev => ({ ...prev, image: uploadedUrl }));
+      await updateDoctor(activeDoctor.id || activeDoctor._id, { image: uploadedUrl });
+      showToast('Profile photo uploaded and saved successfully!');
+    } catch (err) {
+      console.error('Failed to upload doctor photo:', err);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const localData = reader.result;
+        setProfileForm(prev => ({ ...prev, image: localData }));
+        await updateDoctor(activeDoctor.id || activeDoctor._id, { image: localData });
+        showToast('Profile photo updated locally!');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   // Modals
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
@@ -291,14 +324,57 @@ const DoctorDashboard = ({ onNavigate }) => {
         {/* Doctor Profile Banner */}
         <div className={styles.profileBanner}>
           <div className={styles.doctorCardMini}>
-            <img
-              src={activeDoctor.image}
-              alt={activeDoctor.name}
-              className={styles.doctorAvatar}
-              onError={(e) => {
-                e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80';
-              }}
-            />
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <img
+                src={activeDoctor.image}
+                alt={activeDoctor.name}
+                className={styles.doctorAvatar}
+                onClick={() => setIsPhotoZoomOpen(true)}
+                title="Click to view full photo"
+                style={{ cursor: 'pointer', transition: 'transform 0.2s, opacity 0.2s' }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                onError={(e) => {
+                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80';
+                }}
+              />
+              <label
+                style={{
+                  position: 'absolute',
+                  bottom: '0',
+                  right: '0',
+                  background: '#2563eb',
+                  color: 'white',
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                  border: '2px solid #0f172a',
+                  transition: 'transform 0.2s, background 0.2s'
+                }}
+                title="Change Profile Photo"
+              >
+                {isUploadingImage ? (
+                  <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                ) : (
+                  <Camera size={14} />
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={isUploadingImage}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleDoctorPhotoUpload(file);
+                  }}
+                />
+              </label>
+            </div>
             <div className={styles.doctorMeta}>
               <div className={styles.nameRow}>
                 <h2>{activeDoctor.name}</h2>
@@ -664,29 +740,49 @@ const DoctorDashboard = ({ onNavigate }) => {
               <div className={styles.settingsGrid}>
                 <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <img 
-                      src={profileForm.image} 
-                      alt="Profile Preview" 
-                      style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }} 
-                      onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80'}
-                    />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setProfileForm(prev => ({ ...prev, image: reader.result }));
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
-                      style={{ flex: 1, padding: '8px', border: '1px dashed #cbd5e1', borderRadius: '8px', cursor: 'pointer', background: '#f8fafc' }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <img 
+                        src={profileForm.image} 
+                        alt="Profile Preview" 
+                        onClick={() => setIsPhotoZoomOpen(true)}
+                        title="Click to view full photo"
+                        style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb', cursor: 'pointer', transition: 'transform 0.2s' }} 
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.06)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                        onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80'}
+                      />
+                      {isUploadingImage && (
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '50%',
+                          background: 'rgba(0,0,0,0.5)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white'
+                        }}>
+                          <Loader2 size={20} className={styles.spinner} style={{ animation: 'spin 1s linear infinite' }} />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingImage}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleDoctorPhotoUpload(file);
+                        }}
+                        style={{ width: '100%', padding: '10px', border: '1px dashed #cbd5e1', borderRadius: '8px', cursor: 'pointer', background: '#f8fafc' }}
+                      />
+                    </div>
                   </div>
-                  <small style={{ color: '#64748b', marginTop: '6px', display: 'block' }}>Upload a professional headshot. Changes will reflect instantly across the platform after saving.</small>
+                  <small style={{ color: '#64748b', marginTop: '6px', display: 'block' }}>
+                    Upload a high-resolution photo. It is automatically stored in Cloudinary and stays permanently saved across page refreshes.
+                  </small>
                 </div>
               </div>
 
@@ -902,6 +998,116 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Doctor Photo Zoom Preview Modal */}
+      {isPhotoZoomOpen && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setIsPhotoZoomOpen(false)}
+          style={{
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(5px)',
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
+              maxWidth: '520px',
+              width: '90%',
+              background: '#0f172a',
+              borderRadius: '20px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.7)',
+              border: '1px solid rgba(255, 255, 255, 0.1)'
+            }}
+          >
+            <button
+              onClick={() => setIsPhotoZoomOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'rgba(0, 0, 0, 0.65)',
+                border: 'none',
+                color: 'white',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 10,
+                transition: 'background 0.2s'
+              }}
+              title="Close"
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ background: '#020617', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '340px', padding: '16px' }}>
+              <img
+                src={activeDoctor.image}
+                alt={activeDoctor.name}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '65vh',
+                  objectFit: 'contain',
+                  borderRadius: '12px',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                }}
+                onError={(e) => {
+                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                }}
+              />
+            </div>
+
+            <div style={{ padding: '16px 20px', background: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.15rem', fontWeight: 700 }}>
+                  {activeDoctor.name}
+                </h3>
+                <span style={{ fontSize: '0.84rem', color: '#94a3b8' }}>
+                  {activeDoctor.specialty} • {activeDoctor.hospital || 'Verified Practitioner'}
+                </span>
+              </div>
+              <label
+                style={{
+                  background: '#2563eb',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '0.84rem',
+                  fontWeight: 600,
+                  cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title="Replace with new photo"
+              >
+                {isUploadingImage ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={15} />}
+                <span>Update Photo</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={isUploadingImage}
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleDoctorPhotoUpload(file);
+                  }}
+                />
+              </label>
+            </div>
           </div>
         </div>
       )}

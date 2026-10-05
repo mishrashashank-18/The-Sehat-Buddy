@@ -5,7 +5,7 @@ import SectionHeader from '../common/SectionHeader';
 import { useData } from '../../context/useData';
 import styles from './TopHospitals.module.css';
 
-const TopHospitals = () => {
+const TopHospitals = ({ onNavigate }) => {
   const { hospitals } = useData();
 
   return (
@@ -14,11 +14,21 @@ const TopHospitals = () => {
         <SectionHeader
           title="Top Partner Hospitals"
           linkText={`Explore All Hospitals (${hospitals.length})`}
+          onLinkClick={() => {
+            if (onNavigate) {
+              onNavigate('find-hospitals');
+            }
+          }}
         />
 
         <div className={styles.grid}>
           {hospitals.slice(0, 4).map((hospital) => (
-            <div key={hospital.id} className={styles.card}>
+            <div
+              key={hospital.id || hospital._id}
+              className={styles.card}
+              onClick={() => onNavigate && onNavigate('hospital-profile', hospital.id || hospital._id)}
+              style={{ cursor: 'pointer' }}
+            >
               <div className={styles.imageWrapper}>
                 <img
                   src={hospital.image}
@@ -76,7 +86,15 @@ const TopHospitals = () => {
                     <ShieldCheck size={14} color="#2563EB" />
                     <span>Verified Partner</span>
                   </div>
-                  <button className={styles.viewDetailsBtn}>
+                  <button
+                    className={styles.viewDetailsBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onNavigate) {
+                        onNavigate('hospital-profile', hospital.id || hospital._id);
+                      }
+                    }}
+                  >
                     View Center
                   </button>
                 </div>

@@ -5,6 +5,8 @@ import { initialHeroContent } from '../data/heroContent';
 import { initialServices } from '../data/services';
 import { initialFeatures } from '../data/features';
 import { initialArticles } from '../data/articles';
+import { initialHospitals } from '../data/hospitals';
+import { initialDoctors } from '../data/doctors';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
@@ -14,11 +16,29 @@ const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
 
 export const DataProvider = ({ children }) => {
-  // 1. Doctors State (Fetched directly from DB)
-  const [doctors, setDoctors] = useState([]);
+  // 1. Doctors State (Fetched directly from DB with fallback)
+  const [doctors, setDoctors] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_DOCTORS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return initialDoctors;
+  });
 
-  // 2. Hospitals State (Fetched directly from DB)
-  const [hospitals, setHospitals] = useState([]);
+  // 2. Hospitals State (Fetched directly from DB with fallback)
+  const [hospitals, setHospitals] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_HOSPITALS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return initialHospitals;
+  });
 
   // 3. Hero & Front Page General Content State
   const [heroContent, setHeroContent] = useState(() => {
@@ -109,7 +129,11 @@ export const DataProvider = ({ children }) => {
           setHospitals(hospsRes.value.map(h => ({
             ...h,
             id: h._id || h.id,
-            specialties: h.specialities || h.specialties || []
+            specialties: h.specialities || h.specialties || [],
+            reels: h.reels || [],
+            youtube_videos: h.youtube_videos || [],
+            photos: Array.isArray(h.photos) ? h.photos : [],
+            star_doctors: h.star_doctors || []
           })));
         }
         if (contentRes.status === 'fulfilled' && contentRes.value) {
@@ -180,7 +204,7 @@ export const DataProvider = ({ children }) => {
   const updateDoctor = (id, updatedData) => {
     setDoctors(prev =>
       prev.map(doc => {
-        if (doc.id === id) {
+        if (String(doc.id || doc._id) === String(id)) {
           const merged = {
             ...doc,
             ...updatedData,
@@ -196,7 +220,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const deleteDoctor = (id) => {
-    setDoctors(prev => prev.filter(doc => doc.id !== id));
+    setDoctors(prev => prev.filter(doc => String(doc.id || doc._id) !== String(id)));
     api.deleteDoctor(id).catch(() => {});
   };
 
@@ -213,7 +237,13 @@ export const DataProvider = ({ children }) => {
         ? hospitalData.specialties
         : (typeof hospitalData.specialties === 'string'
             ? hospitalData.specialties.split(',').map(s => s.trim()).filter(Boolean)
-            : [])
+            : []),
+      reels: hospitalData.reels || [],
+      youtube_videos: hospitalData.youtube_videos || [],
+      photos: Array.isArray(hospitalData.photos) ? hospitalData.photos : [],
+      star_doctors: hospitalData.star_doctors || [],
+      latitude: hospitalData.latitude !== undefined ? Number(hospitalData.latitude) : undefined,
+      longitude: hospitalData.longitude !== undefined ? Number(hospitalData.longitude) : undefined
     };
     setHospitals(prev => [newHospital, ...prev]);
     api.addHospital(newHospital).catch(() => {});
@@ -223,18 +253,24 @@ export const DataProvider = ({ children }) => {
   const updateHospital = (id, updatedData) => {
     setHospitals(prev =>
       prev.map(hosp => {
-        if (hosp.id === id) {
+        if (String(hosp.id || hosp._id) === String(id)) {
           const merged = {
             ...hosp,
             ...updatedData,
-            rating: parseFloat(updatedData.rating) || hosp.rating,
-            totalBeds: parseInt(updatedData.totalBeds, 10) || hosp.totalBeds,
+            rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) : hosp.rating,
+            totalBeds: updatedData.totalBeds !== undefined ? parseInt(updatedData.totalBeds, 10) : hosp.totalBeds,
             emergency24x7: updatedData.emergency24x7 !== undefined ? Boolean(updatedData.emergency24x7) : hosp.emergency24x7,
             specialties: Array.isArray(updatedData.specialties)
               ? updatedData.specialties
               : (typeof updatedData.specialties === 'string'
                   ? updatedData.specialties.split(',').map(s => s.trim()).filter(Boolean)
-                  : hosp.specialties)
+                  : hosp.specialties),
+            reels: updatedData.reels !== undefined ? updatedData.reels : (hosp.reels || []),
+            youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : (hosp.youtube_videos || []),
+            photos: updatedData.photos !== undefined ? updatedData.photos : (hosp.photos || []),
+            star_doctors: updatedData.star_doctors !== undefined ? updatedData.star_doctors : (hosp.star_doctors || []),
+            latitude: updatedData.latitude !== undefined ? (updatedData.latitude === '' || updatedData.latitude === null ? undefined : Number(updatedData.latitude)) : hosp.latitude,
+            longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude
           };
           api.updateHospital(id, merged).catch(() => {});
           return merged;
@@ -245,7 +281,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const deleteHospital = (id) => {
-    setHospitals(prev => prev.filter(hosp => hosp.id !== id));
+    setHospitals(prev => prev.filter(hosp => String(hosp.id || hosp._id) !== String(id)));
     api.deleteHospital(id).catch(() => {});
   };
 

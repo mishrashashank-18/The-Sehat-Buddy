@@ -14,6 +14,23 @@ const hospitalSchema = new mongoose.Schema({
   description: { type: String },
   specialities: [{ type: String }],
   isVerified: { type: Boolean, default: false },
+  rating: { type: Number, default: 4.8 },
+  reviews: { type: String, default: '50+' },
+  totalBeds: { type: Number, default: 100 },
+  emergency24x7: { type: Boolean, default: true },
+  establishedYear: { type: Number, default: 2000 },
+  reels: [{ type: String }],
+  youtube_videos: [{ type: String }],
+  photos: [{
+    url: { type: String, required: true },
+    title: { type: String, default: '' },
+    category: { type: String, enum: ['interior', 'exterior', 'facility', 'custom'], default: 'custom' },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  star_doctors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],
+  staff_emails: [{ type: String }],
+  latitude: { type: Number },
+  longitude: { type: Number },
 }, { timestamps: true });
 
 hospitalSchema.pre('save', async function() {

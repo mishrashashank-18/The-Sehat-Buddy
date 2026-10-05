@@ -4,11 +4,11 @@ import bcrypt from 'bcrypt';
 const doctorSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  specialization: { type: String, required: true },
-  experience: { type: Number, required: true },
+  password: { type: String, default: 'CHANGEME_PENDING_SETUP' },
+  specialization: { type: String, default: 'General Medicine' },
+  experience: { type: Number, default: 5 },
   about: { type: String },
-  fees: { type: Number, required: true },
+  fees: { type: Number, default: 500 },
   image: { type: String },
   available: { type: Boolean, default: true },
   address: {
@@ -24,6 +24,9 @@ const doctorSchema = new mongoose.Schema({
   youtube_videos: [{ type: String }],
   rating: { type: Number, default: 4.8 },
   reviews: { type: String, default: '50+' },
+  isStarDoctor: { type: Boolean, default: false },
+  isFirstLogin: { type: Boolean, default: true },
+  passwordSet: { type: Boolean, default: false },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });
