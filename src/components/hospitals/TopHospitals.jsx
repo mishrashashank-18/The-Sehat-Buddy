@@ -41,11 +41,7 @@ const TopHospitals = ({ onNavigate }) => {
                 <div className={styles.cityBadge}>
                   <MapPin size={12} /> {hospital.city}
                 </div>
-                {hospital.emergency24x7 && (
-                  <div className={styles.emergencyTag}>
-                    24/7 Emergency
-                  </div>
-                )}
+
               </div>
 
               <div className={styles.info}>

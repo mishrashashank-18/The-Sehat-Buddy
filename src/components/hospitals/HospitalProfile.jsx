@@ -157,23 +157,37 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           experience: typeof sd.experience === 'number' ? `${sd.experience}+ Years Experience` : (sd.experience || '10+ Years Experience')
         };
       }
-      const matched = doctors.find(d => String(d.id || d._id) === String(sd));
+      
+      const sdString = String(sd).toLowerCase().trim();
+      let matched = doctors.find(d => String(d.id || d._id || d.email).toLowerCase().trim() === sdString);
+      
+      // If not in global doctors, check if it's a hospital staff doctor
+      if (!matched && hospital.staff_doctors) {
+        const staffDoc = hospital.staff_doctors.find(staff => {
+          if (typeof staff === 'string') return staff.toLowerCase().trim() === sdString;
+          return staff.email?.toLowerCase().trim() === sdString;
+        });
+        
+        if (staffDoc) {
+          const sEmail = (typeof staffDoc === 'string' ? staffDoc : staffDoc.email).toLowerCase().trim();
+          matched = {
+            id: sEmail,
+            _id: sEmail,
+            name: typeof staffDoc === 'object' && staffDoc.name ? staffDoc.name : ('Dr. ' + sEmail.split('@')[0].replace(/[._-]/g, ' ')),
+            email: sEmail,
+            specialty: 'Hospital Staff Physician',
+            specialization: 'Hospital Staff Physician',
+            hospital: hospital.name,
+            image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80',
+            price: 700,
+            experience: '8+ Years Experience',
+            rating: 4.8
+          };
+        }
+      }
+      
       return matched;
     }).filter(Boolean);
-  }
-
-  // If no star doctors specifically found, check doctors with matching hospital or isStarDoctor
-  if (starDoctorsList.length === 0) {
-    const hospName = (hospital.name || '').toLowerCase();
-    starDoctorsList = doctors.filter(d => {
-      const docHosp = (d.hospital || '').toLowerCase();
-      return (docHosp && (docHosp.includes(hospName) || hospName.includes(docHosp))) || d.isStarDoctor;
-    });
-  }
-
-  // Fallback to all doctors if still empty
-  if (starDoctorsList.length === 0 && doctors.length > 0) {
-    starDoctorsList = doctors.slice(0, 4);
   }
 
   return (
@@ -194,11 +208,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
                 }}
               />
-              {hospital.emergency24x7 && (
-                <div className={styles.emergencyBadge}>
-                  <ShieldCheck size={14} /> 24/7 Emergency
-                </div>
-              )}
+
               {hospital.city && (
                 <div className={styles.cityBadge}>
                   <MapPin size={13} /> {hospital.city}

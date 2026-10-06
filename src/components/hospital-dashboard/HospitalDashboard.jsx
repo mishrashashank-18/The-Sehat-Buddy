@@ -343,16 +343,25 @@ const HospitalDashboard = ({ onNavigate }) => {
     showToast('Photo removed successfully!');
   };
 
-  const toggleStarDoctor = (docId) => {
+  const toggleStarDoctor = async (docId) => {
     const sId = String(docId);
+    let newStarIds;
     setStarDoctorIds(prev => {
       const exists = prev.some(id => String(id) === sId);
       if (exists) {
-        return prev.filter(id => String(id) !== sId);
+        newStarIds = prev.filter(id => String(id) !== sId);
       } else {
-        return [...prev, docId];
+        newStarIds = [...prev, docId];
       }
+      return newStarIds;
     });
+
+    try {
+      await updateHospital(activeHospital.id || activeHospital._id, { star_doctors: newStarIds });
+      showToast('Star Doctors updated instantly!');
+    } catch {
+      showToast('Failed to update Star Doctors immediately.');
+    }
   };
 
   return (
@@ -419,6 +428,13 @@ const HospitalDashboard = ({ onNavigate }) => {
             </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('admin')}>
               Admin
+            </button>
+            <button className={styles.navLinkBtn} style={{ color: '#dc2626', fontWeight: 600 }} onClick={() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('user');
+              window.location.href = '/hospital';
+            }}>
+              Logout
             </button>
           </div>
         </div>

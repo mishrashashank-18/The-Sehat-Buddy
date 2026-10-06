@@ -113,6 +113,26 @@ export const registerHospital = async (req, res) => {
       parsedStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : [];
     }
 
+    // Sync staff doctors BEFORE creating hospital so they get ObjectIds
+    const combinedStaff = [
+      ...parsedStaffDoctors,
+      ...parsedStaffEmails.map(e => ({ email: e }))
+    ];
+    if (combinedStaff.length > 0) {
+      await syncHospitalStaff(name, combinedStaff, null); // We don't have hospital._id yet, but that's fine, syncHospitalStaff doesn't strictly need it to create the doctor
+    }
+
+    const resolvedStarDoctors = [];
+    const inputStarDoctors = Array.isArray(star_doctors) ? star_doctors : [];
+    for (const sd of inputStarDoctors) {
+      if (/^[0-9a-fA-F]{24}$/.test(sd)) {
+        resolvedStarDoctors.push(sd);
+      } else if (typeof sd === 'string' && sd.includes('@')) {
+        const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
+        if (doc) resolvedStarDoctors.push(doc._id);
+      }
+    }
+
     const hospital = await Hospital.create({ 
       name, email, password: password || 'password123', address, city, state, zip, phone, description, 
       specialities: parsedSpecialities, image,
@@ -123,7 +143,7 @@ export const registerHospital = async (req, res) => {
       establishedYear,
       reels: reels || [],
       youtube_videos: youtube_videos || [],
-      star_doctors: star_doctors || [],
+      star_doctors: resolvedStarDoctors,
       staff_emails: parsedStaffEmails,
       staff_doctors: parsedStaffDoctors,
       latitude: latitude !== undefined ? Number(latitude) : undefined,
@@ -131,15 +151,6 @@ export const registerHospital = async (req, res) => {
     });
     
     if (hospital) {
-      // Sync staff doctors created with this hospital
-      const combinedStaff = [
-        ...parsedStaffDoctors,
-        ...parsedStaffEmails.map(e => ({ email: e }))
-      ];
-      if (combinedStaff.length > 0) {
-        await syncHospitalStaff(hospital.name, combinedStaff, hospital._id);
-      }
-
       res.status(201).json({
         success: true,
         token: generateToken(hospital._id),
@@ -180,6 +191,21 @@ export const updateHospital = async (req, res) => {
     const hospital = await Hospital.findById(req.params.id);
     if (hospital) {
       Object.assign(hospital, req.body);
+      
+      // Sync any new staff doctors & emails BEFORE saving so they get ObjectIds
+      const incomingStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : (hospital.staff_doctors || []);
+      const incomingStaffEmails = Array.isArray(req.body.staff_emails) 
+          ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
+          : (req.body.staff_emails ? String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : (hospital.staff_emails || []));
+      
+      const combinedStaff = [
+        ...incomingStaffDoctors,
+        ...incomingStaffEmails.map(e => ({ email: e }))
+      ];
+      if (combinedStaff.length > 0) {
+        await syncHospitalStaff(req.body.name || hospital.name, combinedStaff, hospital._id);
+      }
+
       if (req.body.specialities !== undefined) {
         hospital.specialities = req.body.specialities;
         hospital.markModified('specialities');
@@ -193,7 +219,17 @@ export const updateHospital = async (req, res) => {
         hospital.markModified('youtube_videos');
       }
       if (req.body.star_doctors !== undefined) {
-        hospital.star_doctors = Array.isArray(req.body.star_doctors) ? req.body.star_doctors : [];
+        const resolvedStarDoctors = [];
+        const inputStarDoctors = Array.isArray(req.body.star_doctors) ? req.body.star_doctors : [];
+        for (const sd of inputStarDoctors) {
+          if (/^[0-9a-fA-F]{24}$/.test(sd)) {
+            resolvedStarDoctors.push(sd);
+          } else if (typeof sd === 'string' && sd.includes('@')) {
+            const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
+            if (doc) resolvedStarDoctors.push(doc._id);
+          }
+        }
+        hospital.star_doctors = resolvedStarDoctors;
         hospital.markModified('star_doctors');
       }
       if (req.body.photos !== undefined) {
@@ -201,15 +237,11 @@ export const updateHospital = async (req, res) => {
         hospital.markModified('photos');
       }
       if (req.body.staff_doctors !== undefined) {
-        hospital.staff_doctors = Array.isArray(req.body.staff_doctors)
-          ? req.body.staff_doctors
-          : [];
+        hospital.staff_doctors = incomingStaffDoctors;
         hospital.markModified('staff_doctors');
       }
       if (req.body.staff_emails !== undefined) {
-        hospital.staff_emails = Array.isArray(req.body.staff_emails) 
-          ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
-          : String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+        hospital.staff_emails = incomingStaffEmails;
         hospital.markModified('staff_emails');
       }
       if (req.file) {
@@ -217,16 +249,8 @@ export const updateHospital = async (req, res) => {
       } else if (req.body.image) {
         hospital.image = req.body.image;
       }
+      
       const updatedHospital = await hospital.save();
-
-      // Sync any new staff doctors & emails
-      const combinedStaff = [
-        ...(hospital.staff_doctors || []),
-        ...(hospital.staff_emails || []).map(e => ({ email: e }))
-      ];
-      if (combinedStaff.length > 0) {
-        await syncHospitalStaff(updatedHospital.name, combinedStaff, updatedHospital._id);
-      }
 
       const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');
       res.json({ success: true, message: 'Hospital updated', data: populated || updatedHospital });

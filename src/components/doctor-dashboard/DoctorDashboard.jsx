@@ -311,7 +311,7 @@ const DoctorDashboard = ({ onNavigate }) => {
             <button className={styles.navLinkBtn} style={{ color: '#dc2626', fontWeight: 600 }} onClick={() => {
               localStorage.removeItem('token');
               localStorage.removeItem('user');
-              window.location.href = '/login';
+              window.location.href = '/doctor';
             }}>
               Logout
             </button>

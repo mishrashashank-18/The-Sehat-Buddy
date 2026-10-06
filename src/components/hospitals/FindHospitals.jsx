@@ -183,11 +183,7 @@ const FindHospitals = ({ onNavigate }) => {
                       <MapPin size={12} /> {hospital.city}
                     </div>
                   )}
-                  {hospital.emergency24x7 && (
-                    <div className={styles.emergencyTag}>
-                      24/7 Emergency
-                    </div>
-                  )}
+
                 </div>
 
                 <div className={styles.info}>
