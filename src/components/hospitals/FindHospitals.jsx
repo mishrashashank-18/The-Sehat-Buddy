@@ -7,9 +7,29 @@ import styles from './FindHospitals.module.css';
 const FindHospitals = ({ onNavigate }) => {
   const { hospitals } = useData();
 
-  const [searchName, setSearchName] = useState('');
-  const [searchCity, setSearchCity] = useState('');
-  const [searchSpecialty, setSearchSpecialty] = useState('');
+  // Read initial query params from SearchBar / URL
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialName = queryParams.get('name') || queryParams.get('q') || '';
+  const initialLoc = queryParams.get('city') || queryParams.get('location') || '';
+  const initialSpec = queryParams.get('specialty') || queryParams.get('speciality') || '';
+
+  const [searchName, setSearchName] = useState(initialName);
+  const [searchCity, setSearchCity] = useState(initialLoc);
+  const [searchSpecialty, setSearchSpecialty] = useState(initialSpec);
+
+  // Sync state if URL search params change
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('name') || params.has('q')) {
+      setSearchName(params.get('name') || params.get('q') || '');
+    }
+    if (params.has('city') || params.has('location')) {
+      setSearchCity(params.get('city') || params.get('location') || '');
+    }
+    if (params.has('specialty') || params.has('speciality')) {
+      setSearchSpecialty(params.get('specialty') || params.get('speciality') || '');
+    }
+  }, []);
 
   // Collect unique cities
   const uniqueCities = Array.from(
@@ -27,23 +47,29 @@ const FindHospitals = ({ onNavigate }) => {
   const filteredHospitals = hospitals.filter(hospital => {
     // Name or address match
     if (searchName) {
-      const q = searchName.toLowerCase();
+      const q = searchName.toLowerCase().trim();
       const nameMatch = hospital.name && hospital.name.toLowerCase().includes(q);
       const addrMatch = hospital.address && hospital.address.toLowerCase().includes(q);
-      if (!nameMatch && !addrMatch) return false;
+      const cityMatch = hospital.city && hospital.city.toLowerCase().includes(q);
+      const specsMatch = Array.isArray(hospital.specialties) && hospital.specialties.some(s => s.toLowerCase().includes(q));
+      if (!nameMatch && !addrMatch && !cityMatch && !specsMatch) return false;
     }
 
     // City match
     if (searchCity) {
-      if (!hospital.city || hospital.city.toLowerCase() !== searchCity.toLowerCase()) {
+      const cQ = searchCity.toLowerCase().trim();
+      const cityMatch = hospital.city && hospital.city.toLowerCase().includes(cQ);
+      const addrMatch = hospital.address && hospital.address.toLowerCase().includes(cQ);
+      if (!cityMatch && !addrMatch) {
         return false;
       }
     }
 
     // Specialty match
     if (searchSpecialty) {
+      const sQ = searchSpecialty.toLowerCase().trim();
       const specs = Array.isArray(hospital.specialties) ? hospital.specialties : [];
-      const hasSpec = specs.some(s => s.toLowerCase() === searchSpecialty.toLowerCase());
+      const hasSpec = specs.some(s => s.toLowerCase().includes(sQ) || sQ.includes(s.toLowerCase()));
       if (!hasSpec) return false;
     }
 

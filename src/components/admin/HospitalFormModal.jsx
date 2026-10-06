@@ -53,6 +53,58 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         ? hospitalToEdit.star_doctors.map(d => typeof d === 'object' ? (d._id || d.id) : d).filter(Boolean)
         : [];
 
+      // Resolve staff doctors with full names from hospital records or doctors database
+      const rawStaffEmails = Array.isArray(hospitalToEdit.staff_emails) ? [...hospitalToEdit.staff_emails] : [];
+      const rawStaffDocs = Array.isArray(hospitalToEdit.staff_doctors) ? [...hospitalToEdit.staff_doctors] : [];
+
+      const initialStaffDocs = [];
+      const seenStaffEmails = new Set();
+
+      rawStaffDocs.forEach(sd => {
+        const sEmail = (typeof sd === 'string' ? sd : sd?.email || '').toLowerCase().trim();
+        if (!sEmail || seenStaffEmails.has(sEmail)) return;
+        seenStaffEmails.add(sEmail);
+        let sName = (typeof sd === 'object' ? sd?.name : '') || '';
+        if (!sName && doctors && doctors.length > 0) {
+          const match = doctors.find(d => (d.email || '').toLowerCase().trim() === sEmail);
+          if (match?.name) sName = match.name;
+        }
+        if (!sName) {
+          const namePart = sEmail.split('@')[0].replace(/[._-]/g, ' ');
+          sName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        }
+        initialStaffDocs.push({ email: sEmail, name: sName });
+      });
+
+      rawStaffEmails.forEach(e => {
+        const cleanE = (typeof e === 'string' ? e : e?.email || '').toLowerCase().trim();
+        if (!cleanE || seenStaffEmails.has(cleanE)) return;
+        seenStaffEmails.add(cleanE);
+        let sName = '';
+        if (doctors && doctors.length > 0) {
+          const match = doctors.find(d => (d.email || '').toLowerCase().trim() === cleanE);
+          if (match?.name) sName = match.name;
+        }
+        if (!sName) {
+          const namePart = cleanE.split('@')[0].replace(/[._-]/g, ' ');
+          sName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        }
+        initialStaffDocs.push({ email: cleanE, name: sName });
+      });
+
+      // Also auto-link any existing doctors in DB whose hospital property matches this hospital
+      if (doctors && doctors.length > 0 && hospitalToEdit.name) {
+        const hospNameLower = hospitalToEdit.name.toLowerCase().trim();
+        doctors.forEach(doc => {
+          const docEmail = (doc.email || '').toLowerCase().trim();
+          const docHosp = (doc.hospital || '').toLowerCase().trim();
+          if (docEmail && !seenStaffEmails.has(docEmail) && docHosp && (docHosp === hospNameLower || docHosp.includes(hospNameLower) || hospNameLower.includes(docHosp))) {
+            seenStaffEmails.add(docEmail);
+            initialStaffDocs.push({ email: docEmail, name: doc.name || '' });
+          }
+        });
+      }
+
       return {
         name: hospitalToEdit.name || '',
         city: hospitalToEdit.city || 'Delhi',
@@ -72,7 +124,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         star_doctors: initStarDocs,
         latitude: hospitalToEdit.latitude !== undefined && hospitalToEdit.latitude !== null ? hospitalToEdit.latitude : '',
         longitude: hospitalToEdit.longitude !== undefined && hospitalToEdit.longitude !== null ? hospitalToEdit.longitude : '',
-        staff_emails: Array.isArray(hospitalToEdit.staff_emails) ? [...hospitalToEdit.staff_emails] : []
+        staff_emails: Array.from(seenStaffEmails),
+        staff_doctors: initialStaffDocs
       };
     }
     return {
@@ -94,7 +147,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       star_doctors: [],
       latitude: '',
       longitude: '',
-      staff_emails: []
+      staff_emails: [],
+      staff_doctors: []
     };
   });
 
@@ -114,24 +168,44 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [staffEmailInput, setStaffEmailInput] = useState('');
+  const [staffDoctorNameInput, setStaffDoctorNameInput] = useState('');
   const [errors, setErrors] = useState({});
 
-  const handleAddStaffEmail = () => {
+  const handleAddStaffDoctor = () => {
     if (!staffEmailInput.trim()) return;
     const cleanEmail = staffEmailInput.trim().toLowerCase();
-    if (!formData.staff_emails.includes(cleanEmail)) {
+    let docName = staffDoctorNameInput.trim();
+
+    if (!docName && doctors && doctors.length > 0) {
+      const match = doctors.find(d => (d.email || '').toLowerCase().trim() === cleanEmail);
+      if (match?.name) {
+        docName = match.name;
+      }
+    }
+    if (!docName) {
+      const namePart = cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
+      docName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+    } else if (!docName.toLowerCase().startsWith('dr.') && !docName.toLowerCase().startsWith('dr ')) {
+      docName = 'Dr. ' + docName;
+    }
+
+    const existingStaff = formData.staff_doctors || [];
+    if (!existingStaff.some(d => (d.email || d).toLowerCase() === cleanEmail)) {
       setFormData({
         ...formData,
-        staff_emails: [...formData.staff_emails, cleanEmail]
+        staff_emails: [...(formData.staff_emails || []).filter(e => e.toLowerCase() !== cleanEmail), cleanEmail],
+        staff_doctors: [...existingStaff, { email: cleanEmail, name: docName }]
       });
     }
     setStaffEmailInput('');
+    setStaffDoctorNameInput('');
   };
 
-  const handleRemoveStaffEmail = (emailToRemove) => {
+  const handleRemoveStaffDoctor = (emailToRemove) => {
     setFormData({
       ...formData,
-      staff_emails: formData.staff_emails.filter(e => e !== emailToRemove)
+      staff_emails: (formData.staff_emails || []).filter(e => e !== emailToRemove),
+      staff_doctors: (formData.staff_doctors || []).filter(d => d.email !== emailToRemove)
     });
   };
 
@@ -217,6 +291,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       youtube_videos: formData.youtube_videos.map(v => v.trim()).filter(Boolean),
       star_doctors: formData.star_doctors,
       staff_emails: formData.staff_emails,
+      staff_doctors: formData.staff_doctors,
       latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
       longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
     };
@@ -232,6 +307,75 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     }
     onClose();
   };
+
+  // Filter doctors to ONLY show doctors affiliated with this hospital
+  const hospitalDoctors = React.useMemo(() => {
+    const currentHospitalName = (formData.name || hospitalToEdit?.name || '').toLowerCase().trim();
+
+    // Collect all emails associated with this hospital's staff
+    const staffEmailSet = new Set([
+      ...(formData.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
+      ...(formData.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
+    ].filter(Boolean));
+
+    // Map email to custom name if provided in staff_doctors
+    const staffNameMap = new Map();
+    (formData.staff_doctors || []).forEach(d => {
+      if (d && typeof d === 'object' && d.email && d.name) {
+        staffNameMap.set(d.email.toLowerCase().trim(), d.name.trim());
+      }
+    });
+
+    const list = [];
+    const addedEmails = new Set();
+    const addedIds = new Set();
+
+    // 1. Doctors from the platform whose hospital property matches or whose email is in this hospital's staff
+    (doctors || []).forEach(doc => {
+      const docEmail = (doc.email || '').toLowerCase().trim();
+      const docHosp = (doc.hospital || '').toLowerCase().trim();
+      const docIdStr = String(doc.id || doc._id || '');
+
+      const isStaff = staffEmailSet.has(docEmail);
+      const isHospitalMatch = currentHospitalName && docHosp && (
+        docHosp === currentHospitalName ||
+        docHosp.includes(currentHospitalName) ||
+        currentHospitalName.includes(docHosp)
+      );
+
+      if (isStaff || isHospitalMatch) {
+        // Fetch doctor name from staff_doctors if defined, else doctor's DB name
+        const displayName = staffNameMap.get(docEmail) || doc.name;
+        list.push({
+          ...doc,
+          name: displayName
+        });
+        if (docEmail) addedEmails.add(docEmail);
+        if (docIdStr) addedIds.add(docIdStr);
+      }
+    });
+
+    // 2. Any staff doctors added in this modal who might not yet exist in the global doctors list
+    (formData.staff_doctors || []).forEach(staffDoc => {
+      const sEmail = (staffDoc.email || staffDoc || '').toLowerCase().trim();
+      if (sEmail && !addedEmails.has(sEmail)) {
+        addedEmails.add(sEmail);
+        const name = staffDoc.name || ('Dr. ' + sEmail.split('@')[0].replace(/[._-]/g, ' '));
+        list.push({
+          id: sEmail,
+          _id: sEmail,
+          name: name,
+          email: sEmail,
+          specialty: 'Hospital Staff Physician',
+          specialization: 'Hospital Staff Physician',
+          hospital: formData.name || 'This Hospital',
+          image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80'
+        });
+      }
+    });
+
+    return list;
+  }, [doctors, formData.name, formData.staff_emails, formData.staff_doctors, hospitalToEdit]);
 
   return (
     <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -576,69 +720,122 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           </div>
 
           {/* Star Doctors Selection */}
-          <div className={styles.sectionHeader} style={{ marginTop: '20px' }}>
-            ⭐ Star Doctors of this Hospital
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px', borderBottom: '1px solid #edf2f4', paddingBottom: '6px' }}>
+            <div className={styles.sectionHeader} style={{ margin: 0, border: 'none', padding: 0 }}>
+              ⭐ Star Doctors of this Hospital
+            </div>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, background: '#fef3c7', color: '#b45309', padding: '3px 10px', borderRadius: '12px' }}>
+              {formData.star_doctors.length} Selected
+            </span>
           </div>
-          <div className={styles.starDoctorsGrid}>
-            {doctors.map((doc) => {
-              const isSelected = formData.star_doctors.some(id => String(id) === String(doc.id || doc._id));
-              return (
-                <div
-                  key={doc.id || doc._id}
-                  className={`${styles.starDocItem} ${isSelected ? styles.starDocItemActive : ''}`}
-                  onClick={() => {
-                    const docId = doc.id || doc._id;
-                    const exists = formData.star_doctors.some(id => String(id) === String(docId));
-                    const newDocs = exists
-                      ? formData.star_doctors.filter(id => String(id) !== String(docId))
-                      : [...formData.star_doctors, docId];
-                    setFormData({ ...formData, star_doctors: newDocs });
-                  }}
-                >
-                  <img
-                    src={doc.image}
-                    alt={doc.name}
-                    className={styles.starDocThumb}
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
-                    }}
-                  />
-                  <div className={styles.starDocInfo}>
-                    <h5>{doc.name}</h5>
-                    <p>{doc.specialty || doc.specialization}</p>
-                  </div>
-                  <Star
-                    size={16}
-                    color={isSelected ? '#f59e0b' : '#cbd5e1'}
-                    fill={isSelected ? '#f59e0b' : 'none'}
-                  />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Hospital Staff Doctors (Invite by Email) */}
-          <div className={styles.sectionHeader} style={{ marginTop: '24px' }}>
-            Hospital Staff & Affiliated Doctors (Invite by Email)
-          </div>
-          <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
-            Add emails of doctors who work at this hospital. When they log in to the Doctor Portal for the first time, they will be prompted to set their password.
+          <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '6px 0 10px 0' }}>
+            Select the star doctors to be showcased prominently on this hospital's profile page. Click any doctor card to toggle star status.
           </p>
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+          <div className={styles.starDoctorsGrid} style={{ minHeight: '220px', flexShrink: 0 }}>
+            {hospitalDoctors && hospitalDoctors.length > 0 ? (
+              hospitalDoctors.map((doc) => {
+                const docId = doc.id || doc._id || doc.email;
+                const isSelected = formData.star_doctors.some(id => 
+                  String(id) === String(docId) || (doc.email && String(id).toLowerCase() === doc.email.toLowerCase())
+                );
+                const isHospitalStaff = (doc.hospital && formData.name && doc.hospital.toLowerCase().includes(formData.name.toLowerCase())) ||
+                  (formData.staff_emails && formData.staff_emails.includes(doc.email?.toLowerCase())) ||
+                  (formData.staff_doctors && formData.staff_doctors.some(sd => (sd.email || sd)?.toLowerCase() === doc.email?.toLowerCase()));
+
+                return (
+                  <div
+                    key={doc.id || doc._id || doc.email}
+                    className={`${styles.starDocItem} ${isSelected ? styles.starDocItemActive : ''}`}
+                    onClick={() => {
+                      const targetId = doc.id || doc._id || doc.email;
+                      const isAlreadySelected = formData.star_doctors.some(id => 
+                        String(id) === String(targetId) || (doc.email && String(id).toLowerCase() === doc.email.toLowerCase())
+                      );
+                      const newDocs = isAlreadySelected
+                        ? formData.star_doctors.filter(id => 
+                            String(id) !== String(targetId) && (!doc.email || String(id).toLowerCase() !== doc.email.toLowerCase())
+                          )
+                        : [...formData.star_doctors, targetId];
+                      setFormData({ ...formData, star_doctors: newDocs });
+                    }}
+                    title={isSelected ? "Click to remove Star status" : "Click to select as Star Doctor"}
+                  >
+                    <img
+                      src={doc.image}
+                      alt={doc.name}
+                      className={styles.starDocThumb}
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                      }}
+                    />
+                    <div className={styles.starDocInfo}>
+                      <h5>{doc.name}</h5>
+                      <p>
+                        {doc.specialty || doc.specialization}
+                        {isHospitalStaff && <span style={{ color: '#059669', fontWeight: 600 }}> • Hospital Staff</span>}
+                      </p>
+                    </div>
+                    <Star
+                      size={20}
+                      color={isSelected ? '#f59e0b' : '#cbd5e1'}
+                      fill={isSelected ? '#f59e0b' : 'none'}
+                      style={{ flexShrink: 0 }}
+                    />
+                  </div>
+                );
+              })
+            ) : (
+              <div style={{ gridColumn: '1 / -1', padding: '28px 16px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '12px' }}>
+                <p style={{ margin: 0, fontWeight: 600, color: '#334155', fontSize: '0.95rem' }}>
+                  No doctors currently registered to this hospital.
+                </p>
+                <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                  Add doctors in the <strong>Hospital Staff</strong> section below. They will immediately appear here so you can mark them as Star Doctors!
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Hospital Staff Doctors (Invite by Email & Name) */}
+          <div className={styles.sectionHeader} style={{ marginTop: '24px' }}>
+            Hospital Staff & Affiliated Doctors
+          </div>
+          <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
+            Add doctors who work at this hospital with their Name and Email. When they log in to the Doctor Portal with their email, their name will automatically be retrieved from the database, and they can set their password.
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr auto', gap: '8px', marginBottom: '12px' }}>
+            <input
+              type="text"
+              placeholder="Doctor's Name (e.g. Dr. Rajesh Sharma)"
+              value={staffDoctorNameInput}
+              onChange={(e) => setStaffDoctorNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddStaffDoctor();
+                }
+              }}
+              style={{
+                padding: '10px 14px',
+                borderRadius: '8px',
+                border: '1px solid #d9e2e6',
+                fontSize: '0.88rem'
+              }}
+            />
             <input
               type="email"
-              placeholder="e.g. doctor@hospital.com"
+              placeholder="Doctor Email (e.g. doctor@hospital.com)"
               value={staffEmailInput}
               onChange={(e) => setStaffEmailInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  handleAddStaffEmail();
+                  handleAddStaffDoctor();
                 }
               }}
               style={{
-                flex: 1,
                 padding: '10px 14px',
                 borderRadius: '8px',
                 border: '1px solid #d9e2e6',
@@ -647,7 +844,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             />
             <button
               type="button"
-              onClick={handleAddStaffEmail}
+              onClick={handleAddStaffDoctor}
               style={{
                 background: '#2563eb',
                 color: '#ffffff',
@@ -660,46 +857,65 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                 whiteSpace: 'nowrap'
               }}
             >
-              + Add Doctor Email
+              + Add Doctor
             </button>
           </div>
 
-          {formData.staff_emails && formData.staff_emails.length > 0 && (
+          {((formData.staff_doctors && formData.staff_doctors.length > 0) || (formData.staff_emails && formData.staff_emails.length > 0)) && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
-              {formData.staff_emails.map((email, idx) => (
-                <span
-                  key={idx}
-                  style={{
-                    background: '#eff6ff',
-                    color: '#1e40af',
-                    border: '1px solid #bfdbfe',
-                    padding: '5px 12px',
-                    borderRadius: '20px',
-                    fontSize: '0.82rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <span>👨‍⚕️ {email}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveStaffEmail(email)}
+              {(formData.staff_doctors && formData.staff_doctors.length > 0
+                ? formData.staff_doctors
+                : (formData.staff_emails || []).map(e => ({ email: e, name: '' }))
+              ).map((doc, idx) => {
+                const sEmail = (doc.email || doc || '').toLowerCase().trim();
+                let displayName = doc.name;
+                if (!displayName && doctors && doctors.length > 0) {
+                  const match = doctors.find(d => (d.email || '').toLowerCase().trim() === sEmail);
+                  if (match?.name) displayName = match.name;
+                }
+                if (!displayName) {
+                  const namePart = sEmail.split('@')[0].replace(/[._-]/g, ' ');
+                  displayName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+                }
+
+                return (
+                  <span
+                    key={idx}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#6b7280',
-                      cursor: 'pointer',
-                      padding: '0 2px',
-                      fontSize: '1rem',
-                      lineHeight: 1
+                      background: '#eff6ff',
+                      color: '#1e40af',
+                      border: '1px solid #bfdbfe',
+                      padding: '6px 14px',
+                      borderRadius: '20px',
+                      fontSize: '0.84rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontWeight: 500
                     }}
-                    title="Remove email"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    <span>
+                      👨‍⚕️ <strong>{displayName}</strong> <span style={{ color: '#64748b', fontWeight: 400, fontSize: '0.8rem' }}>({doc.email || doc})</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStaffDoctor(doc.email || doc)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#6b7280',
+                        cursor: 'pointer',
+                        padding: '0 2px',
+                        fontSize: '1rem',
+                        lineHeight: 1
+                      }}
+                      title="Remove doctor"
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

@@ -29,6 +29,10 @@ const hospitalSchema = new mongoose.Schema({
   }],
   star_doctors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],
   staff_emails: [{ type: String }],
+  staff_doctors: [{
+    name: { type: String },
+    email: { type: String, required: true }
+  }],
   latitude: { type: Number },
   longitude: { type: Number },
 }, { timestamps: true });

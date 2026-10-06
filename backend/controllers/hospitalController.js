@@ -23,17 +23,31 @@ export const authHospital = async (req, res) => {
 /**
  * Helper to ensure doctor staff accounts exist and are linked to hospital
  */
-const syncHospitalStaff = async (hospitalName, staffEmails, hospitalId) => {
-  if (!Array.isArray(staffEmails) || staffEmails.length === 0) return;
+const syncHospitalStaff = async (hospitalName, staffList, hospitalId) => {
+  if (!Array.isArray(staffList) || staffList.length === 0) return;
 
-  for (const sEmail of staffEmails) {
-    const cleanEmail = sEmail.toLowerCase().trim();
+  for (const staffItem of staffList) {
+    let cleanEmail = '';
+    let doctorName = '';
+
+    if (typeof staffItem === 'string') {
+      cleanEmail = staffItem.toLowerCase().trim();
+    } else if (staffItem && typeof staffItem === 'object') {
+      cleanEmail = (staffItem.email || '').toLowerCase().trim();
+      doctorName = (staffItem.name || '').trim();
+    }
+
     if (!cleanEmail) continue;
 
     const existingDoctor = await Doctor.findOne({ email: cleanEmail });
     if (!existingDoctor) {
-      const namePart = cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
-      const formattedName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      let formattedName = doctorName;
+      if (!formattedName) {
+        const namePart = cleanEmail.split('@')[0].replace(/[._-]/g, ' ');
+        formattedName = 'Dr. ' + namePart.charAt(0).toUpperCase() + namePart.slice(1);
+      } else if (!formattedName.toLowerCase().startsWith('dr.') && !formattedName.toLowerCase().startsWith('dr ')) {
+        formattedName = 'Dr. ' + formattedName;
+      }
       
       await Doctor.create({
         name: formattedName,
@@ -48,8 +62,21 @@ const syncHospitalStaff = async (hospitalName, staffEmails, hospitalId) => {
         about: `Clinical specialist affiliated with ${hospitalName}.`
       });
     } else {
+      let needsSave = false;
       if (!existingDoctor.hospital) {
         existingDoctor.hospital = hospitalName;
+        needsSave = true;
+      }
+      // If doctor didn't have a customized name yet and a name is provided, update it
+      if (doctorName && (!existingDoctor.name || existingDoctor.name.toLowerCase().includes(cleanEmail.split('@')[0]))) {
+        let formattedName = doctorName;
+        if (!formattedName.toLowerCase().startsWith('dr.') && !formattedName.toLowerCase().startsWith('dr ')) {
+          formattedName = 'Dr. ' + formattedName;
+        }
+        existingDoctor.name = formattedName;
+        needsSave = true;
+      }
+      if (needsSave) {
         await existingDoctor.save();
       }
     }
@@ -81,6 +108,11 @@ export const registerHospital = async (req, res) => {
         : String(staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
     }
 
+    let parsedStaffDoctors = [];
+    if (req.body.staff_doctors) {
+      parsedStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : [];
+    }
+
     const hospital = await Hospital.create({ 
       name, email, password: password || 'password123', address, city, state, zip, phone, description, 
       specialities: parsedSpecialities, image,
@@ -93,14 +125,19 @@ export const registerHospital = async (req, res) => {
       youtube_videos: youtube_videos || [],
       star_doctors: star_doctors || [],
       staff_emails: parsedStaffEmails,
+      staff_doctors: parsedStaffDoctors,
       latitude: latitude !== undefined ? Number(latitude) : undefined,
       longitude: longitude !== undefined ? Number(longitude) : undefined
     });
     
     if (hospital) {
       // Sync staff doctors created with this hospital
-      if (parsedStaffEmails.length > 0) {
-        await syncHospitalStaff(hospital.name, parsedStaffEmails, hospital._id);
+      const combinedStaff = [
+        ...parsedStaffDoctors,
+        ...parsedStaffEmails.map(e => ({ email: e }))
+      ];
+      if (combinedStaff.length > 0) {
+        await syncHospitalStaff(hospital.name, combinedStaff, hospital._id);
       }
 
       res.status(201).json({
@@ -163,6 +200,12 @@ export const updateHospital = async (req, res) => {
         hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
         hospital.markModified('photos');
       }
+      if (req.body.staff_doctors !== undefined) {
+        hospital.staff_doctors = Array.isArray(req.body.staff_doctors)
+          ? req.body.staff_doctors
+          : [];
+        hospital.markModified('staff_doctors');
+      }
       if (req.body.staff_emails !== undefined) {
         hospital.staff_emails = Array.isArray(req.body.staff_emails) 
           ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
@@ -176,9 +219,13 @@ export const updateHospital = async (req, res) => {
       }
       const updatedHospital = await hospital.save();
 
-      // Sync any new staff emails
-      if (hospital.staff_emails && hospital.staff_emails.length > 0) {
-        await syncHospitalStaff(updatedHospital.name, hospital.staff_emails, updatedHospital._id);
+      // Sync any new staff doctors & emails
+      const combinedStaff = [
+        ...(hospital.staff_doctors || []),
+        ...(hospital.staff_emails || []).map(e => ({ email: e }))
+      ];
+      if (combinedStaff.length > 0) {
+        await syncHospitalStaff(updatedHospital.name, combinedStaff, updatedHospital._id);
       }
 
       const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');

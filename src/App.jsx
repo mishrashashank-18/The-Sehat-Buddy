@@ -27,7 +27,7 @@ function MainWebsite({ onNavigate, currentView }) {
       <Navbar onNavigate={onNavigate} currentView={currentView} />
       <main>
         <Hero />
-        <SearchBar />
+        <SearchBar onNavigate={onNavigate} />
         <ServicesSection />
         <WhyChooseSection />
         <PopularDoctors onNavigate={onNavigate} />
@@ -103,8 +103,18 @@ function AppContent() {
     else if (viewName === 'doctor') targetPath = '/doctor';
     else if (viewName === 'hospital') targetPath = '/hospital';
     else if (viewName === 'user-login') targetPath = '/login';
-    else if (viewName === 'find-doctors') targetPath = '/doctors';
-    else if (viewName === 'find-hospitals') targetPath = '/hospitals';
+    else if (viewName === 'find-doctors') {
+      const queryString = param && typeof param === 'object' 
+        ? '?' + new URLSearchParams(param).toString() 
+        : '';
+      targetPath = '/doctors' + queryString;
+    }
+    else if (viewName === 'find-hospitals') {
+      const queryString = param && typeof param === 'object' 
+        ? '?' + new URLSearchParams(param).toString() 
+        : '';
+      targetPath = '/hospitals' + queryString;
+    }
     else if (viewName === 'doctor-profile') targetPath = `/doctors/${param}`;
     else if (viewName === 'hospital-profile') targetPath = `/hospitals/${param}`;
 

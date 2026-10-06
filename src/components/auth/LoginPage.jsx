@@ -15,8 +15,9 @@ const LoginPage = ({ role, setView }) => {
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState('');
   const [pendingEmail, setPendingEmail] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Doctor specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning)
+  // Doctor specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning) OR 'reset-otp' / 'reset-new-password'
   const [docStep, setDocStep] = useState('email');
   const [docInfo, setDocInfo] = useState(null);
 
@@ -31,9 +32,13 @@ const LoginPage = ({ role, setView }) => {
       title: 'Doctor Portal',
       subtitle: docStep === 'set-password'
         ? 'Welcome to the clinical portal. Set your new account password.'
-        : (docStep === 'password'
-          ? 'Enter your password to access your doctor dashboard'
-          : 'Enter your registered doctor email address'),
+        : (docStep === 'reset-otp'
+          ? 'Enter the 6-digit OTP sent to your registered email.'
+          : (docStep === 'reset-new-password'
+            ? 'Set a new password for your doctor account.'
+            : (docStep === 'password'
+              ? 'Enter your password to access your doctor dashboard'
+              : 'Enter your registered doctor email address'))),
       icon: <Stethoscope size={48} className={styles.roleIcon} />,
       image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=1000'
     },
@@ -162,6 +167,125 @@ const LoginPage = ({ role, setView }) => {
       }
     } catch (err) {
       setError('Login failed. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // DOCTOR PASSWORD RESET STEP 1: Request OTP to Email
+  const handleDoctorRequestResetOtp = async (customEmail) => {
+    const targetEmail = (customEmail || email).trim().toLowerCase();
+    if (!targetEmail) {
+      setError('Please enter your doctor email first.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/doctors/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setEmail(targetEmail);
+        setOtp('');
+        setDocStep('reset-otp');
+        setSuccessMessage(data.message || `A 6-digit OTP has been sent to ${targetEmail}`);
+      } else {
+        setError(data.message || 'Could not send reset OTP. Please check your email.');
+      }
+    } catch (err) {
+      setError('Failed to connect to authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // DOCTOR PASSWORD RESET STEP 2: Verify OTP
+  const handleDoctorVerifyResetOtp = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      setError('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/doctors/verify-reset-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setPassword('');
+        setConfirmPassword('');
+        setDocStep('reset-new-password');
+        setSuccessMessage('OTP verified! Please create your new password.');
+      } else {
+        setError(data.message || 'Invalid or expired OTP. Please try again.');
+      }
+    } catch (err) {
+      setError('Error verifying OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // DOCTOR PASSWORD RESET STEP 3: Submit New Password
+  const handleDoctorResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/doctors/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          password
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        window.location.href = '/doctor';
+      } else {
+        setError(data.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (err) {
+      setError('An error occurred while resetting your password.');
     } finally {
       setLoading(false);
     }
@@ -310,7 +434,13 @@ const LoginPage = ({ role, setView }) => {
               {showOtp
                 ? 'Verify OTP'
                 : (role === 'doctor'
-                  ? (docStep === 'set-password' ? 'Set Your Password' : title)
+                  ? (docStep === 'set-password'
+                    ? 'Set Your Password'
+                    : (docStep === 'reset-otp'
+                      ? 'Verify Reset OTP'
+                      : (docStep === 'reset-new-password'
+                        ? 'Create New Password'
+                        : title)))
                   : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`))}
             </h2>
             <p>
@@ -321,6 +451,23 @@ const LoginPage = ({ role, setView }) => {
           </div>
           
           {error && <div className={styles.errorMsg}>{error}</div>}
+          {successMessage && (
+            <div style={{
+              background: '#ecfdf5',
+              color: '#065f46',
+              border: '1px solid #a7f3d0',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              fontSize: '0.88rem',
+              marginBottom: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: 500
+            }}>
+              <span>✅</span> {successMessage}
+            </div>
+          )}
 
           {/* DOCTOR SPECIFIC AUTHENTICATION FLOW */}
           {role === 'doctor' ? (
@@ -351,6 +498,32 @@ const LoginPage = ({ role, setView }) => {
                   <button type="submit" className={styles.submitButton} disabled={loading}>
                     {loading ? 'Checking Email...' : 'Continue (Press Enter)'}
                   </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        if (!email.trim()) {
+                          setError('Please enter your doctor email above first to reset your password.');
+                          return;
+                        }
+                        handleDoctorRequestResetOtp(email);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#2563eb',
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontWeight: 500,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Forgot password? Reset via Email OTP
+                    </button>
+                  </div>
                 </form>
               )}
 
@@ -360,15 +533,18 @@ const LoginPage = ({ role, setView }) => {
                   <div style={{
                     background: '#eff6ff',
                     border: '1px solid #bfdbfe',
-                    borderRadius: '10px',
-                    padding: '12px 16px',
-                    marginBottom: '16px'
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    marginBottom: '18px'
                   }}>
-                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Sparkles size={16} color="#2563eb" /> First-Time Doctor Setup
+                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={18} color="#2563eb" /> First-Time Doctor Setup
                     </div>
-                    <div style={{ fontSize: '0.84rem', color: '#3b82f6', marginTop: '4px' }}>
-                      Welcome {docInfo?.name ? docInfo.name : 'Doctor'}! ({email})
+                    <div style={{ marginTop: '8px', fontSize: '0.95rem', color: '#1e3a8a', fontWeight: 600 }}>
+                      👨‍⚕️ {docInfo?.name || 'Doctor'}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
+                      {email} {docInfo?.hospital ? `• ${docInfo.hospital}` : ''}
                     </div>
                   </div>
 
@@ -440,16 +616,19 @@ const LoginPage = ({ role, setView }) => {
                   <div style={{
                     background: '#f8fafc',
                     border: '1px solid #e2e8f0',
-                    borderRadius: '10px',
-                    padding: '10px 14px',
+                    borderRadius: '12px',
+                    padding: '12px 16px',
                     marginBottom: '16px',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center'
                   }}>
                     <div>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block' }}>Signing in as</span>
-                      <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{email}</strong>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>Doctor Account</span>
+                      <strong style={{ fontSize: '0.98rem', color: '#0f172a', display: 'block' }}>
+                        👨‍⚕️ {docInfo?.name || 'Doctor'}
+                      </strong>
+                      <span style={{ fontSize: '0.82rem', color: '#64748b' }}>{email}</span>
                     </div>
                     <a
                       href="#"
@@ -488,9 +667,180 @@ const LoginPage = ({ role, setView }) => {
                     </div>
                   </div>
 
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-6px', marginBottom: '16px' }}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleDoctorRequestResetOtp(email)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#2563eb',
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontWeight: 500,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Forgot Password? Reset via OTP
+                    </button>
+                  </div>
+
                   <button type="submit" className={styles.submitButton} disabled={loading}>
                     {loading ? 'Authenticating...' : 'Sign In'}
                   </button>
+                </form>
+              )}
+
+              {/* STEP 3A: DOCTOR PASSWORD RESET - ENTER OTP */}
+              {docStep === 'reset-otp' && (
+                <form className={styles.authForm} onSubmit={handleDoctorVerifyResetOtp}>
+                  <div style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    marginBottom: '18px'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <KeyRound size={18} color="#2563eb" /> Verify Reset OTP
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '0.86rem', color: '#334155' }}>
+                      A 6-digit verification code has been dispatched to <strong>{email}</strong>. Enter it below to verify your identity.
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="resetOtp">Enter 6-digit OTP</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type="text"
+                        id="resetOtp"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        maxLength={6}
+                        placeholder="••••••"
+                        style={{ letterSpacing: '6px', fontSize: '1.2rem', fontWeight: 700, textAlign: 'center' }}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 16px 0', fontSize: '0.84rem' }}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleDoctorRequestResetOtp(email)}
+                      style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                    >
+                      Didn't get code? Resend OTP
+                    </button>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading || otp.length < 6}>
+                    {loading ? 'Verifying OTP...' : 'Verify OTP & Continue'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setDocStep('email');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3B: DOCTOR PASSWORD RESET - CREATE NEW PASSWORD */}
+              {docStep === 'reset-new-password' && (
+                <form className={styles.authForm} onSubmit={handleDoctorResetPasswordSubmit}>
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '12px',
+                    padding: '14px 16px',
+                    marginBottom: '18px'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#166534', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={18} color="#16a34a" /> Set Your New Password
+                    </div>
+                    <div style={{ marginTop: '6px', fontSize: '0.86rem', color: '#334155' }}>
+                      Identity verified for <strong>{email}</strong>. Create a strong password for your account.
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="newResetPassword">New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="newResetPassword"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="At least 6 characters"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="confirmResetPassword">Confirm New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="confirmResetPassword"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="Re-enter your new password"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Updating Password...' : 'Save New Password & Sign In'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setDocStep('email');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
                 </form>
               )}
             </div>

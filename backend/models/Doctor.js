@@ -27,6 +27,8 @@ const doctorSchema = new mongoose.Schema({
   isStarDoctor: { type: Boolean, default: false },
   isFirstLogin: { type: Boolean, default: true },
   passwordSet: { type: Boolean, default: false },
+  otp: { type: String },
+  otpExpires: { type: Date },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });

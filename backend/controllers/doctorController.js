@@ -2,6 +2,7 @@ import Doctor from '../models/Doctor.js';
 import Appointment from '../models/Appointment.js';
 import Hospital from '../models/Hospital.js';
 import generateToken from '../utils/generateToken.js';
+import { sendEmail } from '../utils/email.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -39,7 +40,7 @@ export const checkDoctorEmail = async (req, res) => {
       });
     }
 
-    const isFirstLogin = Boolean(doctor.isFirstLogin || !doctor.passwordSet);
+    const isFirstLogin = Boolean(doctor.isFirstLogin || !doctor.passwordSet || doctor.password === 'CHANGEME_PENDING_SETUP');
 
     return res.json({
       success: true,
@@ -90,6 +91,142 @@ export const setInitialPassword = async (req, res) => {
 };
 
 /**
+ * Doctor requested OTP for password reset
+ */
+export const forgotDoctorPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    }
+
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    if (!doctor) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered doctor account found with this email. Please check your email or contact your hospital administrator.'
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    doctor.otp = otp;
+    doctor.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await doctor.save();
+
+    try {
+      await sendEmail({
+        email: doctor.email,
+        subject: 'Password Reset OTP - Sehat Buddy Doctor Portal',
+        message: `Hello ${doctor.name},\n\nYour OTP for resetting your doctor account password is ${otp}. It is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 520px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
+              <h2 style="color: #2563eb; margin: 0; font-size: 20px;">Sehat Buddy • Doctor Portal</h2>
+            </div>
+            <p style="font-size: 15px;">Hello <strong>${doctor.name}</strong>,</p>
+            <p style="font-size: 14px; color: #475569;">You requested to reset your password. Use the 6-digit OTP below to verify your identity and set a new password:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <div style="background: #eff6ff; border: 1px dashed #3b82f6; padding: 14px 28px; font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #1d4ed8; border-radius: 10px; display: inline-block;">
+                ${otp}
+              </div>
+            </div>
+            <p style="font-size: 13px; color: #64748b;">⏱️ This OTP is valid for <strong>10 minutes</strong>. If you did not request a password reset, please safely ignore this email.</p>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error('Error sending doctor password reset OTP email:', emailErr.message);
+    }
+
+    console.log(`[DOCTOR RESET OTP] OTP for ${doctor.email} is: ${otp}`);
+
+    return res.json({
+      success: true,
+      message: `A 6-digit OTP has been sent to ${doctor.email}.`
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Verify doctor reset OTP
+ */
+export const verifyDoctorResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+    }
+
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor account not found' });
+    }
+
+    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    }
+
+    if (doctor.otpExpires && new Date(doctor.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verified successfully.'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Reset doctor password with OTP
+ */
+export const resetDoctorPassword = async (req, res) => {
+  try {
+    const { email, otp, password } = req.body;
+    if (!email || !otp || !password) {
+      return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+    }
+
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor account not found' });
+    }
+
+    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    }
+
+    if (doctor.otpExpires && new Date(doctor.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    doctor.password = password;
+    doctor.isFirstLogin = false;
+    doctor.passwordSet = true;
+    doctor.otp = undefined;
+    doctor.otpExpires = undefined;
+    await doctor.save();
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully! Logging in...',
+      token: generateToken(doctor._id),
+      user: doctor
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
  * Hospital adds a doctor to their roster with star doctor option
  */
 export const addDoctorByHospital = async (req, res) => {
@@ -129,6 +266,10 @@ export const addDoctorByHospital = async (req, res) => {
         if (!Array.isArray(hospital.staff_emails)) hospital.staff_emails = [];
         if (!hospital.staff_emails.includes(cleanEmail)) {
           hospital.staff_emails.push(cleanEmail);
+        }
+        if (!Array.isArray(hospital.staff_doctors)) hospital.staff_doctors = [];
+        if (!hospital.staff_doctors.some(d => d.email === cleanEmail)) {
+          hospital.staff_doctors.push({ name: doctor.name, email: cleanEmail });
         }
         if (isStarDoctor) {
           if (!Array.isArray(hospital.star_doctors)) hospital.star_doctors = [];

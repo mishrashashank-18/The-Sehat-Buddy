@@ -3,6 +3,9 @@ import {
   authDoctor,
   checkDoctorEmail,
   setInitialPassword,
+  forgotDoctorPassword,
+  verifyDoctorResetOtp,
+  resetDoctorPassword,
   addDoctorByHospital,
   getDoctors,
   getDoctorById,
@@ -22,6 +25,9 @@ router.get('/:id', getDoctorById);
 router.post('/login', authDoctor);
 router.post('/check-email', checkDoctorEmail);
 router.post('/set-initial-password', setInitialPassword);
+router.post('/forgot-password', forgotDoctorPassword);
+router.post('/verify-reset-otp', verifyDoctorResetOtp);
+router.post('/reset-password', resetDoctorPassword);
 router.post('/add-by-hospital', addDoctorByHospital);
 
 // Doctor profile update

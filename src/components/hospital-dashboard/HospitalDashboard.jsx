@@ -875,11 +875,14 @@ const HospitalDashboard = ({ onNavigate }) => {
               <div className={styles.mediaCard}>
                 <div className={styles.mediaCardHeader}>
                   <div>
-                    <h3>
+                    <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <Sparkles size={20} color="#f59e0b" />
                       Star Doctors of {activeHospital.name}
+                      <span style={{ fontSize: '0.8rem', background: '#fef3c7', color: '#b45309', padding: '2px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                        {starDoctorIds.length} Selected
+                      </span>
                     </h3>
-                    <p>Select which doctors to highlight as verified Star Doctors for this hospital center.</p>
+                    <p>Select which doctors to highlight as verified Star Doctors for this hospital center. All doctors of this hospital are displayed below.</p>
                   </div>
                   <button className={styles.saveBtn} onClick={handleSaveMedia}>
                     Save Star Doctors
@@ -887,34 +890,100 @@ const HospitalDashboard = ({ onNavigate }) => {
                 </div>
 
                 <div className={styles.starDoctorsSelector}>
-                  {doctors.map((doc) => {
-                    const isSelected = starDoctorIds.some(id => String(id) === String(doc.id || doc._id));
-                    return (
-                      <div
-                        key={doc.id || doc._id}
-                        className={`${styles.starDoctorOption} ${isSelected ? styles.starDoctorOptionActive : ''}`}
-                        onClick={() => toggleStarDoctor(doc.id || doc._id)}
-                      >
-                        <img
-                          src={doc.image}
-                          alt={doc.name}
-                          className={styles.starDocAvatar}
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
-                          }}
-                        />
-                        <div className={styles.starDocMeta}>
-                          <h4>{doc.name}</h4>
-                          <p>{doc.specialty || doc.specialization} • {doc.hospital || activeHospital.name}</p>
+                  {(() => {
+                    const hospName = (activeHospital.name || '').toLowerCase().trim();
+                    const staffEmails = new Set([
+                      ...(activeHospital.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
+                      ...(activeHospital.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
+                    ].filter(Boolean));
+
+                    const staffNameMap = new Map();
+                    (activeHospital.staff_doctors || []).forEach(d => {
+                      if (d && typeof d === 'object' && d.email && d.name) {
+                        staffNameMap.set(d.email.toLowerCase().trim(), d.name.trim());
+                      }
+                    });
+
+                    const list = [];
+                    const addedEmails = new Set();
+
+                    (doctors || []).forEach(doc => {
+                      const docEmail = (doc.email || '').toLowerCase().trim();
+                      const docHosp = (doc.hospital || '').toLowerCase().trim();
+                      const isStaff = staffEmails.has(docEmail);
+                      const isMatch = hospName && docHosp && (
+                        docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)
+                      );
+
+                      if (isStaff || isMatch) {
+                        list.push({
+                          ...doc,
+                          name: staffNameMap.get(docEmail) || doc.name
+                        });
+                        if (docEmail) addedEmails.add(docEmail);
+                      }
+                    });
+
+                    (activeHospital.staff_doctors || []).forEach(sd => {
+                      const sEmail = (sd?.email || sd || '').toLowerCase().trim();
+                      if (sEmail && !addedEmails.has(sEmail)) {
+                        addedEmails.add(sEmail);
+                        list.push({
+                          id: sEmail,
+                          _id: sEmail,
+                          name: sd?.name || ('Dr. ' + sEmail.split('@')[0].replace(/[._-]/g, ' ')),
+                          email: sEmail,
+                          specialty: 'Hospital Staff Physician',
+                          specialization: 'Hospital Staff Physician',
+                          hospital: activeHospital.name,
+                          image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80'
+                        });
+                      }
+                    });
+
+                    if (list.length === 0) {
+                      return (
+                        <div style={{ gridColumn: '1 / -1', padding: '24px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '12px' }}>
+                          <p style={{ margin: 0, fontWeight: 600 }}>No doctors currently registered to this hospital center.</p>
+                          <p style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>Affiliated doctors will appear here automatically when added by admin or hospital management.</p>
                         </div>
-                        <Star
-                          size={20}
-                          className={styles.starToggleIcon}
-                          fill={isSelected ? '#f59e0b' : 'none'}
-                        />
-                      </div>
-                    );
-                  })}
+                      );
+                    }
+
+                    return list.map((doc) => {
+                      const isSelected = starDoctorIds.some(id => String(id) === String(doc.id || doc._id || doc.email));
+                      return (
+                        <div
+                          key={doc.id || doc._id || doc.email}
+                          className={`${styles.starDoctorOption} ${isSelected ? styles.starDoctorOptionActive : ''}`}
+                          onClick={() => toggleStarDoctor(doc.id || doc._id || doc.email)}
+                          title={isSelected ? "Click to remove Star Doctor" : "Click to select as Star Doctor"}
+                        >
+                          <img
+                            src={doc.image}
+                            alt={doc.name}
+                            className={styles.starDocAvatar}
+                            onError={(e) => {
+                              e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                            }}
+                          />
+                          <div className={styles.starDocMeta}>
+                            <h4>{doc.name}</h4>
+                            <p>
+                              {doc.specialty || doc.specialization}
+                              <span style={{ color: '#059669', fontWeight: 600 }}> • Hospital Staff</span>
+                            </p>
+                          </div>
+                          <Star
+                            size={22}
+                            className={styles.starToggleIcon}
+                            fill={isSelected ? '#f59e0b' : 'none'}
+                            color={isSelected ? '#f59e0b' : '#cbd5e1'}
+                          />
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

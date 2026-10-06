@@ -7,9 +7,29 @@ import styles from './FindDoctors.module.css';
 const FindDoctors = ({ onNavigate }) => {
   const { doctors } = useData();
   
-  const [searchName, setSearchName] = useState('');
-  const [searchLocation, setSearchLocation] = useState('');
-  const [searchSpecialty, setSearchSpecialty] = useState('');
+  // Read any initial query params passed from SearchBar / URL
+  const queryParams = new URLSearchParams(window.location.search);
+  const initialName = queryParams.get('name') || queryParams.get('q') || '';
+  const initialLoc = queryParams.get('location') || queryParams.get('city') || '';
+  const initialSpec = queryParams.get('specialty') || queryParams.get('speciality') || '';
+
+  const [searchName, setSearchName] = useState(initialName);
+  const [searchLocation, setSearchLocation] = useState(initialLoc);
+  const [searchSpecialty, setSearchSpecialty] = useState(initialSpec);
+
+  // Sync state if URL search params change
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('name') || params.has('q')) {
+      setSearchName(params.get('name') || params.get('q') || '');
+    }
+    if (params.has('location') || params.has('city')) {
+      setSearchLocation(params.get('location') || params.get('city') || '');
+    }
+    if (params.has('specialty') || params.has('speciality')) {
+      setSearchSpecialty(params.get('specialty') || params.get('speciality') || '');
+    }
+  }, []);
 
   // Get unique specialties for the dropdown
   const uniqueSpecialties = Array.from(new Set(doctors.filter(d => d.available !== false).map(d => d.specialty || d.specialization).filter(Boolean)));
@@ -18,20 +38,35 @@ const FindDoctors = ({ onNavigate }) => {
   const activeDoctors = doctors.filter(doc => {
     if (doc.available === false) return false;
     
-    // Name match
-    if (searchName && !doc.name.toLowerCase().includes(searchName.toLowerCase())) return false;
+    // Keyword match (name, specialty, degree, about, or treatments)
+    if (searchName) {
+      const q = searchName.toLowerCase().trim();
+      const nameMatch = doc.name && doc.name.toLowerCase().includes(q);
+      const specMatch = (doc.specialty && doc.specialty.toLowerCase().includes(q)) ||
+                        (doc.specialization && doc.specialization.toLowerCase().includes(q));
+      const hospMatch = doc.hospital && doc.hospital.toLowerCase().includes(q);
+      const degreeMatch = doc.degree && doc.degree.toLowerCase().includes(q);
+      const aboutMatch = doc.about && doc.about.toLowerCase().includes(q);
+      if (!nameMatch && !specMatch && !hospMatch && !degreeMatch && !aboutMatch) return false;
+    }
     
-    // Location match (check hospital, address.line1, address.line2)
+    // Location match (check hospital, address.line1, address.line2, address.city)
     if (searchLocation) {
-      const locMatch = (doc.hospital && doc.hospital.toLowerCase().includes(searchLocation.toLowerCase())) ||
-                       (doc.address && typeof doc.address === 'string' && doc.address.toLowerCase().includes(searchLocation.toLowerCase())) ||
-                       (doc.address?.line1 && doc.address.line1.toLowerCase().includes(searchLocation.toLowerCase())) ||
-                       (doc.address?.line2 && doc.address.line2.toLowerCase().includes(searchLocation.toLowerCase()));
+      const locQ = searchLocation.toLowerCase().trim();
+      const locMatch = (doc.hospital && doc.hospital.toLowerCase().includes(locQ)) ||
+                       (doc.address && typeof doc.address === 'string' && doc.address.toLowerCase().includes(locQ)) ||
+                       (doc.address?.city && doc.address.city.toLowerCase().includes(locQ)) ||
+                       (doc.address?.line1 && doc.address.line1.toLowerCase().includes(locQ)) ||
+                       (doc.address?.line2 && doc.address.line2.toLowerCase().includes(locQ));
       if (!locMatch) return false;
     }
     
     // Specialty match
-    if (searchSpecialty && (doc.specialty || doc.specialization) !== searchSpecialty) return false;
+    if (searchSpecialty) {
+      const specQ = searchSpecialty.toLowerCase().trim();
+      const docSpec = (doc.specialty || doc.specialization || '').toLowerCase().trim();
+      if (!docSpec.includes(specQ) && !specQ.includes(docSpec)) return false;
+    }
     
     return true;
   });

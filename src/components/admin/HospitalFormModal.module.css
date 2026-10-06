@@ -511,42 +511,67 @@
 
 .starDoctorsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-  margin-top: 10px;
-  max-height: 220px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  min-height: 220px;
+  max-height: 380px;
   overflow-y: auto;
-  padding: 4px;
+  flex-shrink: 0;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.starDoctorsGrid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.starDoctorsGrid::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.starDoctorsGrid::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
 }
 
 .starDocItem {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  background: white;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 68px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  background: #ffffff;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  user-select: none;
+  flex-shrink: 0;
 }
 
 .starDocItem:hover {
   border-color: #f59e0b;
   background: #fffbeb;
+  transform: translateY(-1px);
 }
 
 .starDocItemActive {
-  border-color: #f59e0b;
-  background: #fffbeb;
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);
+  border-color: #f59e0b !important;
+  background: #fffbeb !important;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
 }
 
 .starDocThumb {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   object-fit: cover;
+  border: 1.5px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .starDocInfo {
@@ -555,17 +580,18 @@
 }
 
 .starDocInfo h5 {
-  margin: 0;
-  font-size: 0.85rem;
+  margin: 0 0 2px 0;
+  font-size: 0.9rem;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--color-heading);
+  color: #0f172a;
 }
 
 .starDocInfo p {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
