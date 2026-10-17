@@ -59,7 +59,7 @@ const Footer = ({ onNavigate }) => {
             <ul>
               <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Find Doctors</a></li>
               <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Book Appointments</a></li>
-              <li><a href="/services/lab-tests" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'lab-tests'); }}>Lab Tests</a></li>
+              <li><span style={{ color: 'rgba(255, 255, 255, 0.65)', fontSize: '0.9rem', cursor: 'default' }}>Lab Tests (Coming Soon)</span></li>
               <li><a href="/hospitals?tab=surgeries" onClick={(e) => { e.preventDefault(); if (onNavigate) { onNavigate('hospitals'); } else { window.history.pushState({}, '', '/hospitals?tab=surgeries'); window.dispatchEvent(new PopStateEvent('popstate')); } window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Surgeries & Specialities</a></li>
             </ul>
           </div>
