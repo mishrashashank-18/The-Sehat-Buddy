@@ -67,7 +67,27 @@ export const initialDoctors = [
     phone: '+91 98202 34567',
     email: 'dr.neha@sehatbuddy.com',
     availableDays: 'Tue, Thu, Sat (11:00 AM - 5:00 PM)',
-    about: 'Expert in high-risk obstetrics, laparoscopic gynecological surgeries, and women hormonal wellness.'
+    about: 'Expert in high-risk obstetrics, laparoscopic gynecological surgeries, and women hormonal wellness.',
+    licenseNumber: 'DMC-2014-78219',
+    awards: [
+      'Rising Star in Women Health - Federation of Obstetric & Gynaecological Societies of India (2022)',
+      'Excellence in Minimally Invasive Gynecological Surgery (2019)'
+    ],
+    certifications: [
+      'Board Certified in Obstetrics & Gynecology',
+      'Fellowship in Advanced Laparoscopic Surgery (FALS)',
+      'Certified Infertility & IVF Specialist'
+    ],
+    memberships: [
+      'Federation of Obstetric & Gynaecological Societies of India (FOGSI)',
+      'Indian Medical Association (IMA)',
+      'Association of Obstetricians & Gynaecologists of Delhi (AOGD)'
+    ],
+    careerExperience: [
+      'Senior Consultant Gynecologist & Laparoscopic Surgeon - Max Super Speciality Hospital (2019 - Present)',
+      'Consultant Obstetrician - Fortis La Femme (2016 - 2019)',
+      'Senior Resident - Maulana Azad Medical College (2014 - 2016)'
+    ]
   },
   {
     id: 3,
@@ -83,9 +103,29 @@ export const initialDoctors = [
     phone: '+91 98303 45678',
     email: 'dr.amit@sehatbuddy.com',
     availableDays: 'Mon to Fri (09:00 AM - 2:00 PM)',
-    about: 'Specialized in joint reconstruction, arthroscopy, and minimally invasive sports trauma repairs.'
-  } 
-  ,{ 
+    about: 'Specialized in joint reconstruction, arthroscopy, and minimally invasive sports trauma repairs.',
+    licenseNumber: 'MMC-2012-39041',
+    awards: [
+      'Best Orthopedic Surgeon in Joint Replacement - National Health Awards (2021)',
+      'Pioneer in Robotic Knee Surgery Honor (2023)'
+    ],
+    certifications: [
+      'Fellowship in Joint Replacement Surgery (Germany)',
+      'AO Trauma Certified Surgeon',
+      'Robotic Knee & Hip Arthroplasty Certified Specialist'
+    ],
+    memberships: [
+      'Indian Orthopaedic Association (IOA)',
+      'Delhi Orthopaedic Association (DOA)',
+      'International Society of Arthroscopy, Knee Surgery and Orthopaedic Sports Medicine (ISAKOS)'
+    ],
+    careerExperience: [
+      'Head of Joint Reconstruction & Orthopedic Surgery - Fortis Memorial (2018 - Present)',
+      'Senior Consultant Orthopedics - Medanta The Medicity (2015 - 2018)',
+      'Fellow in Adult Reconstruction - Asklepios Clinic Germany (2013 - 2015)'
+    ]
+  },
+  { 
     id: 4, 
     name: 'Dr. Pooja Malhotra', 
     specialty: 'Pediatrician', 
@@ -99,7 +139,64 @@ export const initialDoctors = [
     phone: '+91 98404 56789', 
     email: 'dr.pooja@sehatbuddy.com', 
     availableDays: 'Mon, Tue, Thu, Sat (10:00 AM - 3:00 PM)', 
-    about: 'Dedicated child health specialist with extensive experience in pediatric intensive care and vaccinations.' 
+    about: 'Dedicated child health specialist with extensive experience in pediatric intensive care and vaccinations.',
+    licenseNumber: 'KMC-2016-55120',
+    awards: [
+      'Excellence in Neonatal & Pediatric Care - State Pediatric Summit (2022)',
+      'Community Child Health Champion Award (2020)'
+    ],
+    certifications: [
+      'Pediatric Advanced Life Support (PALS) Certified Instructor',
+      'Fellowship in Neonatal Intensive Care (FICN)',
+      'Certified Pediatric Pulmonology & Allergy Specialist'
+    ],
+    memberships: [
+      'Indian Academy of Pediatrics (IAP)',
+      'National Neonatology Forum (NNF)',
+      'Indian Medical Association (IMA)'
+    ],
+    careerExperience: [
+      'Senior Consultant Pediatrician & Neonatologist - Manipal Hospital (2020 - Present)',
+      'Consultant Pediatric Care - Rainbow Children Hospital (2018 - 2020)',
+      'Senior Resident Pediatric ICU - AIIMS (2016 - 2018)'
+    ]
+  },
+  {
+    id: 5,
+    name: 'Shashank',
+    specialty: 'Dermatologist',
+    experience: '8+ Years Experience',
+    rating: 4.8,
+    reviews: '250+',
+    price: 700,
+    image: doc1,
+    hospital: 'Manipal Hospital, Old Airport Road',
+    degree: 'MBBS, MD (Dermatology, Venereology & Leprosy)',
+    phone: '+91 7839502745',
+    email: 'sarthakmisra311@gmail.com',
+    availableDays: 'Mon to Sat (10:00 AM - 6:00 PM)',
+    about: 'Experienced Consultant Dermatologist & Aesthetic Specialist specializing in clinical dermatology, laser treatments, trichology, and advanced skin care therapy.',
+    licenseNumber: 'KMC-2016-92841',
+    awards: [
+      'Excellence in Clinical Dermatology & Aesthetic Medicine (2023)',
+      'Young Dermatologist of the Year - Karnataka Medical Forum (2021)',
+      'Best Paper in Cutaneous Laser Therapeutics (2019)'
+    ],
+    certifications: [
+      'Board Certified in Clinical Dermatology & Venereology',
+      'Fellowship in Aesthetic Medicine & Laser Technologies (FAM)',
+      'Advanced Dermatosurgery & Trichology Certification'
+    ],
+    memberships: [
+      'Indian Association of Dermatologists, Venereologists and Leprologists (IADVL)',
+      'Association of Cutaneous Surgeons of India (ACSI)',
+      'Indian Medical Association (IMA)'
+    ],
+    careerExperience: [
+      'Senior Consultant Dermatologist - Manipal Hospital, Old Airport Road (2020 - Present)',
+      'Consultant Dermatologist & Trichologist - Kaya Skin Clinic (2018 - 2020)',
+      'Senior Resident in Dermatology - Victoria Hospital Medical College (2016 - 2018)'
+    ]
   }
 ];
 

@@ -144,68 +144,90 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [newMembershipInput, setNewMembershipInput] = useState('');
   const [newCareerExpInput, setNewCareerExpInput] = useState('');
 
+  const initialDoctorIdRef = React.useRef(null);
+
   React.useEffect(() => {
-    setProfileForm({
-      ...activeDoctor,
-      experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : (activeDoctor.experience || 5),
-      licenseNumber: activeDoctor.licenseNumber || '',
-      awards: Array.isArray(activeDoctor.awards) ? activeDoctor.awards : [],
-      certifications: Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : [],
-      memberships: Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : [],
-      careerExperience: Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []
-    });
-  }, [activeDoctor]);
+    const currentId = activeDoctor?.id || activeDoctor?._id;
+    if (currentId && String(currentId) !== String(initialDoctorIdRef.current)) {
+      initialDoctorIdRef.current = String(currentId);
+      setProfileForm({
+        ...activeDoctor,
+        experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : (activeDoctor.experience || 5),
+        licenseNumber: activeDoctor.licenseNumber || '',
+        awards: Array.isArray(activeDoctor.awards) ? activeDoctor.awards : [],
+        certifications: Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : [],
+        memberships: Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : [],
+        careerExperience: Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []
+      });
+    }
+  }, [activeDoctor?.id, activeDoctor?._id]);
 
   const handleAddAward = (e) => {
     e?.preventDefault();
     if (!newAwardInput.trim()) return;
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
-    setProfileForm({ ...profileForm, awards: [...current, newAwardInput.trim()] });
+    const updated = [...current, newAwardInput.trim()];
+    setProfileForm(prev => ({ ...prev, awards: updated }));
     setNewAwardInput('');
+    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: updated });
   };
 
   const handleRemoveAward = (index) => {
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
-    setProfileForm({ ...profileForm, awards: current.filter((_, i) => i !== index) });
+    const updated = current.filter((_, i) => i !== index);
+    setProfileForm(prev => ({ ...prev, awards: updated }));
+    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: updated });
   };
 
   const handleAddCert = (e) => {
     e?.preventDefault();
     if (!newCertInput.trim()) return;
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
-    setProfileForm({ ...profileForm, certifications: [...current, newCertInput.trim()] });
+    const updated = [...current, newCertInput.trim()];
+    setProfileForm(prev => ({ ...prev, certifications: updated }));
     setNewCertInput('');
+    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: updated });
   };
 
   const handleRemoveCert = (index) => {
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
-    setProfileForm({ ...profileForm, certifications: current.filter((_, i) => i !== index) });
+    const updated = current.filter((_, i) => i !== index);
+    setProfileForm(prev => ({ ...prev, certifications: updated }));
+    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: updated });
   };
 
   const handleAddMembership = (e) => {
     e?.preventDefault();
     if (!newMembershipInput.trim()) return;
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
-    setProfileForm({ ...profileForm, memberships: [...current, newMembershipInput.trim()] });
+    const updated = [...current, newMembershipInput.trim()];
+    setProfileForm(prev => ({ ...prev, memberships: updated }));
     setNewMembershipInput('');
+    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: updated });
   };
 
   const handleRemoveMembership = (index) => {
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
-    setProfileForm({ ...profileForm, memberships: current.filter((_, i) => i !== index) });
+    const updated = current.filter((_, i) => i !== index);
+    setProfileForm(prev => ({ ...prev, memberships: updated }));
+    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: updated });
   };
 
   const handleAddCareerExp = (e) => {
     e?.preventDefault();
     if (!newCareerExpInput.trim()) return;
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    setProfileForm({ ...profileForm, careerExperience: [...current, newCareerExpInput.trim()] });
+    const updated = [...current, newCareerExpInput.trim()];
+    setProfileForm(prev => ({ ...prev, careerExperience: updated }));
     setNewCareerExpInput('');
+    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
   };
 
   const handleRemoveCareerExp = (index) => {
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    setProfileForm({ ...profileForm, careerExperience: current.filter((_, i) => i !== index) });
+    const updated = current.filter((_, i) => i !== index);
+    setProfileForm(prev => ({ ...prev, careerExperience: updated }));
+    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
   };
 
   // Profile photo uploading state

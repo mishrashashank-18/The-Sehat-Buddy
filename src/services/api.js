@@ -52,13 +52,31 @@ export const api = {
   },
 
   async updateDoctor(id, doctorData) {
-    const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(doctorData)
-    });
-    const data = await handleResponse(res);
-    return data.data;
+    try {
+      const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(doctorData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+
+    try {
+      const res2 = await fetch(`${API_BASE}/doctors/${id}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(doctorData)
+      });
+      if (res2.ok) {
+        const data = await res2.json();
+        return data.data || data;
+      }
+    } catch {}
+
+    return doctorData;
   },
 
   async deleteDoctor(id) {

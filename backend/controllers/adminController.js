@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Admin from '../models/Admin.js';
 import generateToken from '../utils/generateToken.js';
 import Doctor from '../models/Doctor.js';
@@ -94,9 +95,36 @@ export const getDashboardData = async (req, res) => {
 
 export const updateDoctor = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      doctor = await Doctor.findById(req.params.id);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: req.params.id });
+    }
     if (doctor) {
       Object.assign(doctor, req.body);
+
+      if (req.body.awards !== undefined) {
+        doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];
+        doctor.markModified('awards');
+      }
+      if (req.body.certifications !== undefined) {
+        doctor.certifications = Array.isArray(req.body.certifications) ? req.body.certifications : [];
+        doctor.markModified('certifications');
+      }
+      if (req.body.memberships !== undefined) {
+        doctor.memberships = Array.isArray(req.body.memberships) ? req.body.memberships : [];
+        doctor.markModified('memberships');
+      }
+      if (req.body.careerExperience !== undefined) {
+        doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience : [];
+        doctor.markModified('careerExperience');
+      }
+      if (req.body.licenseNumber !== undefined) {
+        doctor.licenseNumber = req.body.licenseNumber;
+      }
+
       if (req.body.reels !== undefined) {
         doctor.reels = req.body.reels;
         doctor.markModified('reels');
