@@ -151,6 +151,16 @@ export const api = {
     return data.data;
   },
 
+  async updateCorporateTieups(corporateList) {
+    const res = await fetch(`${API_BASE}/content/corporate`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(corporateList)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
   // Stats
   async getStats() {
     const res = await fetch(`${API_BASE}/stats`, {
@@ -181,6 +191,57 @@ export const api = {
       method: 'POST',
       headers,
       body
+    });
+    const data = await handleResponse(res);
+    return data.url;
+  },
+
+  // Video Upload (Cloudinary)
+  async uploadVideo(fileOrBlob, folder = 'sehatbuddy/videos', onProgress = null) {
+    const formData = new FormData();
+    formData.append('video', fileOrBlob);
+    formData.append('folder', folder);
+
+    const token = localStorage.getItem('token');
+
+    if (onProgress && typeof onProgress === 'function') {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/upload/video`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress(percent);
+          }
+        };
+
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+              resolve(data.url);
+            } else {
+              reject(new Error(data.message || 'Video upload to Cloudinary failed'));
+            }
+          } catch {
+            reject(new Error('Invalid response from upload server'));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during video upload'));
+        xhr.send(formData);
+      });
+    }
+
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/upload/video`, {
+      method: 'POST',
+      headers,
+      body: formData
     });
     const data = await handleResponse(res);
     return data.url;

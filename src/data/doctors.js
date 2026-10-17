@@ -61,8 +61,8 @@ export const initialDoctors = [
     email: 'dr.amit@sehatbuddy.com',
     availableDays: 'Mon to Fri (09:00 AM - 2:00 PM)',
     about: 'Specialized in joint reconstruction, arthroscopy, and minimally invasive sports trauma repairs.'
-  } 
-  ,{ 
+  },
+  { 
     id: 4, 
     name: 'Dr. Pooja Malhotra', 
     specialty: 'Pediatrician', 
@@ -77,6 +77,38 @@ export const initialDoctors = [
     email: 'dr.pooja@sehatbuddy.com', 
     availableDays: 'Mon, Tue, Thu, Sat (10:00 AM - 3:00 PM)', 
     about: 'Dedicated child health specialist with extensive experience in pediatric intensive care and vaccinations.' 
+  },
+  {
+    id: 5,
+    name: 'Dr. Priya Nair',
+    specialty: 'Neurologist',
+    experience: '14+ Years Experience',
+    rating: 4.9,
+    reviews: '140+',
+    price: 900,
+    image: 'https://images.unsplash.com/photo-1594824813589-424a68291f09?auto=format&fit=crop&q=80&w=400',
+    hospital: 'Narayana Health City',
+    degree: 'MBBS, MD (Medicine), DM (Neurology)',
+    phone: '+91 98450 12345',
+    email: 'dr.priya.nair@sehatbuddy.com',
+    availableDays: 'Mon to Sat (10:00 AM - 4:00 PM)',
+    about: 'Senior Neurologist specializing in neuro-critical care, stroke management, epilepsy, and clinical neurophysiology.'
+  },
+  {
+    id: 6,
+    name: 'Dr. Rajesh Kulkarni',
+    specialty: 'Gastroenterologist',
+    experience: '16+ Years Experience',
+    rating: 4.8,
+    reviews: '110+',
+    price: 850,
+    image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400',
+    hospital: 'Fortis Hospital, Bannerghatta Road',
+    degree: 'MBBS, MD, DNB (Gastroenterology)',
+    phone: '+91 98451 98765',
+    email: 'dr.rajesh.kulkarni@sehatbuddy.com',
+    availableDays: 'Tue, Thu, Sat (09:00 AM - 3:00 PM)',
+    about: 'Renowned gastroenterologist and hepatologist specializing in advanced therapeutic endoscopy, liver health, and digestive wellness.'
   }
 ];
 

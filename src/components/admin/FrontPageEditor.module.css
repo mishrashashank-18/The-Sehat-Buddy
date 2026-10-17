@@ -301,6 +301,7 @@
   font-size: 0.76rem;
   font-weight: 500;
   text-align: center;
+  transition: all 0.2s;
 }
 
 .customUploadBox:hover {
@@ -308,8 +309,114 @@
   color: var(--color-primary);
 }
 
+.uploadingBox {
+  border-color: var(--color-primary) !important;
+  background: #f0fdf4 !important;
+  cursor: wait !important;
+}
+
+.spinIcon {
+  animation: spin 1s linear infinite;
+  color: var(--color-primary);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.heroUrlRow {
+  margin-top: 14px;
+}
+
+.urlInputWithBtn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.urlInputWithBtn input {
+  flex: 1;
+}
+
+.applyBtn {
+  padding: 10px 18px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.applyBtn:hover:not(:disabled) {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #ffffff;
+}
+
+.applyBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.currentHeroPreviewBanner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-top: 14px;
+}
+
+.heroPreviewThumb {
+  width: 90px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.heroPreviewInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.heroPreviewTag {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.heroPreviewUrl {
+  font-size: 0.76rem;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .formSubmitRow {
-  margin-top: 8px;
+  margin-top: 16px;
   display: flex;
   justify-content: flex-end;
 }
@@ -541,6 +648,119 @@
   color: #ffffff;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* Video Cloudinary Upload Box */
+.videoUploadBox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.videoUploadBox:hover {
+  border-color: var(--color-primary);
+  background: #f0f7ff;
+}
+
+.videoUploadHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.videoUploadInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 500px;
+}
+
+.videoUploadIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #e0edff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.videoUploadTitle {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--color-heading);
+  margin-bottom: 2px;
+}
+
+.videoUploadDesc {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.videoUploadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.2s;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.videoUploadBtn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.videoUploadBtn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.videoProgressBar {
+  width: 100%;
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.videoProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #38bdf8);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.cloudinaryBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 0.76rem;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {

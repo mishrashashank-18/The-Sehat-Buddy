@@ -70,14 +70,27 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
           <li><a href="#services-section" onClick={(e) => { e.preventDefault(); scrollTo('services-section'); }}>Services</a></li>
           <li><a href="#health-content-section" onClick={(e) => { e.preventDefault(); scrollTo('health-content-section'); }}>Health Content</a></li>
           <li>
-            <a href="#" className={styles.withDropdown}>
+            <a
+              href="#"
+              className={`${styles.withDropdown} ${currentView.startsWith('coming-soon:care') ? styles.active : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                onNavigate('coming-soon', 'care-services');
+              }}
+              title="At-Home & Specialized Care Services (Coming Soon)"
+            >
               Care Services <ChevronDown size={16} />
             </a>
           </li>
         </ul>
 
         <div className={styles.actions}>
-          <div className={styles.locationPill}>
+          <div
+            className={styles.locationPill}
+            onClick={() => onNavigate && onNavigate('coming-soon', 'cities')}
+            style={{ cursor: 'pointer' }}
+            title="Click to view city coverage and upcoming locations"
+          >
             <MapPin size={16} className={styles.locationIcon} />
             <span>Bengaluru</span>
             <ChevronDown size={16} className={styles.chevron} />

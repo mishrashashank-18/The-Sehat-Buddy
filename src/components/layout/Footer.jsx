@@ -5,13 +5,13 @@ import styles from './Footer.module.css';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
-const Footer = () => {
+const Footer = ({ onNavigate }) => {
   return (
     <footer className={styles.footer}>
       <Container>
         <div className={styles.grid}>
           <div className={styles.brandSection}>
-            <div className={styles.logoGroup}>
+            <div className={styles.logoGroup} onClick={() => onNavigate && onNavigate('site')} style={{ cursor: 'pointer' }}>
               <div className={styles.logoIcon}>
                 <HeartPulse size={24} color="var(--color-primary)" />
               </div>
@@ -27,7 +27,7 @@ const Footer = () => {
               <a href="https://www.facebook.com/profile.php?id=61594704587784" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
               </a>
-              <a href="#" aria-label="Twitter">
+              <a href="#" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'social-twitter'); }} aria-label="Twitter">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path></svg>
               </a>
               <a href="https://www.instagram.com/thesehatbuddy/" target="_blank" rel="noopener noreferrer" aria-label="Instagram">
@@ -42,30 +42,30 @@ const Footer = () => {
           <div className={styles.linkSection}>
             <h3>For Patients</h3>
             <ul>
-              <li><a href="#">Find Doctors</a></li>
-              <li><a href="#">Book Appointments</a></li>
-              <li><a href="#">Lab Tests</a></li>
-              <li><a href="#">Surgeries</a></li>
+              <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Find Doctors</a></li>
+              <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Book Appointments</a></li>
+              <li><a href="/services/lab-tests" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'lab-tests'); }}>Lab Tests</a></li>
+              <li><a href="/services/surgeries" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'surgeries'); }}>Surgeries</a></li>
             </ul>
           </div>
           
           <div className={styles.linkSection}>
             <h3>For Providers</h3>
             <ul>
-              <li><a href="/doctor" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/doctor'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Doctor Portal</a></li>
-              <li><a href="/hospital" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/hospital'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Hospital Dashboard</a></li>
-              <li><a href="/admin" onClick={(e) => { e.preventDefault(); window.history.pushState({}, '', '/admin'); window.dispatchEvent(new PopStateEvent('popstate')); }}>Admin Console</a></li>
-              <li><a href="#">Provider Support</a></li>
+              <li><a href="/doctor" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('doctor'); }}>Doctor Portal</a></li>
+              <li><a href="/hospital" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('hospital'); }}>Hospital Dashboard</a></li>
+              <li><a href="/admin" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('admin'); }}>Admin Console</a></li>
+              <li><a href="/support" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'provider-support'); }}>Provider Support</a></li>
             </ul>
           </div>
           
           <div className={styles.linkSection}>
             <h3>Company</h3>
             <ul>
-              <li><a href="#">About Us</a></li>
-              <li><a href="#">Contact Us</a></li>
-              <li><a href="#">Privacy Policy</a></li>
-              <li><a href="#">Terms & Conditions</a></li>
+              <li><a href="/about" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'about'); }}>About Us</a></li>
+              <li><a href="/contact" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'contact'); }}>Contact Us</a></li>
+              <li><a href="/privacy" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'privacy'); }}>Privacy Policy</a></li>
+              <li><a href="/terms" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'terms'); }}>Terms & Conditions</a></li>
             </ul>
           </div>
         </div>

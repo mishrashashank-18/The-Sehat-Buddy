@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   CheckCircle,
@@ -8,16 +8,23 @@ import {
   FileText,
   HelpCircle,
   Upload,
+  UploadCloud,
+  Loader2,
   Layers,
   ShieldCheck,
-  X
+  X,
+  Play,
+  Video,
+  Building2,
+  Users
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
 import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './FrontPageEditor.module.css';
 
 const PRESET_HERO_IMAGES = [
-  { name: 'Happy Family', url: heroFamily },
+  { name: 'Happy Family at Hospital', url: heroFamily },
   { name: 'Doctor Consultation', url: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80' },
   { name: 'Medical Team', url: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=800&q=80' }
 ];
@@ -34,7 +41,32 @@ const AVAILABLE_ICONS = [
   'Activity'
 ];
 
-const FrontPageEditor = ({ showToast }) => {
+const getEmbedUrl = (url, autoplay = true) => {
+  if (!url) return '';
+  let videoId = '';
+  try {
+    if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split(/[?#&]/)[0];
+    } else if (url.includes('youtube.com/watch')) {
+      const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+      videoId = u.searchParams.get('v');
+    } else if (url.includes('youtube.com/embed/')) {
+      videoId = url.split('youtube.com/embed/')[1]?.split(/[?#&]/)[0];
+    } else if (url.includes('youtube.com/shorts/')) {
+      videoId = url.split('youtube.com/shorts/')[1]?.split(/[?#&]/)[0];
+    }
+  } catch (e) {
+    console.error('Error parsing video URL', e);
+  }
+
+  if (videoId) {
+    const autoplayVal = autoplay ? '1' : '0';
+    return `https://www.youtube.com/embed/${videoId}?autoplay=${autoplayVal}&rel=0&enablejsapi=1&playsinline=1`;
+  }
+  return url;
+};
+
+const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   const {
     heroContent,
     updateHeroContent,
@@ -50,11 +82,21 @@ const FrontPageEditor = ({ showToast }) => {
     addArticle,
     updateArticle,
     deleteArticle,
+    corporateTieups,
+    addCorporateTieup,
+    updateCorporateTieup,
+    deleteCorporateTieup,
     resetFrontPageDefaults
   } = useData();
 
-  // Active sub-tab: 'hero' | 'services' | 'why' | 'articles'
-  const [subTab, setSubTab] = useState('hero');
+  // Active sub-tab: 'hero' | 'services' | 'why' | 'articles' | 'corporate'
+  const [subTab, setSubTab] = useState(initialSubTab);
+
+  React.useEffect(() => {
+    if (initialSubTab) {
+      setSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
 
   // Hero form local state
   const [heroForm, setHeroForm] = useState(() => ({
@@ -71,8 +113,15 @@ const FrontPageEditor = ({ showToast }) => {
     stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
     stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
     whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
+    whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+    whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
+    whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
     newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
-    newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter'
+    newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
+    corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
+    corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
+    corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+    corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
   }));
 
   React.useEffect(() => {
@@ -90,8 +139,15 @@ const FrontPageEditor = ({ showToast }) => {
       stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
       stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
       whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
+      whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+      whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
+      whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
       newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
-      newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter'
+      newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
+      corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
+      corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
+      corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+      corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
     });
   }, [heroContent]);
 
@@ -121,6 +177,86 @@ const FrontPageEditor = ({ showToast }) => {
     image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80'
   });
 
+  const [isPreviewVideoOpen, setIsPreviewVideoOpen] = useState(false);
+  const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  const [isHeroPhotoUploading, setIsHeroPhotoUploading] = useState(false);
+  const [customPhotoUrlInput, setCustomPhotoUrlInput] = useState('');
+  const [customHeroImage, setCustomHeroImage] = useState(() => {
+    return localStorage.getItem('sehat_custom_hero_image') || '';
+  });
+  const videoFileInputRef = useRef(null);
+  const heroFileInputRef = useRef(null);
+
+  // Sync customHeroImage if heroContent has a custom (non-preset) image
+  React.useEffect(() => {
+    if (heroContent?.heroImage) {
+      const isPreset = PRESET_HERO_IMAGES.some(p => 
+        p.url === heroContent.heroImage || 
+        (p.name === 'Happy Family at Hospital' && (heroContent.heroImage?.includes('hero-family') || heroContent.heroImage?.includes('i3g2e9ptcdydfnfeqf9c')))
+      );
+      if (!isPreset && !heroContent.heroImage.startsWith('data:image/')) {
+        setCustomHeroImage(heroContent.heroImage);
+      }
+    }
+  }, [heroContent?.heroImage]);
+
+  // Upload Video to Cloudinary
+  const handleVideoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit: 250MB
+    const maxSizeBytes = 250 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      showToast('Video file exceeds maximum limit of 250MB. Please choose a smaller video.');
+      return;
+    }
+
+    try {
+      setIsVideoUploading(true);
+      setVideoUploadProgress(5);
+
+      const uploadedUrl = await api.uploadVideo(file, 'sehatbuddy/videos', (percent) => {
+        setVideoUploadProgress(percent);
+      });
+
+      setHeroForm(prev => ({
+        ...prev,
+        whyChooseVideoUrl: uploadedUrl
+      }));
+
+      // Immediately persist update
+      updateHeroContent({
+        whyChooseVideoUrl: uploadedUrl
+      });
+
+      showToast('Video uploaded and saved to Cloudinary successfully!');
+    } catch (err) {
+      console.error('Video upload failed:', err);
+      showToast(err.message || 'Failed to upload video to Cloudinary. Please try again.');
+    } finally {
+      setIsVideoUploading(false);
+      setVideoUploadProgress(0);
+      if (videoFileInputRef.current) {
+        videoFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Corporate partner modal & form state
+  const [isAddCorporateOpen, setIsAddCorporateOpen] = useState(false);
+  const [newCorporate, setNewCorporate] = useState({
+    name: '',
+    shortName: '',
+    category: 'IT & Consulting',
+    benefit: '',
+    color: '#0054A6',
+    bgColor: '#EFF6FF',
+    logoText: '',
+    employeesCovered: '100,000+'
+  });
+
   // Save Hero Form
   const handleSaveHero = (e) => {
     e.preventDefault();
@@ -137,21 +273,109 @@ const FrontPageEditor = ({ showToast }) => {
         { id: 3, label: heroForm.stat3Label, value: heroForm.stat3Value }
       ],
       whyChooseTitle: heroForm.whyChooseTitle,
+      whyChooseVideoUrl: heroForm.whyChooseVideoUrl,
+      whyChooseVideoText: heroForm.whyChooseVideoText,
+      whyChooseVideoAutoplay: heroForm.whyChooseVideoAutoplay,
       newsletterTitle: heroForm.newsletterTitle,
       newsletterSubtitle: heroForm.newsletterSubtitle
     });
     showToast('Hero section & front page headers updated successfully!');
   };
 
-  const handleHeroFileUpload = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setHeroForm(prev => ({ ...prev, heroImage: reader.result }));
-      };
-      reader.readAsDataURL(file);
+  const handleSaveWhyVideo = (e) => {
+    if (e) e.preventDefault();
+    updateHeroContent({
+      whyChooseTitle: heroForm.whyChooseTitle,
+      whyChooseVideoUrl: heroForm.whyChooseVideoUrl,
+      whyChooseVideoText: heroForm.whyChooseVideoText,
+      whyChooseVideoAutoplay: heroForm.whyChooseVideoAutoplay
+    });
+    showToast('Explainer video settings saved successfully!');
+  };
+
+  const isPresetActive = (presetUrl, targetImage = heroForm.heroImage) => {
+    if (!targetImage) return false;
+    if (targetImage === presetUrl) return true;
+    if (presetUrl === heroFamily && (targetImage.includes('hero-family') || targetImage.includes('i3g2e9ptcdydfnfeqf9c'))) {
+      return true;
     }
+    return false;
+  };
+
+  const handleHeroFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check size limit: 15MB
+    if (file.size > 15 * 1024 * 1024) {
+      showToast('Image file exceeds maximum limit of 15MB. Please choose a smaller file.');
+      return;
+    }
+
+    try {
+      setIsHeroPhotoUploading(true);
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/hero');
+      if (!uploadedUrl) {
+        throw new Error('Upload succeeded but no image URL was returned.');
+      }
+
+      setCustomHeroImage(uploadedUrl);
+      try {
+        localStorage.setItem('sehat_custom_hero_image', uploadedUrl);
+      } catch {}
+
+      setHeroForm(prev => ({
+        ...prev,
+        heroImage: uploadedUrl
+      }));
+
+      // Immediately persist update so it reflects live on homepage and MongoDB Atlas
+      updateHeroContent({
+        heroImage: uploadedUrl
+      });
+
+      showToast('Hero photo uploaded & saved successfully!');
+    } catch (err) {
+      console.error('Hero photo upload failed:', err);
+      showToast(err.message || 'Failed to upload photo to Cloudinary. Please try again.');
+    } finally {
+      setIsHeroPhotoUploading(false);
+      if (heroFileInputRef.current) {
+        heroFileInputRef.current.value = '';
+      }
+      if (e.target) {
+        e.target.value = '';
+      }
+    }
+  };
+
+  const handleSelectHeroImage = (imageUrl, imageName) => {
+    setHeroForm(prev => ({ ...prev, heroImage: imageUrl }));
+    updateHeroContent({ heroImage: imageUrl });
+    showToast(`Hero photo set to "${imageName}" & saved!`);
+  };
+
+  const handleApplyPhotoUrl = (e) => {
+    if (e) e.preventDefault();
+    const url = customPhotoUrlInput.trim();
+    if (!url) {
+      showToast('Please enter an image URL.');
+      return;
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/')) {
+      showToast('Please enter a valid URL starting with http://, https://, or /');
+      return;
+    }
+
+    setCustomHeroImage(url);
+    try {
+      localStorage.setItem('sehat_custom_hero_image', url);
+    } catch {}
+
+    setHeroForm(prev => ({ ...prev, heroImage: url }));
+    updateHeroContent({ heroImage: url });
+    showToast('Hero photo updated from URL & saved!');
+    setCustomPhotoUrlInput('');
   };
 
   // Add Service
@@ -208,6 +432,47 @@ const FrontPageEditor = ({ showToast }) => {
     showToast('New health article added to front page!');
   };
 
+  // Save Corporate Header
+  const handleSaveCorporateHeader = (e) => {
+    if (e) e.preventDefault();
+    updateHeroContent({
+      corporateBadge: heroForm.corporateBadge,
+      corporateTitle: heroForm.corporateTitle,
+      corporateSubtitle: heroForm.corporateSubtitle,
+      corporateStat: heroForm.corporateStat
+    });
+    showToast('Corporate Tie-ups header & metrics updated!');
+  };
+
+  // Add Corporate Partner
+  const handleCreateCorporate = (e) => {
+    e.preventDefault();
+    if (!newCorporate.name.trim()) return;
+    const short = newCorporate.shortName.trim() || newCorporate.name.split(' ')[0];
+    addCorporateTieup({
+      name: newCorporate.name.trim(),
+      shortName: short,
+      logoText: (newCorporate.logoText.trim() || short).slice(0, 10),
+      category: newCorporate.category.trim() || 'Enterprise Partner',
+      benefit: newCorporate.benefit.trim() || 'Comprehensive healthcare coverage and priority care',
+      employeesCovered: newCorporate.employeesCovered.trim() || '50,000+',
+      color: newCorporate.color || '#2563EB',
+      bgColor: newCorporate.bgColor || '#EFF6FF'
+    });
+    setIsAddCorporateOpen(false);
+    setNewCorporate({
+      name: '',
+      shortName: '',
+      category: 'IT & Consulting',
+      benefit: '',
+      color: '#0054A6',
+      bgColor: '#EFF6FF',
+      logoText: '',
+      employeesCovered: '100,000+'
+    });
+    showToast(`Partner "${newCorporate.name.trim()}" added to Corporate Tie-ups!`);
+  };
+
   return (
     <div className={styles.editorContainer}>
       <div className={styles.editorHeader}>
@@ -258,6 +523,13 @@ const FrontPageEditor = ({ showToast }) => {
         >
           <FileText size={16} />
           <span>Articles & Newsletter ({articles?.length || 0})</span>
+        </button>
+        <button
+          className={`${styles.subTabBtn} ${subTab === 'corporate' ? styles.subTabActive : ''}`}
+          onClick={() => setSubTab('corporate')}
+        >
+          <Building2 size={16} />
+          <span>Corporate Tie-ups ({corporateTieups?.length || 0})</span>
         </button>
       </div>
 
@@ -393,23 +665,119 @@ const FrontPageEditor = ({ showToast }) => {
 
             {/* Hero Image Selection */}
             <div className={styles.subSectionTitle}>Hero Family Photo</div>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '-8px', marginBottom: '12px' }}>
+              Select a preset photo, upload your own photo directly to Cloudinary, or paste an image link.
+            </p>
+
             <div className={styles.imageSelectorGrid}>
-              {PRESET_HERO_IMAGES.map((img, idx) => (
+              {PRESET_HERO_IMAGES.map((img, idx) => {
+                const active = isPresetActive(img.url);
+                return (
+                  <div
+                    key={idx}
+                    className={`${styles.imagePreset} ${active ? styles.imagePresetActive : ''}`}
+                    onClick={() => handleSelectHeroImage(img.url, img.name)}
+                    title={`Set hero image to ${img.name}`}
+                  >
+                    <img src={img.url} alt={img.name} />
+                    <span>{img.name}</span>
+                  </div>
+                );
+              })}
+
+              {/* Custom photo card if current active photo is not in presets */}
+              {heroForm.heroImage && !PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
                 <div
-                  key={idx}
-                  className={`${styles.imagePreset} ${heroForm.heroImage === img.url ? styles.imagePresetActive : ''}`}
-                  onClick={() => setHeroForm({ ...heroForm, heroImage: img.url })}
+                  className={`${styles.imagePreset} ${styles.imagePresetActive}`}
+                  title="Currently active custom photo"
                 >
-                  <img src={img.url} alt={img.name} />
-                  <span>{img.name}</span>
+                  <img src={heroForm.heroImage} alt="Custom Hero" />
+                  <span>✓ Custom Active</span>
                 </div>
-              ))}
-              <label className={styles.customUploadBox}>
-                <Upload size={20} />
-                <span>Upload custom image</span>
-                <input type="file" accept="image/*" onChange={handleHeroFileUpload} style={{ display: 'none' }} />
+              )}
+
+              {/* Stored custom photo if another preset is currently selected */}
+              {customHeroImage && PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
+                <div
+                  className={styles.imagePreset}
+                  onClick={() => handleSelectHeroImage(customHeroImage, 'Custom Photo')}
+                  title="Switch back to your custom uploaded photo"
+                >
+                  <img src={customHeroImage} alt="Custom Hero" />
+                  <span>Custom Photo</span>
+                </div>
+              )}
+
+              {/* Upload to Cloudinary Box */}
+              <label className={`${styles.customUploadBox} ${isHeroPhotoUploading ? styles.uploadingBox : ''}`}>
+                {isHeroPhotoUploading ? (
+                  <>
+                    <Loader2 size={20} className={styles.spinIcon} />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Upload size={20} />
+                    <span>Upload custom image</span>
+                  </>
+                )}
+                <input
+                  ref={heroFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  disabled={isHeroPhotoUploading}
+                  onChange={handleHeroFileUpload}
+                  style={{ display: 'none' }}
+                />
               </label>
             </div>
+
+            {/* Direct Image Link Input */}
+            <div className={styles.heroUrlRow}>
+              <div className={styles.formGroup} style={{ margin: 0 }}>
+                <label>Or paste an image link directly</label>
+                <div className={styles.urlInputWithBtn}>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/... or https://res.cloudinary.com/..."
+                    value={customPhotoUrlInput}
+                    onChange={(e) => setCustomPhotoUrlInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleApplyPhotoUrl();
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={styles.applyBtn}
+                    onClick={handleApplyPhotoUrl}
+                    disabled={!customPhotoUrlInput.trim()}
+                  >
+                    Apply Photo
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Hero Preview Banner */}
+            {heroForm.heroImage && (
+              <div className={styles.currentHeroPreviewBanner}>
+                <img
+                  src={heroForm.heroImage}
+                  alt="Live Hero Preview"
+                  className={styles.heroPreviewThumb}
+                  onError={(e) => {
+                    e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
+                  }}
+                />
+                <div className={styles.heroPreviewInfo}>
+                  <span className={styles.heroPreviewTag}>Live on Homepage</span>
+                  <span className={styles.heroPreviewUrl}>{heroForm.heroImage}</span>
+                </div>
+              </div>
+            )}
 
             <div className={styles.formSubmitRow}>
               <button type="submit" className={styles.primarySaveBtn}>
@@ -519,6 +887,192 @@ const FrontPageEditor = ({ showToast }) => {
                 placeholder="e.g. Why Choose The Sehat Buddy?"
               />
             </div>
+          </div>
+
+          {/* Explainer Video Settings */}
+          <div className={styles.formCard} style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #e9eff2', paddingBottom: '12px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-heading)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Play size={18} color="#2563EB" />
+                  "Watch How It Works" Video Control
+                </h4>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
+                  Manage the explainer video URL, play button text, and configure automatic video playback.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveWhyVideo}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'var(--color-primary)',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <CheckCircle size={15} /> Save Video
+              </button>
+            </div>
+
+            {/* Cloudinary Video Upload Box */}
+            <div className={styles.videoUploadBox}>
+              <div className={styles.videoUploadHeader}>
+                <div className={styles.videoUploadInfo}>
+                  <div className={styles.videoUploadIcon}>
+                    <UploadCloud size={22} />
+                  </div>
+                  <div>
+                    <div className={styles.videoUploadTitle}>Upload Custom Video to Cloudinary</div>
+                    <p className={styles.videoUploadDesc}>
+                      Upload direct video (.mp4, .webm, .mov up to 250MB). Streamed securely to Cloudinary CDN and automatically saved to the website.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    ref={videoFileInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*"
+                    onChange={handleVideoUpload}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    disabled={isVideoUploading}
+                    onClick={() => videoFileInputRef.current?.click()}
+                    className={styles.videoUploadBtn}
+                  >
+                    {isVideoUploading ? (
+                      <>
+                        <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Uploading ({videoUploadProgress}%)...</span>
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud size={16} />
+                        <span>Upload Video to Cloudinary</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Upload Progress Bar */}
+              {isVideoUploading && (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748B', marginBottom: '4px' }}>
+                    <span>Uploading and processing in Cloudinary CDN...</span>
+                    <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{videoUploadProgress}%</span>
+                  </div>
+                  <div className={styles.videoProgressBar}>
+                    <div className={styles.videoProgressFill} style={{ width: `${videoUploadProgress}%` }}></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Status indicator if currently pointing to Cloudinary */}
+              {heroForm.whyChooseVideoUrl?.includes('cloudinary.com') && !isVideoUploading && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={styles.cloudinaryBadge}>
+                      <CheckCircle size={13} /> Cloudinary Video Active
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: '#475569', wordBreak: 'break-all' }}>
+                      {heroForm.whyChooseVideoUrl.split('/').pop()}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultYt = 'https://www.youtube.com/watch?v=zCCD52Pty4A';
+                      setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: defaultYt }));
+                      updateHeroContent({ whyChooseVideoUrl: defaultYt });
+                      showToast('Reverted to default YouTube explainer video.');
+                    }}
+                    style={{ background: 'transparent', border: 'none', color: '#64748B', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Reset to Default YouTube
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>Video URL (Cloudinary, YouTube, or Direct MP4 link)</label>
+                <input
+                  type="text"
+                  value={heroForm.whyChooseVideoUrl}
+                  onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoUrl: e.target.value })}
+                  placeholder="https://www.youtube.com/watch?v=... or https://res.cloudinary.com/..."
+                />
+                <span style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                  Upload a video to Cloudinary using the button above, or paste any YouTube URL / external MP4 link.
+                </span>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Play Button Text / Label</label>
+                <textarea
+                  rows={2}
+                  value={heroForm.whyChooseVideoText}
+                  onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoText: e.target.value })}
+                  placeholder="Watch how&#10;Sehat Buddy&#10;works for you"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Autoplay on Click</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(heroForm.whyChooseVideoAutoplay)}
+                    onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoAutoplay: e.target.checked })}
+                    style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                  />
+                  <span style={{ fontSize: '0.88rem', color: '#1E293B', fontWeight: 500 }}>
+                    Autoplay video immediately when player modal opens
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Test Video Preview Button */}
+            {heroForm.whyChooseVideoUrl && (
+              <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewVideoOpen(true)}
+                  style={{
+                    background: '#F1F5F9',
+                    border: '1px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '7px 14px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    color: '#334155',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Play size={14} color="#2563EB" /> Test & Preview Autoplay
+                </button>
+                <span style={{ fontSize: '0.8rem', color: '#64748B' }}>
+                  Click to test the video modal and verify that autoplay works properly.
+                </span>
+              </div>
+            )}
           </div>
 
           <div className={styles.itemsList}>
@@ -682,6 +1236,199 @@ const FrontPageEditor = ({ showToast }) => {
         </div>
       )}
 
+      {/* SUB-TAB 5: CORPORATE TIE-UPS */}
+      {subTab === 'corporate' && (
+        <div className={styles.tabPane}>
+          {/* Section Header Controls */}
+          <form onSubmit={handleSaveCorporateHeader} className={styles.formCard}>
+            <div className={styles.paneHeader}>
+              <div>
+                <h3>Corporate Tie-ups Section Header & Metrics</h3>
+                <p>Customize the headline, subtitle, and trust metrics shown above the corporate partners ticker.</p>
+              </div>
+              <button type="submit" className={styles.primarySaveBtn}>
+                <CheckCircle size={16} /> Save Header
+              </button>
+            </div>
+
+            <div className={styles.formGrid}>
+              <div className={styles.formGroup}>
+                <label>Top Badge Text</label>
+                <input
+                  type="text"
+                  value={heroForm.corporateBadge}
+                  onChange={(e) => setHeroForm({ ...heroForm, corporateBadge: e.target.value })}
+                  placeholder="e.g. ENTERPRISE HEALTHCARE NETWORK"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Covered Lives Stat Pill</label>
+                <input
+                  type="text"
+                  value={heroForm.corporateStat}
+                  onChange={(e) => setHeroForm({ ...heroForm, corporateStat: e.target.value })}
+                  placeholder="e.g. 2.5M+ Corporate Lives Covered"
+                />
+              </div>
+
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>Section Heading Title</label>
+                <input
+                  type="text"
+                  value={heroForm.corporateTitle}
+                  onChange={(e) => setHeroForm({ ...heroForm, corporateTitle: e.target.value })}
+                  placeholder="e.g. Corporate Tie-ups & Partners"
+                />
+              </div>
+
+              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                <label>Section Subtitle</label>
+                <textarea
+                  rows={2}
+                  value={heroForm.corporateSubtitle}
+                  onChange={(e) => setHeroForm({ ...heroForm, corporateSubtitle: e.target.value })}
+                  placeholder="Describe your corporate healthcare partnership network..."
+                />
+              </div>
+            </div>
+          </form>
+
+          {/* Action Header */}
+          <div className={styles.paneActionHeader}>
+            <div>
+              <h3>Corporate Partners & Enterprises ({corporateTieups?.length || 0})</h3>
+              <p>Manage enterprise companies, custom brand colors, logo initials, and employee benefit packages.</p>
+            </div>
+            <button
+              type="button"
+              className={styles.addBtn}
+              onClick={() => setIsAddCorporateOpen(true)}
+            >
+              <Plus size={16} /> Add Corporate Partner
+            </button>
+          </div>
+
+          {/* Partners List */}
+          <div className={styles.itemsList}>
+            {corporateTieups?.map((corp) => (
+              <div key={corp.id} className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
+                {/* Visual Preview Badge */}
+                <div
+                  style={{
+                    width: '64px',
+                    height: '42px',
+                    borderRadius: '8px',
+                    backgroundColor: corp.bgColor || '#EFF6FF',
+                    color: corp.color || '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.82rem',
+                    flexShrink: 0,
+                    border: '1px solid #E2E8F0',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                    marginTop: '4px'
+                  }}
+                  title="Badge Live Preview"
+                >
+                  {corp.logoText || corp.shortName || 'CORP'}
+                </div>
+
+                <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
+                  <div className={styles.formGroup}>
+                    <label>Company Name</label>
+                    <input
+                      type="text"
+                      value={corp.name || ''}
+                      onChange={(e) => updateCorporateTieup(corp.id, { name: e.target.value })}
+                      placeholder="e.g. Tata Consultancy Services"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Logo Text (Short Code)</label>
+                    <input
+                      type="text"
+                      value={corp.logoText || ''}
+                      onChange={(e) => updateCorporateTieup(corp.id, { logoText: e.target.value })}
+                      placeholder="e.g. TCS"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Industry / Category</label>
+                    <input
+                      type="text"
+                      value={corp.category || ''}
+                      onChange={(e) => updateCorporateTieup(corp.id, { category: e.target.value })}
+                      placeholder="e.g. IT & Consulting"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+                    <label>Benefit Offered</label>
+                    <input
+                      type="text"
+                      value={corp.benefit || ''}
+                      onChange={(e) => updateCorporateTieup(corp.id, { benefit: e.target.value })}
+                      placeholder="e.g. Comprehensive Employee Wellness & Health Checks"
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>Employees Covered</label>
+                    <input
+                      type="text"
+                      value={corp.employeesCovered || ''}
+                      onChange={(e) => updateCorporateTieup(corp.id, { employeesCovered: e.target.value })}
+                      placeholder="e.g. 500,000+"
+                    />
+                  </div>
+                </div>
+
+                {/* Color Controls */}
+                <div className={styles.colorPillsGroup} style={{ flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                  <div className={styles.colorInputWrap}>
+                    <label>Text Color</label>
+                    <input
+                      type="color"
+                      value={corp.color || '#2563EB'}
+                      onChange={(e) => updateCorporateTieup(corp.id, { color: e.target.value })}
+                      title="Logo text color"
+                    />
+                  </div>
+                  <div className={styles.colorInputWrap}>
+                    <label>Badge BG</label>
+                    <input
+                      type="color"
+                      value={corp.bgColor || '#EFF6FF'}
+                      onChange={(e) => updateCorporateTieup(corp.id, { bgColor: e.target.value })}
+                      title="Badge background color"
+                    />
+                  </div>
+                </div>
+
+                {/* Delete Button */}
+                <button
+                  type="button"
+                  className={styles.deleteRowBtn}
+                  onClick={() => {
+                    deleteCorporateTieup(corp.id);
+                    showToast(`Partner "${corp.name}" removed.`);
+                  }}
+                  title="Delete corporate partner"
+                  style={{ marginTop: '4px' }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Modal: Add Service */}
       {isAddServiceOpen && (
         <div className={styles.modalOverlay} onClick={() => setIsAddServiceOpen(false)}>
@@ -838,6 +1585,217 @@ const FrontPageEditor = ({ showToast }) => {
                 <button type="submit" className={styles.submitBtn}>Add Article</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Add Corporate Partner */}
+      {isAddCorporateOpen && (
+        <div className={styles.modalOverlay} onClick={() => setIsAddCorporateOpen(false)}>
+          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>Add Corporate Partner</h3>
+              <button onClick={() => setIsAddCorporateOpen(false)} className={styles.closeBtn}><X size={18} /></button>
+            </div>
+            <form onSubmit={handleCreateCorporate} className={styles.modalForm}>
+              <div className={styles.formGroup}>
+                <label>Company / Enterprise Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Tata Consultancy Services"
+                  value={newCorporate.name}
+                  onChange={(e) => setNewCorporate({ ...newCorporate, name: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGrid2}>
+                <div className={styles.formGroup}>
+                  <label>Logo Badge Text (Short Acronym) *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. TCS"
+                    value={newCorporate.logoText}
+                    onChange={(e) => setNewCorporate({ ...newCorporate, logoText: e.target.value })}
+                  />
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Industry / Category</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. IT & Consulting"
+                    value={newCorporate.category}
+                    onChange={(e) => setNewCorporate({ ...newCorporate, category: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Healthcare Benefit Offered</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Comprehensive Annual Health Checks & Family Benefits"
+                  value={newCorporate.benefit}
+                  onChange={(e) => setNewCorporate({ ...newCorporate, benefit: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Employees Covered</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 500,000+"
+                  value={newCorporate.employeesCovered}
+                  onChange={(e) => setNewCorporate({ ...newCorporate, employeesCovered: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGrid2}>
+                <div className={styles.formGroup}>
+                  <label>Logo Text Color</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="color"
+                      value={newCorporate.color}
+                      onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
+                      style={{ width: '40px', height: '36px', padding: 0 }}
+                    />
+                    <input
+                      type="text"
+                      value={newCorporate.color}
+                      onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+                <div className={styles.formGroup}>
+                  <label>Badge Background Color</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="color"
+                      value={newCorporate.bgColor}
+                      onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
+                      style={{ width: '40px', height: '36px', padding: 0 }}
+                    />
+                    <input
+                      type="text"
+                      value={newCorporate.bgColor}
+                      onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div
+                  style={{
+                    width: '60px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: newCorporate.bgColor,
+                    color: newCorporate.color,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    flexShrink: 0,
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.06)'
+                  }}
+                >
+                  {newCorporate.logoText || 'CORP'}
+                </div>
+                <div>
+                  <strong style={{ fontSize: '0.88rem', color: '#0F172A', display: 'block' }}>
+                    {newCorporate.name || 'Company Name'}
+                  </strong>
+                  <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
+                    {newCorporate.benefit || 'Healthcare Benefit preview'}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.cancelBtn} onClick={() => setIsAddCorporateOpen(false)}>Cancel</button>
+                <button type="submit" className={styles.submitBtn}>Add Corporate Partner</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Video Preview Modal */}
+      {isPreviewVideoOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '24px'
+          }}
+          onClick={() => setIsPreviewVideoOpen(false)}
+        >
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: '860px',
+              background: '#000000',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.6)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsPreviewVideoOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                zIndex: 10,
+                background: 'rgba(0, 0, 0, 0.65)',
+                border: '1px solid rgba(255, 255, 255, 0.3)',
+                color: '#fff',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={20} />
+            </button>
+            <div style={{ position: 'relative', width: '100%', paddingTop: '56.25%' }}>
+              {heroForm.whyChooseVideoUrl.includes('youtube.com') || heroForm.whyChooseVideoUrl.includes('youtu.be') ? (
+                <iframe
+                  src={getEmbedUrl(heroForm.whyChooseVideoUrl, heroForm.whyChooseVideoAutoplay)}
+                  title="Video Preview"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
+                />
+              ) : (
+                <video
+                  src={heroForm.whyChooseVideoUrl}
+                  autoPlay={Boolean(heroForm.whyChooseVideoAutoplay)}
+                  controls
+                  playsInline
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}

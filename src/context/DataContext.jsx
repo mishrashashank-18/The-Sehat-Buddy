@@ -7,13 +7,15 @@ import { initialFeatures } from '../data/features';
 import { initialArticles } from '../data/articles';
 import { initialHospitals } from '../data/hospitals';
 import { initialDoctors } from '../data/doctors';
+import { initialCorporateTieups } from '../data/corporateTieups';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
-const STORAGE_KEY_HERO = 'sehat_buddy_hero_v2';
+const STORAGE_KEY_HERO = 'sehat_buddy_hero_v3';
 const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
 const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
+const STORAGE_KEY_CORPORATE = 'sehat_buddy_corporate_v2';
 
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB with fallback)
@@ -43,10 +45,18 @@ export const DataProvider = ({ children }) => {
   // 3. Hero & Front Page General Content State
   const [heroContent, setHeroContent] = useState(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_HERO);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedV3 = localStorage.getItem(STORAGE_KEY_HERO);
+      if (savedV3) {
+        const parsed = JSON.parse(savedV3);
         if (parsed && typeof parsed === 'object') return { ...initialHeroContent, ...parsed };
+      }
+      const savedV2 = localStorage.getItem('sehat_buddy_hero_v2');
+      if (savedV2) {
+        const parsed = JSON.parse(savedV2);
+        if (parsed && typeof parsed === 'object') {
+          // Carry forward customizations but update heroImage to the newly uploaded family photo
+          return { ...initialHeroContent, ...parsed, heroImage: initialHeroContent.heroImage };
+        }
       }
     } catch (e) {
       console.error('Failed to parse heroContent from localStorage', e);
@@ -103,6 +113,20 @@ export const DataProvider = ({ children }) => {
     return initialArticles;
   });
 
+  // 7. Corporate Tie-ups & Enterprise Network State
+  const [corporateTieups, setCorporateTieups] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CORPORATE);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse corporateTieups from localStorage', e);
+    }
+    return initialCorporateTieups;
+  });
+
   // Fetch from Backend API periodically for real-time updates
   useEffect(() => {
     let isMounted = true;
@@ -137,11 +161,20 @@ export const DataProvider = ({ children }) => {
           })));
         }
         if (contentRes.status === 'fulfilled' && contentRes.value) {
-          const { hero, services: sList, features: fList, articles: aList } = contentRes.value;
-          if (hero) setHeroContent(prev => ({ ...prev, ...hero }));
+          const { hero, services: sList, features: fList, articles: aList, corporate: cList } = contentRes.value;
+          if (hero) {
+            setHeroContent(prev => {
+              const cleanHero = { ...hero };
+              if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
+                cleanHero.heroImage = prev.heroImage || initialHeroContent.heroImage;
+              }
+              return { ...prev, ...cleanHero };
+            });
+          }
           if (Array.isArray(sList) && sList.length > 0) setServices(sList);
           if (Array.isArray(fList) && fList.length > 0) setFeatures(fList);
           if (Array.isArray(aList) && aList.length > 0) setArticles(aList);
+          if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(cList);
         }
       } catch {
         // Backend not available, seamlessly fall back to local storage and default data
@@ -150,10 +183,10 @@ export const DataProvider = ({ children }) => {
 
     fetchBackendData();
 
-    // Poll every 10 seconds to keep data fresh without refreshing
+    // Poll periodically to keep data fresh without excessive network chatter
     const intervalId = setInterval(() => {
       fetchBackendData();
-    }, 10000);
+    }, 60000);
 
     return () => {
       isMounted = false;
@@ -209,6 +242,14 @@ export const DataProvider = ({ children }) => {
       console.error('Failed to save hospitals to localStorage', e);
     }
   }, [hospitals]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(corporateTieups));
+    } catch (e) {
+      console.error('Failed to save corporateTieups to localStorage', e);
+    }
+  }, [corporateTieups]);
 
   // Doctor CRUD operations
   const addDoctor = (doctorData) => {
@@ -414,16 +455,58 @@ export const DataProvider = ({ children }) => {
     });
   };
 
+  // Corporate Tie-ups CRUD
+  const addCorporateTieup = (tieupData) => {
+    const newTieup = {
+      ...tieupData,
+      id: Date.now(),
+      name: tieupData.name || 'New Corporate Partner',
+      shortName: tieupData.shortName || (tieupData.name ? tieupData.name.split(' ')[0] : 'Partner'),
+      logoText: tieupData.logoText || (tieupData.name ? tieupData.name.slice(0, 4).toUpperCase() : 'CORP'),
+      category: tieupData.category || 'Enterprise Partner',
+      benefit: tieupData.benefit || 'Comprehensive healthcare coverage and priority care',
+      color: tieupData.color || '#2563EB',
+      bgColor: tieupData.bgColor || '#EFF6FF',
+      employeesCovered: tieupData.employeesCovered || '50,000+'
+    };
+    setCorporateTieups(prev => {
+      const next = [newTieup, ...prev];
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+    return newTieup;
+  };
+
+  const updateCorporateTieup = (id, updatedData) => {
+    setCorporateTieups(prev => {
+      const next = prev.map(c => (String(c.id) === String(id) ? { ...c, ...updatedData } : c));
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+  };
+
+  const deleteCorporateTieup = (id) => {
+    setCorporateTieups(prev => {
+      const next = prev.filter(c => String(c.id) !== String(id));
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+  };
+
   // Reset Front Page Defaults
   const resetFrontPageDefaults = () => {
     setHeroContent(initialHeroContent);
     setServices(initialServices);
     setFeatures(initialFeatures);
     setArticles(initialArticles);
+    setCorporateTieups(initialCorporateTieups);
     localStorage.removeItem(STORAGE_KEY_HERO);
+    localStorage.removeItem('sehat_buddy_hero_v2');
     localStorage.removeItem(STORAGE_KEY_SERVICES);
     localStorage.removeItem(STORAGE_KEY_FEATURES);
     localStorage.removeItem(STORAGE_KEY_ARTICLES);
+    localStorage.removeItem(STORAGE_KEY_CORPORATE);
+    api.updateCorporateTieups(initialCorporateTieups).catch(() => {});
   };
 
   // Reset Everything
@@ -472,6 +555,10 @@ export const DataProvider = ({ children }) => {
         addArticle,
         updateArticle,
         deleteArticle,
+        corporateTieups,
+        addCorporateTieup,
+        updateCorporateTieup,
+        deleteCorporateTieup,
         resetFrontPageDefaults,
         resetToDefaults,
         stats
