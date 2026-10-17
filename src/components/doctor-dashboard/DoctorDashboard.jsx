@@ -739,8 +739,43 @@ const DoctorDashboard = ({ onNavigate }) => {
         {activeTab === 'profile' && (
           <div className={styles.tabContentArea}>
             <div className={styles.settingsCard}>
-              <h3>Consultation & Clinic Settings</h3>
-              <p>Configure fee, availability days, and contact info displayed to patients on Sehat Buddy.</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Consultation & Clinic Settings</h3>
+                  <p style={{ margin: '4px 0 0 0', color: '#64748b' }}>Configure credentials, awards, hospital timeline, fee, and contact info displayed to patients on Sehat Buddy.</p>
+                </div>
+                {doctors.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#eff6ff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1d4ed8' }}>Doctor Profile:</span>
+                    <select
+                      value={activeDoctor.id || activeDoctor._id}
+                      onChange={(e) => {
+                        const newId = e.target.value;
+                        setSelectedDoctorId(newId);
+                        const doc = doctors.find(d => String(d.id || d._id) === String(newId));
+                        if (doc) {
+                          setProfileForm({
+                            ...doc,
+                            experience: typeof doc.experience === 'string' ? parseInt(doc.experience) : (doc.experience || 5),
+                            licenseNumber: doc.licenseNumber || '',
+                            awards: Array.isArray(doc.awards) ? doc.awards : [],
+                            certifications: Array.isArray(doc.certifications) ? doc.certifications : [],
+                            memberships: Array.isArray(doc.memberships) ? doc.memberships : [],
+                            careerExperience: Array.isArray(doc.careerExperience) ? doc.careerExperience : []
+                          });
+                        }
+                      }}
+                      style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '0.84rem', fontWeight: 600, background: 'white', color: '#1e293b' }}
+                    >
+                      {doctors.map(d => (
+                        <option key={d.id || d._id} value={d.id || d._id}>
+                          {d.name} ({d.specialty || d.specialization || 'Doctor'})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
 
               <div className={styles.settingsGrid}>
                 <div className={styles.formGroup}>

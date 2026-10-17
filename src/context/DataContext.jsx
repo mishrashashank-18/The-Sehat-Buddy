@@ -188,17 +188,18 @@ export const DataProvider = ({ children }) => {
           setDoctors(prevDoctors => {
             return docsRes.value.map(d => {
               const existing = prevDoctors.find(p => String(p.id || p._id) === String(d._id || d.id));
+              const initial = initialDoctors.find(i => String(i.id) === String(d.id || d._id) || i.name?.toLowerCase() === d.name?.toLowerCase());
               return {
                 ...d,
                 id: d._id || d.id,
                 specialty: d.specialization || d.specialty || 'General Physician',
                 price: d.fees || d.price || 500,
                 experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience'),
-                licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
-                awards: Array.isArray(d.awards) && d.awards.length > 0 ? d.awards : (existing?.awards || []),
-                certifications: Array.isArray(d.certifications) && d.certifications.length > 0 ? d.certifications : (existing?.certifications || []),
-                memberships: Array.isArray(d.memberships) && d.memberships.length > 0 ? d.memberships : (existing?.memberships || []),
-                careerExperience: Array.isArray(d.careerExperience) && d.careerExperience.length > 0 ? d.careerExperience : (existing?.careerExperience || [])
+                licenseNumber: d.licenseNumber || existing?.licenseNumber || initial?.licenseNumber || '',
+                awards: Array.isArray(d.awards) && d.awards.length > 0 ? d.awards : (Array.isArray(existing?.awards) && existing.awards.length > 0 ? existing.awards : (initial?.awards || [])),
+                certifications: Array.isArray(d.certifications) && d.certifications.length > 0 ? d.certifications : (Array.isArray(existing?.certifications) && existing.certifications.length > 0 ? existing.certifications : (initial?.certifications || [])),
+                memberships: Array.isArray(d.memberships) && d.memberships.length > 0 ? d.memberships : (Array.isArray(existing?.memberships) && existing.memberships.length > 0 ? existing.memberships : (initial?.memberships || [])),
+                careerExperience: Array.isArray(d.careerExperience) && d.careerExperience.length > 0 ? d.careerExperience : (Array.isArray(existing?.careerExperience) && existing.careerExperience.length > 0 ? existing.careerExperience : (initial?.careerExperience || []))
               };
             });
           });
