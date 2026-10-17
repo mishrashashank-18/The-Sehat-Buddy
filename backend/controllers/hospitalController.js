@@ -146,6 +146,14 @@ export const registerHospital = async (req, res) => {
       star_doctors: resolvedStarDoctors,
       staff_emails: parsedStaffEmails,
       staff_doctors: parsedStaffDoctors,
+      cashlessInsurance: req.body.cashlessInsurance !== undefined ? req.body.cashlessInsurance : true,
+      acceptedInsurances: Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : ['Star Health', 'HDFC ERGO', 'ICICI Lombard', 'Care Health', 'Niva Bupa'],
+      tpaHelpdesk: req.body.tpaHelpdesk || {
+        phone: req.body.phone || '080-45678900',
+        email: 'tpa@' + (email ? email.split('@')[1] : 'sehatbuddy.com'),
+        preAuthTime: '30 Mins Cashless Pre-Approval'
+      },
+      insuranceHelpline: req.body.insuranceHelpline || '1800-SEHAT-CARE',
       latitude: latitude !== undefined ? Number(latitude) : undefined,
       longitude: longitude !== undefined ? Number(longitude) : undefined
     });
@@ -243,6 +251,20 @@ export const updateHospital = async (req, res) => {
       if (req.body.staff_emails !== undefined) {
         hospital.staff_emails = incomingStaffEmails;
         hospital.markModified('staff_emails');
+      }
+      if (req.body.cashlessInsurance !== undefined) {
+        hospital.cashlessInsurance = Boolean(req.body.cashlessInsurance);
+      }
+      if (req.body.acceptedInsurances !== undefined) {
+        hospital.acceptedInsurances = Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : [];
+        hospital.markModified('acceptedInsurances');
+      }
+      if (req.body.tpaHelpdesk !== undefined) {
+        hospital.tpaHelpdesk = req.body.tpaHelpdesk;
+        hospital.markModified('tpaHelpdesk');
+      }
+      if (req.body.insuranceHelpline !== undefined) {
+        hospital.insuranceHelpline = req.body.insuranceHelpline;
       }
       if (req.file) {
         hospital.image = req.file.path;

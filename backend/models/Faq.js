@@ -1,0 +1,16 @@
+import mongoose from 'mongoose';
+
+const faqSchema = new mongoose.Schema({
+  question: { type: String, required: true },
+  answer: { type: String, required: true },
+  category: { 
+    type: String, 
+    enum: ['Insurance & Cashless', 'Surgeries & Procedures', 'Hospitals & Admissions', 'Doctors & Consultations', 'General'],
+    default: 'General'
+  },
+  order: { type: Number, default: 0 },
+  isActive: { type: Boolean, default: true }
+}, { timestamps: true });
+
+const Faq = mongoose.model('Faq', faqSchema);
+export default Faq;

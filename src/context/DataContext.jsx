@@ -8,6 +8,11 @@ import { initialArticles } from '../data/articles';
 import { initialHospitals } from '../data/hospitals';
 import { initialDoctors } from '../data/doctors';
 import { initialCorporateTieups } from '../data/corporateTieups';
+import { initialFaqs } from '../data/faqs';
+import { initialReviews } from '../data/reviews';
+import { initialSpecialitiesProcedures } from '../data/specialitiesProcedures';
+import { defaultAcceptedInsurances } from '../data/insurancePartners';
+import { initialBranding } from '../data/branding';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
@@ -16,6 +21,10 @@ const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
 const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
 const STORAGE_KEY_CORPORATE = 'sehat_buddy_corporate_v2';
+const STORAGE_KEY_FAQS = 'sehat_buddy_faqs_v2';
+const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
+const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
+const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v2';
 
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB with fallback)
@@ -127,15 +136,74 @@ export const DataProvider = ({ children }) => {
     return initialCorporateTieups;
   });
 
+  // 8. FAQs State
+  const [faqs, setFaqs] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_FAQS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse faqs from localStorage', e);
+    }
+    return initialFaqs;
+  });
+
+  // 9. Public Reviews State
+  const [reviews, setReviews] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_REVIEWS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse reviews from localStorage', e);
+    }
+    return initialReviews;
+  });
+
+  // 10. Specialities & Procedures State
+  const [specialitiesProcedures, setSpecialitiesProcedures] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_SPECIALITIES);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse specialitiesProcedures from localStorage', e);
+    }
+    return initialSpecialitiesProcedures;
+  });
+
+  // 11. Site Identity & Branding State
+  const [branding, setBranding] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_BRANDING);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return { ...initialBranding, ...parsed };
+      }
+    } catch (e) {
+      console.error('Failed to parse branding from localStorage', e);
+    }
+    return initialBranding;
+  });
+
   // Fetch from Backend API periodically for real-time updates
   useEffect(() => {
     let isMounted = true;
     const fetchBackendData = async () => {
       try {
-        const [docsRes, hospsRes, contentRes] = await Promise.allSettled([
+        const [docsRes, hospsRes, contentRes, faqsRes, reviewsRes, specsRes] = await Promise.allSettled([
           api.getDoctors(),
           api.getHospitals(),
-          api.getContent()
+          api.getContent(),
+          api.getFaqs(),
+          api.getReviews(),
+          api.getSpecialitiesProcedures()
         ]);
 
         if (!isMounted) return;
@@ -157,11 +225,19 @@ export const DataProvider = ({ children }) => {
             reels: h.reels || [],
             youtube_videos: h.youtube_videos || [],
             photos: Array.isArray(h.photos) ? h.photos : [],
-            star_doctors: h.star_doctors || []
+            star_doctors: h.star_doctors || [],
+            cashlessInsurance: h.cashlessInsurance !== undefined ? h.cashlessInsurance : true,
+            acceptedInsurances: Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0 ? h.acceptedInsurances : defaultAcceptedInsurances,
+            tpaHelpdesk: h.tpaHelpdesk || {
+              phone: h.phone || '080-45678900',
+              email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
+              preAuthTime: '30 Mins Cashless Pre-Approval'
+            },
+            insuranceHelpline: h.insuranceHelpline || '1800-SEHAT-CARE'
           })));
         }
         if (contentRes.status === 'fulfilled' && contentRes.value) {
-          const { hero, services: sList, features: fList, articles: aList, corporate: cList } = contentRes.value;
+          const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData } = contentRes.value;
           if (hero) {
             setHeroContent(prev => {
               const cleanHero = { ...hero };
@@ -171,10 +247,20 @@ export const DataProvider = ({ children }) => {
               return { ...prev, ...cleanHero };
             });
           }
+          if (bData) setBranding(prev => ({ ...prev, ...bData }));
           if (Array.isArray(sList) && sList.length > 0) setServices(sList);
           if (Array.isArray(fList) && fList.length > 0) setFeatures(fList);
           if (Array.isArray(aList) && aList.length > 0) setArticles(aList);
           if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(cList);
+        }
+        if (faqsRes.status === 'fulfilled' && Array.isArray(faqsRes.value) && faqsRes.value.length > 0) {
+          setFaqs(faqsRes.value.map(f => ({ ...f, id: f._id || f.id })));
+        }
+        if (reviewsRes.status === 'fulfilled' && Array.isArray(reviewsRes.value) && reviewsRes.value.length > 0) {
+          setReviews(reviewsRes.value.map(r => ({ ...r, id: r._id || r.id })));
+        }
+        if (specsRes.status === 'fulfilled' && Array.isArray(specsRes.value) && specsRes.value.length > 0) {
+          setSpecialitiesProcedures(specsRes.value.map(s => ({ ...s, id: s._id || s.id })));
         }
       } catch {
         // Backend not available, seamlessly fall back to local storage and default data
@@ -251,6 +337,38 @@ export const DataProvider = ({ children }) => {
     }
   }, [corporateTieups]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(faqs));
+    } catch (e) {
+      console.error('Failed to save faqs to localStorage', e);
+    }
+  }, [faqs]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(reviews));
+    } catch (e) {
+      console.error('Failed to save reviews to localStorage', e);
+    }
+  }, [reviews]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_SPECIALITIES, JSON.stringify(specialitiesProcedures));
+    } catch (e) {
+      console.error('Failed to save specialitiesProcedures to localStorage', e);
+    }
+  }, [specialitiesProcedures]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_BRANDING, JSON.stringify(branding));
+    } catch (e) {
+      console.error('Failed to save branding to localStorage', e);
+    }
+  }, [branding]);
+
   // Doctor CRUD operations
   const addDoctor = (doctorData) => {
     const newDoctor = {
@@ -306,6 +424,16 @@ export const DataProvider = ({ children }) => {
       youtube_videos: hospitalData.youtube_videos || [],
       photos: Array.isArray(hospitalData.photos) ? hospitalData.photos : [],
       star_doctors: hospitalData.star_doctors || [],
+      staff_emails: hospitalData.staff_emails || [],
+      staff_doctors: hospitalData.staff_doctors || [],
+      cashlessInsurance: hospitalData.cashlessInsurance !== undefined ? Boolean(hospitalData.cashlessInsurance) : true,
+      acceptedInsurances: Array.isArray(hospitalData.acceptedInsurances) && hospitalData.acceptedInsurances.length > 0 ? hospitalData.acceptedInsurances : defaultAcceptedInsurances,
+      tpaHelpdesk: hospitalData.tpaHelpdesk || {
+        phone: hospitalData.phone || '080-45678900',
+        email: 'tpa@' + (hospitalData.email ? hospitalData.email.split('@')[1] : 'sehatbuddy.com'),
+        preAuthTime: '30 Mins Cashless Pre-Approval'
+      },
+      insuranceHelpline: hospitalData.insuranceHelpline || '1800-SEHAT-CARE',
       latitude: hospitalData.latitude !== undefined ? Number(hospitalData.latitude) : undefined,
       longitude: hospitalData.longitude !== undefined ? Number(hospitalData.longitude) : undefined
     };
@@ -324,6 +452,10 @@ export const DataProvider = ({ children }) => {
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) : hosp.rating,
             totalBeds: updatedData.totalBeds !== undefined ? parseInt(updatedData.totalBeds, 10) : hosp.totalBeds,
             emergency24x7: updatedData.emergency24x7 !== undefined ? Boolean(updatedData.emergency24x7) : hosp.emergency24x7,
+            cashlessInsurance: updatedData.cashlessInsurance !== undefined ? Boolean(updatedData.cashlessInsurance) : hosp.cashlessInsurance,
+            acceptedInsurances: updatedData.acceptedInsurances !== undefined ? updatedData.acceptedInsurances : hosp.acceptedInsurances,
+            tpaHelpdesk: updatedData.tpaHelpdesk !== undefined ? updatedData.tpaHelpdesk : hosp.tpaHelpdesk,
+            insuranceHelpline: updatedData.insuranceHelpline !== undefined ? updatedData.insuranceHelpline : hosp.insuranceHelpline,
             specialties: Array.isArray(updatedData.specialties)
               ? updatedData.specialties
               : (typeof updatedData.specialties === 'string'
@@ -333,6 +465,8 @@ export const DataProvider = ({ children }) => {
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : (hosp.youtube_videos || []),
             photos: updatedData.photos !== undefined ? updatedData.photos : (hosp.photos || []),
             star_doctors: updatedData.star_doctors !== undefined ? updatedData.star_doctors : (hosp.star_doctors || []),
+            staff_emails: updatedData.staff_emails !== undefined ? updatedData.staff_emails : (hosp.staff_emails || []),
+            staff_doctors: updatedData.staff_doctors !== undefined ? updatedData.staff_doctors : (hosp.staff_doctors || []),
             latitude: updatedData.latitude !== undefined ? (updatedData.latitude === '' || updatedData.latitude === null ? undefined : Number(updatedData.latitude)) : hosp.latitude,
             longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude
           };
@@ -493,6 +627,130 @@ export const DataProvider = ({ children }) => {
     });
   };
 
+  // FAQs CRUD
+  const addFaq = (faqData) => {
+    const newFaq = {
+      ...faqData,
+      id: faqData.id || faqData._id || `faq-${Date.now()}`,
+      order: Number(faqData.order) || (faqs.length + 1),
+      isActive: faqData.isActive !== undefined ? Boolean(faqData.isActive) : true
+    };
+    setFaqs(prev => [newFaq, ...prev]);
+    api.addFaq(newFaq).then(saved => {
+      if (saved && saved._id) {
+        setFaqs(prev => prev.map(f => f.id === newFaq.id ? { ...saved, id: saved._id } : f));
+      }
+    }).catch(() => {});
+    return newFaq;
+  };
+
+  const updateFaq = (id, updatedData) => {
+    setFaqs(prev => prev.map(f => {
+      if (String(f.id || f._id) === String(id)) {
+        const merged = { ...f, ...updatedData };
+        api.updateFaq(id, merged).catch(() => {});
+        return merged;
+      }
+      return f;
+    }));
+  };
+
+  const deleteFaq = (id) => {
+    setFaqs(prev => prev.filter(f => String(f.id || f._id) !== String(id)));
+    api.deleteFaq(id).catch(() => {});
+  };
+
+  // Reviews CRUD
+  const addReview = (reviewData) => {
+    const newReview = {
+      ...reviewData,
+      id: reviewData.id || reviewData._id || `rev-${Date.now()}`,
+      rating: Number(reviewData.rating) || 5,
+      createdAt: new Date().toISOString(),
+      isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
+      status: reviewData.status || 'approved'
+    };
+    setReviews(prev => [newReview, ...prev]);
+    api.addReview(newReview).then(saved => {
+      if (saved && saved._id) {
+        setReviews(prev => prev.map(r => r.id === newReview.id ? { ...saved, id: saved._id } : r));
+      }
+    }).catch(() => {});
+    return newReview;
+  };
+
+  const updateReview = (id, updatedData) => {
+    setReviews(prev => prev.map(r => {
+      if (String(r.id || r._id) === String(id)) {
+        const merged = { ...r, ...updatedData };
+        api.updateReview(id, merged).catch(() => {});
+        return merged;
+      }
+      return r;
+    }));
+  };
+
+  const deleteReview = (id) => {
+    setReviews(prev => prev.filter(r => String(r.id || r._id) !== String(id)));
+    api.deleteReview(id).catch(() => {});
+  };
+
+  // Specialities & Procedures CRUD
+  const addSpecialityProcedure = (itemData) => {
+    const newItem = {
+      ...itemData,
+      id: itemData.id || itemData._id || `sp-${Date.now()}`,
+      type: itemData.type || 'speciality',
+      insuranceCovered: itemData.insuranceCovered !== undefined ? itemData.insuranceCovered : true,
+      insuranceDetails: itemData.insuranceDetails || {
+        coveragePercent: 'Up to 100% Covered',
+        cashlessAvailable: true,
+        preAuthHours: '30 Mins Pre-Approval',
+        estimatedCostRange: '₹45,000 - ₹90,000',
+        outOfPocketWithInsurance: '₹0 with Cashless Mediclaim',
+        emiAvailable: true
+      }
+    };
+    setSpecialitiesProcedures(prev => [...prev, newItem]);
+    api.addSpecialityProcedure(newItem).then(saved => {
+      if (saved && saved._id) {
+        setSpecialitiesProcedures(prev => prev.map(s => s.id === newItem.id ? { ...saved, id: saved._id } : s));
+      }
+    }).catch(() => {});
+    return newItem;
+  };
+
+  const updateSpecialityProcedure = (id, updatedData) => {
+    setSpecialitiesProcedures(prev => prev.map(s => {
+      if (String(s.id || s._id) === String(id)) {
+        const merged = { ...s, ...updatedData };
+        api.updateSpecialityProcedure(id, merged).catch(() => {});
+        return merged;
+      }
+      return s;
+    }));
+  };
+
+  const deleteSpecialityProcedure = (id) => {
+    setSpecialitiesProcedures(prev => prev.filter(s => String(s.id || s._id) !== String(id)));
+    api.deleteSpecialityProcedure(id).catch(() => {});
+  };
+
+  // 10. Branding & Site Identity CRUD
+  const updateBranding = (newFields) => {
+    setBranding(prev => {
+      const merged = { ...prev, ...newFields };
+      api.updateBranding(merged).catch(() => {});
+      return merged;
+    });
+  };
+
+  const resetBranding = () => {
+    setBranding(initialBranding);
+    localStorage.removeItem(STORAGE_KEY_BRANDING);
+    api.updateBranding(initialBranding).catch(() => {});
+  };
+
   // Reset Front Page Defaults
   const resetFrontPageDefaults = () => {
     setHeroContent(initialHeroContent);
@@ -500,12 +758,19 @@ export const DataProvider = ({ children }) => {
     setFeatures(initialFeatures);
     setArticles(initialArticles);
     setCorporateTieups(initialCorporateTieups);
+    setFaqs(initialFaqs);
+    setReviews(initialReviews);
+    setSpecialitiesProcedures(initialSpecialitiesProcedures);
+    resetBranding();
     localStorage.removeItem(STORAGE_KEY_HERO);
     localStorage.removeItem('sehat_buddy_hero_v2');
     localStorage.removeItem(STORAGE_KEY_SERVICES);
     localStorage.removeItem(STORAGE_KEY_FEATURES);
     localStorage.removeItem(STORAGE_KEY_ARTICLES);
     localStorage.removeItem(STORAGE_KEY_CORPORATE);
+    localStorage.removeItem(STORAGE_KEY_FAQS);
+    localStorage.removeItem(STORAGE_KEY_REVIEWS);
+    localStorage.removeItem(STORAGE_KEY_SPECIALITIES);
     api.updateCorporateTieups(initialCorporateTieups).catch(() => {});
   };
 
@@ -540,6 +805,10 @@ export const DataProvider = ({ children }) => {
         addHospital,
         updateHospital,
         deleteHospital,
+        // Branding & Site Identity
+        branding,
+        updateBranding,
+        resetBranding,
         // Front page content
         heroContent,
         updateHeroContent,
@@ -559,6 +828,21 @@ export const DataProvider = ({ children }) => {
         addCorporateTieup,
         updateCorporateTieup,
         deleteCorporateTieup,
+        // FAQs
+        faqs,
+        addFaq,
+        updateFaq,
+        deleteFaq,
+        // Public Reviews
+        reviews,
+        addReview,
+        updateReview,
+        deleteReview,
+        // Specialities & Procedures / Surgeries
+        specialitiesProcedures,
+        addSpecialityProcedure,
+        updateSpecialityProcedure,
+        deleteSpecialityProcedure,
         resetFrontPageDefaults,
         resetToDefaults,
         stats

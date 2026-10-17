@@ -12,6 +12,9 @@ import userRoutes from './routes/userRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import faqRoutes from './routes/faqRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import specialityRoutes from './routes/specialityRoutes.js';
 
 // Resolve directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -58,6 +61,9 @@ app.use('/api/user', userRoutes);
 app.use('/api/content', contentRoutes);
 app.use('/api/maps', mapRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/faqs', faqRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/specialities-procedures', specialityRoutes);
 
 // Start Server
 app.listen(PORT, () => {

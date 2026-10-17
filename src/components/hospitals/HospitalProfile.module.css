@@ -198,9 +198,46 @@
   margin-top: 3px;
 }
 
+.headerActionsStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.insuranceBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #059669;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 18px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.22);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.insuranceBtn:hover {
+  background: #047857;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.32);
+}
+
+.insuranceBtn:active {
+  transform: translateY(0);
+}
+
 .getDirectionsBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   background: #2563eb;
   color: #ffffff;
@@ -787,7 +824,155 @@
     align-items: flex-start;
   }
   
+  .headerActionsStack {
+    width: 100%;
+  }
+
   .doctorsGrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Practo-style Sticky Sub-Navigation */
+.practoNavWrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  padding: 8px 16px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+  margin-bottom: 32px;
+  overflow-x: auto;
+  white-space: nowrap;
+  scrollbar-width: none;
+}
+
+.practoNavWrap::-webkit-scrollbar {
+  display: none;
+}
+
+.practoNavTab {
+  background: none;
+  border: none;
+  padding: 10px 18px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.practoNavTab:hover {
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+.practoNavTabActive {
+  background-color: #eff6ff !important;
+  color: #2563eb !important;
+  font-weight: 700;
+}
+
+/* MediBuddy-style FAQs */
+.faqCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.faqHeader {
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.faqTitle {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.faqSubtitle {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.faqList {
+  display: flex;
+  flex-direction: column;
+}
+
+.faqItem {
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.faqItem:last-child {
+  border-bottom: none;
+}
+
+.faqQuestionBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.faqQuestionBtn:hover {
+  color: #2563eb;
+}
+
+.faqChevron {
+  color: #2563eb;
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
+}
+
+.faqChevronOpen {
+  transform: rotate(180deg);
+}
+
+.faqAnswer {
+  padding: 0 0 20px 0;
+  color: #475569;
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.faqStepsList {
+  margin: 0 0 12px 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.faqStepsList li {
+  color: #334155;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.faqNote {
+  margin: 10px 0 0 0;
+  color: #64748b;
+  font-size: 0.88rem;
+  font-style: italic;
 }

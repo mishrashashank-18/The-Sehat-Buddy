@@ -1,0 +1,206 @@
+.sectionWrap {
+  padding: 60px 0 70px 0;
+  background-color: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sectionHeader {
+  margin-bottom: 30px;
+}
+
+.titleWrap {
+  display: inline-block;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #003865;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.02em;
+}
+
+.accentBar {
+  height: 3.5px;
+  background-color: #003865;
+  border-radius: 2px;
+  width: 100%;
+}
+
+.contentLayout {
+  display: block;
+  width: 100%;
+}
+
+/* Main Column */
+.leftCol {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.tabsContainer {
+  display: flex;
+  gap: 40px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 30px;
+}
+
+.tabBtn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0 0 14px 0;
+  position: relative;
+  transition: color 0.2s ease;
+}
+
+.tabBtn:hover {
+  color: #003865;
+}
+
+.tabBtnActive {
+  color: #2563eb;
+}
+
+.tabIndicator {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background-color: #2563eb;
+  border-radius: 2px 2px 0 0;
+}
+
+/* Items Grid - Responsive 4 columns */
+.itemsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.itemCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  cursor: pointer;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  transition: all 0.25s ease;
+}
+
+.itemCard:hover {
+  background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%);
+  border-color: #93c5fd;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.08);
+  transform: translateY(-2px);
+}
+
+.iconBox {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f7ff;
+  border-radius: 12px;
+  border: 1px solid #e0f2fe;
+  transition: all 0.2s ease;
+}
+
+.itemCard:hover .iconBox {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  transform: scale(1.04);
+}
+
+.itemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itemName {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #003865;
+  line-height: 1.35;
+  transition: color 0.2s;
+}
+
+.itemCard:hover .itemName {
+  color: #2563eb;
+}
+
+.insurancePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #0369a1;
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 2.5px 8.5px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.viewAllRow {
+  margin-top: 32px;
+}
+
+.viewAllBtn {
+  background: none;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #003865;
+  cursor: pointer;
+  padding: 6px 0;
+  transition: all 0.2s;
+}
+
+.viewAllBtn:hover {
+  color: #2563eb;
+  gap: 10px;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .itemsGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+}
+
+@media (max-width: 768px) {
+  .itemsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .sectionTitle {
+    font-size: 1.6rem;
+  }
+  .tabBtn {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .itemsGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+

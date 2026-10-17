@@ -20,7 +20,7 @@
 .subtitle {
   color: var(--color-body, #64748b);
   font-size: 1.05rem;
-  max-width: 600px;
+  max-width: 650px;
   margin: 0 auto;
 }
 
@@ -354,5 +354,88 @@
   }
   .inputWrapper, .selectWrapper {
     min-width: 100%;
+  }
+}
+
+.surgeriesBanner {
+  margin-top: 50px;
+  background: linear-gradient(135deg, #022c43 0%, #05445e 100%);
+  border-radius: 20px;
+  padding: 32px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  color: #ffffff;
+  box-shadow: 0 10px 30px rgba(2, 44, 67, 0.15);
+}
+
+.surgeriesBannerLeft {
+  max-width: 650px;
+}
+
+.bannerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #79e0ee;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.surgeriesBannerLeft h3 {
+  font-size: 1.45rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: #ffffff;
+}
+
+.surgeriesBannerLeft p {
+  font-size: 0.92rem;
+  color: rgba(255, 255, 255, 0.85);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.bannerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #022c43;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 24px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.bannerBtn:hover {
+  background: #e2f5f8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 768px) {
+  .surgeriesBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+  }
+  .bannerBtn {
+    width: 100%;
+    justify-content: center;
   }
 }

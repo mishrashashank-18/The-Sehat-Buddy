@@ -161,6 +161,16 @@ export const api = {
     return data.data;
   },
 
+  async updateBranding(brandingData) {
+    const res = await fetch(`${API_BASE}/content/branding`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(brandingData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
   // Stats
   async getStats() {
     const res = await fetch(`${API_BASE}/stats`, {
@@ -245,5 +255,113 @@ export const api = {
     });
     const data = await handleResponse(res);
     return data.url;
+  },
+
+  // FAQs API
+  async getFaqs(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/faqs${qs ? '?' + qs : ''}`);
+    const data = await handleResponse(res);
+    return data.data || [];
+  },
+
+  async addFaq(faqData) {
+    const res = await fetch(`${API_BASE}/faqs`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(faqData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateFaq(id, faqData) {
+    const res = await fetch(`${API_BASE}/faqs/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(faqData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteFaq(id) {
+    const res = await fetch(`${API_BASE}/faqs/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Public Reviews API
+  async getReviews(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(`${API_BASE}/reviews${qs ? '?' + qs : ''}`);
+    const data = await handleResponse(res);
+    return data.data || [];
+  },
+
+  async addReview(reviewData) {
+    const res = await fetch(`${API_BASE}/reviews`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(reviewData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateReview(id, reviewData) {
+    const res = await fetch(`${API_BASE}/reviews/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(reviewData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteReview(id) {
+    const res = await fetch(`${API_BASE}/reviews/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Specialities & Procedures API
+  async getSpecialitiesProcedures(type = '') {
+    const url = type ? `${API_BASE}/specialities-procedures?type=${type}` : `${API_BASE}/specialities-procedures`;
+    const res = await fetch(url);
+    const data = await handleResponse(res);
+    return data.data || [];
+  },
+
+  async addSpecialityProcedure(itemData) {
+    const res = await fetch(`${API_BASE}/specialities-procedures`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(itemData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateSpecialityProcedure(id, itemData) {
+    const res = await fetch(`${API_BASE}/specialities-procedures/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(itemData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteSpecialityProcedure(id) {
+    const res = await fetch(`${API_BASE}/specialities-procedures/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
   }
 };

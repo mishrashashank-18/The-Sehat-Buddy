@@ -19,6 +19,29 @@ export const initialDoctors = [
     email: 'dr.rahul@sehatbuddy.com',
     availableDays: 'Mon, Wed, Fri (10:00 AM - 4:00 PM)',
     about: 'Senior consultant cardiologist specializing in non-invasive cardiology and coronary interventions.',
+    licenseNumber: 'DMC-2009-44182',
+    awards: [
+      'Best Cardiologist of the Year - National Healthcare Summit (2023)',
+      'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
+      'Distinguished Clinical Researcher Award (2018)'
+    ],
+    certifications: [
+      'Fellow of the American College of Cardiology (FACC)',
+      'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
+      'Advanced Cardiac Life Support (ACLS) Certified Provider',
+      'Post-Doctoral Fellowship in Complex Coronary Angioplasty'
+    ],
+    memberships: [
+      'Cardiological Society of India (CSI) - Life Member',
+      'Indian Medical Association (IMA)',
+      'European Society of Cardiology (ESC)',
+      'Association of Physicians of India (API)'
+    ],
+    careerExperience: [
+      'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 - Present)',
+      'Associate Consultant Cardiology - Fortis Healthcare (2014 - 2018)',
+      'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 - 2014)'
+    ],
     instagram: 'https://www.instagram.com/thesehatbuddy/',
     facebook: 'https://www.facebook.com/profile.php?id=61594704587784',
     reels: [

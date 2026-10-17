@@ -1,27 +1,42 @@
 import React from 'react';
 import { HeartPulse } from 'lucide-react';
+import { useData } from '../../context/useData';
 import Container from './Container';
 import styles from './Footer.module.css';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
 const Footer = ({ onNavigate }) => {
+  const { branding } = useData();
+
   return (
     <footer className={styles.footer}>
       <Container>
         <div className={styles.grid}>
           <div className={styles.brandSection}>
             <div className={styles.logoGroup} onClick={() => onNavigate && onNavigate('site')} style={{ cursor: 'pointer' }}>
-              <div className={styles.logoIcon}>
-                <HeartPulse size={24} color="var(--color-primary)" />
-              </div>
+              {branding?.showLogo !== false && branding?.logoType !== 'none' && (
+                <div className={styles.logoIcon}>
+                  {branding?.logoType === 'image' && branding?.logoImage ? (
+                    <img
+                      src={branding.logoImage}
+                      alt={branding?.siteName || 'Logo'}
+                      style={{ height: '28px', maxWidth: '120px', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <HeartPulse size={24} color="var(--color-primary)" />
+                  )}
+                </div>
+              )}
               <div className={styles.logoText}>
-                <h2>The Sehat Buddy</h2>
-                <p>Your Health. Our Priority.</p>
+                <h2>{branding?.siteName || 'The Sehat Buddy'}</h2>
+                {branding?.showTagline !== false && branding?.tagline && (
+                  <p>{branding.tagline}</p>
+                )}
               </div>
             </div>
             <p className={styles.description}>
-              The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services.
+              {branding?.siteName || 'The Sehat Buddy'} is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services.
             </p>
             <div className={styles.socialLinks}>
               <a href="https://www.facebook.com/profile.php?id=61594704587784" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
@@ -45,7 +60,7 @@ const Footer = ({ onNavigate }) => {
               <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Find Doctors</a></li>
               <li><a href="/doctors" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('find-doctors'); }}>Book Appointments</a></li>
               <li><a href="/services/lab-tests" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'lab-tests'); }}>Lab Tests</a></li>
-              <li><a href="/services/surgeries" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'surgeries'); }}>Surgeries</a></li>
+              <li><a href="/hospitals?tab=surgeries" onClick={(e) => { e.preventDefault(); if (onNavigate) { onNavigate('hospitals'); } else { window.history.pushState({}, '', '/hospitals?tab=surgeries'); window.dispatchEvent(new PopStateEvent('popstate')); } window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Surgeries & Specialities</a></li>
             </ul>
           </div>
           

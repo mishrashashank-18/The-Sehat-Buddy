@@ -21,6 +21,7 @@ import DoctorProfile from './components/doctors/DoctorProfile';
 import FindHospitals from './components/hospitals/FindHospitals';
 import HospitalProfile from './components/hospitals/HospitalProfile';
 import ComingSoon from './components/common/ComingSoon';
+import { useData } from './context/useData';
 import './styles/global.css';
 
 function MainWebsite({ onNavigate, currentView }) {
@@ -102,8 +103,31 @@ const resolveCurrentView = () => {
 };
 
 function AppContent() {
+  const { branding } = useData();
   const [currentView, setCurrentView] = useState(resolveCurrentView);
   const [redirectAfterLogin, setRedirectAfterLogin] = useState(null);
+
+  // Sync Favicon and Document Title dynamically with Branding Settings
+  useEffect(() => {
+    if (branding?.siteName) {
+      document.title = branding.siteName;
+    }
+
+    let link = document.querySelector("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+
+    if (branding?.showLogo && branding?.logoType === 'image' && branding?.logoImage) {
+      link.type = 'image/png';
+      link.href = branding.logoImage;
+    } else {
+      link.type = 'image/svg+xml';
+      link.href = '/favicon.svg';
+    }
+  }, [branding]);
 
   useEffect(() => {
     const handleLocationChange = () => {
@@ -145,6 +169,7 @@ function AppContent() {
     }
 
     window.history.pushState({}, '', targetPath);
+    window.dispatchEvent(new PopStateEvent('popstate'));
     setCurrentView(
       viewName === 'doctor-profile' 
         ? `doctor-profile:${param}` 
