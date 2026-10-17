@@ -209,13 +209,23 @@ export const DataProvider = ({ children }) => {
         if (!isMounted) return;
 
         if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)) {
-          setDoctors(docsRes.value.map(d => ({
-            ...d,
-            id: d._id || d.id,
-            specialty: d.specialization || d.specialty || 'General Physician',
-            price: d.fees || d.price || 500,
-            experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience')
-          })));
+          setDoctors(prevDoctors => {
+            return docsRes.value.map(d => {
+              const existing = prevDoctors.find(p => String(p.id || p._id) === String(d._id || d.id));
+              return {
+                ...d,
+                id: d._id || d.id,
+                specialty: d.specialization || d.specialty || 'General Physician',
+                price: d.fees || d.price || 500,
+                experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience'),
+                licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
+                awards: Array.isArray(d.awards) && d.awards.length > 0 ? d.awards : (existing?.awards || []),
+                certifications: Array.isArray(d.certifications) && d.certifications.length > 0 ? d.certifications : (existing?.certifications || []),
+                memberships: Array.isArray(d.memberships) && d.memberships.length > 0 ? d.memberships : (existing?.memberships || []),
+                careerExperience: Array.isArray(d.careerExperience) && d.careerExperience.length > 0 ? d.careerExperience : (existing?.careerExperience || [])
+              };
+            });
+          });
         }
         if (hospsRes.status === 'fulfilled' && Array.isArray(hospsRes.value)) {
           setHospitals(hospsRes.value.map(h => ({
@@ -384,21 +394,30 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateDoctor = (id, updatedData) => {
-    setDoctors(prev =>
-      prev.map(doc => {
+    setDoctors(prev => {
+      const updated = prev.map(doc => {
         if (String(doc.id || doc._id) === String(id)) {
           const merged = {
             ...doc,
             ...updatedData,
-            rating: parseFloat(updatedData.rating) || doc.rating,
-            price: parseInt(updatedData.price, 10) || doc.price,
+            rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
+            price: updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : doc.price,
+            awards: updatedData.awards !== undefined ? updatedData.awards : doc.awards,
+            certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
+            memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
+            careerExperience: updatedData.careerExperience !== undefined ? updatedData.careerExperience : doc.careerExperience,
+            licenseNumber: updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : doc.licenseNumber
           };
           api.updateDoctor(id, merged).catch(() => {});
           return merged;
         }
         return doc;
-      })
-    );
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
   const deleteDoctor = (id) => {
