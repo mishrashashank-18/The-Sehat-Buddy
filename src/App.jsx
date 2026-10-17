@@ -95,7 +95,48 @@ const resolveCurrentView = () => {
   return 'site';
 };
 
-const SEHAT_BUDDY_FAVICON_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFFFFF'/%3E%3Cpath d='M24.5 17.5c1.3-1.3 2.6-2.8 2.6-4.8 0-2.3-1.9-4.2-4.2-4.2-1.5 0-2.6.4-3.9 1.7-1.3-1.3-2.4-1.7-3.9-1.7-2.3 0-4.2 1.9-4.2 4.2 0 2 1.3 3.5 2.6 4.8l6.1 6.1 5-6.1Z' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M9.5 15.5h3.6l.6-.9 1.8 3.8 1.8-5.8 1.4 2.9h4.8' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E`;
+const SEHAT_BUDDY_FAVICON_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23FFFFFF'/%3E%3Cpath d='M24.5 17.5c1.3-1.3 2.6-2.8 2.6-4.8 0-2.3-1.9-4.2-4.2-4.2-1.5 0-2.6.4-3.9 1.7-1.3-1.3-2.4-1.7-3.9-1.7-2.3 0-4.2 1.9-4.2 4.2 0 2 1.3 3.5 2.6 4.8l6.1 6.1 5-6.1Z' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9.5 15.5h3.6l.6-.9 1.8 3.8 1.8-5.8 1.4 2.9h4.8' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E`;
+
+const makeCircularFavicon = (imageUrl) => {
+  return new Promise((resolve) => {
+    if (!imageUrl) return resolve(SEHAT_BUDDY_FAVICON_SVG);
+    if (imageUrl.startsWith('data:image/svg+xml') && imageUrl.includes('circle')) {
+      return resolve(imageUrl);
+    }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(imageUrl);
+
+        // Circular clip
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2, true);
+        ctx.closePath();
+        ctx.clip();
+
+        // White background inside circle
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw image centered inside circle
+        const pad = 4;
+        ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
+
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(imageUrl);
+      }
+    };
+    img.onerror = () => resolve(imageUrl);
+    img.src = imageUrl;
+  });
+};
 
 function AppContent() {
   const { branding } = useData();
@@ -108,24 +149,37 @@ function AppContent() {
       document.title = branding.siteName;
     }
 
-    const faviconUrl =
+    let isMounted = true;
+    const rawFavicon =
       branding?.showLogo && branding?.logoType === 'image' && branding?.logoImage
         ? branding.logoImage
         : SEHAT_BUDDY_FAVICON_SVG;
 
-    // Remove any existing icons to bust browser favicon cache
-    document.querySelectorAll("link[rel*='icon']").forEach((el) => el.remove());
+    const applyFavicon = (url) => {
+      if (!isMounted) return;
+      document.querySelectorAll("link[rel*='icon']").forEach((el) => el.remove());
 
-    const link = document.createElement('link');
-    link.rel = 'icon';
-    link.type = faviconUrl.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
-    link.href = faviconUrl;
-    document.head.appendChild(link);
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      link.type = url.startsWith('data:image/svg') ? 'image/svg+xml' : 'image/png';
+      link.href = url.startsWith('data:') ? url : `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      document.head.appendChild(link);
 
-    const shortcut = document.createElement('link');
-    shortcut.rel = 'shortcut icon';
-    shortcut.href = faviconUrl;
-    document.head.appendChild(shortcut);
+      const shortcut = document.createElement('link');
+      shortcut.rel = 'shortcut icon';
+      shortcut.href = link.href;
+      document.head.appendChild(shortcut);
+    };
+
+    if (rawFavicon === SEHAT_BUDDY_FAVICON_SVG) {
+      applyFavicon(SEHAT_BUDDY_FAVICON_SVG);
+    } else {
+      makeCircularFavicon(rawFavicon).then(applyFavicon);
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, [branding]);
 
   useEffect(() => {
