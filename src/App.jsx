@@ -85,6 +85,13 @@ const resolveCurrentView = () => {
     const clean = hash.replace(/^#\/?coming-soon\//, '').trim();
     if (clean) return 'coming-soon:' + clean;
   }
+  if (path === '/lab-tests' || path === '/services/lab-tests' || hash === '#lab-tests') return 'coming-soon:lab-tests';
+  if (path === '/surgeries' || path === '/services/surgeries' || hash === '#surgeries') return 'coming-soon:surgeries';
+  if (path === '/senior-care' || path === '/services/senior-care') return 'coming-soon:senior-care';
+  if (path === '/women-care' || path === '/services/women-care') return 'coming-soon:women-care';
+  if (path === '/kid-care' || path === '/services/kid-care') return 'coming-soon:kid-care';
+  if (path === '/care-services' || hash === '#care-services') return 'coming-soon:care-services';
+  if (path === '/services' || hash === '#services') return 'coming-soon:all-services';
   if (path === '/about' || hash === '#about') return 'coming-soon:about';
   if (path === '/contact' || hash === '#contact') return 'coming-soon:contact';
   if (path === '/privacy' || hash === '#privacy') return 'coming-soon:privacy';

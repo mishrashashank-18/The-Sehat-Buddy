@@ -13,6 +13,8 @@ const ServicesSection = ({ onNavigate }) => {
       <Container>
         <SectionHeader
           title="Explore Top Services"
+          linkText={`View All Services (${services?.length || 0})`}
+          onLinkClick={() => onNavigate && onNavigate('coming-soon', 'all-services')}
         />
         <div className={styles.grid}>
           {services?.map(service => (
