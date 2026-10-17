@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { 
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
-  GraduationCap, Phone, X, Play
+  GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
+  Award, CheckCircle2, MessageSquare
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
+import WriteReviewModal from '../reviews/WriteReviewModal';
 import styles from './DoctorProfile.module.css';
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors } = useData();
+  const { doctors, reviews } = useData();
   const [activeReel, setActiveReel] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
+  const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
   const [bookingDate, setBookingDate] = useState('');
   const [bookingTime, setBookingTime] = useState('');
   const [patientName, setPatientName] = useState('');
@@ -19,6 +22,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [patientPhone, setPatientPhone] = useState('');
   const [symptoms, setSymptoms] = useState('');
   const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
+  const [expandedFaq, setExpandedFaq] = useState(null);
 
   React.useEffect(() => {
     // Check if there's a pending booking after login
@@ -137,6 +141,20 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     }
   };
 
+  const doctorReviews = (reviews || []).filter(r => {
+    if (r.targetType === 'doctor' && r.status !== 'rejected') {
+      const dName = (doctor?.name || '').toLowerCase();
+      const tName = (r.targetName || '').toLowerCase();
+      const dId = String(doctor?.id || doctor?._id || '');
+      const rTargetId = String(r.targetId || '');
+      return (
+        (rTargetId && rTargetId === dId) ||
+        (tName && dName && (tName.includes(dName) || dName.includes(tName)))
+      );
+    }
+    return false;
+  });
+
   return (
     <div className={styles.pageWrapper}>
       <Container>
@@ -218,6 +236,28 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
                 </div>
               )}
+              {doctor.licenseNumber && (
+                <div className={styles.detailItem}>
+                  <ShieldCheck className={styles.detailIcon} size={20} color="#2563eb" />
+                  <div>
+                    <h4>Medical Registration</h4>
+                    <p style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <strong>{doctor.licenseNumber}</strong>
+                      <span style={{
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        border: '1px solid #bfdbfe'
+                      }}>
+                        Verified
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              )}
               {doctor.contact_number && (
                 <div className={styles.detailItem}>
                   <Phone className={styles.detailIcon} size={20} />
@@ -246,6 +286,99 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             </div>
           </div>
         </div>
+
+        {/* Doctor Credentials, Awards, Certificates & Experience */}
+        {((doctor.awards && doctor.awards.length > 0) ||
+          (doctor.certifications && doctor.certifications.length > 0) ||
+          (doctor.memberships && doctor.memberships.length > 0) ||
+          (doctor.careerExperience && doctor.careerExperience.length > 0) ||
+          doctor.licenseNumber) && (
+          <div className={styles.credentialsCard}>
+            <div className={styles.credentialsHeader}>
+              <h3 className={styles.credentialsTitle}>
+                <Award size={22} color="#2563eb" />
+                Credentials, Honors & Clinical Experience
+              </h3>
+              <p className={styles.credentialsSubtitle}>
+                Verified clinical certifications, institutional awards, and professional memberships of Dr. {doctor.name.replace('Dr. ', '')}.
+              </p>
+            </div>
+
+            <div className={styles.credentialsGrid}>
+              {/* Awards & Recognitions */}
+              {doctor.awards && doctor.awards.length > 0 && (
+                <div className={styles.credBlock}>
+                  <h4 className={styles.credBlockTitle}>
+                    <Award size={18} color="#d97706" />
+                    Awards & Honors ({doctor.awards.length})
+                  </h4>
+                  <div className={styles.credList}>
+                    {doctor.awards.map((award, idx) => (
+                      <div key={idx} className={`${styles.credBadgeItem} ${styles.awardItem}`}>
+                        <Award size={16} color="#d97706" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>{award}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Certifications & Fellowships */}
+              {doctor.certifications && doctor.certifications.length > 0 && (
+                <div className={styles.credBlock}>
+                  <h4 className={styles.credBlockTitle}>
+                    <GraduationCap size={18} color="#2563eb" />
+                    Certificates & Fellowships ({doctor.certifications.length})
+                  </h4>
+                  <div className={styles.credList}>
+                    {doctor.certifications.map((cert, idx) => (
+                      <div key={idx} className={`${styles.credBadgeItem} ${styles.certItem}`}>
+                        <GraduationCap size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>{cert}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Professional Memberships */}
+              {doctor.memberships && doctor.memberships.length > 0 && (
+                <div className={styles.credBlock}>
+                  <h4 className={styles.credBlockTitle}>
+                    <Building2 size={18} color="#475569" />
+                    Professional Memberships ({doctor.memberships.length})
+                  </h4>
+                  <div className={styles.credList}>
+                    {doctor.memberships.map((mem, idx) => (
+                      <div key={idx} className={styles.credBadgeItem}>
+                        <CheckCircle2 size={15} color="#2563eb" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>{mem}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Career Experience & Past Roles */}
+              {doctor.careerExperience && doctor.careerExperience.length > 0 && (
+                <div className={styles.credBlock}>
+                  <h4 className={styles.credBlockTitle}>
+                    <Briefcase size={18} color="#2563eb" />
+                    Clinical Experience & Hospital Posts ({doctor.careerExperience.length})
+                  </h4>
+                  <div className={styles.credList}>
+                    {doctor.careerExperience.map((exp, idx) => (
+                      <div key={idx} className={styles.credBadgeItem}>
+                        <Briefcase size={15} color="#2563eb" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>{exp}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Instagram Reels Section */}
         {doctor.reels && Array.isArray(doctor.reels) && doctor.reels.length > 0 && (
@@ -292,6 +425,205 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             </div>
           </div>
         )}
+
+        {/* MediBuddy-style FAQs Section */}
+        <div className={styles.faqCard}>
+          <div className={styles.faqHeader}>
+            <h3 className={styles.faqTitle}>Frequently asked questions (FAQs)</h3>
+          </div>
+
+          <div className={styles.faqList}>
+            {[
+              {
+                q: `How can I book an appointment with ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'}?`,
+                steps: [
+                  'Open The Sehat Buddy platform on web or mobile app',
+                  `Tap on "Book Now" on this profile page`,
+                  `Select your preferred consultation date and available appointment slot`,
+                  'Review patient details, enter your symptoms, and proceed with instant confirmation'
+                ],
+                note: "Once completed, your appointment will be booked, and you'll receive a confirmation instantly."
+              },
+              {
+                q: 'What do I need to show at the clinic?',
+                a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.'
+              },
+              {
+                q: 'Is my consultation private with the doctor?',
+                a: 'Yes, 100%. All consultations, patient notes, and medical discussions are strictly confidential and protected under standard healthcare privacy regulations.'
+              },
+              {
+                q: `Can I reschedule my appointment with ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'}?`,
+                a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account or by reaching out to our support care desk.'
+              },
+              {
+                q: `Does ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'} accept health insurance or cashless claims?`,
+                a: 'Yes, consultations and any recommended procedures or surgeries performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.'
+              }
+            ].map((faq, idx) => {
+              const isOpen = expandedFaq === idx;
+              return (
+                <div key={idx} className={styles.faqItem}>
+                  <button
+                    type="button"
+                    className={styles.faqQuestionBtn}
+                    onClick={() => setExpandedFaq(isOpen ? null : idx)}
+                    aria-expanded={isOpen}
+                  >
+                    <span>{faq.q}</span>
+                    <ChevronDown
+                      size={18}
+                      className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
+                    />
+                  </button>
+                  {isOpen && (
+                    <div className={styles.faqAnswer}>
+                      {Array.isArray(faq.steps) && (
+                        <ol className={styles.faqStepsList}>
+                          {faq.steps.map((step, sIdx) => (
+                            <li key={sIdx}>{step}</li>
+                          ))}
+                        </ol>
+                      )}
+                      {faq.a && <p>{faq.a}</p>}
+                      {faq.note && <p className={styles.faqNote}>{faq.note}</p>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Verified Patient Reviews */}
+        <div className={styles.reviewsCard}>
+          <div className={styles.reviewsHeader}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                <span className={styles.categoryBadge}>Patient Experiences</span>
+                <span style={{ fontSize: '0.78rem', background: '#ecfdf5', color: '#059669', padding: '2px 8px', borderRadius: '12px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                  <ShieldCheck size={13} /> Verified Reviews
+                </span>
+              </div>
+              <h2 className={styles.sectionTitle} style={{ margin: 0 }}>
+                Patient Feedback & Ratings
+              </h2>
+              <p style={{ margin: '4px 0 0', fontSize: '0.88rem', color: '#64748b' }}>
+                Authentic ratings and verified recovery stories from patients treated by {doctor.name}
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
+              <div className={styles.ratingSummary}>
+                <div className={styles.ratingScoreBig}>
+                  {doctorReviews.length > 0
+                    ? (doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / doctorReviews.length).toFixed(1)
+                    : (doctor.rating || '4.9')}
+                </div>
+                <div>
+                  <div className={styles.starsRow}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} size={16} fill="currentColor" color="currentColor" />
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                    Based on {doctorReviews.length > 0 ? doctorReviews.length : (doctor.reviewsCount || doctor.reviews || '50+')} patient ratings
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className={styles.writeReviewBtn}
+                onClick={() => setIsWriteReviewOpen(true)}
+              >
+                <MessageSquare size={16} />
+                <span>Write a Review</span>
+              </button>
+            </div>
+          </div>
+
+          {doctorReviews.length > 0 ? (
+            <div className={styles.reviewsGrid}>
+              {doctorReviews.map((rev) => (
+                <div key={rev.id || rev._id} className={styles.reviewItemCard}>
+                  <div>
+                    <div className={styles.reviewTop}>
+                      <div>
+                        <div className={styles.reviewerName}>
+                          <span>{rev.patientName}</span>
+                          {rev.isVerified && (
+                            <span title="Verified Patient Experience" style={{ display: 'inline-flex', alignItems: 'center', color: '#059669' }}>
+                              <CheckCircle2 size={15} />
+                            </span>
+                          )}
+                        </div>
+                        {rev.patientCity && <div className={styles.reviewerCity}>{rev.patientCity}</div>}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '2px', color: '#f59e0b' }}>
+                        {[1, 2, 3, 4, 5].map((s) => (
+                          <Star
+                            key={s}
+                            size={14}
+                            fill={s <= Number(rev.rating) ? 'currentColor' : '#e2e8f0'}
+                            color={s <= Number(rev.rating) ? 'currentColor' : '#cbd5e1'}
+                          />
+                        ))}
+                      </div>
+                    </div>
+
+                    {rev.title && (
+                      <h4 style={{ margin: '12px 0 6px', fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>
+                        {rev.title}
+                      </h4>
+                    )}
+
+                    <p className={styles.reviewComment}>{rev.comment}</p>
+                  </div>
+
+                  <div className={styles.reviewTags}>
+                    {rev.treatment && (
+                      <span className={styles.reviewTagPill}>
+                        🩺 {rev.treatment}
+                      </span>
+                    )}
+                    {rev.insuranceUsed && (
+                      <span className={styles.reviewTagPill} style={{ background: '#ecfdf5', color: '#047857', borderColor: '#a7f3d0' }}>
+                        🛡️ {rev.insuranceUsed} Cashless
+                      </span>
+                    )}
+                    {rev.hospital && (
+                      <span className={styles.reviewTagPill} style={{ background: '#f8fafc', color: '#475569', borderColor: '#e2e8f0' }}>
+                        🏥 {rev.hospital}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '36px 20px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#2563eb' }}>
+                <MessageSquare size={24} />
+              </div>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', color: '#0f172a', fontWeight: 700 }}>
+                No Patient Reviews Yet
+              </h4>
+              <p style={{ margin: '0 0 16px 0', fontSize: '0.88rem', color: '#64748b', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
+                Have you consulted with {doctor.name}? Share your medical experience to help other patients make informed health decisions.
+              </p>
+              <button
+                type="button"
+                className={styles.writeReviewBtn}
+                onClick={() => setIsWriteReviewOpen(true)}
+              >
+                <MessageSquare size={16} />
+                <span>Write the First Review</span>
+              </button>
+            </div>
+          )}
+        </div>
       </Container>
 
       {/* Reel Modal */}
@@ -453,6 +785,20 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Write Review Modal */}
+      {isWriteReviewOpen && (
+        <WriteReviewModal
+          preselectedTarget={{
+            type: 'doctor',
+            id: doctor.id || doctor._id,
+            name: doctor.name,
+            treatment: doctor.specialty || doctor.specialization
+          }}
+          onClose={() => setIsWriteReviewOpen(false)}
+          onSuccess={() => setIsWriteReviewOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Building2, Upload, AlertCircle, Plus, Check, Video, Sparkles, Star, Loader2 } from 'lucide-react';
+import { X, Building2, Upload, AlertCircle, Plus, Check, Video, Sparkles, Star, Loader2, ShieldCheck } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
+import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import styles from './HospitalFormModal.module.css';
 
 const DEFAULT_SPECIALTIES = [
@@ -125,7 +126,13 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         latitude: hospitalToEdit.latitude !== undefined && hospitalToEdit.latitude !== null ? hospitalToEdit.latitude : '',
         longitude: hospitalToEdit.longitude !== undefined && hospitalToEdit.longitude !== null ? hospitalToEdit.longitude : '',
         staff_emails: Array.from(seenStaffEmails),
-        staff_doctors: initialStaffDocs
+        staff_doctors: initialStaffDocs,
+        cashlessInsurance: hospitalToEdit.cashlessInsurance !== undefined ? hospitalToEdit.cashlessInsurance : true,
+        acceptedInsurances: Array.isArray(hospitalToEdit.acceptedInsurances) && hospitalToEdit.acceptedInsurances.length > 0 ? hospitalToEdit.acceptedInsurances : defaultAcceptedInsurances,
+        tpaPhone: hospitalToEdit.tpaHelpdesk?.phone || '',
+        tpaEmail: hospitalToEdit.tpaHelpdesk?.email || '',
+        tpaPreAuthTime: hospitalToEdit.tpaHelpdesk?.preAuthTime || '30 Mins Cashless Pre-Approval',
+        insuranceHelpline: hospitalToEdit.insuranceHelpline || '1800-SEHAT-CARE'
       };
     }
     return {
@@ -148,7 +155,13 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       latitude: '',
       longitude: '',
       staff_emails: [],
-      staff_doctors: []
+      staff_doctors: [],
+      cashlessInsurance: true,
+      acceptedInsurances: defaultAcceptedInsurances,
+      tpaPhone: '',
+      tpaEmail: '',
+      tpaPreAuthTime: '30 Mins Cashless Pre-Approval',
+      insuranceHelpline: '1800-SEHAT-CARE'
     };
   });
 
@@ -292,6 +305,14 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       star_doctors: formData.star_doctors,
       staff_emails: formData.staff_emails,
       staff_doctors: formData.staff_doctors,
+      cashlessInsurance: formData.cashlessInsurance,
+      acceptedInsurances: formData.acceptedInsurances,
+      tpaHelpdesk: {
+        phone: formData.tpaPhone.trim() || formData.phone.trim(),
+        email: formData.tpaEmail.trim() || formData.email.trim(),
+        preAuthTime: formData.tpaPreAuthTime.trim() || '30 Mins Cashless Pre-Approval'
+      },
+      insuranceHelpline: formData.insuranceHelpline.trim() || '1800-SEHAT-CARE',
       latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
       longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
     };
@@ -918,6 +939,103 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               })}
             </div>
           )}
+        </div>
+
+        {/* Section: Insurance & Cashless Mediclaim Desk */}
+        <div style={{ marginTop: '24px', background: '#f8fafc', border: '1.5px solid #d1fae5', borderRadius: '14px', padding: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <ShieldCheck size={20} color="#059669" />
+              <strong style={{ fontSize: '1rem', color: '#065f46' }}>Insurance & Cashless Facility Desk</strong>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 700, color: '#065f46', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={formData.cashlessInsurance}
+                onChange={(e) => setFormData({ ...formData, cashlessInsurance: e.target.checked })}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+              />
+              Accepts 100% Cashless Insurance
+            </label>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+            <div className={styles.formGroup}>
+              <label>TPA Desk Phone</label>
+              <input
+                type="text"
+                placeholder="e.g. 080-45678900"
+                value={formData.tpaPhone}
+                onChange={(e) => setFormData({ ...formData, tpaPhone: e.target.value })}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>TPA Desk Email</label>
+              <input
+                type="email"
+                placeholder="e.g. tpa@hospital.com"
+                value={formData.tpaEmail}
+                onChange={(e) => setFormData({ ...formData, tpaEmail: e.target.value })}
+              />
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Pre-Auth Turnaround Time</label>
+              <input
+                type="text"
+                placeholder="e.g. 30 Mins Cashless Pre-Approval"
+                value={formData.tpaPreAuthTime}
+                onChange={(e) => setFormData({ ...formData, tpaPreAuthTime: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+              Select Accepted Insurance Companies & TPAs:
+            </label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {insurancePartners.map((partner) => {
+                const isSelected = formData.acceptedInsurances.includes(partner.name);
+                return (
+                  <button
+                    key={partner.id}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setFormData({
+                          ...formData,
+                          acceptedInsurances: formData.acceptedInsurances.filter(n => n !== partner.name)
+                        });
+                      } else {
+                        setFormData({
+                          ...formData,
+                          acceptedInsurances: [...formData.acceptedInsurances, partner.name]
+                        });
+                      }
+                    }}
+                    style={{
+                      background: isSelected ? '#ecfdf5' : '#ffffff',
+                      border: `1.5px solid ${isSelected ? '#059669' : '#cbd5e1'}`,
+                      color: isSelected ? '#065f46' : '#475569',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    {isSelected ? '✓ ' : '+ '} {partner.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className={styles.footer}>

@@ -18,11 +18,20 @@ import {
   Navigation,
   Loader2,
   Camera,
-  Image as ImageIcon
+  Image as ImageIcon,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Edit3,
+  ChevronDown,
+  HelpCircle
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
 import HospitalDirections from './HospitalDirections';
+import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
+import WriteReviewModal from '../reviews/WriteReviewModal';
+import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
 import styles from './HospitalProfile.module.css';
 
 const DEFAULT_REELS = [
@@ -42,10 +51,22 @@ const DEFAULT_VIDEOS = [
 ];
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors } = useData();
+  const { hospitals, doctors, reviews } = useData();
   const [activeReel, setActiveReel] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
   const [activePhoto, setActivePhoto] = useState(null);
+  const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
+  const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState('overview');
+  const [expandedHospitalFaq, setExpandedHospitalFaq] = useState(null);
+
+  const scrollToHospitalSection = (sectionId, tabKey) => {
+    setActiveProfileTab(tabKey);
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   const hospital = hospitals.find(h => String(h.id || h._id) === String(hospitalId)) || hospitals[0];
 
@@ -198,7 +219,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         </button>
 
         {/* Hospital Hero Card */}
-        <div className={styles.profileCard}>
+        <div className={styles.profileCard} id="hospital-overview">
           <div className={styles.imageCol}>
             <div className={styles.imageWrapper}>
               <img
@@ -260,25 +281,36 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 <MapPin size={18} />
                 <span>{hospital.address}</span>
               </div>
-              <button
-                type="button"
-                className={styles.getDirectionsBtn}
-                onClick={handleGetDirections}
-                disabled={isLocating}
-                title="Get directions to this hospital"
-              >
-                {isLocating ? (
-                  <>
-                    <Loader2 size={16} className={styles.spinIcon} />
-                    <span>Getting your location...</span>
-                  </>
-                ) : (
-                  <>
-                    <Navigation size={16} />
-                    <span>📍 Get Directions</span>
-                  </>
-                )}
-              </button>
+              <div className={styles.headerActionsStack}>
+                <button
+                  type="button"
+                  className={styles.insuranceBtn}
+                  onClick={() => setIsInsuranceModalOpen(true)}
+                  title="Search all available insurances in this hospital"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Insurance</span>
+                </button>
+                <button
+                  type="button"
+                  className={styles.getDirectionsBtn}
+                  onClick={handleGetDirections}
+                  disabled={isLocating}
+                  title="Get directions to this hospital"
+                >
+                  {isLocating ? (
+                    <>
+                      <Loader2 size={16} className={styles.spinIcon} />
+                      <span>Getting your location...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Navigation size={16} />
+                      <span>📍 Get Directions</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {locationError && (
@@ -326,8 +358,73 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           </div>
         </div>
 
+        {/* Practo-style Sticky Sub-Nav */}
+        <div className={styles.practoNavWrap}>
+          <button
+            type="button"
+            className={`${styles.practoNavTab} ${activeProfileTab === 'overview' ? styles.practoNavTabActive : ''}`}
+            onClick={() => scrollToHospitalSection('hospital-overview', 'overview')}
+          >
+            Overview
+          </button>
+
+          {starDoctorsList.length > 0 && (
+            <button
+              type="button"
+              className={`${styles.practoNavTab} ${activeProfileTab === 'doctors' ? styles.practoNavTabActive : ''}`}
+              onClick={() => scrollToHospitalSection('hospital-doctors', 'doctors')}
+            >
+              Doctors ({starDoctorsList.length})
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`${styles.practoNavTab} ${activeProfileTab === 'specialities' ? styles.practoNavTabActive : ''}`}
+            onClick={() => scrollToHospitalSection('hospital-specialities', 'specialities')}
+          >
+            Specialities & Procedures
+          </button>
+
+          {(displayVideos.length > 0 || displayReels.length > 0) && (
+            <button
+              type="button"
+              className={`${styles.practoNavTab} ${activeProfileTab === 'media' ? styles.practoNavTabActive : ''}`}
+              onClick={() => scrollToHospitalSection('hospital-media', 'media')}
+            >
+              Videos & Shorts ({displayVideos.length + displayReels.length})
+            </button>
+          )}
+
+          {Array.isArray(hospital.photos) && hospital.photos.length > 0 && (
+            <button
+              type="button"
+              className={`${styles.practoNavTab} ${activeProfileTab === 'photos' ? styles.practoNavTabActive : ''}`}
+              onClick={() => scrollToHospitalSection('hospital-photos', 'photos')}
+            >
+              Photos ({hospital.photos.length})
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`${styles.practoNavTab} ${activeProfileTab === 'faqs' ? styles.practoNavTabActive : ''}`}
+            onClick={() => scrollToHospitalSection('hospital-faqs', 'faqs')}
+          >
+            FAQs
+          </button>
+
+          <button
+            type="button"
+            className={`${styles.practoNavTab} ${activeProfileTab === 'reviews' ? styles.practoNavTabActive : ''}`}
+            onClick={() => scrollToHospitalSection('hospital-reviews', 'reviews')}
+          >
+            Patient Stories
+          </button>
+        </div>
+
         {/* SECTION 1: STAR DOCTORS */}
-        <section className={styles.sectionBlock}>
+        <section className={styles.sectionBlock} id="hospital-doctors">
           <div className={styles.sectionHeader}>
             <div className={styles.sectionTitleGroup}>
               <h2>
@@ -397,9 +494,14 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           </div>
         </section>
 
-        {/* SECTION 2: INSTAGRAM REELS (UP TO 5, CENTER ALIGNED) */}
+        {/* SECTION 2: SPECIALITIES & CLINICAL PROCEDURES */}
+        <div id="hospital-specialities" style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.04)', border: '1px solid #e2e8f0' }}>
+          <SpecialitiesProceduresSection onNavigate={onNavigate} />
+        </div>
+
+        {/* SECTION 3: INSTAGRAM REELS (UP TO 5, CENTER ALIGNED) */}
         {displayReels.length > 0 && (
-          <section className={styles.sectionBlock}>
+          <section className={styles.sectionBlock} id="hospital-media">
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleGroup}>
                 <h2>
@@ -486,7 +588,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         )}
         {/* SECTION 4: INTERIOR & EXTERIOR GALLERY */}
         {Array.isArray(hospital.photos) && hospital.photos.length > 0 && (
-          <section className={styles.sectionBlock}>
+          <section className={styles.sectionBlock} id="hospital-photos">
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleGroup}>
                 <h2>
@@ -573,6 +675,172 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </div>
           </section>
         )}
+
+        {/* SECTION 5: FREQUENTLY ASKED QUESTIONS (FAQS) */}
+        <section className={styles.sectionBlock} id="hospital-faqs">
+          <div className={styles.faqCard}>
+            <div className={styles.faqHeader}>
+              <h3 className={styles.faqTitle}>Frequently asked questions (FAQs)</h3>
+              <p className={styles.faqSubtitle}>
+                Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
+              </p>
+            </div>
+
+            <div className={styles.faqList}>
+              {[
+                {
+                  q: `How does 100% cashless insurance pre-authorization work at ${hospital.name}?`,
+                  steps: [
+                    `Visit the Cashless Insurance Helpdesk at ${hospital.name} or start cashless verification on The Sehat Buddy`,
+                    'Present your valid health insurance policy copy / digital card and patient government photo ID',
+                    'Our hospital TPA coordinator submits your electronic pre-authorization within 30 minutes',
+                    'Once approved by your insurer, your treatment begins with zero upfront cash deposit'
+                  ],
+                  note: 'Our hospital TPA desk coordinates directly with all leading insurance providers for paperless, cashless settlement.'
+                },
+                {
+                  q: `What documents are required for patient admission at ${hospital.name}?`,
+                  a: "Please carry the patient's valid photo ID (Aadhar Card, Passport, or Voter ID), health insurance e-card / policy document, doctor's admission recommendation note, and all relevant diagnostic reports, blood tests, or imaging scans."
+                },
+                {
+                  q: `Is 24x7 emergency and trauma care available at ${hospital.name}?`,
+                  a: `Yes, ${hospital.name} is fully equipped with 24x7 emergency triage, ICU, emergency trauma surgical teams, diagnostic imaging, and dedicated ambulance services. Call ${hospital.phone || 'our helpline'} for immediate emergency assistance.`
+                },
+                {
+                  q: `Can I consult star doctors and board-certified surgeons at ${hospital.name}?`,
+                  a: `Yes, ${hospital.name} features eminent medical consultants, heads of surgery, and specialists. You can view their profiles, consultation fees, and schedule direct appointments right on this page.`
+                },
+                {
+                  q: `Which health insurance companies and TPAs are accepted at ${hospital.name}?`,
+                  a: `${hospital.name} is empaneled with all major public and private health insurance providers and TPAs including Star Health, Care Health, HDFC ERGO, ICICI Lombard, Niva Bupa, Bajaj Allianz, Medi Assist, Paramount TPA, and more.`
+                },
+                {
+                  q: `How do I get directions to ${hospital.name}?`,
+                  a: "Click the 'Get Directions' button in the location section above to open GPS navigation and view turn-by-turn routes from your current location."
+                }
+              ].map((faq, idx) => {
+                const isOpen = expandedHospitalFaq === idx;
+                return (
+                  <div key={idx} className={styles.faqItem}>
+                    <button
+                      type="button"
+                      className={styles.faqQuestionBtn}
+                      onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
+                      aria-expanded={isOpen}
+                    >
+                      <span>{faq.q}</span>
+                      <ChevronDown
+                        size={18}
+                        className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
+                      />
+                    </button>
+                    {isOpen && (
+                      <div className={styles.faqAnswer}>
+                        {Array.isArray(faq.steps) && (
+                          <ol className={styles.faqStepsList}>
+                            {faq.steps.map((step, sIdx) => (
+                              <li key={sIdx}>{step}</li>
+                            ))}
+                          </ol>
+                        )}
+                        {faq.a && <p>{faq.a}</p>}
+                        {faq.note && <p className={styles.faqNote}>{faq.note}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 7: VERIFIED PATIENT REVIEWS */}
+        <section className={styles.sectionBlock} id="hospital-reviews">
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionTitleGroup}>
+              <h2>
+                <Star size={24} color="#f59e0b" />
+                Verified Patient Reviews & Experiences
+              </h2>
+              <p>Real feedback from patients treated at {hospital.name}.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsWriteReviewModalOpen(true)}
+              style={{
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '8px 18px',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <Edit3 size={15} /> Write a Review
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            {reviews
+              .filter(r => r.status !== 'rejected')
+              .filter(r => 
+                (r.targetName && hospital?.name && r.targetName.toLowerCase().includes(hospital.name.toLowerCase())) ||
+                r.targetType === 'hospital'
+              )
+              .slice(0, 4)
+              .map((rev) => (
+                <div
+                  key={rev.id || rev._id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '16px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>{rev.patientName}</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block' }}>{rev.patientCity}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '2px' }}>
+                      {[1, 2, 3, 4, 5].map(s => (
+                        <Star key={s} size={14} fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'} color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'} />
+                      ))}
+                    </div>
+                  </div>
+
+                  {rev.treatment && (
+                    <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', width: 'fit-content', fontWeight: 600 }}>
+                      Treatment: {rev.treatment}
+                    </span>
+                  )}
+
+                  {rev.title && <strong style={{ fontSize: '0.95rem', color: '#1e293b' }}>{rev.title}</strong>}
+
+                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.55 }}>
+                    {rev.comment}
+                  </p>
+
+                  {rev.insuranceUsed && rev.insuranceUsed !== 'None' && rev.insuranceUsed !== 'None / Self-pay' && (
+                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <ShieldCheck size={13} />
+                      <span>Cashless via {rev.insuranceUsed}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+          </div>
+        </section>
       </Container>
 
       {/* Photo Modal */}
@@ -653,6 +921,23 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           hospital={hospital}
           userLocation={userLocation}
           onClose={() => setShowDirections(false)}
+        />
+      )}
+
+      {/* Cashless Insurances Accepted by this Hospital Modal */}
+      {isInsuranceModalOpen && (
+        <HospitalInsuranceModal
+          hospital={hospital}
+          onClose={() => setIsInsuranceModalOpen(false)}
+        />
+      )}
+
+      {/* Write Hospital Review Modal */}
+      {isWriteReviewModalOpen && (
+        <WriteReviewModal
+          preselectedTarget={{ type: 'hospital', name: hospital.name }}
+          onClose={() => setIsWriteReviewModalOpen(false)}
+          onSuccess={() => setIsWriteReviewModalOpen(false)}
         />
       )}
     </div>

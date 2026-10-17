@@ -17,7 +17,12 @@ import {
   Check,
   Upload,
   Loader2,
-  Camera
+  Camera,
+  Award,
+  ShieldCheck,
+  GraduationCap,
+  Users,
+  Briefcase
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -134,12 +139,74 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Local state for profile form to prevent API spam and CastErrors
   const [profileForm, setProfileForm] = useState(activeDoctor);
+  const [newAwardInput, setNewAwardInput] = useState('');
+  const [newCertInput, setNewCertInput] = useState('');
+  const [newMembershipInput, setNewMembershipInput] = useState('');
+  const [newCareerExpInput, setNewCareerExpInput] = useState('');
+
   React.useEffect(() => {
     setProfileForm({
       ...activeDoctor,
-      experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : activeDoctor.experience
+      experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : (activeDoctor.experience || 5),
+      licenseNumber: activeDoctor.licenseNumber || '',
+      awards: Array.isArray(activeDoctor.awards) ? activeDoctor.awards : [],
+      certifications: Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : [],
+      memberships: Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : [],
+      careerExperience: Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []
     });
   }, [activeDoctor]);
+
+  const handleAddAward = (e) => {
+    e?.preventDefault();
+    if (!newAwardInput.trim()) return;
+    const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
+    setProfileForm({ ...profileForm, awards: [...current, newAwardInput.trim()] });
+    setNewAwardInput('');
+  };
+
+  const handleRemoveAward = (index) => {
+    const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
+    setProfileForm({ ...profileForm, awards: current.filter((_, i) => i !== index) });
+  };
+
+  const handleAddCert = (e) => {
+    e?.preventDefault();
+    if (!newCertInput.trim()) return;
+    const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
+    setProfileForm({ ...profileForm, certifications: [...current, newCertInput.trim()] });
+    setNewCertInput('');
+  };
+
+  const handleRemoveCert = (index) => {
+    const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
+    setProfileForm({ ...profileForm, certifications: current.filter((_, i) => i !== index) });
+  };
+
+  const handleAddMembership = (e) => {
+    e?.preventDefault();
+    if (!newMembershipInput.trim()) return;
+    const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
+    setProfileForm({ ...profileForm, memberships: [...current, newMembershipInput.trim()] });
+    setNewMembershipInput('');
+  };
+
+  const handleRemoveMembership = (index) => {
+    const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
+    setProfileForm({ ...profileForm, memberships: current.filter((_, i) => i !== index) });
+  };
+
+  const handleAddCareerExp = (e) => {
+    e?.preventDefault();
+    if (!newCareerExpInput.trim()) return;
+    const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
+    setProfileForm({ ...profileForm, careerExperience: [...current, newCareerExpInput.trim()] });
+    setNewCareerExpInput('');
+  };
+
+  const handleRemoveCareerExp = (index) => {
+    const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
+    setProfileForm({ ...profileForm, careerExperience: current.filter((_, i) => i !== index) });
+  };
 
   // Profile photo uploading state
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -717,6 +784,19 @@ const DoctorDashboard = ({ onNavigate }) => {
                   />
                 </div>
 
+                <div className={styles.formGroup}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <ShieldCheck size={16} color="#2563eb" />
+                    Medical Registration / License No.
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. DMC-2009-44182 or MCI-48291"
+                    value={profileForm.licenseNumber || ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, licenseNumber: e.target.value })}
+                  />
+                </div>
+
                 <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
                   <label>Available Consultation Hours</label>
                   <input
@@ -734,6 +814,272 @@ const DoctorDashboard = ({ onNavigate }) => {
                     onChange={(e) => setProfileForm({ ...profileForm, about: e.target.value })}
                   />
                 </div>
+              </div>
+
+              {/* SECTION: AWARDS & RECOGNITIONS */}
+              <div style={{ marginTop: '28px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
+                    <Award size={18} color="#2563eb" />
+                    Awards & Recognitions
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {(profileForm.awards || []).length} Awards
+                  </span>
+                </div>
+                <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 12px 0' }}>
+                  Add national, state, or institutional awards and professional honors.
+                </p>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {(profileForm.awards && profileForm.awards.length > 0) ? (
+                    profileForm.awards.map((award, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: '#fef3c7',
+                          color: '#92400e',
+                          border: '1px solid #fde68a',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        <Award size={14} color="#d97706" />
+                        {award}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAward(idx)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#b45309', padding: 0, display: 'flex' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No awards added yet.</span>
+                  )}
+                </div>
+
+                <form onSubmit={handleAddAward} style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. Best Cardiologist 2023 - CSI, National Medical Excellence Award..."
+                    value={newAwardInput}
+                    onChange={(e) => setNewAwardInput(e.target.value)}
+                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
+                  />
+                  <button
+                    type="submit"
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    + Add Award
+                  </button>
+                </form>
+              </div>
+
+              {/* SECTION: CERTIFICATIONS & FELLOWSHIPS */}
+              <div style={{ marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
+                    <GraduationCap size={18} color="#2563eb" />
+                    Certificates & Fellowships
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {(profileForm.certifications || []).length} Certificates
+                  </span>
+                </div>
+                <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 12px 0' }}>
+                  Add clinical fellowships, specialized board certifications, and advanced training credentials.
+                </p>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {(profileForm.certifications && profileForm.certifications.length > 0) ? (
+                    profileForm.certifications.map((cert, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        <GraduationCap size={14} color="#2563eb" />
+                        {cert}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCert(idx)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#60a5fa', padding: 0, display: 'flex' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No certifications added yet.</span>
+                  )}
+                </div>
+
+                <form onSubmit={handleAddCert} style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. Fellow of American College of Cardiology (FACC), ACLS Certified..."
+                    value={newCertInput}
+                    onChange={(e) => setNewCertInput(e.target.value)}
+                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
+                  />
+                  <button
+                    type="submit"
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    + Add Certificate
+                  </button>
+                </form>
+              </div>
+
+              {/* SECTION: PROFESSIONAL MEMBERSHIPS */}
+              <div style={{ marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
+                    <Users size={18} color="#2563eb" />
+                    Professional Medical Memberships
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {(profileForm.memberships || []).length} Memberships
+                  </span>
+                </div>
+                <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 12px 0' }}>
+                  National and international medical societies, associations, and college memberships.
+                </p>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                  {(profileForm.memberships && profileForm.memberships.length > 0) ? (
+                    profileForm.memberships.map((mem, idx) => (
+                      <span
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: '#f8fafc',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          padding: '5px 10px',
+                          borderRadius: '8px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600
+                        }}
+                      >
+                        <Users size={14} color="#64748b" />
+                        {mem}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMembership(idx)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0, display: 'flex' }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No memberships added yet.</span>
+                  )}
+                </div>
+
+                <form onSubmit={handleAddMembership} style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. Cardiological Society of India (CSI), Indian Medical Association (IMA)..."
+                    value={newMembershipInput}
+                    onChange={(e) => setNewMembershipInput(e.target.value)}
+                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
+                  />
+                  <button
+                    type="submit"
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    + Add Membership
+                  </button>
+                </form>
+              </div>
+
+              {/* SECTION: CAREER EXPERIENCE TIMELINE */}
+              <div style={{ marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
+                    <Briefcase size={18} color="#2563eb" />
+                    Career Experience & Hospital Timeline
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                    {(profileForm.careerExperience || []).length} Roles
+                  </span>
+                </div>
+                <p style={{ color: '#64748b', fontSize: '0.82rem', margin: '0 0 12px 0' }}>
+                  Past hospital posts, consultancy tenures, and clinical appointments.
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                  {(profileForm.careerExperience && profileForm.careerExperience.length > 0) ? (
+                    profileForm.careerExperience.map((expRole, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          fontSize: '0.85rem',
+                          color: '#1e293b',
+                          fontWeight: 500
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Briefcase size={14} color="#2563eb" />
+                          <span>{expRole}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCareerExp(idx)}
+                          style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '2px', display: 'flex' }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No past hospital roles added yet.</span>
+                  )}
+                </div>
+
+                <form onSubmit={handleAddCareerExp} style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="e.g. Senior Consultant - Apollo Hospital (2018 - Present)..."
+                    value={newCareerExpInput}
+                    onChange={(e) => setNewCareerExpInput(e.target.value)}
+                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
+                  />
+                  <button
+                    type="submit"
+                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
+                  >
+                    + Add Role
+                  </button>
+                </form>
               </div>
 
               <h4 style={{ marginTop: '24px', marginBottom: '12px' }}>Profile Photo</h4>
@@ -814,9 +1160,14 @@ const DoctorDashboard = ({ onNavigate }) => {
                       ...profileForm,
                       specialization: profileForm.specialty,
                       fees: profileForm.price,
-                      experience: parseInt(profileForm.experience) || 0
+                      experience: parseInt(profileForm.experience) || 0,
+                      licenseNumber: profileForm.licenseNumber || '',
+                      awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
+                      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
+                      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
+                      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : []
                     });
-                    showToast('Profile settings saved successfully!');
+                    showToast('Profile, credentials, awards & experience saved successfully!');
                   }}
                 >
                   Save Settings

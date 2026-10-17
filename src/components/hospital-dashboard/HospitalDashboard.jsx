@@ -23,11 +23,16 @@ import {
   Trash2,
   Upload,
   Loader2,
-  Camera
+  Camera,
+  Activity,
+  Edit2,
+  Search,
+  Filter
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
 import HospitalLocationPicker from './HospitalLocationPicker';
+import SpecialityFormModal from '../admin/SpecialityFormModal';
 import styles from './HospitalDashboard.module.css';
 
 const INITIAL_WARDS = [
@@ -53,7 +58,16 @@ const INITIAL_AMBULANCES = [
 ];
 
 const HospitalDashboard = ({ onNavigate }) => {
-  const { hospitals, doctors, updateHospital, addDoctor } = useData();
+  const {
+    hospitals,
+    doctors,
+    updateHospital,
+    addDoctor,
+    specialitiesProcedures,
+    addSpecialityProcedure,
+    updateSpecialityProcedure,
+    deleteSpecialityProcedure
+  } = useData();
 
   // Selected hospital
   const [selectedHospitalId, setSelectedHospitalId] = useState(() => {
@@ -131,6 +145,66 @@ const HospitalDashboard = ({ onNavigate }) => {
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  // Specialities & Procedures State & Handlers
+  const [editingSpeciality, setEditingSpeciality] = useState(null);
+  const [isSpecialityModalOpen, setIsSpecialityModalOpen] = useState(false);
+  const [specialitySearch, setSpecialitySearch] = useState('');
+  const [specialityTypeFilter, setSpecialityTypeFilter] = useState('all');
+  const [newCustomSpecialtyInput, setNewCustomSpecialtyInput] = useState('');
+
+  const handleToggleHospitalSpecialty = (spec) => {
+    const curSpecs = Array.isArray(activeHospital.specialties) ? [...activeHospital.specialties] : [];
+    const exists = curSpecs.some(s => s.toLowerCase() === spec.toLowerCase());
+    const nextSpecs = exists
+      ? curSpecs.filter(s => s.toLowerCase() !== spec.toLowerCase())
+      : [...curSpecs, spec];
+
+    updateHospital(activeHospital.id || activeHospital._id, {
+      ...activeHospital,
+      specialties: nextSpecs,
+      specialities: nextSpecs
+    });
+    showToast(`${spec} ${exists ? 'removed from' : 'added to'} hospital departments.`);
+  };
+
+  const handleAddCustomHospitalSpecialty = (e) => {
+    e?.preventDefault();
+    const trimmed = newCustomSpecialtyInput.trim();
+    if (!trimmed) return;
+    const curSpecs = Array.isArray(activeHospital.specialties) ? [...activeHospital.specialties] : [];
+    if (curSpecs.some(s => s.toLowerCase() === trimmed.toLowerCase())) {
+      showToast('Department already exists in this hospital.');
+      return;
+    }
+    const nextSpecs = [...curSpecs, trimmed];
+    updateHospital(activeHospital.id || activeHospital._id, {
+      ...activeHospital,
+      specialties: nextSpecs,
+      specialities: nextSpecs
+    });
+    setNewCustomSpecialtyInput('');
+    showToast(`Added "${trimmed}" to hospital departments.`);
+  };
+
+  const handleSaveSpecialityProcedure = (savedData) => {
+    if (editingSpeciality && (editingSpeciality.id || editingSpeciality._id)) {
+      updateSpecialityProcedure(editingSpeciality.id || editingSpeciality._id, savedData);
+      showToast(`Updated "${savedData.name}" successfully!`);
+    } else {
+      addSpecialityProcedure(savedData);
+      showToast(`Added "${savedData.name}" successfully!`);
+    }
+    setIsSpecialityModalOpen(false);
+    setEditingSpeciality(null);
+  };
+
+  const handleDeleteSpecialityProcedure = (item) => {
+    if (window.confirm(`Are you sure you want to delete "${item.name}"? This will remove it from the catalog.`)) {
+      deleteSpecialityProcedure(item.id || item._id);
+      showToast(`"${item.name}" deleted successfully.`);
+    }
   };
 
   const handleAddDoctorSubmit = async (e) => {
@@ -597,6 +671,14 @@ const HospitalDashboard = ({ onNavigate }) => {
               <Building2 size={18} />
               <span>Facility Profile</span>
             </button>
+
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'specialities' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('specialities')}
+            >
+              <Activity size={18} />
+              <span>Specialities & Procedures ({specialitiesProcedures?.length || 0})</span>
+            </button>
           </div>
 
           {activeTab === 'beds' && (
@@ -615,6 +697,19 @@ const HospitalDashboard = ({ onNavigate }) => {
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             >
               <Plus size={16} /> + Add Doctor to Roster
+            </button>
+          )}
+
+          {activeTab === 'specialities' && (
+            <button
+              className={styles.addPrimaryBtn}
+              onClick={() => {
+                setEditingSpeciality(null);
+                setIsSpecialityModalOpen(true);
+              }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <Plus size={16} /> Add Speciality / Procedure
             </button>
           )}
         </div>
@@ -1449,6 +1544,364 @@ const HospitalDashboard = ({ onNavigate }) => {
             </div>
           </div>
         )}
+
+        {/* TAB 7: SPECIALITIES & PROCEDURES MANAGEMENT */}
+        {activeTab === 'specialities' && (
+          <div className={styles.tabContentArea}>
+            {/* 1. Hospital Active Departments Card */}
+            <div className={styles.settingsCard} style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                <div>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={20} color="#2563eb" />
+                    Hospital Clinical Departments & Specialities
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
+                    Departments active for this hospital. These will be highlighted on your public hospital profile.
+                  </p>
+                </div>
+                <div style={{ background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '4px 12px', borderRadius: '100px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  {(activeHospital.specialties || []).length} Departments Active
+                </div>
+              </div>
+
+              {/* Active Specialties Tags */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '16px 0' }}>
+                {(activeHospital.specialties && activeHospital.specialties.length > 0) ? (
+                  activeHospital.specialties.map((spec) => (
+                    <span
+                      key={spec}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        border: '1.5px solid #93c5fd',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '0.88rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      <CheckCircle size={14} color="#2563eb" />
+                      {spec}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleHospitalSpecialty(spec)}
+                        title={`Remove ${spec}`}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: '#64748b',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 0,
+                          marginLeft: '2px'
+                        }}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))
+                ) : (
+                  <p style={{ color: '#94a3b8', fontSize: '0.88rem', fontStyle: 'italic', margin: 0 }}>
+                    No departments selected yet. Click any quick-select button below or add your own!
+                  </p>
+                )}
+              </div>
+
+              {/* Quick Select Popular Departments */}
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px', marginTop: '12px' }}>
+                <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#475569', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Quick-Add Clinical Departments:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {[
+                    'Cardiology', 'Neurology', 'Orthopedics', 'Robotic Surgery', 'Oncology',
+                    'Nephrology', 'Internal Medicine', 'Obstetrics & Gynaecology', 'Pediatrics',
+                    'Urology', 'Gastroenterology', 'Pulmonology', 'Emergency & Critical Care'
+                  ].map((dept) => {
+                    const isSelected = (activeHospital.specialties || []).some(s => s.toLowerCase() === dept.toLowerCase());
+                    return (
+                      <button
+                        key={dept}
+                        type="button"
+                        onClick={() => handleToggleHospitalSpecialty(dept)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: isSelected ? '#dbeafe' : '#f8fafc',
+                          color: isSelected ? '#1e40af' : '#475569',
+                          border: isSelected ? '1.5px solid #3b82f6' : '1px solid #cbd5e1',
+                          borderRadius: '8px',
+                          padding: '5px 12px',
+                          fontSize: '0.82rem',
+                          fontWeight: isSelected ? 700 : 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {isSelected ? <CheckCircle size={13} color="#2563eb" /> : <Plus size={13} />}
+                        {dept}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Custom Department Form */}
+              <form onSubmit={handleAddCustomHospitalSpecialty} style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                <input
+                  type="text"
+                  placeholder="Enter custom department (e.g. Ophthalmology, Plastic Surgery)..."
+                  value={newCustomSpecialtyInput}
+                  onChange={(e) => setNewCustomSpecialtyInput(e.target.value)}
+                  style={{
+                    flex: 1,
+                    maxWidth: '420px',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontSize: '0.88rem',
+                    outline: 'none'
+                  }}
+                />
+                <button
+                  type="submit"
+                  style={{
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Plus size={15} /> Add Department
+                </button>
+              </form>
+            </div>
+
+            {/* 2. Specialities & Procedures Catalog */}
+            <div className={styles.settingsCard}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
+                <div>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShieldCheck size={20} color="#2563eb" />
+                    Specialities, Surgeries & Cashless Mediclaim Catalog
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.88rem' }}>
+                    Edit the treatments, cost estimates, cashless insurance coverage, and procedures shown under "Specialities & Procedures".
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={styles.saveBtn}
+                  onClick={() => {
+                    setEditingSpeciality(null);
+                    setIsSpecialityModalOpen(true);
+                  }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Plus size={16} /> + New Speciality / Procedure
+                </button>
+              </div>
+
+              {/* Filter & Search Controls */}
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '18px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #cbd5e1', borderRadius: '8px', padding: '6px 12px', flex: 1, minWidth: '240px' }}>
+                  <Search size={16} color="#64748b" />
+                  <input
+                    type="text"
+                    placeholder="Search specialities or procedures..."
+                    value={specialitySearch}
+                    onChange={(e) => setSpecialitySearch(e.target.value)}
+                    style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.88rem' }}
+                  />
+                  {specialitySearch && (
+                    <button type="button" onClick={() => setSpecialitySearch('')} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  {[
+                    { key: 'all', label: 'All Items' },
+                    { key: 'speciality', label: 'Specialities' },
+                    { key: 'procedure', label: 'Procedures' }
+                  ].map(tab => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() => setSpecialityTypeFilter(tab.key)}
+                      style={{
+                        background: specialityTypeFilter === tab.key ? '#2563eb' : '#f1f5f9',
+                        color: specialityTypeFilter === tab.key ? '#ffffff' : '#475569',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '7px 14px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Items Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                {(specialitiesProcedures || [])
+                  .filter(item => {
+                    const matchesSearch = !specialitySearch ||
+                      item.name?.toLowerCase().includes(specialitySearch.toLowerCase()) ||
+                      item.description?.toLowerCase().includes(specialitySearch.toLowerCase());
+                    const matchesType = specialityTypeFilter === 'all' || item.type === specialityTypeFilter;
+                    return matchesSearch && matchesType;
+                  })
+                  .map((item) => (
+                    <div
+                      key={item.id || item._id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 6px rgba(0, 0, 0, 0.02)'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '10px' }}>
+                          <div>
+                            <span
+                              style={{
+                                display: 'inline-block',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                textTransform: 'uppercase',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: item.type === 'procedure' ? '#fef3c7' : '#eff6ff',
+                                color: item.type === 'procedure' ? '#92400e' : '#1d4ed8',
+                                marginBottom: '6px'
+                              }}
+                            >
+                              {item.type === 'procedure' ? 'Surgical Procedure' : 'Clinical Speciality'}
+                            </span>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                              {item.name}
+                            </h4>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSpeciality(item);
+                                setIsSpecialityModalOpen(true);
+                              }}
+                              title="Edit Speciality / Procedure"
+                              style={{
+                                background: '#eff6ff',
+                                border: '1px solid #bfdbfe',
+                                color: '#1d4ed8',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteSpecialityProcedure(item)}
+                              title="Delete Speciality / Procedure"
+                              style={{
+                                background: '#fef2f2',
+                                border: '1px solid #fecaca',
+                                color: '#dc2626',
+                                borderRadius: '6px',
+                                padding: '6px',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {item.description && (
+                          <p style={{ margin: '8px 0 0 0', color: '#64748b', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>Coverage:</span>
+                          <span style={{ color: '#0284c7', background: '#f0f9ff', border: '1px solid #bae6fd', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                            {item.insuranceDetails?.coveragePercent || 'Cashless Available'}
+                          </span>
+                        </div>
+
+                        {item.insuranceDetails?.estimatedCostRange && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.78rem' }}>
+                            <span style={{ color: '#64748b', fontWeight: 600 }}>Estimated Cost:</span>
+                            <span style={{ color: '#0f172a', fontWeight: 700 }}>
+                              {item.insuranceDetails.estimatedCostRange}
+                            </span>
+                          </div>
+                        )}
+
+                        {item.procedures && item.procedures.length > 0 && (
+                          <div style={{ marginTop: '4px' }}>
+                            <div style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, marginBottom: '4px' }}>
+                              Included Procedures ({item.procedures.length}):
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {item.procedures.slice(0, 3).map((p, idx) => (
+                                <span key={idx} style={{ background: '#f8fafc', color: '#475569', fontSize: '0.72rem', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                                  {p}
+                                </span>
+                              ))}
+                              {item.procedures.length > 3 && (
+                                <span style={{ color: '#2563eb', fontSize: '0.72rem', fontWeight: 600 }}>
+                                  +{item.procedures.length - 3} more
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Admit Patient Modal */}
@@ -1654,6 +2107,18 @@ const HospitalDashboard = ({ onNavigate }) => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Speciality & Procedure Edit/Add Modal */}
+      {isSpecialityModalOpen && (
+        <SpecialityFormModal
+          itemToEdit={editingSpeciality}
+          onClose={() => {
+            setIsSpecialityModalOpen(false);
+            setEditingSpeciality(null);
+          }}
+          onSave={handleSaveSpecialityProcedure}
+        />
       )}
     </div>
   );

@@ -19,23 +19,46 @@ import {
   Clock,
   ShieldCheck,
   LogOut,
-  LayoutTemplate
+  LayoutTemplate,
+  HelpCircle,
+  MessageSquare,
+  Activity,
+  Eye,
+  EyeOff,
+  Palette
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import DoctorFormModal from './DoctorFormModal';
 import HospitalFormModal from './HospitalFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import FrontPageEditor from './FrontPageEditor';
+import FaqFormModal from './FaqFormModal';
+import ReviewFormModal from './ReviewFormModal';
+import SpecialityFormModal from './SpecialityFormModal';
+import BrandingManager from './BrandingManager';
 import styles from './AdminPanel.module.css';
 
 const AdminPanel = ({ onExit, onNavigate }) => {
   const {
+    branding,
     doctors,
     hospitals,
     deleteDoctor,
     deleteHospital,
     resetToDefaults,
-    stats
+    stats,
+    faqs,
+    addFaq,
+    updateFaq,
+    deleteFaq,
+    reviews,
+    addReview,
+    updateReview,
+    deleteReview,
+    specialitiesProcedures,
+    addSpecialityProcedure,
+    updateSpecialityProcedure,
+    deleteSpecialityProcedure
   } = useData();
 
   // Navigation tab: 'overview' | 'doctors' | 'hospitals'
@@ -57,9 +80,27 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
 
+  // Search & Filters for FAQs
+  const [faqSearch, setFaqSearch] = useState('');
+  const [faqCategoryFilter, setFaqCategoryFilter] = useState('all');
+  const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
+  const [faqToEdit, setFaqToEdit] = useState(null);
+
+  // Search & Filters for Reviews
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [reviewStatusFilter, setReviewStatusFilter] = useState('all');
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewToEdit, setReviewToEdit] = useState(null);
+
+  // Search & Filters for Specialities & Procedures
+  const [specSearch, setSpecSearch] = useState('');
+  const [specTypeFilter, setSpecTypeFilter] = useState('all');
+  const [isSpecModalOpen, setIsSpecModalOpen] = useState(false);
+  const [specToEdit, setSpecToEdit] = useState(null);
+
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
-    type: null, // 'doctor' | 'hospital' | 'reset'
+    type: null, // 'doctor' | 'hospital' | 'faq' | 'review' | 'speciality' | 'reset'
     item: null
   });
 
@@ -147,9 +188,18 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     } else if (deleteModalState.type === 'hospital' && deleteModalState.item) {
       deleteHospital(deleteModalState.item.id);
       showToast(`Hospital "${deleteModalState.item.name}" deleted successfully.`);
+    } else if (deleteModalState.type === 'faq' && deleteModalState.item) {
+      deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
+      showToast('FAQ deleted successfully.');
+    } else if (deleteModalState.type === 'review' && deleteModalState.item) {
+      deleteReview(deleteModalState.item.id || deleteModalState.item._id);
+      showToast('Review deleted successfully.');
+    } else if (deleteModalState.type === 'speciality' && deleteModalState.item) {
+      deleteSpecialityProcedure(deleteModalState.item.id || deleteModalState.item._id);
+      showToast('Speciality / Surgery deleted successfully.');
     } else if (deleteModalState.type === 'reset') {
       resetToDefaults();
-      showToast('All doctors and hospitals reset to demo defaults.');
+      showToast('All doctors, hospitals, FAQs, reviews, and specialities reset to demo defaults.');
     }
   };
 
@@ -166,17 +216,29 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       {/* Top Bar */}
       <header className={styles.topbar}>
         <div className={styles.brandGroup}>
-          <div className={styles.logoIcon}>
-            <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
-          </div>
+          {branding?.showLogo !== false && branding?.logoType !== 'none' && (
+            <div className={styles.logoIcon}>
+              {branding?.logoType === 'image' && branding?.logoImage ? (
+                <img
+                  src={branding.logoImage}
+                  alt={branding?.siteName || 'Logo'}
+                  style={{ height: '28px', maxWidth: '36px', objectFit: 'contain', display: 'block' }}
+                />
+              ) : (
+                <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
+              )}
+            </div>
+          )}
           <div>
             <div className={styles.brandTitleWrap}>
-              <span className={styles.brandTitle}>The Sehat Buddy</span>
+              <span className={styles.brandTitle}>{branding?.siteName || 'The Sehat Buddy'}</span>
               <span className={styles.adminBadge}>
                 <ShieldCheck size={13} /> Admin Panel
               </span>
             </div>
-            <p className={styles.brandSub}>Doctors & Healthcare Directory Management</p>
+            <p className={styles.brandSub}>
+              {branding?.tagline || 'Doctors & Healthcare Directory Management'}
+            </p>
           </div>
         </div>
 
@@ -266,6 +328,41 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               <LayoutTemplate size={20} />
               <span>Front Page Content</span>
             </button>
+
+            <button
+              className={`${styles.navItem} ${activeTab === 'branding' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('branding')}
+            >
+              <Palette size={20} />
+              <span>Site Identity & Logo</span>
+            </button>
+
+            <button
+              className={`${styles.navItem} ${activeTab === 'faqs' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('faqs')}
+            >
+              <HelpCircle size={20} />
+              <span>FAQs Management</span>
+              <span className={styles.navCount}>{faqs.length}</span>
+            </button>
+
+            <button
+              className={`${styles.navItem} ${activeTab === 'reviews' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              <MessageSquare size={20} />
+              <span>Public Reviews</span>
+              <span className={styles.navCount}>{reviews.length}</span>
+            </button>
+
+            <button
+              className={`${styles.navItem} ${activeTab === 'specialities' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('specialities')}
+            >
+              <Activity size={20} />
+              <span>Specialities & Surgeries</span>
+              <span className={styles.navCount}>{specialitiesProcedures.length}</span>
+            </button>
           </div>
 
           <div className={styles.quickAddBox}>
@@ -275,6 +372,36 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             </button>
             <button className={styles.quickHospitalBtn} onClick={handleOpenAddHospital}>
               <Plus size={16} /> Add Hospital
+            </button>
+            <button
+              className={styles.quickDoctorBtn}
+              style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}
+              onClick={() => {
+                setFaqToEdit(null);
+                setIsFaqModalOpen(true);
+              }}
+            >
+              <Plus size={16} /> Add FAQ
+            </button>
+            <button
+              className={styles.quickDoctorBtn}
+              style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}
+              onClick={() => {
+                setSpecToEdit(null);
+                setIsSpecModalOpen(true);
+              }}
+            >
+              <Plus size={16} /> Add Speciality / Surgery
+            </button>
+            <button
+              className={styles.quickDoctorBtn}
+              style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
+              onClick={() => {
+                setReviewToEdit(null);
+                setIsReviewModalOpen(true);
+              }}
+            >
+              <Plus size={16} /> Add Review
             </button>
           </div>
 
@@ -766,6 +893,437 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               <FrontPageEditor showToast={showToast} />
             </div>
           )}
+
+          {/* TAB 5: FAQs MANAGEMENT */}
+          {activeTab === 'faqs' && (
+            <div className={styles.viewSection}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.sectionTitle}>Frequently Asked Questions (FAQs)</h2>
+                  <p className={styles.sectionSub}>Add new FAQs or modify existing answers displayed on the public portal.</p>
+                </div>
+                <button
+                  className={styles.primaryActionBtn}
+                  onClick={() => {
+                    setFaqToEdit(null);
+                    setIsFaqModalOpen(true);
+                  }}
+                >
+                  <Plus size={16} /> Add New FAQ
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className={styles.filterBar}>
+                <div className={styles.searchWrap}>
+                  <Search size={18} className={styles.searchIcon} />
+                  <input
+                    type="text"
+                    placeholder="Search FAQs by question or answer keyword..."
+                    value={faqSearch}
+                    onChange={(e) => setFaqSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+                <div className={styles.filterGroup}>
+                  <Filter size={16} className={styles.filterIcon} />
+                  <select
+                    value={faqCategoryFilter}
+                    onChange={(e) => setFaqCategoryFilter(e.target.value)}
+                    className={styles.filterSelect}
+                  >
+                    <option value="all">All Categories ({faqs.length})</option>
+                    <option value="Insurance & Cashless">Insurance & Cashless</option>
+                    <option value="Surgeries & Procedures">Surgeries & Procedures</option>
+                    <option value="Hospitals & Admissions">Hospitals & Admissions</option>
+                    <option value="Doctors & Consultations">Doctors & Consultations</option>
+                    <option value="General">General</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* FAQ Cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
+                {faqs
+                  .filter(f => {
+                    const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
+                    const matchSearch =
+                      f.question.toLowerCase().includes(faqSearch.toLowerCase()) ||
+                      f.answer.toLowerCase().includes(faqSearch.toLowerCase());
+                    return matchCat && matchSearch;
+                  })
+                  .map((faq) => (
+                    <div
+                      key={faq.id || faq._id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '18px 22px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                        <div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                              {faq.category}
+                            </span>
+                            <span style={{ fontSize: '0.75rem', background: faq.isActive ? '#ecfdf5' : '#f1f5f9', color: faq.isActive ? '#059669' : '#64748b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                              {faq.isActive ? 'Active' : 'Hidden'}
+                            </span>
+                          </div>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                            {faq.question}
+                          </h4>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFaqToEdit(faq);
+                              setIsFaqModalOpen(true);
+                            }}
+                            style={{
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '8px',
+                              padding: '6px 12px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600,
+                              color: '#2563eb',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                          >
+                            <Edit3 size={14} /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteModalState({
+                                isOpen: true,
+                                type: 'faq',
+                                item: faq
+                              });
+                            }}
+                            style={{
+                              background: '#fef2f2',
+                              border: '1px solid #fecaca',
+                              borderRadius: '8px',
+                              padding: '6px 10px',
+                              color: '#ef4444',
+                              cursor: 'pointer'
+                            }}
+                            title="Delete FAQ"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <p style={{ margin: 0, fontSize: '0.9rem', color: '#475569', lineHeight: 1.55 }}>
+                        {faq.answer}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: PUBLIC REVIEWS */}
+          {activeTab === 'reviews' && (
+            <div className={styles.viewSection}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.sectionTitle}>Public Reviews & Patient Testimonials</h2>
+                  <p className={styles.sectionSub}>Moderate user reviews, verify insurance experiences, or add official hospital reviews.</p>
+                </div>
+                <button
+                  className={styles.primaryActionBtn}
+                  onClick={() => {
+                    setReviewToEdit(null);
+                    setIsReviewModalOpen(true);
+                  }}
+                >
+                  <Plus size={16} /> Add New Review
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className={styles.filterBar}>
+                <div className={styles.searchWrap}>
+                  <Search size={18} className={styles.searchIcon} />
+                  <input
+                    type="text"
+                    placeholder="Search by patient name, hospital, surgery, or keywords..."
+                    value={reviewSearch}
+                    onChange={(e) => setReviewSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+                <div className={styles.filterGroup}>
+                  <Filter size={16} className={styles.filterIcon} />
+                  <select
+                    value={reviewStatusFilter}
+                    onChange={(e) => setReviewStatusFilter(e.target.value)}
+                    className={styles.filterSelect}
+                  >
+                    <option value="all">All Reviews ({reviews.length})</option>
+                    <option value="approved">Approved</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Reviews List */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginTop: '16px' }}>
+                {reviews
+                  .filter(r => {
+                    const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
+                    const matchSearch =
+                      r.patientName.toLowerCase().includes(reviewSearch.toLowerCase()) ||
+                      r.targetName.toLowerCase().includes(reviewSearch.toLowerCase()) ||
+                      r.comment.toLowerCase().includes(reviewSearch.toLowerCase());
+                    return matchStatus && matchSearch;
+                  })
+                  .map((rev) => (
+                    <div
+                      key={rev.id || rev._id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '18px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>{rev.patientName}</strong>
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block' }}>{rev.patientCity}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '2px' }}>
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              size={14}
+                              fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'}
+                              color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', color: '#334155' }}>
+                        <strong>Target:</strong> {rev.targetName} ({rev.targetType})
+                        {rev.treatment && <span style={{ display: 'block', color: '#2563eb' }}>Treatment: {rev.treatment}</span>}
+                        {rev.insuranceUsed && <span style={{ display: 'block', color: '#059669' }}>Insurance: {rev.insuranceUsed}</span>}
+                      </div>
+
+                      <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
+                        {rev.comment}
+                      </p>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                        <span style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          padding: '3px 8px',
+                          borderRadius: '4px',
+                          background: rev.status === 'approved' ? '#ecfdf5' : rev.status === 'pending' ? '#fef3c7' : '#fef2f2',
+                          color: rev.status === 'approved' ? '#059669' : rev.status === 'pending' ? '#b45309' : '#ef4444'
+                        }}>
+                          {rev.status}
+                        </span>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewToEdit(rev);
+                              setIsReviewModalOpen(true);
+                            }}
+                            style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleteModalState({
+                                isOpen: true,
+                                type: 'review',
+                                item: { ...rev, name: rev.patientName + "'s review" }
+                              });
+                            }}
+                            style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', color: '#ef4444', cursor: 'pointer' }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: SPECIALITIES & SURGERIES */}
+          {activeTab === 'specialities' && (
+            <div className={styles.viewSection}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.sectionTitle}>Specialities & Procedures (Surgeries)</h2>
+                  <p className={styles.sectionSub}>Manage clinical departments, surgical procedures, and cashless insurance coverage parameters.</p>
+                </div>
+                <button
+                  className={styles.primaryActionBtn}
+                  onClick={() => {
+                    setSpecToEdit(null);
+                    setIsSpecModalOpen(true);
+                  }}
+                >
+                  <Plus size={16} /> Add Speciality / Surgery
+                </button>
+              </div>
+
+              {/* Filters */}
+              <div className={styles.filterBar}>
+                <div className={styles.searchWrap}>
+                  <Search size={18} className={styles.searchIcon} />
+                  <input
+                    type="text"
+                    placeholder="Search specialities, procedures, surgeries..."
+                    value={specSearch}
+                    onChange={(e) => setSpecSearch(e.target.value)}
+                    className={styles.searchInput}
+                  />
+                </div>
+                <div className={styles.filterGroup}>
+                  <Filter size={16} className={styles.filterIcon} />
+                  <select
+                    value={specTypeFilter}
+                    onChange={(e) => setSpecTypeFilter(e.target.value)}
+                    className={styles.filterSelect}
+                  >
+                    <option value="all">All Items ({specialitiesProcedures.length})</option>
+                    <option value="speciality">Specialities Only</option>
+                    <option value="procedure">Procedures / Surgeries Only</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '16px' }}>
+                {specialitiesProcedures
+                  .filter(sp => {
+                    const matchType = specTypeFilter === 'all' || sp.type === specTypeFilter;
+                    const matchSearch =
+                      sp.name.toLowerCase().includes(specSearch.toLowerCase()) ||
+                      (sp.description || '').toLowerCase().includes(specSearch.toLowerCase());
+                    return matchType && matchSearch;
+                  })
+                  .map((sp) => (
+                    <div
+                      key={sp.id || sp._id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '18px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: sp.type === 'procedure' ? '#eff6ff' : '#f0fdf4',
+                            color: sp.type === 'procedure' ? '#2563eb' : '#059669',
+                            display: 'inline-block',
+                            marginBottom: '4px'
+                          }}>
+                            {sp.type === 'procedure' ? 'Surgical Procedure' : 'Medical Speciality'}
+                          </span>
+                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                            {sp.name}
+                          </h4>
+                        </div>
+
+                        <span style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', color: '#64748b' }}>
+                          Icon: {sp.icon || 'Bot'}
+                        </span>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <span style={{ color: '#059669', fontWeight: 700 }}>
+                          🛡️ {sp.insuranceDetails?.coveragePercent || 'Cashless Available'}
+                        </span>
+                        <span style={{ color: '#475569' }}>
+                          Cost: <strong>{sp.insuranceDetails?.estimatedCostRange || '₹45,000 - ₹90,000'}</strong>
+                        </span>
+                        <span style={{ color: '#64748b' }}>
+                          Pre-Auth: {sp.insuranceDetails?.preAuthHours || '30 Mins'}
+                        </span>
+                      </div>
+
+                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', lineHeight: 1.45 }}>
+                        {sp.description}
+                      </p>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSpecToEdit(sp);
+                            setIsSpecModalOpen(true);
+                          }}
+                          style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteModalState({
+                              isOpen: true,
+                              type: 'speciality',
+                              item: sp
+                            });
+                          }}
+                          style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', padding: '5px 10px', fontSize: '0.8rem', color: '#ef4444', cursor: 'pointer' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 8: SITE IDENTITY & LOGO */}
+          {activeTab === 'branding' && (
+            <div className={styles.viewSection}>
+              <BrandingManager showToast={showToast} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -784,6 +1342,57 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         onSuccess={showToast}
       />
 
+      {isFaqModalOpen && (
+        <FaqFormModal
+          faqToEdit={faqToEdit}
+          onClose={() => setIsFaqModalOpen(false)}
+          onSave={(data) => {
+            if (faqToEdit) {
+              updateFaq(faqToEdit.id || faqToEdit._id, data);
+              showToast('FAQ updated successfully!');
+            } else {
+              addFaq(data);
+              showToast('New FAQ added successfully!');
+            }
+            setIsFaqModalOpen(false);
+          }}
+        />
+      )}
+
+      {isReviewModalOpen && (
+        <ReviewFormModal
+          reviewToEdit={reviewToEdit}
+          onClose={() => setIsReviewModalOpen(false)}
+          onSave={(data) => {
+            if (reviewToEdit) {
+              updateReview(reviewToEdit.id || reviewToEdit._id, data);
+              showToast('Review updated successfully!');
+            } else {
+              addReview(data);
+              showToast('New Review added successfully!');
+            }
+            setIsReviewModalOpen(false);
+          }}
+        />
+      )}
+
+      {isSpecModalOpen && (
+        <SpecialityFormModal
+          itemToEdit={specToEdit}
+          onClose={() => setIsSpecModalOpen(false)}
+          onSave={(data) => {
+            if (specToEdit) {
+              updateSpecialityProcedure(specToEdit.id || specToEdit._id, data);
+              showToast('Speciality / Procedure updated successfully!');
+            } else {
+              addSpecialityProcedure(data);
+              showToast('New Speciality / Procedure created successfully!');
+            }
+            setIsSpecModalOpen(false);
+          }}
+        />
+      )}
+
       <DeleteConfirmModal
         isOpen={deleteModalState.isOpen}
         onClose={() => setDeleteModalState({ isOpen: false, type: null, item: null })}
@@ -791,14 +1400,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         title={
           deleteModalState.type === 'reset'
             ? 'Reset to Default Seeds?'
-            : `Delete ${deleteModalState.type === 'doctor' ? 'Doctor' : 'Hospital'}?`
+            : `Delete ${deleteModalState.type === 'doctor' ? 'Doctor' : deleteModalState.type === 'hospital' ? 'Hospital' : deleteModalState.type === 'faq' ? 'FAQ' : deleteModalState.type === 'review' ? 'Review' : 'Speciality'}?`
         }
         message={
           deleteModalState.type === 'reset'
-            ? 'This will restore the initial pre-configured doctors and hospitals database.'
+            ? 'This will restore the initial pre-configured database back to initial defaults.'
             : `Are you sure you want to delete this record? It will be removed from both the Admin Panel and the public website.`
         }
-        itemName={deleteModalState.item?.name}
+        itemName={deleteModalState.item?.name || deleteModalState.item?.question || deleteModalState.item?.patientName}
       />
     </div>
   );

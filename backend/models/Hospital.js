@@ -33,6 +33,14 @@ const hospitalSchema = new mongoose.Schema({
     name: { type: String },
     email: { type: String, required: true }
   }],
+  cashlessInsurance: { type: Boolean, default: true },
+  acceptedInsurances: [{ type: String }],
+  tpaHelpdesk: {
+    phone: { type: String, default: '' },
+    email: { type: String, default: '' },
+    preAuthTime: { type: String, default: '30 Mins Cashless Pre-Approval' }
+  },
+  insuranceHelpline: { type: String, default: '1800-SEHAT-CARE' },
   latitude: { type: Number },
   longitude: { type: Number },
 }, { timestamps: true });
