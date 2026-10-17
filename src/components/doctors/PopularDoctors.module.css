@@ -1,22 +1,56 @@
 .section {
-  padding: 28px 0;
+  padding: 32px 0 16px 0;
+  overflow: hidden;
+  position: relative;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+.marqueeWrapper {
   width: 100%;
-  padding: 12px 4px 20px 4px;
+  overflow: hidden;
+  position: relative;
+  padding: 18px 0 24px 0;
 }
 
-@media (max-width: 1024px) {
-  .grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.marqueeTrackLeft {
+  display: flex;
+  gap: 24px;
+  width: max-content;
+  animation: runLeft 38s linear infinite;
+  will-change: transform;
+}
+
+.marqueeWrapper:hover .marqueeTrackLeft {
+  animation-play-state: paused;
+}
+
+@keyframes runLeft {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
   }
 }
-@media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr;
+
+.cardItem {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.cardItem > div {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .section {
+    padding: 24px 0 12px 0;
+  }
+  .cardItem {
+    width: 320px;
+  }
+  .marqueeTrackLeft {
+    animation-duration: 28s;
+    gap: 16px;
   }
 }

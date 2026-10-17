@@ -8,19 +8,34 @@ import styles from './PopularDoctors.module.css';
 const PopularDoctors = ({ onNavigate }) => {
   const { doctors } = useData();
 
-  // Remove Dr. Pooja Malhotra from this specific section
-  const filteredDoctors = doctors.filter(doctor => !doctor.name.includes('Pooja Malhotra'));
-  const displayDoctors = filteredDoctors.slice(0, 3);
+  const displayDoctors = doctors && doctors.length > 0 ? doctors : [];
+  // Duplicate doctors for seamless infinite marquee loop (running left)
+  const marqueeDoctors = displayDoctors.length > 0
+    ? (displayDoctors.length < 5
+        ? [...displayDoctors, ...displayDoctors, ...displayDoctors, ...displayDoctors]
+        : [...displayDoctors, ...displayDoctors])
+    : [];
 
   return (
     <section id="doctors-section" className={styles.section}>
       <Container>
-        <SectionHeader title="Popular Doctors" linkText={`View All Doctors (${filteredDoctors.length})`} onLinkClick={() => onNavigate('find-doctors')} />
-        
-        <div className={styles.grid}>
-          {displayDoctors.map(doctor => (
-            <DoctorCard key={doctor.id} doctor={doctor} onNavigate={onNavigate} />
-          ))}
+        <SectionHeader
+          title="Popular Doctors"
+          linkText={`View All Doctors (${displayDoctors.length})`}
+          onLinkClick={() => onNavigate('find-doctors')}
+        />
+
+        <div className={styles.marqueeWrapper}>
+          <div className={styles.marqueeTrackLeft}>
+            {marqueeDoctors.map((doctor, idx) => (
+              <div
+                key={`${doctor.id || doctor._id || doctor.name}-${idx}`}
+                className={styles.cardItem}
+              >
+                <DoctorCard doctor={doctor} onNavigate={onNavigate} />
+              </div>
+            ))}
+          </div>
         </div>
       </Container>
     </section>

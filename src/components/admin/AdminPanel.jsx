@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   LogOut,
   LayoutTemplate,
+  Briefcase,
   HelpCircle,
   MessageSquare,
   Activity,
@@ -43,6 +44,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     branding,
     doctors,
     hospitals,
+    corporateTieups,
     deleteDoctor,
     deleteHospital,
     resetToDefaults,
@@ -61,7 +63,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     deleteSpecialityProcedure
   } = useData();
 
-  // Navigation tab: 'overview' | 'doctors' | 'hospitals'
+  // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'content' | 'corporate'
   const [activeTab, setActiveTab] = useState('overview');
 
   // Search & Filters for Doctors
@@ -330,6 +332,15 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             </button>
 
             <button
+              className={`${styles.navItem} ${activeTab === 'corporate' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('corporate')}
+            >
+              <Briefcase size={20} />
+              <span>Corporate Tie-ups</span>
+              <span className={styles.navCount}>{corporateTieups?.length || 0}</span>
+            </button>
+
+            <button
               className={`${styles.navItem} ${activeTab === 'branding' ? styles.navItemActive : ''}`}
               onClick={() => setActiveTab('branding')}
             >
@@ -496,8 +507,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   </div>
 
                   <div className={styles.boxList}>
-                    {doctors.slice(0, 4).map(doc => (
-                      <div key={doc.id} className={styles.boxItem}>
+                    {doctors.map(doc => (
+                      <div key={doc.id || doc._id} className={styles.boxItem}>
                         <img
                           src={doc.image}
                           alt={doc.name}
@@ -539,8 +550,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   </div>
 
                   <div className={styles.boxList}>
-                    {hospitals.slice(0, 4).map(hosp => (
-                      <div key={hosp.id} className={styles.boxItem}>
+                    {hospitals.map(hosp => (
+                      <div key={hosp.id || hosp._id} className={styles.boxItem}>
                         <img
                           src={hosp.image}
                           alt={hosp.name}
@@ -648,7 +659,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     </thead>
                     <tbody>
                       {filteredDoctors.map(doc => (
-                        <tr key={doc.id}>
+                        <tr key={doc.id || doc._id}>
                           <td>
                             <div className={styles.tableDocProfile}>
                               <img
@@ -784,7 +795,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               ) : (
                 <div className={styles.hospitalsGrid}>
                   {filteredHospitals.map(hosp => (
-                    <div key={hosp.id} className={styles.hospitalAdminCard}>
+                    <div key={hosp.id || hosp._id} className={styles.hospitalAdminCard}>
                       <div className={styles.cardImageContainer}>
                         <img
                           src={hosp.image}
@@ -890,7 +901,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
           {/* TAB 4: FRONT PAGE CONTENT EDITOR */}
           {activeTab === 'content' && (
             <div className={styles.viewSection}>
-              <FrontPageEditor showToast={showToast} />
+              <FrontPageEditor showToast={showToast} initialSubTab="hero" />
+            </div>
+          )}
+
+          {/* TAB 5: CORPORATE TIE-UPS EDITOR */}
+          {activeTab === 'corporate' && (
+            <div className={styles.viewSection}>
+              <FrontPageEditor showToast={showToast} initialSubTab="corporate" />
             </div>
           )}
 

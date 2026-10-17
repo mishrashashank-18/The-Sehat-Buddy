@@ -3,6 +3,8 @@ import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -11,10 +13,36 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const router = express.Router();
 
-// Memory storage so we can inspect and stream to Cloudinary directly
+// Memory storage for images
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
+});
+
+// Disk storage for videos to handle large files smoothly without RAM bloat
+const videoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, os.tmpdir());
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.mp4';
+    cb(null, `sehat-video-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  }
+});
+
+const uploadVideo = multer({
+  storage: videoStorage,
+  limits: { fileSize: 250 * 1024 * 1024 }, // 250MB limit
+  fileFilter: (req, file, cb) => {
+    if (
+      (file.mimetype && file.mimetype.startsWith('video/')) ||
+      (file.originalname && file.originalname.match(/\.(mp4|mov|webm|mkv|avi|m4v|3gp)$/i))
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only video files (.mp4, .webm, .mov, etc.) are allowed!'), false);
+    }
+  }
 });
 
 // Configure cloudinary
@@ -113,6 +141,117 @@ router.post('/image', upload.single('image'), async (req, res) => {
   } catch (error) {
     console.error('Image upload error:', error);
     return res.status(500).json({ success: false, message: error.message || 'Upload failed' });
+  }
+});
+
+/**
+ * Upload single video to Cloudinary
+ * Returns { success: true, url, public_id, format, duration }
+ */
+router.post('/video', (req, res, next) => {
+  uploadVideo.single('video')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, message: 'Video file size exceeds maximum limit of 250MB' });
+      }
+      return res.status(400).json({ success: false, message: err.message });
+    } else if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const filePath = req.file?.path;
+  try {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    const isCloudinaryConfigured =
+      cloudName &&
+      apiKey &&
+      apiSecret &&
+      cloudName !== 'your_cloudinary_cloud_name' &&
+      !cloudName.includes('your_');
+
+    if (!isCloudinaryConfigured) {
+      return res.status(500).json({
+        success: false,
+        message: 'Cloudinary credentials are not configured in backend/.env'
+      });
+    }
+
+    if (!req.file && (!req.body || !req.body.video)) {
+      return res.status(400).json({ success: false, message: 'No video file or URL provided' });
+    }
+
+    const folder = req.body?.folder || 'sehatbuddy/videos';
+    const cld = getCloudinary();
+
+    if (req.file) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        cld.uploader.upload_large(
+          filePath,
+          {
+            resource_type: 'video',
+            folder,
+            chunk_size: 6000000
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+      });
+
+      return res.json({
+        success: true,
+        url: uploadResult.secure_url || uploadResult.url,
+        public_id: uploadResult.public_id,
+        duration: uploadResult.duration,
+        format: uploadResult.format,
+        width: uploadResult.width,
+        height: uploadResult.height,
+        provider: 'cloudinary'
+      });
+    }
+
+    if (req.body.video && typeof req.body.video === 'string') {
+      const uploadResult = await new Promise((resolve, reject) => {
+        cld.uploader.upload(
+          req.body.video,
+          {
+            resource_type: 'video',
+            folder
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+      });
+
+      return res.json({
+        success: true,
+        url: uploadResult.secure_url || uploadResult.url,
+        public_id: uploadResult.public_id,
+        provider: 'cloudinary'
+      });
+    }
+
+    return res.status(400).json({ success: false, message: 'No video file provided' });
+  } catch (error) {
+    console.error('Video upload error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Video upload to Cloudinary failed'
+    });
+  } finally {
+    if (filePath) {
+      try {
+        await fs.promises.unlink(filePath);
+      } catch {}
+    }
   }
 });
 

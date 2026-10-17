@@ -1,9 +1,22 @@
 import React from 'react';
 import styles from './ArticleCard.module.css';
 
-const ArticleCard = ({ article }) => {
+const ArticleCard = ({ article, onNavigate }) => {
   return (
-    <div className={styles.card}>
+    <div
+      className={styles.card}
+      onClick={() => onNavigate && onNavigate('coming-soon', 'articles')}
+      style={{ cursor: 'pointer' }}
+      title={`Read article: ${article.title}`}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onNavigate && onNavigate('coming-soon', 'articles');
+        }
+      }}
+    >
       <div className={styles.imageWrapper}>
         <img
           src={article.image}

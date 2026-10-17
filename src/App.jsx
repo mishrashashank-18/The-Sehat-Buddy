@@ -9,6 +9,7 @@ import WhyChooseSection from './components/why/WhyChooseSection';
 import PopularDoctors from './components/doctors/PopularDoctors';
 import TopHospitals from './components/hospitals/TopHospitals';
 import HealthContentSection from './components/content/HealthContentSection';
+import CorporateTieups from './components/corporate/CorporateTieups';
 import Footer from './components/layout/Footer';
 import AdminPanel from './components/admin/AdminPanel';
 import DoctorDashboard from './components/doctor-dashboard/DoctorDashboard';
@@ -19,6 +20,7 @@ import FindDoctors from './components/doctors/FindDoctors';
 import DoctorProfile from './components/doctors/DoctorProfile';
 import FindHospitals from './components/hospitals/FindHospitals';
 import HospitalProfile from './components/hospitals/HospitalProfile';
+import ComingSoon from './components/common/ComingSoon';
 import { useData } from './context/useData';
 import './styles/global.css';
 
@@ -29,13 +31,14 @@ function MainWebsite({ onNavigate, currentView }) {
       <main>
         <Hero />
         <SearchBar onNavigate={onNavigate} />
-        <ServicesSection />
+        <ServicesSection onNavigate={onNavigate} />
         <WhyChooseSection />
         <PopularDoctors onNavigate={onNavigate} />
         <TopHospitals onNavigate={onNavigate} />
-        <HealthContentSection />
+        <HealthContentSection onNavigate={onNavigate} />
+        <CorporateTieups onNavigate={onNavigate} />
       </main>
-      <Footer />
+      <Footer onNavigate={onNavigate} />
     </div>
   );
 }
@@ -74,10 +77,28 @@ const resolveCurrentView = () => {
       return 'hospital-profile:' + segments[2];
     }
   }
-  if (hash.startsWith('#/hospitals/') || hash.startsWith('#hospitals/')) {
-    const clean = hash.replace(/^#\/?hospitals\//, '');
-    if (clean) return 'hospital-profile:' + clean;
+  if (path.startsWith('/coming-soon/')) {
+    const clean = path.replace(/^\/coming-soon\//, '').trim();
+    if (clean) return 'coming-soon:' + clean;
   }
+  if (hash.startsWith('#/coming-soon/') || hash.startsWith('#coming-soon/')) {
+    const clean = hash.replace(/^#\/?coming-soon\//, '').trim();
+    if (clean) return 'coming-soon:' + clean;
+  }
+  if (path === '/lab-tests' || path === '/services/lab-tests' || hash === '#lab-tests') return 'coming-soon:lab-tests';
+  if (path === '/surgeries' || path === '/services/surgeries' || hash === '#surgeries') return 'coming-soon:surgeries';
+  if (path === '/senior-care' || path === '/services/senior-care') return 'coming-soon:senior-care';
+  if (path === '/women-care' || path === '/services/women-care') return 'coming-soon:women-care';
+  if (path === '/kid-care' || path === '/services/kid-care') return 'coming-soon:kid-care';
+  if (path === '/care-services' || hash === '#care-services') return 'coming-soon:care-services';
+  if (path === '/services' || hash === '#services') return 'coming-soon:all-services';
+  if (path === '/about' || hash === '#about') return 'coming-soon:about';
+  if (path === '/contact' || hash === '#contact') return 'coming-soon:contact';
+  if (path === '/privacy' || hash === '#privacy') return 'coming-soon:privacy';
+  if (path === '/terms' || hash === '#terms') return 'coming-soon:terms';
+  if (path === '/support' || path === '/provider-support' || hash === '#support') return 'coming-soon:provider-support';
+  if (path === '/articles' || hash === '#articles') return 'coming-soon:articles';
+
   return 'site';
 };
 
@@ -201,6 +222,7 @@ function AppContent() {
     }
     else if (viewName === 'doctor-profile') targetPath = `/doctors/${param}`;
     else if (viewName === 'hospital-profile') targetPath = `/hospitals/${param}`;
+    else if (viewName === 'coming-soon') targetPath = `/coming-soon/${param || 'feature'}`;
 
     if (viewName === 'user-login' && param) {
       setRedirectAfterLogin(param);
@@ -213,6 +235,8 @@ function AppContent() {
         ? `doctor-profile:${param}` 
         : viewName === 'hospital-profile'
         ? `hospital-profile:${param}`
+        : viewName === 'coming-soon'
+        ? `coming-soon:${param || 'feature'}`
         : viewName
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -251,7 +275,7 @@ function AppContent() {
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <FindDoctors onNavigate={navigateTo} />
-        <Footer />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }
@@ -261,7 +285,7 @@ function AppContent() {
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <FindHospitals onNavigate={navigateTo} />
-        <Footer />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }
@@ -272,7 +296,7 @@ function AppContent() {
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <DoctorProfile doctorId={docId} onNavigate={navigateTo} />
-        <Footer />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }
@@ -283,7 +307,18 @@ function AppContent() {
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <HospitalProfile hospitalId={hospId} onNavigate={navigateTo} />
-        <Footer />
+        <Footer onNavigate={navigateTo} />
+      </div>
+    );
+  }
+
+  if (currentView.startsWith('coming-soon:')) {
+    const feature = currentView.split(':')[1];
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <ComingSoon featureKey={feature} onNavigate={navigateTo} />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }

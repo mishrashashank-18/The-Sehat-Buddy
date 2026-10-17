@@ -7,6 +7,7 @@ import { initialFeatures } from '../data/features';
 import { initialArticles } from '../data/articles';
 import { initialHospitals } from '../data/hospitals';
 import { initialDoctors } from '../data/doctors';
+import { initialCorporateTieups } from '../data/corporateTieups';
 import { initialFaqs } from '../data/faqs';
 import { initialReviews } from '../data/reviews';
 import { initialSpecialitiesProcedures } from '../data/specialitiesProcedures';
@@ -15,10 +16,11 @@ import { initialBranding } from '../data/branding';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
-const STORAGE_KEY_HERO = 'sehat_buddy_hero_v2';
+const STORAGE_KEY_HERO = 'sehat_buddy_hero_v3';
 const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
 const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
+const STORAGE_KEY_CORPORATE = 'sehat_buddy_corporate_v2';
 const STORAGE_KEY_FAQS = 'sehat_buddy_faqs_v2';
 const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
 const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
@@ -52,10 +54,18 @@ export const DataProvider = ({ children }) => {
   // 3. Hero & Front Page General Content State
   const [heroContent, setHeroContent] = useState(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_HERO);
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedV3 = localStorage.getItem(STORAGE_KEY_HERO);
+      if (savedV3) {
+        const parsed = JSON.parse(savedV3);
         if (parsed && typeof parsed === 'object') return { ...initialHeroContent, ...parsed };
+      }
+      const savedV2 = localStorage.getItem('sehat_buddy_hero_v2');
+      if (savedV2) {
+        const parsed = JSON.parse(savedV2);
+        if (parsed && typeof parsed === 'object') {
+          // Carry forward customizations but update heroImage to the newly uploaded family photo
+          return { ...initialHeroContent, ...parsed, heroImage: initialHeroContent.heroImage };
+        }
       }
     } catch (e) {
       console.error('Failed to parse heroContent from localStorage', e);
@@ -112,7 +122,21 @@ export const DataProvider = ({ children }) => {
     return initialArticles;
   });
 
-  // 7. FAQs State
+  // 7. Corporate Tie-ups & Enterprise Network State
+  const [corporateTieups, setCorporateTieups] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CORPORATE);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse corporateTieups from localStorage', e);
+    }
+    return initialCorporateTieups;
+  });
+
+  // 8. FAQs State
   const [faqs, setFaqs] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_FAQS);
@@ -126,7 +150,7 @@ export const DataProvider = ({ children }) => {
     return initialFaqs;
   });
 
-  // 8. Public Reviews State
+  // 9. Public Reviews State
   const [reviews, setReviews] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_REVIEWS);
@@ -140,7 +164,7 @@ export const DataProvider = ({ children }) => {
     return initialReviews;
   });
 
-  // 9. Specialities & Procedures State
+  // 10. Specialities & Procedures State
   const [specialitiesProcedures, setSpecialitiesProcedures] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SPECIALITIES);
@@ -154,7 +178,7 @@ export const DataProvider = ({ children }) => {
     return initialSpecialitiesProcedures;
   });
 
-  // 10. Site Identity & Branding State
+  // 11. Site Identity & Branding State
   const [branding, setBranding] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_BRANDING);
@@ -224,12 +248,21 @@ export const DataProvider = ({ children }) => {
           })));
         }
         if (contentRes.status === 'fulfilled' && contentRes.value) {
-          const { hero, services: sList, features: fList, articles: aList, branding: bData } = contentRes.value;
-          if (hero) setHeroContent(prev => ({ ...prev, ...hero }));
+          const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData } = contentRes.value;
+          if (hero) {
+            setHeroContent(prev => {
+              const cleanHero = { ...hero };
+              if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
+                cleanHero.heroImage = prev.heroImage || initialHeroContent.heroImage;
+              }
+              return { ...prev, ...cleanHero };
+            });
+          }
           if (bData) setBranding(prev => ({ ...prev, ...bData }));
           if (Array.isArray(sList) && sList.length > 0) setServices(sList);
           if (Array.isArray(fList) && fList.length > 0) setFeatures(fList);
           if (Array.isArray(aList) && aList.length > 0) setArticles(aList);
+          if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(cList);
         }
         if (faqsRes.status === 'fulfilled' && Array.isArray(faqsRes.value) && faqsRes.value.length > 0) {
           setFaqs(faqsRes.value.map(f => ({ ...f, id: f._id || f.id })));
@@ -247,10 +280,10 @@ export const DataProvider = ({ children }) => {
 
     fetchBackendData();
 
-    // Poll every 10 seconds to keep data fresh without refreshing
+    // Poll periodically to keep data fresh without excessive network chatter
     const intervalId = setInterval(() => {
       fetchBackendData();
-    }, 10000);
+    }, 60000);
 
     return () => {
       isMounted = false;
@@ -306,6 +339,14 @@ export const DataProvider = ({ children }) => {
       console.error('Failed to save hospitals to localStorage', e);
     }
   }, [hospitals]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(corporateTieups));
+    } catch (e) {
+      console.error('Failed to save corporateTieups to localStorage', e);
+    }
+  }, [corporateTieups]);
 
   useEffect(() => {
     try {
@@ -568,6 +609,44 @@ export const DataProvider = ({ children }) => {
     });
   };
 
+  // Corporate Tie-ups CRUD
+  const addCorporateTieup = (tieupData) => {
+    const newTieup = {
+      ...tieupData,
+      id: Date.now(),
+      name: tieupData.name || 'New Corporate Partner',
+      shortName: tieupData.shortName || (tieupData.name ? tieupData.name.split(' ')[0] : 'Partner'),
+      logoText: tieupData.logoText || (tieupData.name ? tieupData.name.slice(0, 4).toUpperCase() : 'CORP'),
+      category: tieupData.category || 'Enterprise Partner',
+      benefit: tieupData.benefit || 'Comprehensive healthcare coverage and priority care',
+      color: tieupData.color || '#2563EB',
+      bgColor: tieupData.bgColor || '#EFF6FF',
+      employeesCovered: tieupData.employeesCovered || '50,000+'
+    };
+    setCorporateTieups(prev => {
+      const next = [newTieup, ...prev];
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+    return newTieup;
+  };
+
+  const updateCorporateTieup = (id, updatedData) => {
+    setCorporateTieups(prev => {
+      const next = prev.map(c => (String(c.id) === String(id) ? { ...c, ...updatedData } : c));
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+  };
+
+  const deleteCorporateTieup = (id) => {
+    setCorporateTieups(prev => {
+      const next = prev.filter(c => String(c.id) !== String(id));
+      api.updateCorporateTieups(next).catch(() => {});
+      return next;
+    });
+  };
+
   // FAQs CRUD
   const addFaq = (faqData) => {
     const newFaq = {
@@ -698,17 +777,21 @@ export const DataProvider = ({ children }) => {
     setServices(initialServices);
     setFeatures(initialFeatures);
     setArticles(initialArticles);
+    setCorporateTieups(initialCorporateTieups);
     setFaqs(initialFaqs);
     setReviews(initialReviews);
     setSpecialitiesProcedures(initialSpecialitiesProcedures);
     resetBranding();
     localStorage.removeItem(STORAGE_KEY_HERO);
+    localStorage.removeItem('sehat_buddy_hero_v2');
     localStorage.removeItem(STORAGE_KEY_SERVICES);
     localStorage.removeItem(STORAGE_KEY_FEATURES);
     localStorage.removeItem(STORAGE_KEY_ARTICLES);
+    localStorage.removeItem(STORAGE_KEY_CORPORATE);
     localStorage.removeItem(STORAGE_KEY_FAQS);
     localStorage.removeItem(STORAGE_KEY_REVIEWS);
     localStorage.removeItem(STORAGE_KEY_SPECIALITIES);
+    api.updateCorporateTieups(initialCorporateTieups).catch(() => {});
   };
 
   // Reset Everything
@@ -761,6 +844,10 @@ export const DataProvider = ({ children }) => {
         addArticle,
         updateArticle,
         deleteArticle,
+        corporateTieups,
+        addCorporateTieup,
+        updateCorporateTieup,
+        deleteCorporateTieup,
         // FAQs
         faqs,
         addFaq,

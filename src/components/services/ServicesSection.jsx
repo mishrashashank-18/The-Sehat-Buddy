@@ -5,16 +5,20 @@ import ServiceCard from './ServiceCard';
 import { useData } from '../../context/useData';
 import styles from './ServicesSection.module.css';
 
-const ServicesSection = () => {
+const ServicesSection = ({ onNavigate }) => {
   const { services } = useData();
 
   return (
     <section id="services-section" className={styles.section}>
       <Container>
-        <SectionHeader title="Explore Top Services" linkText={`View All Services (${services?.length || 0})`} />
+        <SectionHeader
+          title="Explore Top Services"
+          linkText={`View All Services (${services?.length || 0})`}
+          onLinkClick={() => onNavigate && onNavigate('coming-soon', 'all-services')}
+        />
         <div className={styles.grid}>
           {services?.map(service => (
-            <ServiceCard key={service.id} service={service} />
+            <ServiceCard key={service.id} service={service} onNavigate={onNavigate} />
           ))}
         </div>
       </Container>

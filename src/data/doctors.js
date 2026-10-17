@@ -197,6 +197,38 @@ export const initialDoctors = [
       'Consultant Dermatologist & Trichologist - Kaya Skin Clinic (2018 - 2020)',
       'Senior Resident in Dermatology - Victoria Hospital Medical College (2016 - 2018)'
     ]
+  },
+  {
+    id: 6,
+    name: 'Dr. Priya Nair',
+    specialty: 'Neurologist',
+    experience: '14+ Years Experience',
+    rating: 4.9,
+    reviews: '140+',
+    price: 900,
+    image: 'https://images.unsplash.com/photo-1594824813589-424a68291f09?auto=format&fit=crop&q=80&w=400',
+    hospital: 'Narayana Health City',
+    degree: 'MBBS, MD (Medicine), DM (Neurology)',
+    phone: '+91 98450 12345',
+    email: 'dr.priya.nair@sehatbuddy.com',
+    availableDays: 'Mon to Sat (10:00 AM - 4:00 PM)',
+    about: 'Senior Neurologist specializing in neuro-critical care, stroke management, epilepsy, and clinical neurophysiology.'
+  },
+  {
+    id: 7,
+    name: 'Dr. Rajesh Kulkarni',
+    specialty: 'Gastroenterologist',
+    experience: '16+ Years Experience',
+    rating: 4.8,
+    reviews: '110+',
+    price: 850,
+    image: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?auto=format&fit=crop&q=80&w=400',
+    hospital: 'Fortis Hospital, Bannerghatta Road',
+    degree: 'MBBS, MD, DNB (Gastroenterology)',
+    phone: '+91 98451 98765',
+    email: 'dr.rajesh.kulkarni@sehatbuddy.com',
+    availableDays: 'Tue, Thu, Sat (09:00 AM - 3:00 PM)',
+    about: 'Renowned gastroenterologist and hepatologist specializing in advanced therapeutic endoscopy, liver health, and digestive wellness.'
   }
 ];
 

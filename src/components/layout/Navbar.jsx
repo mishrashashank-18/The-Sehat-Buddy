@@ -168,7 +168,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
           <li className={styles.navItem}>
             <button
               type="button"
-              className={`${styles.navLink} ${activeTab === 'home' ? styles.active : ''}`}
+              className={`${styles.navLink} ${activeTab === 'home' || currentView === 'site' ? styles.active : ''}`}
               onClick={handleGoHome}
             >
               Home
@@ -178,7 +178,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
           <li className={styles.navItem}>
             <button
               type="button"
-              className={`${styles.navLink} ${activeTab === 'doctors' ? styles.active : ''}`}
+              className={`${styles.navLink} ${activeTab === 'doctors' || currentView === 'find-doctors' ? styles.active : ''}`}
               onClick={handleFindDoctors}
             >
               Find Doctors
@@ -188,7 +188,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
           <li className={styles.navItem}>
             <button
               type="button"
-              className={`${styles.navLink} ${activeTab === 'hospitals' ? styles.active : ''}`}
+              className={`${styles.navLink} ${activeTab === 'hospitals' || currentView === 'find-hospitals' ? styles.active : ''}`}
               onClick={handleHospitals}
             >
               Hospitals

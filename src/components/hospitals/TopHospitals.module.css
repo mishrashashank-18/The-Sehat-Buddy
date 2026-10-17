@@ -1,18 +1,48 @@
 .section {
   padding: 60px 0;
   background-color: var(--color-bg-light);
+  overflow: hidden;
+  position: relative;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+.marqueeWrapper {
   width: 100%;
-  margin-top: 24px;
+  overflow: hidden;
+  position: relative;
+  padding: 24px 0 28px 0;
+}
+
+.marqueeTrackRight {
+  display: flex;
+  gap: 24px;
+  width: max-content;
+  animation: runRight 44s linear infinite;
+  will-change: transform;
+}
+
+.marqueeWrapper:hover .marqueeTrackRight {
+  animation-play-state: paused;
+}
+
+@keyframes runRight {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.cardItem {
+  width: 295px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .card {
   height: 100%;
+  width: 100%;
   background-color: #ffffff;
   border-radius: 18px;
   overflow: hidden;
@@ -188,15 +218,15 @@
   color: #ffffff;
 }
 
-
-
-@media (max-width: 1024px) {
-  .grid {
-    grid-template-columns: repeat(2, 1fr);
+@media (max-width: 768px) {
+  .section {
+    padding: 40px 0;
   }
-}
-@media (max-width: 640px) {
-  .grid {
-    grid-template-columns: 1fr;
+  .cardItem {
+    width: 290px;
+  }
+  .marqueeTrackRight {
+    animation-duration: 32s;
+    gap: 16px;
   }
 }
