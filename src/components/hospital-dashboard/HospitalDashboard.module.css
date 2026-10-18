@@ -136,44 +136,74 @@
 
 .quickNavBtns {
   display: flex;
+  align-items: center;
   gap: 8px;
 }
 
 .navLinkBtn {
-  padding: 6px 14px;
-  border-radius: 8px;
+  padding: 7px 14px;
+  border-radius: 9px;
   border: 1px solid #e2e8f0;
-  background: #F1FAF8;
-  color: #5B6B73;
+  background: #ffffff;
+  color: #475569;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .navLinkBtn:hover {
-  background: #2563eb;
-  color: #ffffff;
-  border-color: #2563eb;
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.navLinkPrimary {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border-color: #bfdbfe !important;
+  font-weight: 700 !important;
+}
+
+.navLinkPrimary:hover {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #2563eb !important;
+}
+
+.navLinkLogout {
+  color: #dc2626 !important;
+  background: #fff1f2 !important;
+  border-color: #fecdd3 !important;
+  font-weight: 700 !important;
+}
+
+.navLinkLogout:hover {
+  background: #dc2626 !important;
+  color: #ffffff !important;
+  border-color: #dc2626 !important;
 }
 
 /* Main Container */
 .mainWrapper {
-  max-width: 1200px;
+  max-width: 1340px;
   width: 100%;
   margin: 0 auto;
-  padding: 28px 24px;
+  padding: 24px 32px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
 }
 
 /* Facility Overview Banner */
 .facilityBanner {
   background: #ffffff;
-  border: 1px solid var(--color-border);
-  border-radius: 18px;
-  padding: 24px 28px;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 22px 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -190,12 +220,20 @@
   min-width: 300px;
 }
 
-.facilityImage {
-  width: 100px;
-  height: 80px;
-  border-radius: 12px;
-  object-fit: cover;
+.facilityImageWrap {
+  width: 110px;
+  height: 84px;
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
   border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.facilityImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .facilityMeta {
@@ -338,13 +376,20 @@
 
 .kpiCard {
   background: #ffffff;
-  border: 1px solid var(--color-border);
+  border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 20px;
+  padding: 18px 20px;
   display: flex;
   align-items: center;
   gap: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.kpiCard:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
 }
 
 .kpiIconWrap {
@@ -357,26 +402,36 @@
   flex-shrink: 0;
 }
 
-.kpiBlue { background: #EAF8F1; color: #2563eb; }
-.kpiRed { background: #fef2f2; color: #dc2626; }
-.kpiGreen { background: #e6f6f3; color: var(--color-primary); }
-.kpiYellow { background: #fefce8; color: #ca8a04; }
+.kpiBlue { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
+.kpiRed { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+.kpiGreen { background: #ecfdf5; color: #059669; border: 1px solid #d1fae5; }
+.kpiYellow { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+
+.kpiContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
 
 .kpiLabel {
   font-size: 0.78rem;
-  color: var(--color-body);
-  font-weight: 500;
+  color: #64748b;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .kpiValue {
   font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--color-heading);
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
 }
 
 .kpiSub {
-  font-size: 0.72rem;
+  font-size: 0.74rem;
   color: #94a3b8;
+  white-space: nowrap;
 }
 
 /* Tabs Bar */
@@ -384,57 +439,98 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 2px solid #eef3f4;
-  padding-bottom: 12px;
+  gap: 16px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 6px 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .tabsList {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabsList::-webkit-scrollbar {
+  display: none;
 }
 
 .tabBtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 10px;
+  padding: 8px 14px;
+  border-radius: 9px;
   border: none;
   background: transparent;
-  color: var(--color-body);
-  font-size: 0.9rem;
+  color: #64748b;
+  font-size: 0.84rem;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 
 .tabBtn:hover {
-  background: #edf5f4;
-  color: var(--color-primary);
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .tabBtnActive {
-  background: var(--color-bg-mint) !important;
-  color: var(--color-primary) !important;
+  background: #2563eb !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.tabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #e2e8f0;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.tabBtnActive .tabBadge {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.tabsActionWrap {
+  flex-shrink: 0;
 }
 
 .addPrimaryBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 18px;
+  padding: 8px 16px;
   border-radius: 9px;
   border: none;
-  background: var(--color-primary);
+  background: #2563eb;
   color: #ffffff;
-  font-size: 0.85rem;
+  font-size: 0.84rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+  transition: all 0.2s ease;
+  white-space: nowrap;
 }
 
 .addPrimaryBtn:hover {
-  background: var(--color-primary-dark);
+  background: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
 /* Content Area */
@@ -448,55 +544,90 @@
 .wardsGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
+  gap: 20px;
 }
 
 .wardCard {
   background: #ffffff;
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  padding: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 22px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.wardCard:hover {
+  transform: translateY(-2px);
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
 }
 
 .wardHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .wardHeader h4 {
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   font-weight: 700;
+  color: #0f172a;
 }
 
 .wardHeadDoctor {
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   color: #64748b;
   display: block;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .wardNormalBadge {
-  background: #f0fdf4;
-  color: #16a34a;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.wardNormalDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #10b981;
+  display: inline-block;
+  margin-right: 5px;
 }
 
 .wardAlertBadge {
   background: #fef2f2;
   color: #dc2626;
+  border: 1px solid #fecaca;
   font-size: 0.72rem;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.wardAlertDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #ef4444;
+  display: inline-block;
+  margin-right: 5px;
 }
 
 .wardNumbersRow {
@@ -506,25 +637,37 @@
 }
 
 .occupiedCount {
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--color-heading);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
 }
 
 .totalCount {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: #64748b;
+  font-weight: 500;
 }
 
 .wardPercent {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--color-primary);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.percentRed {
+  color: #dc2626;
+}
+
+.percentOrange {
+  color: #ea580c;
+}
+
+.percentBlue {
+  color: #2563eb;
 }
 
 .wardProgressBar {
   width: 100%;
-  height: 6px;
+  height: 8px;
   background: #f1f5f9;
   border-radius: 999px;
   overflow: hidden;
@@ -532,13 +675,21 @@
 
 .wardProgressFill {
   height: 100%;
-  background: var(--color-primary);
+  background: #2563eb;
   border-radius: 999px;
-  transition: width 0.3s;
+  transition: width 0.3s ease;
 }
 
 .fillRed {
   background: #dc2626 !important;
+}
+
+.fillOrange {
+  background: #ea580c !important;
+}
+
+.fillBlue {
+  background: #2563eb !important;
 }
 
 .wardCardFooter {
@@ -546,49 +697,83 @@
   align-items: center;
   justify-content: space-between;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px solid #f1f5f9;
 }
 
 .vacantCount {
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   color: #64748b;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+}
+
+.vacantDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #10b981;
+  display: inline-block;
+  margin-right: 6px;
 }
 
 .wardActions {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 
 .dischargeBtn {
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 5px 12px;
+  border-radius: 7px;
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  color: #5B6B73;
-  font-size: 0.72rem;
+  color: #475569;
+  font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .dischargeBtn:hover:not(:disabled) {
-  background: #f1f5f9;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #0f172a;
+}
+
+.dischargeBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .quickAdmitBtn {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: none;
-  background: var(--color-bg-mint);
-  color: var(--color-primary);
-  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .quickAdmitBtn:hover:not(:disabled) {
-  background: var(--color-primary);
+  background: #2563eb;
   color: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.2);
+}
+
+.quickAdmitBtn:disabled {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
 }
 
 /* Doctors Roster Table */

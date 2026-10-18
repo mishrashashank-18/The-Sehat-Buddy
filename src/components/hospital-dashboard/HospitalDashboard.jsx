@@ -27,7 +27,8 @@ import {
   Edit2,
   Search,
   Filter,
-  HelpCircle
+  HelpCircle,
+  LogOut
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -332,8 +333,9 @@ const HospitalDashboard = ({ onNavigate }) => {
 
   // Total occupied beds in active hospital
   const totalOccupiedBeds = wards.reduce((sum, w) => sum + w.occupied, 0);
-  const totalCapacityBeds = activeHospital.totalBeds || wards.reduce((sum, w) => sum + w.total, 0);
-  const occupancyPercent = Math.min(100, Math.round((totalOccupiedBeds / totalCapacityBeds) * 100));
+  const totalWardCapacity = wards.reduce((sum, w) => sum + w.total, 0);
+  const totalCapacityBeds = Math.max(totalWardCapacity, Number(activeHospital.totalBeds) || 0);
+  const occupancyPercent = totalCapacityBeds > 0 ? Math.min(100, Math.round((totalOccupiedBeds / totalCapacityBeds) * 100)) : 0;
 
   // Quick actions
   const handleAdmitPatient = (e) => {
@@ -534,28 +536,27 @@ const HospitalDashboard = ({ onNavigate }) => {
 
           <div className={styles.quickNavBtns}>
             <button
-              className={styles.navLinkBtn}
+              className={`${styles.navLinkBtn} ${styles.navLinkPrimary}`}
               onClick={() => onNavigate && onNavigate('hospital-profile', activeHospital.id || activeHospital._id)}
-              style={{ background: '#eff6ff', color: '#2563eb', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              title="Open public hospital center page with reels, videos and star doctors"
+              title="Open public hospital center page"
             >
               <Globe size={13} /> View Public Center
             </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('site')}>
-              Website
+              <ExternalLink size={13} /> Website
             </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('doctor')}>
-              Doctor Portal
+              <Stethoscope size={13} /> Doctor Portal
             </button>
             <button className={styles.navLinkBtn} onClick={() => onNavigate('admin')}>
-              Admin
+              <ShieldCheck size={13} /> Admin
             </button>
-            <button className={styles.navLinkBtn} style={{ color: '#dc2626', fontWeight: 600 }} onClick={() => {
+            <button className={`${styles.navLinkBtn} ${styles.navLinkLogout}`} onClick={() => {
               localStorage.removeItem('token');
               localStorage.removeItem('user');
               window.location.href = '/hospital';
             }}>
-              Logout
+              <LogOut size={13} /> Logout
             </button>
           </div>
         </div>
@@ -566,14 +567,16 @@ const HospitalDashboard = ({ onNavigate }) => {
         {/* Hospital Overview Banner */}
         <div className={styles.facilityBanner}>
           <div className={styles.facilityInfo}>
-            <img
-              src={activeHospital.image}
-              alt={activeHospital.name}
-              className={styles.facilityImage}
-              onError={(e) => {
-                e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=240&q=80';
-              }}
-            />
+            <div className={styles.facilityImageWrap}>
+              <img
+                src={activeHospital.image}
+                alt={activeHospital.name}
+                className={styles.facilityImage}
+                onError={(e) => {
+                  e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=240&q=80';
+                }}
+              />
+            </div>
             <div className={styles.facilityMeta}>
               <div className={styles.titleRow}>
                 <h2>{activeHospital.name}</h2>
@@ -625,10 +628,10 @@ const HospitalDashboard = ({ onNavigate }) => {
             <div className={`${styles.kpiIconWrap} ${styles.kpiBlue}`}>
               <Bed size={22} />
             </div>
-            <div>
+            <div className={styles.kpiContent}>
               <span className={styles.kpiLabel}>Total Bed Capacity</span>
               <div className={styles.kpiValue}>{totalCapacityBeds} Beds</div>
-              <span className={styles.kpiSub}>Across 6 major wards</span>
+              <span className={styles.kpiSub}>Across {wards.length} major wards</span>
             </div>
           </div>
 
@@ -636,7 +639,7 @@ const HospitalDashboard = ({ onNavigate }) => {
             <div className={`${styles.kpiIconWrap} ${styles.kpiRed}`}>
               <AlertTriangle size={22} />
             </div>
-            <div>
+            <div className={styles.kpiContent}>
               <span className={styles.kpiLabel}>Active Emergency Triage</span>
               <div className={styles.kpiValue}>{erCases.length} Cases</div>
               <span className={styles.kpiSub}>1 Critical (Code Red)</span>
@@ -647,9 +650,11 @@ const HospitalDashboard = ({ onNavigate }) => {
             <div className={`${styles.kpiIconWrap} ${styles.kpiGreen}`}>
               <Stethoscope size={22} />
             </div>
-            <div>
+            <div className={styles.kpiContent}>
               <span className={styles.kpiLabel}>Affiliated Doctors</span>
-              <div className={styles.kpiValue}>{affiliatedDoctors.length} Specialists</div>
+              <div className={styles.kpiValue}>
+                {affiliatedDoctors.length} {affiliatedDoctors.length === 1 ? 'Specialist' : 'Specialists'}
+              </div>
               <span className={styles.kpiSub}>Active on clinical roster</span>
             </div>
           </div>
@@ -658,7 +663,7 @@ const HospitalDashboard = ({ onNavigate }) => {
             <div className={`${styles.kpiIconWrap} ${styles.kpiYellow}`}>
               <Truck size={22} />
             </div>
-            <div>
+            <div className={styles.kpiContent}>
               <span className={styles.kpiLabel}>Ambulance Fleet</span>
               <div className={styles.kpiValue}>
                 {ambulances.filter(a => a.status === 'Available').length} / {ambulances.length}
@@ -675,90 +680,93 @@ const HospitalDashboard = ({ onNavigate }) => {
               className={`${styles.tabBtn} ${activeTab === 'beds' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('beds')}
             >
-              <Bed size={18} />
-              <span>Wards & Bed Capacity</span>
+              <Bed size={16} />
+              <span>Wards & Beds</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'doctors' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('doctors')}
             >
-              <Stethoscope size={18} />
-              <span>Clinical Roster ({affiliatedDoctors.length})</span>
+              <Stethoscope size={16} />
+              <span>Doctor Roster</span>
+              <span className={styles.tabBadge}>{affiliatedDoctors.length}</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'media' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('media')}
             >
-              <Video size={18} />
-              <span>5 Reels, 5 Videos & Star Doctors</span>
+              <Video size={16} />
+              <span>Reels & Media</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'photos' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('photos')}
             >
-              <Camera size={18} />
-              <span>Photos & Gallery ({photos.length})</span>
+              <Camera size={16} />
+              <span>Photo Gallery</span>
+              <span className={styles.tabBadge}>{photos.length}</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'emergency' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('emergency')}
             >
-              <AlertTriangle size={18} />
-              <span>ER Triage & Fleet</span>
+              <AlertTriangle size={16} />
+              <span>ER & Fleet</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'settings' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('settings')}
             >
-              <Building2 size={18} />
-              <span>Facility Profile</span>
+              <Building2 size={16} />
+              <span>Hospital Profile</span>
             </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'specialities' ? styles.tabBtnActive : ''}`}
               onClick={() => setActiveTab('specialities')}
             >
-              <Activity size={18} />
-              <span>Specialities & Procedures ({specialitiesProcedures?.length || 0})</span>
+              <Activity size={16} />
+              <span>Specialities</span>
+              <span className={styles.tabBadge}>{specialitiesProcedures?.length || 0}</span>
             </button>
           </div>
 
-          {activeTab === 'beds' && (
-            <button
-              className={styles.addPrimaryBtn}
-              onClick={() => setIsAdmitModalOpen(true)}
-            >
-              <Plus size={16} /> Admit Patient
-            </button>
-          )}
+          <div className={styles.tabsActionWrap}>
+            {activeTab === 'beds' && (
+              <button
+                className={styles.addPrimaryBtn}
+                onClick={() => setIsAdmitModalOpen(true)}
+              >
+                <Plus size={16} /> Admit Patient
+              </button>
+            )}
 
-          {activeTab === 'doctors' && (
-            <button
-              className={styles.addPrimaryBtn}
-              onClick={() => setIsAddDoctorModalOpen(true)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Plus size={16} /> + Add Doctor to Roster
-            </button>
-          )}
+            {activeTab === 'doctors' && (
+              <button
+                className={styles.addPrimaryBtn}
+                onClick={() => setIsAddDoctorModalOpen(true)}
+              >
+                <Plus size={16} /> Add Doctor
+              </button>
+            )}
 
-          {activeTab === 'specialities' && (
-            <button
-              className={styles.addPrimaryBtn}
-              onClick={() => {
-                setEditingSpeciality(null);
-                setIsSpecialityModalOpen(true);
-              }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Plus size={16} /> Add Speciality / Procedure
-            </button>
-          )}
+            {activeTab === 'specialities' && (
+              <button
+                className={styles.addPrimaryBtn}
+                onClick={() => {
+                  setEditingSpeciality(null);
+                  setIsSpecialityModalOpen(true);
+                }}
+              >
+                <Plus size={16} /> Add Speciality
+              </button>
+            )}
+          </div>
         </div>
 
         {/* TAB 1: BED & WARD MANAGEMENT */}
@@ -768,6 +776,7 @@ const HospitalDashboard = ({ onNavigate }) => {
               {wards.map((ward) => {
                 const percent = Math.round((ward.occupied / ward.total) * 100);
                 const isNearCapacity = percent >= 90;
+                const isModerate = percent >= 80 && percent < 90;
 
                 return (
                   <div key={ward.id} className={styles.wardCard}>
@@ -777,6 +786,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                         <span className={styles.wardHeadDoctor}>In-charge: {ward.head}</span>
                       </div>
                       <span className={isNearCapacity ? styles.wardAlertBadge : styles.wardNormalBadge}>
+                        <span className={isNearCapacity ? styles.wardAlertDot : styles.wardNormalDot}></span>
                         {isNearCapacity ? 'High Occupancy' : 'Available'}
                       </span>
                     </div>
@@ -786,18 +796,21 @@ const HospitalDashboard = ({ onNavigate }) => {
                         <span className={styles.occupiedCount}>{ward.occupied}</span>
                         <span className={styles.totalCount}> / {ward.total} Beds Occupied</span>
                       </div>
-                      <span className={styles.wardPercent}>{percent}%</span>
+                      <span className={`${styles.wardPercent} ${isNearCapacity ? styles.percentRed : (isModerate ? styles.percentOrange : styles.percentBlue)}`}>
+                        {percent}%
+                      </span>
                     </div>
 
                     <div className={styles.wardProgressBar}>
                       <div
-                        className={`${styles.wardProgressFill} ${isNearCapacity ? styles.fillRed : ''}`}
+                        className={`${styles.wardProgressFill} ${isNearCapacity ? styles.fillRed : (isModerate ? styles.fillOrange : styles.fillBlue)}`}
                         style={{ width: `${percent}%` }}
                       ></div>
                     </div>
 
                     <div className={styles.wardCardFooter}>
                       <span className={styles.vacantCount}>
+                        <span className={styles.vacantDot}></span>
                         {ward.total - ward.occupied} beds vacant
                       </span>
                       <div className={styles.wardActions}>
@@ -817,7 +830,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                           }}
                           disabled={ward.occupied >= ward.total}
                         >
-                          + Admit
+                          <Plus size={14} /> Admit
                         </button>
                       </div>
                     </div>
