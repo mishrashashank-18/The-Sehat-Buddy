@@ -24,10 +24,10 @@ import { api } from '../../services/api';
 import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './FrontPageEditor.module.css';
 
-const PRESET_HERO_IMAGES = [
-  { name: 'Happy Family at Hospital', url: heroFamily },
-  { name: 'Doctor Consultation', url: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80' },
-  { name: 'Medical Team', url: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=800&q=80' }
+const DEFAULT_HERO_PRESETS = [
+  { id: 'preset_1', name: 'Happy Family at Hospital', url: heroFamily },
+  { id: 'preset_2', name: 'Doctor Consultation', url: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80' },
+  { id: 'preset_3', name: 'Medical Team', url: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=800&q=80' }
 ];
 
 const AVAILABLE_ICONS = [
@@ -238,6 +238,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [isHeroPhotoUploading, setIsHeroPhotoUploading] = useState(false);
   const [customPhotoUrlInput, setCustomPhotoUrlInput] = useState('');
+  const [heroPresets, setHeroPresets] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sehat_hero_presets_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_HERO_PRESETS;
+  });
   const [customHeroImage, setCustomHeroImage] = useState(() => {
     return localStorage.getItem('sehat_custom_hero_image') || '';
   });
@@ -247,7 +257,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   // Sync customHeroImage if heroContent has a custom (non-preset) image
   React.useEffect(() => {
     if (heroContent?.heroImage) {
-      const isPreset = PRESET_HERO_IMAGES.some(p => 
+      const isPreset = heroPresets.some(p => 
         p.url === heroContent.heroImage || 
         (p.name === 'Happy Family at Hospital' && (heroContent.heroImage?.includes('hero-family') || heroContent.heroImage?.includes('i3g2e9ptcdydfnfeqf9c')))
       );
@@ -255,7 +265,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
         setCustomHeroImage(heroContent.heroImage);
       }
     }
-  }, [heroContent?.heroImage]);
+  }, [heroContent?.heroImage, heroPresets]);
 
   // Upload Video to Cloudinary
   const handleVideoUpload = async (e) => {
@@ -441,7 +451,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       e.preventDefault();
       e.stopPropagation();
     }
-    const defaultImage = PRESET_HERO_IMAGES[0].url;
+    const defaultImage = heroPresets[0]?.url || heroFamily || '';
     setHeroForm(prev => ({ ...prev, heroImage: defaultImage }));
     setCustomHeroImage('');
     setCustomPhotoUrlInput('');
@@ -450,6 +460,33 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     } catch {}
     updateHeroContent({ heroImage: defaultImage });
     showToast('Photo removed. Reset to default preset photo.');
+  };
+
+  const handleDeletePresetPhoto = (imgToDelete, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const updated = heroPresets.filter(p => p.url !== imgToDelete.url && p.name !== imgToDelete.name);
+    setHeroPresets(updated);
+    try {
+      localStorage.setItem('sehat_hero_presets_v2', JSON.stringify(updated));
+    } catch {}
+
+    if (isPresetActive(imgToDelete.url, heroForm.heroImage)) {
+      const nextPhoto = updated[0]?.url || heroFamily || '';
+      setHeroForm(prev => ({ ...prev, heroImage: nextPhoto }));
+      updateHeroContent({ heroImage: nextPhoto });
+    }
+    showToast(`Photo "${imgToDelete.name}" deleted.`);
+  };
+
+  const handleResetDefaultPresets = () => {
+    setHeroPresets(DEFAULT_HERO_PRESETS);
+    try {
+      localStorage.setItem('sehat_hero_presets_v2', JSON.stringify(DEFAULT_HERO_PRESETS));
+    } catch {}
+    showToast('Default preset photos restored.');
   };
 
   // Add Service
@@ -748,15 +785,24 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
             </p>
 
             <div className={styles.imageSelectorGrid}>
-              {PRESET_HERO_IMAGES.map((img, idx) => {
+              {heroPresets.map((img, idx) => {
                 const active = isPresetActive(img.url);
                 return (
                   <div
-                    key={idx}
+                    key={img.id || idx}
                     className={`${styles.imagePreset} ${active ? styles.imagePresetActive : ''}`}
+                    style={{ position: 'relative' }}
                     onClick={() => handleSelectHeroImage(img.url, img.name)}
                     title={`Set hero image to ${img.name}`}
                   >
+                    <button
+                      type="button"
+                      className={styles.deletePresetCornerBtn}
+                      onClick={(e) => handleDeletePresetPhoto(img, e)}
+                      title={`Delete "${img.name}"`}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                     <img src={img.url} alt={img.name} />
                     <span>{img.name}</span>
                   </div>
@@ -764,7 +810,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               })}
 
               {/* Custom photo card if current active photo is not in presets */}
-              {heroForm.heroImage && !PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
+              {heroForm.heroImage && !heroPresets.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
                 <div
                   className={`${styles.imagePreset} ${styles.imagePresetActive}`}
                   style={{ position: 'relative' }}
@@ -774,7 +820,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     type="button"
                     className={styles.deletePresetCornerBtn}
                     onClick={handleDeleteCustomHeroPhoto}
-                    title="Delete custom photo and reset to default"
+                    title="Delete custom photo"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -784,7 +830,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               )}
 
               {/* Stored custom photo if another preset is currently selected */}
-              {customHeroImage && PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
+              {customHeroImage && heroPresets.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
                 <div
                   className={styles.imagePreset}
                   style={{ position: 'relative' }}
@@ -828,6 +874,30 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               </label>
             </div>
 
+            {/* Restore presets link if any preset was removed */}
+            {heroPresets.length < DEFAULT_HERO_PRESETS.length && (
+              <div style={{ marginTop: '8px', marginBottom: '4px' }}>
+                <button
+                  type="button"
+                  onClick={handleResetDefaultPresets}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#64748B',
+                    fontSize: '0.78rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <RotateCcw size={12} />
+                  <span>Restore Original Preset Photos</span>
+                </button>
+              </div>
+            )}
+
             {/* Direct Image Link Input */}
             <div className={styles.heroUrlRow}>
               <div className={styles.formGroup} style={{ margin: 0 }}>
@@ -857,7 +927,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               </div>
             </div>
 
-            {/* Live Hero Preview Banner with Delete Photo option */}
+            {/* Live Hero Preview Banner with Delete Photo option on all photos */}
             {heroForm.heroImage && (
               <div className={styles.currentHeroPreviewBanner}>
                 <img
@@ -872,27 +942,15 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <span className={styles.heroPreviewTag}>Live on Homepage</span>
                   <span className={styles.heroPreviewUrl}>{heroForm.heroImage}</span>
                 </div>
-                {!PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) ? (
-                  <button
-                    type="button"
-                    className={styles.deleteHeroPhotoBtn}
-                    onClick={handleDeleteCustomHeroPhoto}
-                    title="Delete custom photo and revert to default preset"
-                  >
-                    <Trash2 size={14} />
-                    <span>Delete Photo</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className={styles.resetHeroPhotoBtn}
-                    onClick={handleDeleteCustomHeroPhoto}
-                    title="Reset to default hero photo"
-                  >
-                    <RotateCcw size={13} />
-                    <span>Reset to Default</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className={styles.deleteHeroPhotoBtn}
+                  onClick={handleDeleteCustomHeroPhoto}
+                  title="Delete this photo"
+                >
+                  <Trash2 size={14} />
+                  <span>Delete Photo</span>
+                </button>
               </div>
             )}
 
