@@ -166,7 +166,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       }
     } catch (err) {
       console.error('Failed to load storage stats:', err);
-      setStorageError(err.message || 'Failed to load cloud storage stats');
+      const message = err.message === 'Failed to fetch'
+        ? 'Backend server is offline or unreachable at http://localhost:5000. Please ensure the backend is running.'
+        : (err.message || 'Failed to load cloud storage stats');
+      setStorageError(message);
     } finally {
       setLoadingStorage(false);
     }
