@@ -69,12 +69,21 @@ const allowedOrigins = [
   CLIENT_URL,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  'http://localhost:5175',
+  'http://127.0.0.1:5175',
   'http://localhost:3000'
 ].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || CLIENT_URL === '*') {
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      CLIENT_URL === '*' ||
+      (NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+    ) {
       callback(null, true);
     } else {
       callback(new Error(`Origin [${origin}] not allowed by CORS`));
