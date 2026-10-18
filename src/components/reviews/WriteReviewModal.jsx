@@ -4,15 +4,29 @@ import { useData } from '../../context/useData';
 import { defaultAcceptedInsurances } from '../../data/insurancePartners';
 import styles from './WriteReviewModal.module.css';
 
-const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess }) => {
+const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, targetType: propTargetType, targetName: propTargetName, targetId: propTargetId }) => {
   const { addReview, hospitals } = useData();
+
+  const isAdmin = (() => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.role === 'admin' || u.isAdmin || u.type === 'admin') return true;
+      }
+      if (localStorage.getItem('admin_logged_in') === 'true') return true;
+    } catch {
+      return false;
+    }
+    return false;
+  })();
 
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
   const [patientName, setPatientName] = useState('');
   const [patientCity, setPatientCity] = useState('Bengaluru');
-  const [targetType, setTargetType] = useState(preselectedTarget?.type || 'hospital');
-  const [targetName, setTargetName] = useState(preselectedTarget?.name || hospitals[0]?.name || '');
+  const [targetType, setTargetType] = useState(propTargetType || preselectedTarget?.type || 'doctor');
+  const [targetName, setTargetName] = useState(propTargetName || preselectedTarget?.name || hospitals[0]?.name || '');
   const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
   const [treatment, setTreatment] = useState(preselectedTarget?.treatment || '');
@@ -21,6 +35,10 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!isAdmin) {
+      alert('Review writing is restricted to administrators.');
+      return;
+    }
     if (!patientName.trim() || !comment.trim() || !targetName.trim()) {
       alert('Please fill out all required fields.');
       return;
@@ -31,6 +49,7 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess }) => {
       patientCity: patientCity.trim(),
       targetType,
       targetName: targetName.trim(),
+      targetId: propTargetId || preselectedTarget?.id || '',
       rating: Number(rating),
       title: title.trim(),
       comment: comment.trim(),
@@ -51,16 +70,44 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess }) => {
           <X size={20} />
         </button>
 
-        {!submitted ? (
+        {!isAdmin ? (
+          <div style={{ textAlign: 'center', padding: '36px 16px' }}>
+            <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <ShieldCheck size={28} />
+            </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
+              Admin Authorization Required
+            </h2>
+            <p style={{ fontSize: '0.90rem', color: '#64748b', margin: '0 auto 24px auto', maxWidth: '380px', lineHeight: 1.55 }}>
+              Patient review submission and publishing is restricted to authorized hospital administrators and patient care moderators. Public reviews are closed.
+            </p>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: '#0f172a',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '10px 24px',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              Close Window
+            </button>
+          </div>
+        ) : !submitted ? (
           <div>
             <div className={styles.header}>
-              <div className={styles.badge}>
-                <ShieldCheck size={14} color="#059669" />
-                <span>Verified Patient Experience</span>
+              <div className={styles.badge} style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#b45309' }}>
+                <ShieldCheck size={14} color="#b45309" />
+                <span>Admin Portal • Verified Patient Review</span>
               </div>
-              <h2 className={styles.title}>Share Your Healthcare Experience</h2>
+              <h2 className={styles.title}>Add Verified Patient Review</h2>
               <p className={styles.subtitle}>
-                Help thousands of patients make informed choices regarding hospitals, surgeries, and cashless insurance support.
+                Publish verified clinical experiences and insurance settlement testimonials for {targetName || 'healthcare specialists'}.
               </p>
             </div>
 

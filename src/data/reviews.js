@@ -103,5 +103,50 @@ export const initialReviews = [
     treatment: 'Emergency Cardiac Assessment',
     insuranceUsed: 'HDFC ERGO',
     createdAt: '2026-10-10T09:15:00.000Z'
+  },
+  {
+    id: 8,
+    patientName: 'Rajiv Malhotra',
+    patientCity: 'Bengaluru',
+    targetType: 'doctor',
+    targetName: 'Dr. Rahul Verma',
+    rating: 5,
+    title: 'Life-saving diagnosis & exceptional interventional care',
+    comment: 'Dr. Rahul Verma is an exceptional cardiologist. He immediately identified my father’s severe LAD stenosis and performed a complex angioplasty with zero complications. The cashless TPA desk at Apollo handled everything in 30 minutes!',
+    isVerified: true,
+    status: 'approved',
+    treatment: 'Coronary Angioplasty & Stenting',
+    insuranceUsed: 'Star Health (100% Cashless)',
+    createdAt: '2026-10-06T14:20:00.000Z'
+  },
+  {
+    id: 9,
+    patientName: 'Ananya Deshmukh',
+    patientCity: 'Bengaluru',
+    targetType: 'doctor',
+    targetName: 'Dr. Rahul Verma',
+    rating: 5,
+    title: 'Clear communication and compassionate treatment',
+    comment: 'I visited Dr. Rahul for persistent palpitations and high BP. Instead of prescribing unnecessary medications, he patiently walked me through lifestyle adjustments and targeted therapy. Truly patient-centric approach.',
+    isVerified: true,
+    status: 'approved',
+    treatment: 'Hypertension & Preventive Cardiac Screening',
+    insuranceUsed: 'HDFC ERGO',
+    createdAt: '2026-09-28T16:45:00.000Z'
+  },
+  {
+    id: 10,
+    patientName: 'Col. Sanjeev Kapoor (Retd.)',
+    patientCity: 'Bengaluru',
+    targetType: 'doctor',
+    targetName: 'Dr. Rahul Verma',
+    rating: 5,
+    title: 'Highest standard of medical ethics and clinical precision',
+    comment: 'One of the finest doctors I have encountered in my life. Extremely thorough in evaluating symptoms, transparent about treatment alternatives, and humble. The clinic staff and booking experience were equally seamless.',
+    isVerified: true,
+    status: 'approved',
+    treatment: 'Preventive Cardiac Evaluation & Holter Monitoring',
+    insuranceUsed: 'ICICI Lombard',
+    createdAt: '2026-09-18T10:10:00.000Z'
   }
 ];

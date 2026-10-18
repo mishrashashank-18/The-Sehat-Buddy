@@ -23,7 +23,49 @@
   color: #2563eb;
 }
 
-/* Two-column top section grid: Left (Hero + About) & Right (Booking Card) */
+/* Unified Doctor Master Card (Merges Doctor Profile, Highlights, About & Booking) */
+.unifiedDoctorCard {
+  background: #ffffff;
+  border-radius: 20px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+
+.unifiedMainCol {
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.unifiedAboutSection {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 20px;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.unifiedBookingCol {
+  background: #fbfcfe;
+  border-left: 1px solid #edf2f7;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 16px;
+  box-sizing: border-box;
+}
+
+
+
+/* Two-column top section grid: Left (Hero + About) & Right (Booking Card) [Legacy fallback] */
 .topSectionGrid {
   display: grid;
   grid-template-columns: 1fr 380px;
@@ -385,52 +427,125 @@
   justify-content: space-between;
 }
 
-.feeSection {
+/* Consultation Fee Card */
+.feeCard {
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  transition: all 0.2s ease;
 }
 
-.feeLabel {
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #475569;
+.feeCard:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.feeCardLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.feeCardHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.feeCardLabel {
+  font-size: 0.70rem;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .feePriceRow {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 3px;
+}
+
+.feeCurrency {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .feeAmount {
-  font-size: 1.85rem;
-  font-weight: 800;
+  font-size: 1.9rem;
+  font-weight: 900;
   color: #0f172a;
   line-height: 1;
 }
 
 .feeSub {
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   color: #64748b;
-  font-weight: 500;
+  font-weight: 600;
+  margin-left: 2px;
 }
 
-.sidebarDivider {
-  height: 1px;
-  background: #f1f5f9;
-  margin: 12px 0;
+.feeCardRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.feeVerifiedTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.70rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.feePayTag {
+  font-size: 0.70rem;
+  color: #94a3b8;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Consultation Mode Section */
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.instantTag {
+  font-size: 0.70rem;
+  color: #0284c7;
+  font-weight: 700;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 2px 7px;
+  border-radius: 6px;
 }
 
 .bookingSection {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .bookingSectionLabel {
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -440,96 +555,130 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  background: #f8fafc;
-  padding: 3px;
-  border-radius: 24px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 12px;
   border: 1px solid #e2e8f0;
 }
 
 .consultTypeBtn {
-  padding: 7px 10px;
-  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border-radius: 8px;
   font-size: 0.82rem;
   font-weight: 600;
   border: none;
   background: transparent;
   color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
   white-space: nowrap;
 }
 
-.consultTypeActive {
-  background: white;
-  color: #1d4ed8;
-  font-weight: 700;
-  border: 1.5px solid #2563eb;
-  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);
+.consultTypeBtn:hover {
+  color: #0f172a;
 }
 
+.consultTypeActive {
+  background: #ffffff;
+  color: #1d4ed8;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+/* Date Slots */
 .dateSlotsGroup {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .dateSlotCard {
   border: 1px solid #e2e8f0;
   background: #ffffff;
-  border-radius: 8px;
-  padding: 8px 4px;
+  border-radius: 10px;
+  padding: 8px 6px;
   text-align: center;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 2px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
 }
 
 .dateSlotCard:hover {
   border-color: #93c5fd;
   background: #f8fafc;
+  transform: translateY(-1px);
 }
 
 .dateSlotCardActive {
   border: 2px solid #2563eb;
   background: #eff6ff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
 }
 
-.dateSlotDayText {
+.dateSlotDayName {
+  font-size: 0.80rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.dateSlotDateNum {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.dateSlotPill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.dateSlotPillActive {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+/* Time Slots */
+.timeSlotsHeader {
   font-size: 0.78rem;
   font-weight: 700;
-  color: #1e293b;
-  line-height: 1.2;
-}
-
-.dateSlotCountText {
-  font-size: 0.68rem;
-  color: #16a34a;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.timeSlotsHeader {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #334155;
+  color: #475569;
   margin-top: 10px;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .timeSlotsGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 6px;
+  gap: 7px;
 }
 
 .timeSlotPill {
   border: 1px solid #cbd5e1;
   background: #ffffff;
-  border-radius: 7px;
-  padding: 6px 8px;
+  border-radius: 8px;
+  padding: 8px 10px;
   font-size: 0.82rem;
   font-weight: 600;
   color: #334155;
@@ -548,33 +697,59 @@
   background: #eff6ff;
   color: #1d4ed8;
   font-weight: 700;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.12);
+}
+
+/* CTA & Guarantees */
+.bookingCtaWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .bookAppointmentBtn {
   width: 100%;
-  background: #1d4ed8;
-  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #ffffff;
   border: none;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 12px 18px;
   font-size: 0.96rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 12px rgba(29, 78, 216, 0.22);
-  margin-top: 8px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28);
 }
 
 .bookAppointmentBtn:hover {
-  background: #1e40af;
-  box-shadow: 0 6px 16px rgba(29, 78, 216, 0.32);
+  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.38);
 }
 
-.bookingCardNote {
-  font-size: 0.75rem;
+.bookingGuaranteesRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.72rem;
   color: #64748b;
-  text-align: center;
-  margin: 8px 0 0 0;
+  font-weight: 500;
+}
+
+.guaranteeItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.guaranteeDivider {
+  color: #cbd5e1;
 }
 
 /* Social links */
@@ -602,22 +777,34 @@
   color: white;
 }
 
-/* Credentials, Awards & Memberships Section */
+/* Credentials, Awards & Memberships Section - Symmetrical & Eye-Catching */
 .credentialsCard {
-  background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 80px, #ffffff 100%);
-  border-radius: 20px;
-  padding: 30px 34px;
-  box-shadow: 0 4px 24px -2px rgba(15, 23, 42, 0.05);
-  border: 1px solid #dbeafe;
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 28px 32px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  border: 1px solid #e2e8f0;
 }
 
 .credentialsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 24px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.credentialsHeaderLeft {
+  flex: 1;
+  min-width: 260px;
 }
 
 .credentialsTitle {
-  font-size: 1.4rem;
-  font-weight: 800;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: #0f172a;
   margin: 0 0 6px 0;
   display: flex;
@@ -626,16 +813,31 @@
 }
 
 .credentialsSubtitle {
-  font-size: 0.92rem;
-  color: #475569;
+  font-size: 0.88rem;
+  color: #64748b;
   margin: 0;
   line-height: 1.5;
+}
+
+.verifiedHeaderBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.08);
 }
 
 .credentialsGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 32px 36px;
+  gap: 28px 32px;
+  align-items: start;
 }
 
 .credBlock {
@@ -645,13 +847,13 @@
 }
 
 .credBlockTitle {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  color: #0f172a;
+  color: #1e293b;
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 4px 0;
+  margin: 0 0 2px 0;
 }
 
 .credList {
@@ -660,184 +862,164 @@
   gap: 10px;
 }
 
-/* Awards - warm gold/amber gradient pills */
-.awardItemPill {
+/* Shared Card Item Structure */
+.awardItemPill,
+.certItemPill,
+.membershipItemPill,
+.timelineCard {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: linear-gradient(90deg, #c58129 0%, #d8963e 50%, #cca356 100%);
-  border-radius: 10px;
-  padding: 12px 16px;
-  color: #241400;
-  font-size: 0.88rem;
-  line-height: 1.4;
-  box-shadow: 0 2px 6px rgba(197, 129, 41, 0.2);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.awardItemPill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(197, 129, 41, 0.3);
-}
-
-.awardItemPill strong {
-  font-weight: 700;
-  color: #1a0c00;
-}
-
-.awardIconWrap {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Certifications - rich jewel-toned pills */
-.certItemPill {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-radius: 10px;
-  padding: 12px 16px;
-  color: #ffffff;
-  font-size: 0.88rem;
-  line-height: 1.4;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.certItemPill:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
-}
-
-.certItemPill strong {
-  font-weight: 700;
-  color: #ffffff;
-}
-
-/* 4 distinct jewel tones matching the screenshot */
-.certTone0 {
-  background: linear-gradient(90deg, #0f4c81 0%, #154c9e 100%);
-}
-
-.certTone1 {
-  background: linear-gradient(90deg, #0e5b6a 0%, #13697a 100%);
-}
-
-.certTone2 {
-  background: linear-gradient(90deg, #0d707c 0%, #137e8c 100%);
-}
-
-.certTone3 {
-  background: linear-gradient(90deg, #0c4d54 0%, #115c65 100%);
-}
-
-/* Memberships - clean bordered light cards with teal/green checkmark */
-.membershipItemPill {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 14px;
   background: #ffffff;
-  border: 1.5px solid #dbeafe;
-  border-radius: 10px;
-  padding: 12px 16px;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: #1e293b;
-  line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition: all 0.15s ease;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-height: 62px;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
 }
 
-.membershipItemPill:hover {
-  border-color: #93c5fd;
-  background: #f8fafc;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.05);
+.awardItemPill:hover,
+.certItemPill:hover,
+.membershipItemPill:hover,
+.timelineCard:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
-/* Timeline - custom connected vertical line with nodes */
-.timelineWrapper {
+/* Text hierarchy inside every card */
+.credItemTextWrap {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  position: relative;
-  padding-left: 28px;
+  gap: 2px;
 }
 
-.timelineConnector {
-  position: absolute;
-  left: 7px;
-  top: 22px;
-  bottom: 22px;
-  width: 2px;
-  background: #bfdbfe;
-}
-
-.timelineRow {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.timelineNode {
-  position: absolute;
-  left: -28px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 3px solid #2563eb;
-  box-shadow: 0 0 0 2px #dbeafe;
-  z-index: 2;
-}
-
-.timelineNodeActive {
-  background: #2563eb;
-  border: 3px solid #ffffff;
-  box-shadow: 0 0 0 2px #2563eb;
-}
-
-.timelineCard {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: #ffffff;
-  border: 1.5px solid #dbeafe;
-  border-radius: 10px;
-  padding: 11px 16px;
+.credItemTitle {
   font-size: 0.88rem;
-  color: #334155;
-  line-height: 1.4;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition: all 0.15s ease;
-}
-
-.timelineCard:hover {
-  border-color: #93c5fd;
-  background: #f8fafc;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.05);
-}
-
-.timelineCard strong,
-.timelineJobTitle {
   font-weight: 700;
+  color: #0f172a;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.credItemSubRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.credItemSub {
+  font-size: 0.78rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Micro Chips for Eye-Catching Visual Finish */
+.yearChip {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.certCodeChip {
+  background: #eff6ff;
   color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.memberTierChip {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .presentBadge {
-  background: #dcfce7;
-  color: #15803d;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
   font-size: 0.72rem;
   font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 4px;
-  margin-left: 6px;
-  display: inline-block;
-  vertical-align: middle;
+  padding: 1px 7px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* Icon Containers with Refined Soft Gradients */
+.awardIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  color: #d97706;
+  border: 1px solid #fde68a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.certIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.membershipIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.timelineIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 /* Media section */
@@ -932,55 +1114,168 @@
 .faqCard {
   background: white;
   border-radius: 20px;
-  padding: 24px 32px 30px;
+  padding: 32px 36px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   border: 1px solid #e2e8f0;
 }
 
-.faqHeader {
+.faqLayoutGrid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+/* Left Sidebar */
+.faqSidebarCol {
   display: flex;
-  align-items: center;
-  gap: 22px;
-  padding-bottom: 22px;
-  margin-bottom: 20px;
-  border-bottom: 1.5px solid #f1f5f9;
+  flex-direction: column;
+  gap: 18px;
 }
 
 .faqIllustrationWrap {
-  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .faqHeaderTextWrap {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.faqTitle {
+.faqSectionBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  color: #0284c7;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  width: fit-content;
+  letter-spacing: 0.04em;
+}
+
+.faqMainTitle {
   font-size: 1.55rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  letter-spacing: -0.01em;
-}
-
-.faqTitleIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: #0284c7;
+  line-height: 1.25;
+  margin: 4px 0 0 0;
+  letter-spacing: -0.015em;
 }
 
 .faqSubtitle {
-  font-size: 0.95rem;
-  color: #475569;
-  margin: 6px 0 0 0;
-  line-height: 1.5;
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.faqVerifiedPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  width: fit-content;
+  margin-top: 4px;
+}
+
+/* Dedicated Clinic Support Card inside Left Column */
+.faqSupportCard {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.faqSupportHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.faqSupportIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.faqSupportTitle {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 3px 0;
+}
+
+.faqSupportSub {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.faqSupportActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.faqSupportPhoneBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+}
+
+.faqSupportPhoneBtn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+}
+
+.faqSupportHours {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Right Accordion Column */
+.faqAccordionCol {
+  min-width: 0;
 }
 
 .faqList {
@@ -994,19 +1289,19 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   overflow: hidden;
 }
 
 .faqItem:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
 }
 
 .faqItemOpen {
   border-color: #93c5fd;
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.06);
+  box-shadow: 0 4px 18px rgba(37, 99, 235, 0.08);
 }
 
 .faqQuestionBtn {
@@ -1015,11 +1310,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 20px;
+  padding: 16px 20px;
   background: none;
   border: none;
   cursor: pointer;
-  text-align: center;
+  text-align: left;
   transition: background-color 0.15s ease;
 }
 
@@ -1028,34 +1323,65 @@
 }
 
 .faqItemIconWrap {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.faqItemOpen .faqItemIconWrap {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+.faqQuestionTextWrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+}
+
+.faqCategoryBadge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #0284c7;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .faqQuestionText {
-  flex: 1;
-  text-align: center;
-  font-size: 1.02rem;
+  font-size: 0.98rem;
   font-weight: 700;
   color: #0f172a;
-  line-height: 1.4;
-  padding: 0 12px;
+  line-height: 1.38;
 }
 
 .faqChevronWrap {
-  width: 36px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
   flex-shrink: 0;
+  color: #64748b;
+  background: #f1f5f9;
+  transition: all 0.2s ease;
+}
+
+.faqItemOpen .faqChevronWrap {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .faqChevron {
-  color: #0284c7;
   transition: transform 0.25s ease;
 }
 
@@ -1064,36 +1390,67 @@
 }
 
 .faqAnswer {
-  padding: 16px 24px 20px;
+  padding: 16px 22px 20px 76px;
   border-top: 1px solid #f1f5f9;
-  background: #f8fafc;
-  color: #334155;
-  font-size: 0.94rem;
-  line-height: 1.65;
-  text-align: center;
-}
-
-.faqStepsList {
-  margin: 0 auto 10px;
-  padding-left: 20px;
-  display: inline-block;
+  background: #fafcff;
   text-align: left;
-  max-width: 600px;
 }
 
-.faqStepsList li {
-  color: #334155;
+.faqAnswerText {
   font-size: 0.92rem;
-  line-height: 1.5;
-  margin-bottom: 6px;
+  color: #334155;
+  line-height: 1.65;
+  margin: 0;
 }
 
-.faqNote {
-  margin: 8px 0 0 0;
-  color: #0284c7;
-  font-size: 0.88rem;
+/* Steps list styling */
+.faqStepsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.faqStepRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.faqStepNumBadge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.faqStepText {
+  font-size: 0.90rem;
+  color: #334155;
+  line-height: 1.5;
+}
+
+.faqNoteBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #15803d;
+  font-size: 0.82rem;
   font-weight: 600;
-  text-align: center;
+  line-height: 1.45;
+  margin-top: 10px;
 }
 
 /* Patient Reviews Section */
@@ -1167,6 +1524,55 @@
 .writeReviewBtn:hover {
   background: #1d4ed8;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.adminWriteReviewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0f172a;
+  color: #ffffff;
+  border: 1px solid #334155;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+}
+
+.adminWriteReviewBtn:hover {
+  background: #1e293b;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+}
+
+.adminOnlyNoticePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.06);
+}
+
+.verifiedBadgeMicro {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
 }
 
 .reviewsGrid {
@@ -1288,6 +1694,17 @@
 
 /* Responsive queries */
 @media (max-width: 992px) {
+  .unifiedDoctorCard {
+    grid-template-columns: 1fr;
+  }
+  .unifiedBookingCol {
+    border-left: none;
+    border-top: 1px solid #edf2f7;
+    padding: 24px 20px;
+  }
+  .unifiedMainCol {
+    padding: 22px 20px;
+  }
   .topSectionGrid {
     grid-template-columns: 1fr;
   }
@@ -1326,36 +1743,23 @@
   .reviewsGrid {
     grid-template-columns: 1fr;
   }
+  .faqLayoutGrid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
   .faqCard {
-    padding: 20px 16px 24px;
+    padding: 24px 20px;
     border-radius: 16px;
   }
-  .faqHeader {
-    flex-direction: column;
-    text-align: center;
-    gap: 14px;
-    padding-bottom: 16px;
-    margin-bottom: 16px;
-  }
-  .faqTitle {
-    justify-content: center;
-    font-size: 1.3rem;
-  }
   .faqQuestionBtn {
-    padding: 12px 14px;
-    gap: 10px;
+    padding: 14px 16px;
+    gap: 12px;
   }
   .faqQuestionText {
-    font-size: 0.94rem;
-    padding: 0 4px;
+    font-size: 0.92rem;
   }
-  .faqItemIconWrap, .faqChevronWrap {
-    width: 28px;
-    height: 28px;
-  }
-  .faqItemIconWrap svg {
-    width: 26px;
-    height: 26px;
+  .faqAnswer {
+    padding: 14px 16px 18px 16px;
   }
 }
 
@@ -1387,6 +1791,12 @@
 }
 
 @media (max-width: 480px) {
+  .unifiedMainCol {
+    padding: 18px 14px;
+  }
+  .unifiedBookingCol {
+    padding: 20px 14px;
+  }
   .heroCard {
     padding: 16px 12px;
   }
