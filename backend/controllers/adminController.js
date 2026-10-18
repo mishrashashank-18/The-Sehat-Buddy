@@ -4,6 +4,7 @@ import generateToken from '../utils/generateToken.js';
 import Doctor from '../models/Doctor.js';
 import Hospital from '../models/Hospital.js';
 import Appointment from '../models/Appointment.js';
+import validatePassword from '../utils/validatePassword.js';
 
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
@@ -31,6 +32,11 @@ export const authAdmin = async (req, res) => {
 export const registerAdmin = async (req, res) => {
   const { name, email, password } = req.body;
   try {
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
     const existingAdminsCount = await Admin.countDocuments();
     const adminSecret = req.headers['x-admin-secret'] || req.body.adminSecret;
     const envSecret = process.env.ADMIN_REGISTRATION_SECRET;
@@ -127,6 +133,11 @@ export const updateDoctor = async (req, res) => {
     }
     if (doctor) {
       Object.assign(doctor, req.body);
+
+      if (req.body.isStarDoctor !== undefined) {
+        doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
+        doctor.markModified('isStarDoctor');
+      }
 
       if (req.body.awards !== undefined) {
         doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];

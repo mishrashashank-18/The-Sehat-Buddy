@@ -3,12 +3,18 @@ import Doctor from '../models/Doctor.js';
 import Appointment from '../models/Appointment.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
+import validatePassword from '../utils/validatePassword.js';
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 export const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
   try {
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
     const userExists = await User.findOne({ email });
     if (userExists) {
       if (!userExists.isVerified) {

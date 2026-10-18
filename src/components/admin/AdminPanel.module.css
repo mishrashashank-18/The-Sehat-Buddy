@@ -965,6 +965,54 @@
   color: #ffffff;
 }
 
+.starActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 7px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.starActionBtn:hover {
+  background: #fefce8;
+  border-color: #fde047;
+  color: #ca8a04;
+}
+
+.starActionBtnActive {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.starActionBtnActive:hover {
+  background: #fde68a;
+  border-color: #d97706;
+  color: #92400e;
+}
+
+.starDoctorBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  padding: 1px 7px;
+  border-radius: 9999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* Hospitals Cards Grid */
 .hospitalsGrid {
   display: grid;

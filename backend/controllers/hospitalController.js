@@ -3,6 +3,7 @@ import Hospital from '../models/Hospital.js';
 import Doctor from '../models/Doctor.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
+import validatePassword from '../utils/validatePassword.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -84,8 +85,9 @@ export const setInitialHospitalPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
     }
 
     const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
@@ -231,8 +233,9 @@ export const resetHospitalPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
     }
 
     const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpires +otpAttempts');

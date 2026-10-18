@@ -45,6 +45,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     doctors,
     hospitals,
     corporateTieups,
+    updateDoctor,
     deleteDoctor,
     deleteHospital,
     resetToDefaults,
@@ -114,6 +115,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     setTimeout(() => {
       setToastMessage('');
     }, 3500);
+  };
+
+  const handleToggleStarDoctor = (doc, e) => {
+    e?.stopPropagation?.();
+    const nextVal = !doc.isStarDoctor;
+    updateDoctor(doc.id || doc._id, { isStarDoctor: nextVal });
+    showToast(
+      nextVal
+        ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
+        : `Removed ${doc.name} from Star Doctors.`
+    );
   };
 
   // Filtered Doctors
@@ -671,7 +683,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                 }}
                               />
                               <div>
-                                <span className={styles.tableDocName}>{doc.name}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span className={styles.tableDocName}>{doc.name}</span>
+                                  {doc.isStarDoctor && (
+                                    <span className={styles.starDoctorBadge} title="Featured on Homepage Popular Doctors">
+                                      <Star size={11} fill="#F59E0B" color="#D97706" /> Star Doctor
+                                    </span>
+                                  )}
+                                </div>
                                 {doc.degree && <span className={styles.tableDocDegree}>{doc.degree}</span>}
                               </div>
                             </div>
@@ -703,6 +722,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           </td>
                           <td>
                             <div className={styles.actionBtnGroup}>
+                              <button
+                                className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}
+                                onClick={(e) => handleToggleStarDoctor(doc, e)}
+                                title={doc.isStarDoctor ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
+                              >
+                                <Star size={15} fill={doc.isStarDoctor ? "#F59E0B" : "none"} color={doc.isStarDoctor ? "#D97706" : "#64748B"} />
+                                <span>{doc.isStarDoctor ? "Starred" : "Star"}</span>
+                              </button>
                               <button
                                 className={styles.editActionBtn}
                                 onClick={() => handleOpenEditDoctor(doc)}
@@ -985,10 +1012,24 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                         <div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
                               {faq.category}
                             </span>
+                            {faq.targetName && (
+                              <span style={{
+                                fontSize: '0.75rem',
+                                background: faq.targetType === 'doctor' ? '#f5f3ff' : '#ecfdf5',
+                                color: faq.targetType === 'doctor' ? '#7c3aed' : '#059669',
+                                border: `1px solid ${faq.targetType === 'doctor' ? '#ddd6fe' : '#a7f3d0'}`,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontWeight: 700
+                              }}>
+                                {faq.targetType === 'doctor' ? '👨‍⚕️ Doctor: ' : '🏥 Hospital: '}
+                                {faq.targetName}
+                              </span>
+                            )}
                             <span style={{ fontSize: '0.75rem', background: faq.isActive ? '#ecfdf5' : '#f1f5f9', color: faq.isActive ? '#059669' : '#64748b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
                               {faq.isActive ? 'Active' : 'Hidden'}
                             </span>
@@ -1141,8 +1182,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         </div>
                       </div>
 
-                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '6px 10px', borderRadius: '6px', color: '#334155' }}>
-                        <strong>Target:</strong> {rev.targetName} ({rev.targetType})
+                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', color: '#334155', border: '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          <span style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: rev.targetType === 'doctor' ? '#f5f3ff' : '#eff6ff',
+                            color: rev.targetType === 'doctor' ? '#7c3aed' : '#2563eb',
+                            border: `1px solid ${rev.targetType === 'doctor' ? '#ddd6fe' : '#bfdbfe'}`
+                          }}>
+                            {rev.targetType === 'doctor' ? '👨‍⚕️ Doctor Review' : '🏥 Hospital Review'}
+                          </span>
+                          <strong style={{ color: '#0f172a' }}>{rev.targetName}</strong>
+                        </div>
                         {rev.treatment && <span style={{ display: 'block', color: '#2563eb' }}>Treatment: {rev.treatment}</span>}
                         {rev.insuranceUsed && <span style={{ display: 'block', color: '#059669' }}>Insurance: {rev.insuranceUsed}</span>}
                       </div>

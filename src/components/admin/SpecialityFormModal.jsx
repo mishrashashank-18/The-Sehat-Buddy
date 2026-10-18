@@ -65,17 +65,22 @@ const SpecialityFormModal = ({ itemToEdit, onClose, onSave }) => {
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modalContent} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '680px' }}>
-        <button className={styles.closeBtn} onClick={onClose}>
-          <X size={20} />
+        <button type="button" className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
+          <X size={18} />
         </button>
 
-        <div style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
-            {itemToEdit ? 'Edit Speciality / Surgery' : 'Add Speciality / Procedure'}
-          </h2>
-          <p style={{ fontSize: '0.88rem', color: '#64748b', margin: 0 }}>
-            Configure treatment details, display icons, and cashless insurance coverage parameters.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', paddingRight: '40px' }}>
+          <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#ecfdf5', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ShieldCheck size={22} color="#059669" />
+          </div>
+          <div>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+              {itemToEdit ? 'Edit Speciality / Surgery' : 'Add Speciality / Procedure'}
+            </h2>
+            <p style={{ fontSize: '0.86rem', color: '#64748b', margin: 0 }}>
+              Configure treatment details, display icons, and cashless insurance coverage parameters.
+            </p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

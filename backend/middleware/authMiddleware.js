@@ -13,7 +13,11 @@ export const protect = async (req, res, next) => {
   ) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const secret = process.env.JWT_SECRET || 'sehatbuddy_super_secure_jwt_secret_dev_fallback_2026';
+      const secret = process.env.JWT_SECRET || (
+        process.env.NODE_ENV === 'production'
+          ? (() => { throw new Error('FATAL: JWT_SECRET environment variable is missing in production'); })()
+          : 'sehatbuddy_super_secure_jwt_secret_dev_fallback_2026'
+      );
       const decoded = jwt.verify(token, secret);
 
       let user = null;

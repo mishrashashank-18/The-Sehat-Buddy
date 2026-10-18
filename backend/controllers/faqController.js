@@ -83,14 +83,17 @@ export const getFaqs = async (req, res) => {
 
 export const createFaq = async (req, res) => {
   try {
-    const { question, answer, category, order, isActive } = req.body;
+    const { question, answer, category, targetType, targetId, targetName, order, isActive } = req.body;
     if (!question || !answer) {
       return res.status(400).json({ success: false, message: 'Question and answer are required' });
     }
     const faq = await Faq.create({
       question,
       answer,
-      category: category || 'General',
+      category: category || (targetType === 'doctor' ? 'Doctors & Consultations' : targetType === 'hospital' ? 'Hospitals & Admissions' : 'General'),
+      targetType: targetType || 'general',
+      targetId: targetId || '',
+      targetName: targetName || '',
       order: order !== undefined ? Number(order) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true
     });

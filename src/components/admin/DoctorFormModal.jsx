@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, Plus, Trash2, Edit2 } from 'lucide-react';
+import { X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, Plus, Trash2, Edit2, Star } from 'lucide-react';
 import { useData } from '../../context/useData';
 import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
@@ -51,6 +51,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         availableDays: doctorToEdit.availableDays || 'Mon - Sat (9:00 AM - 1:00 PM)',
         about: doctorToEdit.about || '',
         available: doctorToEdit.available !== undefined ? doctorToEdit.available : true,
+        isStarDoctor: Boolean(doctorToEdit.isStarDoctor),
         image: doctorToEdit.image || doc1,
         instagram: doctorToEdit.instagram || '',
         facebook: doctorToEdit.facebook || '',
@@ -74,6 +75,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       availableDays: 'Mon - Sat (10:00 AM - 4:00 PM)',
       about: '',
       available: true,
+      isStarDoctor: false,
       image: doc1,
       instagram: '',
       facebook: '',
@@ -174,6 +176,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       qualifications: formData.degree,
       contact_number: formData.phone,
       available: formData.available,
+      isStarDoctor: Boolean(formData.isStarDoctor),
       faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== '')
     };
 
@@ -461,6 +464,36 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 style={{ width: 'auto' }}
               />
               Active / Listed on Find Doctors page
+            </label>
+          </div>
+
+          <div className={styles.formGroup} style={{ marginTop: '10px' }}>
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              cursor: 'pointer',
+              background: formData.isStarDoctor ? '#fef3c7' : '#f8fafc',
+              border: formData.isStarDoctor ? '1.5px solid #f59e0b' : '1px solid #e2e8f0',
+              padding: '12px 14px',
+              borderRadius: '10px',
+              transition: 'all 0.2s'
+            }}>
+              <input
+                type="checkbox"
+                checked={formData.isStarDoctor}
+                onChange={(e) => setFormData({ ...formData, isStarDoctor: e.target.checked })}
+                style={{ width: '18px', height: '18px', accentColor: '#f59e0b', cursor: 'pointer' }}
+              />
+              <div>
+                <div style={{ fontWeight: 700, color: formData.isStarDoctor ? '#92400e' : '#1e293b', fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Star size={16} fill={formData.isStarDoctor ? '#f59e0b' : 'none'} color={formData.isStarDoctor ? '#f59e0b' : '#64748b'} />
+                  Feature as Star Doctor (Featured on Homepage Popular Doctors)
+                </div>
+                <div style={{ fontSize: '0.78rem', color: formData.isStarDoctor ? '#b45309' : '#64748b', marginTop: '2px' }}>
+                  Doctors marked as Star will appear prominently in the "Popular Doctors" section on the front page.
+                </div>
+              </div>
             </label>
           </div>
 
