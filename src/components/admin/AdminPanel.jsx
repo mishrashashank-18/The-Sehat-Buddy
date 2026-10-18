@@ -207,7 +207,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       if (!isSilent) {
         console.error('Failed to load storage stats:', err);
         const message = err.message === 'Failed to fetch'
-          ? 'Backend server is offline or unreachable at http://localhost:5000. Please ensure the backend is running.'
+          ? 'Backend server is offline or unreachable. Please ensure the backend is running.'
           : (err.message || 'Failed to load cloud storage stats');
         setStorageError(message);
       }
@@ -222,7 +222,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     let isMounted = true;
 
     const token = localStorage.getItem('token');
-    const apiBase = import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const apiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
     const streamBase = apiBase.replace(/\/+$/, '');
     const cleanBase = streamBase.endsWith('/api') ? streamBase : `${streamBase}/api`;
     const sseUrl = `${cleanBase}/admin/storage-stream?token=${encodeURIComponent(token || '')}`;

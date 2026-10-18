@@ -1,11 +1,11 @@
-const resolveApiBase = () => {
-  const envUrl = import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
+export const resolveApiBase = () => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
   if (!envUrl) return 'http://localhost:5000/api';
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 };
 
-const API_BASE = resolveApiBase();
+export const API_BASE = resolveApiBase();
 
 const getAuthHeaders = (isFormData = false) => {
   const token = localStorage.getItem('token');

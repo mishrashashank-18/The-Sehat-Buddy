@@ -1,13 +1,5 @@
 // src/services/routingService.js
-
-const resolveApiBase = () => {
-  const envUrl = import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
-  if (!envUrl) return 'http://localhost:5000/api';
-  const trimmed = envUrl.trim().replace(/\/+$/, '');
-  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
-};
-
-const API_BASE = resolveApiBase();
+import { API_BASE } from './api';
 
 /**
  * Fetch road route between origin and destination.

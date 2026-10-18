@@ -9,6 +9,7 @@ import {
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
+import { API_BASE } from '../../services/api';
 import styles from './DoctorProfile.module.css';
 
 // FAQ Illustration & Icons matching design reference
@@ -304,7 +305,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     const token = localStorage.getItem('token');
     
     try {
-      const response = await fetch('http://localhost:5000/api/user/book-appointment', {
+      const response = await fetch(`${API_BASE}/user/book-appointment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
