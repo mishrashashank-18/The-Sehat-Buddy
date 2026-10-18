@@ -16,7 +16,8 @@ import {
   Play,
   Video,
   Building2,
-  Users
+  Users,
+  ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -90,13 +91,23 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   } = useData();
 
   // Active sub-tab: 'hero' | 'services' | 'why' | 'articles' | 'corporate'
-  const [subTab, setSubTab] = useState(initialSubTab);
+  const [subTab, setSubTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sehat_admin_frontpage_subtab');
+      if (saved) return saved;
+    } catch {}
+    return 'hero';
+  });
 
-  React.useEffect(() => {
-    if (initialSubTab) {
-      setSubTab(initialSubTab);
-    }
-  }, [initialSubTab]);
+  const setSubTab = (newTab) => {
+    try {
+      localStorage.setItem('sehat_admin_frontpage_subtab', newTab);
+    } catch {}
+    setSubTabState(newTab);
+  };
+
+  const isHeroDirtyRef = useRef(false);
+  const heroFormRef = useRef(null);
 
   // Hero form local state
   const [heroForm, setHeroForm] = useState(() => ({
@@ -124,32 +135,66 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
   }));
 
+  // Keep heroFormRef in sync with heroForm
+  useEffect(() => {
+    heroFormRef.current = heroForm;
+  }, [heroForm]);
+
+  // Auto-save on unmount if dirty
+  useEffect(() => {
+    return () => {
+      if (isHeroDirtyRef.current && heroFormRef.current) {
+        updateHeroContent(heroFormRef.current);
+        isHeroDirtyRef.current = false;
+      }
+    };
+  }, []);
+
   React.useEffect(() => {
-    setHeroForm({
-      badge: heroContent?.badge || '',
-      titleLine1: heroContent?.titleLine1 || '',
-      titleLine2: heroContent?.titleLine2 || '',
-      titleHighlight: heroContent?.titleHighlight || '',
-      description: heroContent?.description || '',
-      heroImage: heroContent?.heroImage || heroFamily,
-      stat1Label: heroContent?.stats?.[0]?.label || 'Trusted by',
-      stat1Value: heroContent?.stats?.[0]?.value || '10M+ Users',
-      stat2Label: heroContent?.stats?.[1]?.label || 'Expert Doctors',
-      stat2Value: heroContent?.stats?.[1]?.value || '25,000+',
-      stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
-      stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
-      whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
-      whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
-      whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
-      whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
-      newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
-      newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
-      corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
-      corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
-      corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
-      corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
-    });
+    if (!isHeroDirtyRef.current && heroContent) {
+      setHeroForm({
+        badge: heroContent?.badge || '',
+        titleLine1: heroContent?.titleLine1 || '',
+        titleLine2: heroContent?.titleLine2 || '',
+        titleHighlight: heroContent?.titleHighlight || '',
+        description: heroContent?.description || '',
+        heroImage: heroContent?.heroImage || heroFamily,
+        stat1Label: heroContent?.stats?.[0]?.label || 'Trusted by',
+        stat1Value: heroContent?.stats?.[0]?.value || '10M+ Users',
+        stat2Label: heroContent?.stats?.[1]?.label || 'Expert Doctors',
+        stat2Value: heroContent?.stats?.[1]?.value || '25,000+',
+        stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
+        stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
+        whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
+        whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+        whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
+        whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
+        newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
+        newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
+        corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
+        corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
+        corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+        corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
+      });
+    }
   }, [heroContent]);
+
+  const handleHeroFieldChange = (field, value) => {
+    isHeroDirtyRef.current = true;
+    setHeroForm(prev => {
+      const updated = { ...prev, [field]: value };
+      heroFormRef.current = updated;
+      return updated;
+    });
+  };
+
+  const handleSwitchSubTab = (newTab) => {
+    if (isHeroDirtyRef.current && heroFormRef.current) {
+      updateHeroContent(heroFormRef.current);
+      isHeroDirtyRef.current = false;
+    }
+    setSubTab(newTab);
+  };
 
   // Modals for adding items
   const [isAddServiceOpen, setIsAddServiceOpen] = useState(false);
@@ -174,7 +219,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     readTime: '5 min read',
     categoryColor: '#E0457B',
     categoryBg: '#FDE8EF',
-    image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80'
+    image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80',
+    link: ''
   });
 
   const [isPreviewVideoOpen, setIsPreviewVideoOpen] = useState(false);
@@ -279,11 +325,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       newsletterTitle: heroForm.newsletterTitle,
       newsletterSubtitle: heroForm.newsletterSubtitle
     });
+    isHeroDirtyRef.current = false;
     showToast('Hero section & front page headers updated successfully!');
   };
 
   const handleSaveWhyVideo = (e) => {
     if (e) e.preventDefault();
+    isHeroDirtyRef.current = false;
     updateHeroContent({
       whyChooseTitle: heroForm.whyChooseTitle,
       whyChooseVideoUrl: heroForm.whyChooseVideoUrl,
@@ -418,7 +466,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       readTime: newArticle.readTime.trim() || '5 min read',
       categoryColor: newArticle.categoryColor,
       categoryBg: newArticle.categoryBg,
-      image: newArticle.image
+      image: newArticle.image,
+      link: newArticle.link?.trim() || ''
     });
     setIsAddArticleOpen(false);
     setNewArticle({
@@ -427,7 +476,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       readTime: '5 min read',
       categoryColor: '#E0457B',
       categoryBg: '#FDE8EF',
-      image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80'
+      image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80',
+      link: ''
     });
     showToast('New health article added to front page!');
   };
@@ -435,13 +485,14 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   // Save Corporate Header
   const handleSaveCorporateHeader = (e) => {
     if (e) e.preventDefault();
+    isHeroDirtyRef.current = false;
     updateHeroContent({
-      corporateBadge: heroForm.corporateBadge,
-      corporateTitle: heroForm.corporateTitle,
-      corporateSubtitle: heroForm.corporateSubtitle,
-      corporateStat: heroForm.corporateStat
+      corporateBadge: heroForm.corporateBadge || '',
+      corporateTitle: heroForm.corporateTitle || '',
+      corporateSubtitle: heroForm.corporateSubtitle || '',
+      corporateStat: heroForm.corporateStat || ''
     });
-    showToast('Corporate Tie-ups header & metrics updated!');
+    showToast('Corporate Tie-ups header & metrics updated successfully!');
   };
 
   // Add Corporate Partner
@@ -498,35 +549,35 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       <div className={styles.subTabs}>
         <button
           className={`${styles.subTabBtn} ${subTab === 'hero' ? styles.subTabActive : ''}`}
-          onClick={() => setSubTab('hero')}
+          onClick={() => handleSwitchSubTab('hero')}
         >
           <Sparkles size={16} />
           <span>Hero & Trust Metrics</span>
         </button>
         <button
           className={`${styles.subTabBtn} ${subTab === 'services' ? styles.subTabActive : ''}`}
-          onClick={() => setSubTab('services')}
+          onClick={() => handleSwitchSubTab('services')}
         >
           <Layers size={16} />
           <span>Explore Services ({services?.length || 0})</span>
         </button>
         <button
           className={`${styles.subTabBtn} ${subTab === 'why' ? styles.subTabActive : ''}`}
-          onClick={() => setSubTab('why')}
+          onClick={() => handleSwitchSubTab('why')}
         >
           <HelpCircle size={16} />
           <span>Why Choose Us ({features?.length || 0})</span>
         </button>
         <button
           className={`${styles.subTabBtn} ${subTab === 'articles' ? styles.subTabActive : ''}`}
-          onClick={() => setSubTab('articles')}
+          onClick={() => handleSwitchSubTab('articles')}
         >
           <FileText size={16} />
           <span>Articles & Newsletter ({articles?.length || 0})</span>
         </button>
         <button
           className={`${styles.subTabBtn} ${subTab === 'corporate' ? styles.subTabActive : ''}`}
-          onClick={() => setSubTab('corporate')}
+          onClick={() => handleSwitchSubTab('corporate')}
         >
           <Building2 size={16} />
           <span>Corporate Tie-ups ({corporateTieups?.length || 0})</span>
@@ -553,7 +604,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <input
                   type="text"
                   value={heroForm.badge}
-                  onChange={(e) => setHeroForm({ ...heroForm, badge: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('badge', e.target.value)}
                   placeholder="e.g. Your Health Partner, Every Step of the Way"
                 />
               </div>
@@ -563,7 +614,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <input
                   type="text"
                   value={heroForm.titleLine1}
-                  onChange={(e) => setHeroForm({ ...heroForm, titleLine1: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('titleLine1', e.target.value)}
                   placeholder="e.g. Find Doctors, Book"
                 />
               </div>
@@ -573,7 +624,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <input
                   type="text"
                   value={heroForm.titleLine2}
-                  onChange={(e) => setHeroForm({ ...heroForm, titleLine2: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('titleLine2', e.target.value)}
                   placeholder="e.g. Appointments & Take"
                 />
               </div>
@@ -583,7 +634,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <input
                   type="text"
                   value={heroForm.titleHighlight}
-                  onChange={(e) => setHeroForm({ ...heroForm, titleHighlight: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('titleHighlight', e.target.value)}
                   placeholder="e.g. Care of Your Health"
                 />
               </div>
@@ -593,7 +644,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <textarea
                   rows={3}
                   value={heroForm.description}
-                  onChange={(e) => setHeroForm({ ...heroForm, description: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('description', e.target.value)}
                   placeholder="Brief introductory paragraph..."
                 />
               </div>
@@ -609,7 +660,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat1Label}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat1Label: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat1Label', e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -617,7 +668,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat1Value}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat1Value: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat1Value', e.target.value)}
                   />
                 </div>
               </div>
@@ -629,7 +680,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat2Label}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat2Label: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat2Label', e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -637,7 +688,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat2Value}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat2Value: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat2Value', e.target.value)}
                   />
                 </div>
               </div>
@@ -649,7 +700,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat3Label}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat3Label: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat3Label', e.target.value)}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -657,7 +708,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="text"
                     value={heroForm.stat3Value}
-                    onChange={(e) => setHeroForm({ ...heroForm, stat3Value: e.target.value })}
+                    onChange={(e) => handleHeroFieldChange('stat3Value', e.target.value)}
                   />
                 </div>
               </div>
@@ -875,14 +926,35 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
           {/* Section Title */}
           <div className={styles.formCard} style={{ marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-heading)' }}>
+                  Why Choose Us Section Heading
+                </h4>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
+                  Customize the headline displayed on the homepage above the feature cards.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.primarySaveBtn}
+                onClick={() => {
+                  isHeroDirtyRef.current = false;
+                  updateHeroContent({ whyChooseTitle: heroForm.whyChooseTitle });
+                  showToast('Section heading saved successfully!');
+                }}
+              >
+                <CheckCircle size={15} /> Save Title
+              </button>
+            </div>
             <div className={styles.formGroup}>
               <label>Section Heading Title</label>
               <input
                 type="text"
-                value={heroForm.whyChooseTitle}
-                onChange={(e) => {
-                  setHeroForm({ ...heroForm, whyChooseTitle: e.target.value });
-                  updateHeroContent({ whyChooseTitle: e.target.value });
+                value={heroForm.whyChooseTitle || ''}
+                onChange={(e) => handleHeroFieldChange('whyChooseTitle', e.target.value)}
+                onBlur={() => {
+                  updateHeroContent({ whyChooseTitle: heroForm.whyChooseTitle });
                 }}
                 placeholder="e.g. Why Choose The Sehat Buddy?"
               />
@@ -1012,7 +1084,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <input
                   type="text"
                   value={heroForm.whyChooseVideoUrl}
-                  onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoUrl: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('whyChooseVideoUrl', e.target.value)}
                   placeholder="https://www.youtube.com/watch?v=... or https://res.cloudinary.com/..."
                 />
                 <span style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
@@ -1025,7 +1097,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <textarea
                   rows={2}
                   value={heroForm.whyChooseVideoText}
-                  onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoText: e.target.value })}
+                  onChange={(e) => handleHeroFieldChange('whyChooseVideoText', e.target.value)}
                   placeholder="Watch how&#10;Sehat Buddy&#10;works for you"
                 />
               </div>
@@ -1036,7 +1108,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="checkbox"
                     checked={Boolean(heroForm.whyChooseVideoAutoplay)}
-                    onChange={(e) => setHeroForm({ ...heroForm, whyChooseVideoAutoplay: e.target.checked })}
+                    onChange={(e) => handleHeroFieldChange('whyChooseVideoAutoplay', e.target.checked)}
                     style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
                   />
                   <span style={{ fontSize: '0.88rem', color: '#1E293B', fontWeight: 500 }}>
@@ -1185,6 +1257,19 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     </div>
                   </div>
 
+                  <div className={styles.formGroup} style={{ marginTop: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <ExternalLink size={13} color="#2563EB" />
+                      <span>Article Link / Redirect URL</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={art.link || ''}
+                      onChange={(e) => updateArticle(art.id, { link: e.target.value })}
+                      placeholder="e.g. https://example.com/article-slug or internal path"
+                    />
+                  </div>
+
                   <div className={styles.artCardFooter}>
                     <span className={styles.categoryPillPreview} style={{ backgroundColor: art.categoryBg, color: art.categoryColor }}>
                       {art.category}
@@ -1207,16 +1292,37 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
           {/* Newsletter Box Content */}
           <div className={styles.formCard} style={{ marginTop: '24px' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '1.05rem' }}>Newsletter Card Content</h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Newsletter Card Content</h4>
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
+                  Manage the promotional newsletter subscription box title and subtitle.
+                </p>
+              </div>
+              <button
+                type="button"
+                className={styles.primarySaveBtn}
+                onClick={() => {
+                  isHeroDirtyRef.current = false;
+                  updateHeroContent({
+                    newsletterTitle: heroForm.newsletterTitle,
+                    newsletterSubtitle: heroForm.newsletterSubtitle
+                  });
+                  showToast('Newsletter card content saved!');
+                }}
+              >
+                <CheckCircle size={15} /> Save Newsletter Content
+              </button>
+            </div>
             <div className={styles.formGrid}>
               <div className={styles.formGroup}>
                 <label>Newsletter Title</label>
                 <textarea
                   rows={2}
-                  value={heroForm.newsletterTitle}
-                  onChange={(e) => {
-                    setHeroForm({ ...heroForm, newsletterTitle: e.target.value });
-                    updateHeroContent({ newsletterTitle: e.target.value });
+                  value={heroForm.newsletterTitle || ''}
+                  onChange={(e) => handleHeroFieldChange('newsletterTitle', e.target.value)}
+                  onBlur={() => {
+                    updateHeroContent({ newsletterTitle: heroForm.newsletterTitle });
                   }}
                 />
               </div>
@@ -1224,10 +1330,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Newsletter Subtitle</label>
                 <input
                   type="text"
-                  value={heroForm.newsletterSubtitle}
-                  onChange={(e) => {
-                    setHeroForm({ ...heroForm, newsletterSubtitle: e.target.value });
-                    updateHeroContent({ newsletterSubtitle: e.target.value });
+                  value={heroForm.newsletterSubtitle || ''}
+                  onChange={(e) => handleHeroFieldChange('newsletterSubtitle', e.target.value)}
+                  onBlur={() => {
+                    updateHeroContent({ newsletterSubtitle: heroForm.newsletterSubtitle });
                   }}
                 />
               </div>
@@ -1256,8 +1362,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Top Badge Text</label>
                 <input
                   type="text"
-                  value={heroForm.corporateBadge}
-                  onChange={(e) => setHeroForm({ ...heroForm, corporateBadge: e.target.value })}
+                  value={heroForm.corporateBadge || ''}
+                  onChange={(e) => {
+                    isHeroDirtyRef.current = true;
+                    setHeroForm(prev => ({ ...prev, corporateBadge: e.target.value }));
+                  }}
+                  onBlur={() => {
+                    updateHeroContent({
+                      corporateBadge: heroForm.corporateBadge || ''
+                    });
+                  }}
                   placeholder="e.g. ENTERPRISE HEALTHCARE NETWORK"
                 />
               </div>
@@ -1266,8 +1380,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Covered Lives Stat Pill</label>
                 <input
                   type="text"
-                  value={heroForm.corporateStat}
-                  onChange={(e) => setHeroForm({ ...heroForm, corporateStat: e.target.value })}
+                  value={heroForm.corporateStat || ''}
+                  onChange={(e) => {
+                    isHeroDirtyRef.current = true;
+                    setHeroForm(prev => ({ ...prev, corporateStat: e.target.value }));
+                  }}
+                  onBlur={() => {
+                    updateHeroContent({
+                      corporateStat: heroForm.corporateStat || ''
+                    });
+                  }}
                   placeholder="e.g. 2.5M+ Corporate Lives Covered"
                 />
               </div>
@@ -1276,8 +1398,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Heading Title</label>
                 <input
                   type="text"
-                  value={heroForm.corporateTitle}
-                  onChange={(e) => setHeroForm({ ...heroForm, corporateTitle: e.target.value })}
+                  value={heroForm.corporateTitle || ''}
+                  onChange={(e) => {
+                    isHeroDirtyRef.current = true;
+                    setHeroForm(prev => ({ ...prev, corporateTitle: e.target.value }));
+                  }}
+                  onBlur={() => {
+                    updateHeroContent({
+                      corporateTitle: heroForm.corporateTitle || ''
+                    });
+                  }}
                   placeholder="e.g. Corporate Tie-ups & Partners"
                 />
               </div>
@@ -1286,8 +1416,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Subtitle</label>
                 <textarea
                   rows={2}
-                  value={heroForm.corporateSubtitle}
-                  onChange={(e) => setHeroForm({ ...heroForm, corporateSubtitle: e.target.value })}
+                  value={heroForm.corporateSubtitle || ''}
+                  onChange={(e) => {
+                    isHeroDirtyRef.current = true;
+                    setHeroForm(prev => ({ ...prev, corporateSubtitle: e.target.value }));
+                  }}
+                  onBlur={() => {
+                    updateHeroContent({
+                      corporateSubtitle: heroForm.corporateSubtitle || ''
+                    });
+                  }}
                   placeholder="Describe your corporate healthcare partnership network..."
                 />
               </div>
@@ -1579,6 +1717,21 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   value={newArticle.image}
                   onChange={(e) => setNewArticle({ ...newArticle, image: e.target.value })}
                 />
+              </div>
+              <div className={styles.formGroup}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <ExternalLink size={13} color="#2563EB" />
+                  <span>Article Link / Redirect URL</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="e.g. https://example.com/article-slug or /articles/slug"
+                  value={newArticle.link || ''}
+                  onChange={(e) => setNewArticle({ ...newArticle, link: e.target.value })}
+                />
+                <span style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
+                  When visitors on the homepage click this article, they will be redirected to this link.
+                </span>
               </div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.cancelBtn} onClick={() => setIsAddArticleOpen(false)}>Cancel</button>

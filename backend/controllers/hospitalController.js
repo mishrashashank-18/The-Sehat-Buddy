@@ -8,9 +8,22 @@ import validatePassword from '../utils/validatePassword.js';
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const hospital = await Hospital.findOne({ email: (email || '').toLowerCase().trim() }).select('+password');
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const hospital = await Hospital.findOne({ email: (email || '').toLowerCase().trim() }).select('+password +failedLoginAttempts +lockUntil');
     if (!hospital) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Account lockout check
+    if (hospital.lockUntil && hospital.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((hospital.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
+      });
     }
 
     const isFirstLogin = Boolean(hospital.isFirstLogin || !hospital.passwordSet || hospital.password === 'CHANGEME_PENDING_SETUP');
@@ -23,22 +36,43 @@ export const authHospital = async (req, res) => {
     }
 
     if (await hospital.matchPassword(password)) {
+      if (hospital.failedLoginAttempts > 0 || hospital.lockUntil) {
+        hospital.failedLoginAttempts = 0;
+        hospital.lockUntil = undefined;
+        await hospital.save();
+      }
+
       const hospObj = hospital.toObject();
       delete hospObj.password;
       delete hospObj.otp;
       delete hospObj.otpExpires;
       delete hospObj.otpAttempts;
 
-      res.json({
+      return res.json({
         success: true,
-        token: generateToken(hospital._id, 'hospital'),
+        token: generateToken(hospital._id, 'hospital', hospital.tokenVersion || 0),
         user: hospObj
       });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid email or password' });
+      hospital.failedLoginAttempts = (hospital.failedLoginAttempts || 0) + 1;
+      if (hospital.failedLoginAttempts >= 5) {
+        hospital.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        hospital.failedLoginAttempts = 0;
+        await hospital.save();
+        return res.status(423).json({
+          success: false,
+          message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
+        });
+      }
+      await hospital.save();
+      const remainingAttempts = Math.max(0, 5 - hospital.failedLoginAttempts);
+      return res.status(401).json({
+        success: false,
+        message: `Invalid email or password. ${remainingAttempts} attempt(s) remaining before temporary lockout.`
+      });
     }
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -98,6 +132,9 @@ export const setInitialHospitalPassword = async (req, res) => {
     hospital.password = password;
     hospital.isFirstLogin = false;
     hospital.passwordSet = true;
+    hospital.tokenVersion = (hospital.tokenVersion || 0) + 1;
+    hospital.failedLoginAttempts = 0;
+    hospital.lockUntil = undefined;
     await hospital.save();
 
     const hospObj = hospital.toObject();
@@ -109,7 +146,7 @@ export const setInitialHospitalPassword = async (req, res) => {
     return res.json({
       success: true,
       message: 'Password set successfully! Logging in...',
-      token: generateToken(hospital._id, 'hospital'),
+      token: generateToken(hospital._id, 'hospital', hospital.tokenVersion),
       user: hospObj
     });
   } catch (error) {
@@ -266,6 +303,9 @@ export const resetHospitalPassword = async (req, res) => {
     hospital.password = newPassword;
     hospital.isFirstLogin = false;
     hospital.passwordSet = true;
+    hospital.tokenVersion = (hospital.tokenVersion || 0) + 1;
+    hospital.failedLoginAttempts = 0;
+    hospital.lockUntil = undefined;
     hospital.otp = undefined;
     hospital.otpExpires = undefined;
     hospital.otpAttempts = 0;
@@ -280,7 +320,7 @@ export const resetHospitalPassword = async (req, res) => {
     return res.json({
       success: true,
       message: 'Password reset successfully! Logging you in...',
-      token: generateToken(hospital._id, 'hospital'),
+      token: generateToken(hospital._id, 'hospital', hospital.tokenVersion),
       user: hospObj
     });
   } catch (error) {

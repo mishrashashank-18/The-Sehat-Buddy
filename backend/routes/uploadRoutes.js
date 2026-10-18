@@ -14,10 +14,32 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const router = express.Router();
 
-// Memory storage for images
+const ALLOWED_IMAGE_MIMES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/svg+xml',
+  'image/gif',
+  'image/x-icon',
+  'image/vnd.microsoft.icon'
+];
+
+const ALLOWED_IMAGE_EXTS = /\.(jpg|jpeg|png|webp|svg|gif|ico)$/i;
+
+// Memory storage for images with strict type verification
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 } // 15MB limit
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB limit
+  fileFilter: (req, file, cb) => {
+    if (
+      ALLOWED_IMAGE_MIMES.includes(file.mimetype) ||
+      (file.originalname && file.originalname.match(ALLOWED_IMAGE_EXTS))
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type: Only verified image files (.jpg, .png, .webp, .svg, .gif, .ico) are allowed.'), false);
+    }
+  }
 });
 
 // Disk storage for videos to handle large files smoothly without RAM bloat
@@ -60,7 +82,14 @@ const getCloudinary = () => {
  * Upload single image (file or base64) to Cloudinary
  * Returns { success: true, url, public_id }
  */
-router.post('/image', protect, upload.single('image'), async (req, res) => {
+router.post('/image', protect, (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message || 'File upload error' });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -77,6 +106,17 @@ router.post('/image', protect, upload.single('image'), async (req, res) => {
 
     // 1. File uploaded via multipart/form-data
     if (req.file) {
+      // SVG Script Sanitization against Stored XSS
+      const isSvg = req.file.mimetype === 'image/svg+xml' || (req.file.originalname && req.file.originalname.toLowerCase().endsWith('.svg'));
+      if (isSvg) {
+        const svgStr = req.file.buffer.toString('utf8');
+        if (/<script|javascript:|on\w+\s*=/i.test(svgStr)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Malicious content (script tag or inline event handler) detected in SVG file.'
+          });
+        }
+      }
       if (isCloudinaryConfigured) {
         const cld = getCloudinary();
         const uploadStream = () =>

@@ -289,6 +289,14 @@ export const api = {
     return data.data;
   },
 
+  // Storage Quota Stats (MongoDB & Cloudinary)
+  async getStorageStats() {
+    const res = await fetch(`${API_BASE}/admin/storage-stats`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
   // Image Upload (Cloudinary)
   async uploadImage(fileOrBase64, folder = 'sehatbuddy') {
     let body;

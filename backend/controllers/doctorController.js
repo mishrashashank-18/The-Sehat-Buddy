@@ -9,24 +9,62 @@ import validatePassword from '../utils/validatePassword.js';
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() }).select('+password');
-    if (doctor && (await doctor.matchPassword(password))) {
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const doctor = await Doctor.findOne({ email: (email || '').toLowerCase().trim() }).select('+password +failedLoginAttempts +lockUntil');
+    if (!doctor) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Account lockout check
+    if (doctor.lockUntil && doctor.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((doctor.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
+      });
+    }
+
+    if (await doctor.matchPassword(password)) {
+      if (doctor.failedLoginAttempts > 0 || doctor.lockUntil) {
+        doctor.failedLoginAttempts = 0;
+        doctor.lockUntil = undefined;
+        await doctor.save();
+      }
+
       const docObj = doctor.toObject();
       delete docObj.password;
       delete docObj.otp;
       delete docObj.otpExpires;
       delete docObj.otpAttempts;
 
-      res.json({
+      return res.json({
         success: true,
-        token: generateToken(doctor._id, 'doctor'),
+        token: generateToken(doctor._id, 'doctor', doctor.tokenVersion || 0),
         user: docObj
       });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid email or password' });
+      doctor.failedLoginAttempts = (doctor.failedLoginAttempts || 0) + 1;
+      if (doctor.failedLoginAttempts >= 5) {
+        doctor.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        doctor.failedLoginAttempts = 0;
+        await doctor.save();
+        return res.status(423).json({
+          success: false,
+          message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
+        });
+      }
+      await doctor.save();
+      const remainingAttempts = Math.max(0, 5 - doctor.failedLoginAttempts);
+      return res.status(401).json({
+        success: false,
+        message: `Invalid email or password. ${remainingAttempts} attempt(s) remaining before temporary lockout.`
+      });
     }
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -86,6 +124,9 @@ export const setInitialPassword = async (req, res) => {
     doctor.password = password;
     doctor.isFirstLogin = false;
     doctor.passwordSet = true;
+    doctor.tokenVersion = (doctor.tokenVersion || 0) + 1;
+    doctor.failedLoginAttempts = 0;
+    doctor.lockUntil = undefined;
     await doctor.save();
 
     const docObj = doctor.toObject();
@@ -97,7 +138,7 @@ export const setInitialPassword = async (req, res) => {
     return res.json({
       success: true,
       message: 'Password set successfully! Logging in...',
-      token: generateToken(doctor._id, 'doctor'),
+      token: generateToken(doctor._id, 'doctor', doctor.tokenVersion),
       user: docObj
     });
   } catch (error) {
@@ -254,6 +295,9 @@ export const resetDoctorPassword = async (req, res) => {
     doctor.password = password;
     doctor.isFirstLogin = false;
     doctor.passwordSet = true;
+    doctor.tokenVersion = (doctor.tokenVersion || 0) + 1;
+    doctor.failedLoginAttempts = 0;
+    doctor.lockUntil = undefined;
     doctor.otp = undefined;
     doctor.otpExpires = undefined;
     doctor.otpAttempts = 0;
@@ -268,7 +312,7 @@ export const resetDoctorPassword = async (req, res) => {
     return res.json({
       success: true,
       message: 'Password reset successfully! Logging in...',
-      token: generateToken(doctor._id, 'doctor'),
+      token: generateToken(doctor._id, 'doctor', doctor.tokenVersion),
       user: docObj
     });
   } catch (error) {

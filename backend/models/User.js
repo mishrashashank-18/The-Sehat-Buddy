@@ -18,7 +18,10 @@ const userSchema = new mongoose.Schema({
   isVerified: { type: Boolean, default: false },
   otp: { type: String, select: false },
   otpExpires: { type: Date, select: false },
-  otpAttempts: { type: Number, default: 0, select: false }
+  otpAttempts: { type: Number, default: 0, select: false },
+  tokenVersion: { type: Number, default: 0 },
+  failedLoginAttempts: { type: Number, default: 0, select: false },
+  lockUntil: { type: Date, select: false }
 }, { timestamps: true });
 
 userSchema.pre('save', async function() {

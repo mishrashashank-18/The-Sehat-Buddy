@@ -85,13 +85,19 @@ app.use(express.json({ limit: '10mb' }));
 // 4. NoSQL Query & Body Sanitization (blocks operator injection like $gt, $where)
 app.use(mongoSanitize);
 
-// 4. Rate Limiting Protection
-// General API rate limiter (500 requests per 15 minutes per IP)
+// 5. Rate Limiting Protection
+// General API rate limiter (generous in development, 3,000 requests per 15 mins in prod)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  max: NODE_ENV === 'production' ? 3000 : 15000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting in development or for health check
+    if (NODE_ENV !== 'production') return true;
+    if (req.path === '/health' || req.path === '/api/health') return true;
+    return false;
+  },
   message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes.' }
 });
 app.use('/api/', generalLimiter);

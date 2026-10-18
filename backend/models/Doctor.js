@@ -48,6 +48,9 @@ const doctorSchema = new mongoose.Schema({
   otp: { type: String, select: false },
   otpExpires: { type: Date, select: false },
   otpAttempts: { type: Number, default: 0, select: false },
+  tokenVersion: { type: Number, default: 0 },
+  failedLoginAttempts: { type: Number, default: 0, select: false },
+  lockUntil: { type: Date, select: false },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });

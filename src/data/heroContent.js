@@ -17,5 +17,9 @@ export const initialHeroContent = {
   whyChooseVideoText: 'Watch how\nSehat Buddy\nworks for you',
   whyChooseVideoAutoplay: true,
   newsletterTitle: 'Stay updated with\nhealth tips & offers',
-  newsletterSubtitle: 'Subscribe to our newsletter'
+  newsletterSubtitle: 'Subscribe to our newsletter',
+  corporateBadge: 'ENTERPRISE HEALTHCARE NETWORK',
+  corporateTitle: 'Corporate Tie-ups & Partners',
+  corporateSubtitle: 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+  corporateStat: '2.5M+ Corporate Lives Covered'
 };

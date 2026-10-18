@@ -64,6 +64,18 @@ export const protect = async (req, res, next) => {
         });
       }
 
+      // Multi-device session revocation check
+      if (
+        user.tokenVersion !== undefined &&
+        decoded.tokenVersion !== undefined &&
+        decoded.tokenVersion !== user.tokenVersion
+      ) {
+        return res.status(401).json({
+          success: false,
+          message: 'Session has been revoked or expired due to a password change. Please log in again.'
+        });
+      }
+
       req.user = {
         id: user._id.toString(),
         role: role || user.role || 'user',

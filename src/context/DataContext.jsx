@@ -301,14 +301,29 @@ export const DataProvider = ({ children }) => {
               if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
                 cleanHero.heroImage = prev.heroImage || initialHeroContent.heroImage;
               }
-              return { ...prev, ...cleanHero };
+              // Base defaults -> backend data -> local customizations (prev) take top priority!
+              const merged = { ...initialHeroContent, ...cleanHero, ...prev };
+              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+              return merged;
             });
           }
-          if (bData) setBranding(prev => ({ ...prev, ...bData }));
-          if (Array.isArray(sList) && sList.length > 0) setServices(sList);
-          if (Array.isArray(fList) && fList.length > 0) setFeatures(fList);
-          if (Array.isArray(aList) && aList.length > 0) setArticles(aList);
-          if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(cList);
+          if (bData && typeof bData === 'object') {
+            setBranding(prev => {
+              // If local state has custom values and backend returns default placeholder, preserve local customization
+              const isPrevCustomized = (prev?.siteName && prev.siteName !== 'The Sehat Buddy') || (prev?.tagline && prev.tagline !== 'Your Health. Our Priority.');
+              const isBackendDefault = bData?.siteName === 'The Sehat Buddy' && (!bData?.tagline || bData?.tagline === 'Your Health. Our Priority.');
+              if (isPrevCustomized && isBackendDefault) {
+                return prev;
+              }
+              const merged = { ...prev, ...bData };
+              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+              return merged;
+            });
+          }
+          if (Array.isArray(sList) && sList.length > 0) setServices(prev => (prev && prev.length > 0 ? prev : sList));
+          if (Array.isArray(fList) && fList.length > 0) setFeatures(prev => (prev && prev.length > 0 ? prev : fList));
+          if (Array.isArray(aList) && aList.length > 0) setArticles(prev => (prev && prev.length > 0 ? prev : aList));
+          if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(prev => (prev && prev.length > 0 ? prev : cList));
         }
         if (faqsRes.status === 'fulfilled' && Array.isArray(faqsRes.value) && faqsRes.value.length > 0) {
           setFaqs(faqsRes.value.map(f => ({ ...f, id: f._id || f.id })));
@@ -326,12 +341,12 @@ export const DataProvider = ({ children }) => {
 
     fetchBackendData();
 
-    // Fast intelligent polling when tab is active (4 seconds)
+    // Intelligent background polling when tab is active (20 seconds)
     const intervalId = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         fetchBackendData();
       }
-    }, 4000);
+    }, 20000);
 
     return () => {
       isMounted = false;
@@ -392,6 +407,16 @@ export const DataProvider = ({ children }) => {
         if (b) setBranding(JSON.parse(b));
         const fa = localStorage.getItem(STORAGE_KEY_FAQS);
         if (fa) setFaqs(JSON.parse(fa));
+        const heroLocal = localStorage.getItem(STORAGE_KEY_HERO);
+        if (heroLocal) setHeroContent(JSON.parse(heroLocal));
+        const sLocal = localStorage.getItem(STORAGE_KEY_SERVICES);
+        if (sLocal) setServices(JSON.parse(sLocal));
+        const fLocal = localStorage.getItem(STORAGE_KEY_FEATURES);
+        if (fLocal) setFeatures(JSON.parse(fLocal));
+        const aLocal = localStorage.getItem(STORAGE_KEY_ARTICLES);
+        if (aLocal) setArticles(JSON.parse(aLocal));
+        const cLocal = localStorage.getItem(STORAGE_KEY_CORPORATE);
+        if (cLocal) setCorporateTieups(JSON.parse(cLocal));
       } catch {}
     };
 
@@ -697,6 +722,10 @@ export const DataProvider = ({ children }) => {
   const updateHeroContent = (newFields) => {
     setHeroContent(prev => {
       const merged = { ...prev, ...newFields };
+      try {
+        localStorage.setItem(STORAGE_KEY_HERO, JSON.stringify(merged));
+        broadcastSync(STORAGE_KEY_HERO, merged);
+      } catch {}
       api.updateHero(merged).catch(() => {});
       return merged;
     });
@@ -950,6 +979,10 @@ export const DataProvider = ({ children }) => {
   const updateBranding = (newFields) => {
     setBranding(prev => {
       const merged = { ...prev, ...newFields };
+      try {
+        localStorage.setItem(STORAGE_KEY_BRANDING, JSON.stringify(merged));
+        broadcastSync(STORAGE_KEY_BRANDING, merged);
+      } catch {}
       api.updateBranding(merged).catch(() => {});
       return merged;
     });

@@ -82,6 +82,9 @@ const makeCircularFavicon = (imageUrl) => {
 const BrandingManager = ({ showToast }) => {
   const { branding, updateBranding, resetBranding } = useData();
 
+  const isDirtyRef = useRef(false);
+  const syncTimeoutRef = useRef(null);
+
   const [formData, setFormData] = useState({
     siteName: branding?.siteName || 'The Sehat Buddy',
     tagline: branding?.tagline || 'Your Health. Our Priority.',
@@ -99,21 +102,61 @@ const BrandingManager = ({ showToast }) => {
   const fileInputRef = useRef(null);
   const faviconInputRef = useRef(null);
 
+  // Helper to update formData and debounced-sync to DataContext & localStorage
+  const updateFormField = (field, value) => {
+    isDirtyRef.current = true;
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      syncTimeoutRef.current = setTimeout(() => {
+        updateBranding(next);
+      }, 350);
+      return next;
+    });
+  };
+
+  const updateMultipleFields = (fields) => {
+    isDirtyRef.current = true;
+    setFormData((prev) => {
+      const next = { ...prev, ...fields };
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      updateBranding(next);
+      return next;
+    });
+  };
+
+  const handleBlurSync = () => {
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    updateBranding(formData);
+  };
+
   useEffect(() => {
-    if (branding) {
-      setFormData({
-        siteName: branding.siteName || 'The Sehat Buddy',
-        tagline: branding.tagline || 'Your Health. Our Priority.',
-        logoType: branding.logoType || 'image',
-        logoImage: branding.logoImage || '/logo.png',
-        showLogo: branding.showLogo !== false,
-        showTagline: branding.showTagline !== false,
-        faviconType: branding.faviconType || 'default',
-        favicon: branding.favicon || DEFAULT_FAVICON,
-        faviconCircular: branding.faviconCircular !== false
+    // Only update local formData from context if user does not have active unsaved edits
+    if (branding && !isDirtyRef.current) {
+      setFormData((prev) => {
+        const next = {
+          siteName: branding.siteName || 'The Sehat Buddy',
+          tagline: branding.tagline || 'Your Health. Our Priority.',
+          logoType: branding.logoType || 'image',
+          logoImage: branding.logoImage || '/logo.png',
+          showLogo: branding.showLogo !== false,
+          showTagline: branding.showTagline !== false,
+          faviconType: branding.faviconType || 'default',
+          favicon: branding.favicon || DEFAULT_FAVICON,
+          faviconCircular: branding.faviconCircular !== false
+        };
+        if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
       });
     }
   }, [branding]);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    };
+  }, []);
 
   // Handle local file upload
   const handleFileUpload = async (e) => {
@@ -131,21 +174,21 @@ const BrandingManager = ({ showToast }) => {
       const reader = new FileReader();
       reader.onload = async () => {
         const base64Url = reader.result;
-        setFormData((prev) => ({
-          ...prev,
+        updateMultipleFields({
           logoType: 'image',
           logoImage: base64Url,
           showLogo: true
-        }));
+        });
 
         // Try backend upload if available
         try {
           const uploadRes = await api.uploadImage(file, 'logos');
           if (uploadRes && uploadRes.url) {
-            setFormData((prev) => ({
-              ...prev,
-              logoImage: uploadRes.url
-            }));
+            updateMultipleFields({
+              logoType: 'image',
+              logoImage: uploadRes.url,
+              showLogo: true
+            });
           }
         } catch {
           // Fallback to base64Url if backend upload fails
@@ -161,11 +204,10 @@ const BrandingManager = ({ showToast }) => {
 
   // Remove custom logo
   const handleRemoveLogo = () => {
-    setFormData((prev) => ({
-      ...prev,
+    updateMultipleFields({
       logoImage: '',
       logoType: 'default'
-    }));
+    });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -195,11 +237,10 @@ const BrandingManager = ({ showToast }) => {
           }
         }
 
-        setFormData((prev) => ({
-          ...prev,
+        updateMultipleFields({
           faviconType: 'custom',
           favicon: dataUrl
-        }));
+        });
 
         try {
           const uploadRes = await api.uploadImage(file, 'favicons');
@@ -210,10 +251,10 @@ const BrandingManager = ({ showToast }) => {
                 processedUrl = await makeCircularFavicon(processedUrl);
               } catch {}
             }
-            setFormData((prev) => ({
-              ...prev,
+            updateMultipleFields({
+              faviconType: 'custom',
               favicon: processedUrl
-            }));
+            });
           }
         } catch {
           // fallback
@@ -229,12 +270,11 @@ const BrandingManager = ({ showToast }) => {
 
   // Reset favicon back to default circular icon
   const handleResetFavicon = () => {
-    setFormData((prev) => ({
-      ...prev,
+    updateMultipleFields({
       faviconType: 'default',
       favicon: DEFAULT_FAVICON_CIRCULAR,
       faviconCircular: true
-    }));
+    });
     if (faviconInputRef.current) {
       faviconInputRef.current.value = '';
     }
@@ -253,11 +293,10 @@ const BrandingManager = ({ showToast }) => {
         fav = await makeCircularFavicon(fav);
       } catch {}
     }
-    setFormData((prev) => ({
-      ...prev,
+    updateMultipleFields({
       faviconType: 'logo',
       favicon: fav
-    }));
+    });
     if (showToast) showToast('Favicon updated to match brand logo!');
   };
 
@@ -269,21 +308,22 @@ const BrandingManager = ({ showToast }) => {
         newFavicon = await makeCircularFavicon(formData.favicon);
       } catch {}
     }
-    setFormData((prev) => ({
-      ...prev,
+    updateMultipleFields({
       faviconCircular: checked,
       favicon: newFavicon
-    }));
+    });
   };
 
   // Save changes
   const handleSave = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!formData.siteName.trim()) {
       alert('Website name cannot be empty.');
       return;
     }
 
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    isDirtyRef.current = false;
     updateBranding(formData);
     if (showToast) {
       showToast('Brand identity and logo successfully saved!');
@@ -293,6 +333,8 @@ const BrandingManager = ({ showToast }) => {
   // Reset to original defaults
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset site name and logo back to defaults?')) {
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      isDirtyRef.current = false;
       resetBranding();
       if (showToast) {
         showToast('Site branding reset to default values.');
@@ -408,7 +450,8 @@ const BrandingManager = ({ showToast }) => {
                 type="text"
                 required
                 value={formData.siteName}
-                onChange={(e) => setFormData({ ...formData, siteName: e.target.value })}
+                onChange={(e) => updateFormField('siteName', e.target.value)}
+                onBlur={handleBlurSync}
                 placeholder="e.g. The Sehat Buddy"
                 className={styles.textInput}
               />
@@ -419,7 +462,8 @@ const BrandingManager = ({ showToast }) => {
               <input
                 type="text"
                 value={formData.tagline}
-                onChange={(e) => setFormData({ ...formData, tagline: e.target.value })}
+                onChange={(e) => updateFormField('tagline', e.target.value)}
+                onBlur={handleBlurSync}
                 placeholder="e.g. Your Health. Our Priority."
                 className={styles.textInput}
               />
@@ -427,7 +471,7 @@ const BrandingManager = ({ showToast }) => {
                 <input
                   type="checkbox"
                   checked={formData.showTagline}
-                  onChange={(e) => setFormData({ ...formData, showTagline: e.target.checked })}
+                  onChange={(e) => updateFormField('showTagline', e.target.checked)}
                   className={styles.toggleCheckbox}
                 />
                 <span className={styles.toggleText}>Display tagline under site name</span>
@@ -449,7 +493,7 @@ const BrandingManager = ({ showToast }) => {
             {/* Mode 1: Default Icon */}
             <div
               className={`${styles.logoModeCard} ${formData.logoType === 'default' && formData.showLogo ? styles.logoModeSelected : ''}`}
-              onClick={() => setFormData({ ...formData, logoType: 'default', showLogo: true })}
+              onClick={() => updateMultipleFields({ logoType: 'default', showLogo: true })}
             >
               <div className={styles.modeIcon}>
                 <img src={logoImg} alt="Default Logo" style={{ height: '24px', maxWidth: '30px', objectFit: 'contain' }} />
@@ -461,7 +505,7 @@ const BrandingManager = ({ showToast }) => {
             {/* Mode 2: Custom Upload */}
             <div
               className={`${styles.logoModeCard} ${formData.logoType === 'image' && formData.showLogo ? styles.logoModeSelected : ''}`}
-              onClick={() => setFormData({ ...formData, logoType: 'image', showLogo: true })}
+              onClick={() => updateMultipleFields({ logoType: 'image', showLogo: true })}
             >
               <div className={styles.modeIcon}>
                 <Upload size={24} color="#2563EB" />
@@ -473,7 +517,7 @@ const BrandingManager = ({ showToast }) => {
             {/* Mode 3: No Logo */}
             <div
               className={`${styles.logoModeCard} ${!formData.showLogo || formData.logoType === 'none' ? styles.logoModeSelected : ''}`}
-              onClick={() => setFormData({ ...formData, showLogo: false, logoType: 'none' })}
+              onClick={() => updateMultipleFields({ showLogo: false, logoType: 'none' })}
             >
               <div className={styles.modeIcon}>
                 <Type size={24} color="#64748b" />
@@ -519,7 +563,8 @@ const BrandingManager = ({ showToast }) => {
                   <input
                     type="url"
                     value={formData.logoImage}
-                    onChange={(e) => setFormData({ ...formData, logoImage: e.target.value })}
+                    onChange={(e) => updateFormField('logoImage', e.target.value)}
+                    onBlur={handleBlurSync}
                     placeholder="https://example.com/logo.png"
                     className={styles.textInput}
                     style={{ flex: 1 }}
@@ -553,12 +598,11 @@ const BrandingManager = ({ showToast }) => {
             <div
               className={`${styles.logoModeCard} ${formData.faviconType === 'default' ? styles.logoModeSelected : ''}`}
               onClick={() => {
-                setFormData((prev) => ({
-                  ...prev,
+                updateMultipleFields({
                   faviconType: 'default',
                   favicon: DEFAULT_FAVICON_CIRCULAR,
                   faviconCircular: true
-                }));
+                });
               }}
             >
               <div className={styles.modeIcon}>
@@ -576,10 +620,7 @@ const BrandingManager = ({ showToast }) => {
             <div
               className={`${styles.logoModeCard} ${formData.faviconType === 'custom' ? styles.logoModeSelected : ''}`}
               onClick={() => {
-                setFormData((prev) => ({
-                  ...prev,
-                  faviconType: 'custom'
-                }));
+                updateFormField('faviconType', 'custom');
               }}
             >
               <div className={styles.modeIcon}>
@@ -615,76 +656,112 @@ const BrandingManager = ({ showToast }) => {
               </div>
 
               <div className={styles.faviconControls}>
-                <label className={styles.toggleRow}>
-                  <input
-                    type="checkbox"
-                    checked={formData.faviconCircular}
-                    onChange={(e) => handleToggleFaviconCircular(e.target.checked)}
-                    className={styles.toggleCheckbox}
-                  />
+                {formData.faviconType === 'default' ? (
                   <div>
                     <span className={styles.toggleText} style={{ fontWeight: 700, color: '#0f172a' }}>
-                      Auto-crop Favicon as Circle (Recommended)
+                      Official Built-in Circular Favicon
                     </span>
-                    <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
-                      Rounds edges to give a clean circular appearance in browser tabs and bookmarks.
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                      Using the default blue health pulse circular icon. Ready to use—no URL or file upload needed.
                     </p>
                   </div>
-                </label>
+                ) : formData.faviconType === 'logo' ? (
+                  <div>
+                    <span className={styles.toggleText} style={{ fontWeight: 700, color: '#0f172a' }}>
+                      Synchronized with Brand Logo
+                    </span>
+                    <p style={{ margin: '4px 0 8px 0', fontSize: '0.82rem', color: '#64748b' }}>
+                      Favicon is automatically cropped and generated from your active brand logo.
+                    </p>
+                    <label className={styles.toggleRow} style={{ marginTop: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.faviconCircular}
+                        onChange={(e) => handleToggleFaviconCircular(e.target.checked)}
+                        className={styles.toggleCheckbox}
+                      />
+                      <span className={styles.toggleText} style={{ fontWeight: 600, color: '#334155' }}>
+                        Auto-crop Favicon as Circle
+                      </span>
+                    </label>
+                  </div>
+                ) : (
+                  /* Custom Upload Mode */
+                  <>
+                    <label className={styles.toggleRow}>
+                      <input
+                        type="checkbox"
+                        checked={formData.faviconCircular}
+                        onChange={(e) => handleToggleFaviconCircular(e.target.checked)}
+                        className={styles.toggleCheckbox}
+                      />
+                      <div>
+                        <span className={styles.toggleText} style={{ fontWeight: 700, color: '#0f172a' }}>
+                          Auto-crop Favicon as Circle (Recommended)
+                        </span>
+                        <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                          Rounds edges to give a clean circular appearance in browser tabs and bookmarks.
+                        </p>
+                      </div>
+                    </label>
 
-                <div className={styles.faviconButtonsRow}>
-                  <button
-                    type="button"
-                    onClick={() => faviconInputRef.current?.click()}
-                    className={styles.uploadFaviconBtn}
-                  >
-                    <Upload size={15} /> Upload Favicon File
-                  </button>
-                  <input
-                    type="file"
-                    ref={faviconInputRef}
-                    onChange={handleFaviconUpload}
-                    accept="image/png,image/x-icon,image/svg+xml,image/jpeg,image/webp,.ico"
-                    className={styles.hiddenFileInput}
-                  />
+                    <div className={styles.faviconButtonsRow}>
+                      <button
+                        type="button"
+                        onClick={() => faviconInputRef.current?.click()}
+                        className={styles.uploadFaviconBtn}
+                      >
+                        <Upload size={15} /> Upload Favicon File
+                      </button>
+                      <input
+                        type="file"
+                        ref={faviconInputRef}
+                        onChange={handleFaviconUpload}
+                        accept="image/png,image/x-icon,image/svg+xml,image/jpeg,image/webp,.ico"
+                        className={styles.hiddenFileInput}
+                      />
 
-                  {formData.favicon !== DEFAULT_FAVICON_CIRCULAR && (
-                    <button
-                      type="button"
-                      onClick={handleResetFavicon}
-                      className={styles.removeLogoBtn}
-                    >
-                      <RotateCcw size={14} /> Reset to Default Favicon
-                    </button>
-                  )}
-                </div>
+                      {formData.favicon !== DEFAULT_FAVICON_CIRCULAR && (
+                        <button
+                          type="button"
+                          onClick={handleResetFavicon}
+                          className={styles.removeLogoBtn}
+                        >
+                          <RotateCcw size={14} /> Reset to Default Favicon
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* External Favicon URL Input */}
-            <div className={styles.inputGroup} style={{ marginTop: '16px' }}>
-              <label className={styles.label}>Or Provide Custom Favicon Image URL</label>
-              <input
-                type="url"
-                value={formData.favicon?.startsWith('data:') ? '' : formData.favicon}
-                onChange={async (e) => {
-                  const url = e.target.value;
-                  let processed = url;
-                  if (formData.faviconCircular && url) {
-                    try {
-                      processed = await makeCircularFavicon(url);
-                    } catch {}
-                  }
-                  setFormData((prev) => ({
-                    ...prev,
-                    faviconType: 'custom',
-                    favicon: processed || DEFAULT_FAVICON_CIRCULAR
-                  }));
-                }}
-                placeholder="https://example.com/favicon.png"
-                className={styles.textInput}
-              />
-            </div>
+            {/* External Favicon URL Input: Only shown when Custom Upload is selected */}
+            {formData.faviconType === 'custom' && (
+              <div className={styles.inputGroup} style={{ marginTop: '16px' }}>
+                <label className={styles.label}>Or Provide Custom Favicon Image URL</label>
+                <input
+                  type="url"
+                  value={formData.favicon?.startsWith('data:') ? '' : formData.favicon}
+                  onChange={async (e) => {
+                    const url = e.target.value;
+                    let processed = url;
+                    if (formData.faviconCircular && url) {
+                      try {
+                        processed = await makeCircularFavicon(url);
+                      } catch {}
+                    }
+                    updateMultipleFields({
+                      faviconType: 'custom',
+                      favicon: processed || DEFAULT_FAVICON_CIRCULAR
+                    });
+                  }}
+                  onBlur={handleBlurSync}
+                  placeholder="https://example.com/favicon.png"
+                  className={styles.textInput}
+                />
+              </div>
+            )}
             {isUploadingFavicon && (
               <div style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 600, marginTop: '8px' }}>
                 Processing favicon upload...

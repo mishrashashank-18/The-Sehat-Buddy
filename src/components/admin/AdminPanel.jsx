@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   Stethoscope,
@@ -19,14 +19,22 @@ import {
   ShieldCheck,
   LogOut,
   LayoutTemplate,
-  Briefcase,
   HelpCircle,
   MessageSquare,
   Activity,
   Eye,
   EyeOff,
-  Palette
+  Palette,
+  Database,
+  Cloud,
+  HardDrive,
+  RefreshCw,
+  Server,
+  Layers,
+  Image as ImageIcon,
+  AlertTriangle
 } from 'lucide-react';
+import { api } from '../../services/api';
 import { useData } from '../../context/useData';
 import DoctorFormModal from './DoctorFormModal';
 import HospitalFormModal from './HospitalFormModal';
@@ -64,8 +72,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     deleteSpecialityProcedure
   } = useData();
 
-  // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'content' | 'corporate'
-  const [activeTab, setActiveTab] = useState('overview');
+  // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'content' | 'branding' | 'faqs' | 'reviews' | 'specialities'
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sehat_admin_active_tab') || 'overview';
+      return saved === 'corporate' ? 'content' : saved;
+    } catch {}
+    return 'overview';
+  });
+
+  const setActiveTab = (tab) => {
+    try {
+      localStorage.setItem('sehat_admin_active_tab', tab);
+    } catch {}
+    setActiveTabState(tab);
+  };
 
   // Search & Filters for Doctors
   const [doctorSearch, setDoctorSearch] = useState('');
@@ -127,6 +148,35 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         : `Removed ${doc.name} from Star Doctors.`
     );
   };
+
+  // Storage Stats (MongoDB & Cloudinary)
+  const [storageData, setStorageData] = useState(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
+  const [storageError, setStorageError] = useState(null);
+
+  const fetchStorageStats = useCallback(async () => {
+    try {
+      setLoadingStorage(true);
+      setStorageError(null);
+      const res = await api.getStorageStats();
+      if (res && res.success) {
+        setStorageData(res);
+      } else {
+        setStorageError(res?.message || 'Could not fetch storage metrics');
+      }
+    } catch (err) {
+      console.error('Failed to load storage stats:', err);
+      setStorageError(err.message || 'Failed to load cloud storage stats');
+    } finally {
+      setLoadingStorage(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      fetchStorageStats();
+    }
+  }, [activeTab]);
 
   // Filtered Doctors
   const filteredDoctors = doctors.filter(doc => {
@@ -340,15 +390,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             </button>
 
             <button
-              className={`${styles.navItem} ${activeTab === 'corporate' ? styles.navItemActive : ''}`}
-              onClick={() => setActiveTab('corporate')}
-            >
-              <Briefcase size={20} />
-              <span>Corporate Tie-ups</span>
-              <span className={styles.navCount}>{corporateTieups?.length || 0}</span>
-            </button>
-
-            <button
               className={`${styles.navItem} ${activeTab === 'branding' ? styles.navItemActive : ''}`}
               onClick={() => setActiveTab('branding')}
             >
@@ -433,8 +474,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         {/* Content Area */}
         <main className={styles.mainContent}>
           {/* TAB 1: OVERVIEW */}
-          {activeTab === 'overview' && (
-            <div className={styles.viewSection}>
+          <div className={styles.viewSection} style={{ display: activeTab === 'overview' ? 'block' : 'none' }}>
               <div className={styles.viewHeader}>
                 <div>
                   <h1 className={styles.pageTitle}>Dashboard Overview</h1>
@@ -496,6 +536,228 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <span className={styles.statLabel}>24/7 Emergency</span>
                     <span className={styles.statValue}>{stats.emergencyHospitals}</span>
                     <span className={styles.statSub}>Critical emergency centers</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cloud Infrastructure & Storage Quotas */}
+              <div className={styles.storageSection}>
+                <div className={styles.storageHeader}>
+                  <div className={styles.storageHeaderTitle}>
+                    <div className={styles.storageTitleBadge}>
+                      <Server size={14} />
+                      <span>Cloud Quotas & Capacity</span>
+                    </div>
+                    <h2>Database & Media Storage Quotas</h2>
+                    <p>Live resource usage, allocated capacity, and remaining free space on MongoDB Atlas and Cloudinary</p>
+                  </div>
+
+                  <div className={styles.storageHeaderActions}>
+                    {storageData?.timestamp && (
+                      <span className={styles.storageTimestamp}>
+                        Updated {new Date(storageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    <button
+                      className={styles.storageRefreshBtn}
+                      onClick={fetchStorageStats}
+                      disabled={loadingStorage}
+                      title="Refresh real-time storage metrics"
+                    >
+                      <RefreshCw size={14} className={loadingStorage ? styles.spinning : ''} />
+                      {loadingStorage ? 'Refreshing...' : 'Refresh Quotas'}
+                    </button>
+                  </div>
+                </div>
+
+                {storageError && !storageData && (
+                  <div className={styles.storageErrorBox}>
+                    <AlertTriangle size={18} />
+                    <span>Failed to retrieve storage metrics: {storageError}</span>
+                    <button onClick={fetchStorageStats} className={styles.storageRetryBtn}>Try Again</button>
+                  </div>
+                )}
+
+                <div className={styles.storageGrid}>
+                  {/* MongoDB Storage Card */}
+                  <div className={`${styles.storageCard} ${styles.mongoCard}`}>
+                    <div className={styles.storageCardHeader}>
+                      <div className={styles.storageCardTitleGroup}>
+                        <div className={`${styles.storageIconWrap} ${styles.storageIconMongo}`}>
+                          <Database size={22} />
+                        </div>
+                        <div>
+                          <div className={styles.storagePlatformTag}>NoSQL Database</div>
+                          <h3 className={styles.storageCardTitle}>MongoDB Atlas Cluster</h3>
+                        </div>
+                      </div>
+
+                      <div className={styles.storageBadgeGroup}>
+                        <span className={`${styles.statusPill} ${
+                          storageData?.mongodb?.status === 'critical' ? styles.statusPillCritical :
+                          storageData?.mongodb?.status === 'warning' ? styles.statusPillWarning : styles.statusPillHealthy
+                        }`}>
+                          <span className={styles.statusDot}></span>
+                          {storageData?.mongodb?.status === 'critical' ? 'High Usage' :
+                           storageData?.mongodb?.status === 'warning' ? 'Moderate' : 'Healthy'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.storageHeroMetric}>
+                      <div className={styles.storageHeroRemaining}>
+                        <span className={styles.storageHeroNum}>
+                          {storageData?.mongodb ? storageData.mongodb.remainingMB : '--'}
+                        </span>
+                        <span className={styles.storageHeroUnit}>MB</span>
+                      </div>
+                      <span className={styles.storageHeroLabel}>Remaining Free Space</span>
+                      <span className={styles.storageHeroSub}>
+                        of {storageData?.mongodb ? storageData.mongodb.totalLimitMB : 512} MB total capacity
+                        {storageData?.mongodb ? ` (${storageData.mongodb.percentUsed}% consumed)` : ''}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className={styles.progressBarWrap}>
+                      <div className={styles.progressBarTrack}>
+                        <div
+                          className={`${styles.progressBarFill} ${styles.progressMongo}`}
+                          style={{ width: `${Math.min(100, Math.max(storageData?.mongodb?.percentUsed || 0, 1.5))}%` }}
+                        ></div>
+                      </div>
+                      <div className={styles.progressBarLabels}>
+                        <span>0 MB</span>
+                        <span className={styles.progressCenterLabel}>
+                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB used` : 'Calculating...'}
+                        </span>
+                        <span>{storageData?.mongodb ? `${storageData.mongodb.totalLimitMB} MB Total` : '512 MB Total'}</span>
+                      </div>
+                    </div>
+
+                    {/* Detailed Metric Pills */}
+                    <div className={styles.storageDetailsGrid}>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Total Space</span>
+                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.totalLimitMB} MB` : '512 MB'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Used Space</span>
+                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.usedMB} MB` : '--'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Remaining Space</span>
+                        <span className={`${styles.detailPillVal} ${styles.textEmerald}`}>
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB` : '--'}
+                        </span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Total Documents</span>
+                        <span className={styles.detailPillVal}>
+                          {storageData?.mongodb ? `${storageData.mongodb.objects} records` : '--'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Storage Breakdown Footer */}
+                    <div className={styles.storageFooterRow}>
+                      <span>
+                        <Layers size={13} /> {storageData?.mongodb ? `${storageData.mongodb.collections} Collections` : 'Collections'} ({storageData?.mongodb?.databaseName || 'thesehatbuddy'})
+                      </span>
+                      <span>
+                        Data: {storageData?.mongodb ? `${storageData.mongodb.dataSizeMB} MB` : '0 MB'} • Index: {storageData?.mongodb ? `${storageData.mongodb.indexSizeMB} MB` : '0 MB'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Cloudinary Storage Card */}
+                  <div className={`${styles.storageCard} ${styles.cldCard}`}>
+                    <div className={styles.storageCardHeader}>
+                      <div className={styles.storageCardTitleGroup}>
+                        <div className={`${styles.storageIconWrap} ${styles.storageIconCld}`}>
+                          <Cloud size={22} />
+                        </div>
+                        <div>
+                          <div className={styles.storagePlatformTag}>Media Cloud CDN</div>
+                          <h3 className={styles.storageCardTitle}>Cloudinary Media Storage</h3>
+                        </div>
+                      </div>
+
+                      <div className={styles.storageBadgeGroup}>
+                        <span className={`${styles.statusPill} ${
+                          storageData?.cloudinary?.status === 'critical' ? styles.statusPillCritical :
+                          storageData?.cloudinary?.status === 'warning' ? styles.statusPillWarning : styles.statusPillHealthy
+                        }`}>
+                          <span className={styles.statusDot}></span>
+                          {storageData?.cloudinary?.plan || 'Free'} Plan
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.storageHeroMetric}>
+                      <div className={styles.storageHeroRemaining}>
+                        <span className={styles.storageHeroNum}>
+                          {storageData?.cloudinary ? storageData.cloudinary.remainingGB : '--'}
+                        </span>
+                        <span className={styles.storageHeroUnit}>GB</span>
+                      </div>
+                      <span className={styles.storageHeroLabel}>Remaining Media Storage</span>
+                      <span className={styles.storageHeroSub}>
+                        of {storageData?.cloudinary ? storageData.cloudinary.totalLimitGB : 25} GB total quota
+                        {storageData?.cloudinary ? ` (${storageData.cloudinary.percentUsed}% consumed)` : ''}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className={styles.progressBarWrap}>
+                      <div className={styles.progressBarTrack}>
+                        <div
+                          className={`${styles.progressBarFill} ${styles.progressCld}`}
+                          style={{ width: `${Math.min(100, Math.max(storageData?.cloudinary?.percentUsed || 0, 1.5))}%` }}
+                        ></div>
+                      </div>
+                      <div className={styles.progressBarLabels}>
+                        <span>0 GB</span>
+                        <span className={styles.progressCenterLabel}>
+                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB used` : 'Calculating...'}
+                        </span>
+                        <span>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB} GB Total` : '25 GB Total'}</span>
+                      </div>
+                    </div>
+
+                    {/* Detailed Metric Pills */}
+                    <div className={styles.storageDetailsGrid}>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Total Space</span>
+                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB} GB` : '25 GB'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Used Storage</span>
+                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB` : '--'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Remaining Space</span>
+                        <span className={`${styles.detailPillVal} ${styles.textSky}`}>
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB` : '--'}
+                        </span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Hosted Assets</span>
+                        <span className={styles.detailPillVal}>
+                          {storageData?.cloudinary ? `${storageData.cloudinary.objects} files` : '--'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Storage Breakdown Footer */}
+                    <div className={styles.storageFooterRow}>
+                      <span>
+                        <ImageIcon size={13} /> {storageData?.cloudinary ? `${storageData.cloudinary.credits.remaining} / ${storageData.cloudinary.credits.total} Credits Left` : 'Credits'}
+                      </span>
+                      <span>
+                        Bandwidth: {storageData?.cloudinary ? `${storageData.cloudinary.bandwidthMB} MB` : '0 MB'} • Transformations: {storageData?.cloudinary?.transformations || 0}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -594,11 +856,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               </div>
             </div>
-          )}
 
           {/* TAB 2: DOCTORS MANAGEMENT */}
-          {activeTab === 'doctors' && (
-            <div className={styles.viewSection}>
+          <div className={styles.viewSection} style={{ display: activeTab === 'doctors' ? 'block' : 'none' }}>
               <div className={styles.viewHeader}>
                 <div>
                   <h1 className={styles.pageTitle}>Doctors Management</h1>
@@ -749,11 +1009,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               )}
             </div>
-          )}
 
           {/* TAB 3: HOSPITALS MANAGEMENT */}
-          {activeTab === 'hospitals' && (
-            <div className={styles.viewSection}>
+          <div className={styles.viewSection} style={{ display: activeTab === 'hospitals' ? 'block' : 'none' }}>
               <div className={styles.viewHeader}>
                 <div>
                   <h1 className={styles.pageTitle}>Hospitals Directory</h1>
@@ -919,25 +1177,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               )}
             </div>
-          )}
 
-          {/* TAB 4: FRONT PAGE CONTENT EDITOR */}
-          {activeTab === 'content' && (
-            <div className={styles.viewSection}>
-              <FrontPageEditor showToast={showToast} initialSubTab="hero" />
-            </div>
-          )}
+          {/* TAB 4: FRONT PAGE CONTENT */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'content' ? 'block' : 'none' }}>
+            <FrontPageEditor showToast={showToast} />
+          </div>
 
-          {/* TAB 5: CORPORATE TIE-UPS EDITOR */}
-          {activeTab === 'corporate' && (
-            <div className={styles.viewSection}>
-              <FrontPageEditor showToast={showToast} initialSubTab="corporate" />
-            </div>
-          )}
-
-          {/* TAB 5: FAQs MANAGEMENT */}
-          {activeTab === 'faqs' && (
-            <div className={styles.viewSection}>
+          {/* TAB 6: FAQs MANAGEMENT */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'faqs' ? 'block' : 'none' }}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.sectionTitle}>Frequently Asked Questions (FAQs)</h2>
@@ -1089,11 +1336,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   ))}
               </div>
             </div>
-          )}
 
-          {/* TAB 6: PUBLIC REVIEWS */}
-          {activeTab === 'reviews' && (
-            <div className={styles.viewSection}>
+          {/* TAB 7: PUBLIC REVIEWS */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'reviews' ? 'block' : 'none' }}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.sectionTitle}>Public Reviews & Patient Testimonials</h2>
@@ -1244,11 +1489,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   ))}
               </div>
             </div>
-          )}
 
-          {/* TAB 7: SPECIALITIES & SURGERIES */}
-          {activeTab === 'specialities' && (
-            <div className={styles.viewSection}>
+          {/* TAB 8: SPECIALITIES & SURGERIES */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'specialities' ? 'block' : 'none' }}>
               <div className={styles.sectionHeader}>
                 <div>
                   <h2 className={styles.sectionTitle}>Specialities & Procedures (Surgeries)</h2>
@@ -1384,14 +1627,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   ))}
               </div>
             </div>
-          )}
 
-          {/* TAB 8: SITE IDENTITY & LOGO */}
-          {activeTab === 'branding' && (
-            <div className={styles.viewSection}>
-              <BrandingManager showToast={showToast} />
-            </div>
-          )}
+          {/* TAB 9: SITE IDENTITY & LOGO */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'branding' ? 'block' : 'none' }}>
+            <BrandingManager showToast={showToast} />
+          </div>
         </main>
       </div>
 

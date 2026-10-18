@@ -11,7 +11,8 @@ export const articles = [
     categoryBg: '#FDE8EF',
     title: '5 Simple Steps for a Healthy Heart',
     readTime: '5 min read',
-    image: art1
+    image: art1,
+    link: 'https://www.healthline.com/health/healthy-heart-tips'
   },
   {
     id: 2,
@@ -20,7 +21,8 @@ export const articles = [
     categoryBg: '#E8ECFD',
     title: 'How to Manage Stress in Daily Life',
     readTime: '4 min read',
-    image: art2
+    image: art2,
+    link: 'https://www.helpguide.org/mental-health/stress/stress-management'
   },
   {
     id: 3,
@@ -29,7 +31,8 @@ export const articles = [
     categoryBg: '#E1F5EC',
     title: 'Immunity Boosting Foods you should eat',
     readTime: '6 min read',
-    image: art3
+    image: art3,
+    link: 'https://www.healthline.com/health/food-nutrition/foods-that-boost-the-immune-system'
   },
   {
     id: 4,
@@ -38,7 +41,8 @@ export const articles = [
     categoryBg: '#F3E6FA',
     title: 'Prenatal Care: Important Tips for Expecting Moms',
     readTime: '5 min read',
-    image: art4
+    image: art4,
+    link: 'https://www.womenshealth.gov/pregnancy/youre-pregnant-now-what/prenatal-care-and-tests'
   }
 ];
 

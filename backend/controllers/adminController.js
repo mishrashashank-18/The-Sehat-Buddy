@@ -5,15 +5,39 @@ import Doctor from '../models/Doctor.js';
 import Hospital from '../models/Hospital.js';
 import Appointment from '../models/Appointment.js';
 import validatePassword from '../utils/validatePassword.js';
+import { cloudinary } from '../config/cloudinary.js';
 
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const admin = await Admin.findOne({ email }).select('+password');
-    if (admin && (await admin.matchPassword(password))) {
-      res.json({
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const admin = await Admin.findOne({ email: (email || '').toLowerCase().trim() }).select('+password +failedLoginAttempts +lockUntil');
+    if (!admin) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Account lockout verification
+    if (admin.lockUntil && admin.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((admin.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
+      });
+    }
+
+    if (await admin.matchPassword(password)) {
+      if (admin.failedLoginAttempts > 0 || admin.lockUntil) {
+        admin.failedLoginAttempts = 0;
+        admin.lockUntil = undefined;
+        await admin.save();
+      }
+
+      return res.json({
         success: true,
-        token: generateToken(admin._id, 'admin'),
+        token: generateToken(admin._id, 'admin', admin.tokenVersion || 0),
         admin: {
           id: admin._id,
           name: admin.name,
@@ -22,7 +46,22 @@ export const authAdmin = async (req, res) => {
         }
       });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid email or password' });
+      admin.failedLoginAttempts = (admin.failedLoginAttempts || 0) + 1;
+      if (admin.failedLoginAttempts >= 5) {
+        admin.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        admin.failedLoginAttempts = 0;
+        await admin.save();
+        return res.status(423).json({
+          success: false,
+          message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
+        });
+      }
+      await admin.save();
+      const remainingAttempts = Math.max(0, 5 - admin.failedLoginAttempts);
+      return res.status(401).json({
+        success: false,
+        message: `Invalid email or password. ${remainingAttempts} attempt(s) remaining before temporary lockout.`
+      });
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -203,4 +242,111 @@ export const deleteDoctor = async (req, res) => {
   }
 };
 
-// Added logging
+export const getStorageStats = async (req, res) => {
+  try {
+    let mongoStats = null;
+    let cloudinaryStats = null;
+
+    // 1. MongoDB Atlas Storage Stats
+    try {
+      if (mongoose.connection && mongoose.connection.db) {
+        const stats = await mongoose.connection.db.stats();
+        // Atlas M0 Free Tier limit is 512 MB, allow custom env override
+        const totalLimitMB = Number(process.env.MONGODB_STORAGE_LIMIT_MB) || 512;
+        const totalLimitBytes = totalLimitMB * 1024 * 1024;
+        
+        // MongoDB Atlas calculates total storage used as storageSize + indexSize
+        const usedBytes = (stats.storageSize || 0) + (stats.indexSize || 0);
+        const remainingBytes = Math.max(0, totalLimitBytes - usedBytes);
+        const percentUsed = Number(Math.min(100, (usedBytes / totalLimitBytes) * 100).toFixed(2));
+        
+        mongoStats = {
+          databaseName: stats.db || 'thesehatbuddy',
+          totalLimitBytes,
+          totalLimitMB,
+          usedBytes,
+          usedMB: Number((usedBytes / (1024 * 1024)).toFixed(2)),
+          remainingBytes,
+          remainingMB: Number((remainingBytes / (1024 * 1024)).toFixed(2)),
+          percentUsed,
+          dataSizeBytes: stats.dataSize || 0,
+          dataSizeMB: Number(((stats.dataSize || 0) / (1024 * 1024)).toFixed(2)),
+          storageSizeBytes: stats.storageSize || 0,
+          storageSizeMB: Number(((stats.storageSize || 0) / (1024 * 1024)).toFixed(2)),
+          indexSizeBytes: stats.indexSize || 0,
+          indexSizeMB: Number(((stats.indexSize || 0) / (1024 * 1024)).toFixed(2)),
+          collections: stats.collections || 0,
+          objects: stats.objects || 0,
+          status: percentUsed >= 90 ? 'critical' : percentUsed >= 75 ? 'warning' : 'healthy'
+        };
+      }
+    } catch (mongoErr) {
+      console.error('Error fetching MongoDB stats:', mongoErr.message);
+      mongoStats = {
+        error: mongoErr.message,
+        status: 'error'
+      };
+    }
+
+    // 2. Cloudinary Media Storage Stats
+    try {
+      if (cloudinary && cloudinary.api && cloudinary.api.usage) {
+        const usage = await cloudinary.api.usage();
+        const plan = usage.plan || 'Free';
+        const creditsLimit = usage.credits?.limit || 25;
+        const creditsUsed = usage.credits?.usage || 0;
+        const creditsRemaining = Math.max(0, Number((creditsLimit - creditsUsed).toFixed(2)));
+        const creditsPercentUsed = usage.credits?.used_percent ?? Number(((creditsUsed / creditsLimit) * 100).toFixed(2));
+
+        // 1 Credit = 1 GB of storage or bandwidth
+        const totalStorageBytes = creditsLimit * 1024 * 1024 * 1024;
+        const totalStorageGB = creditsLimit;
+        const usedStorageBytes = usage.storage?.usage || 0;
+        const usedStorageMB = Number((usedStorageBytes / (1024 * 1024)).toFixed(2));
+        const usedStorageGB = Number((usedStorageBytes / (1024 * 1024 * 1024)).toFixed(3));
+        const remainingStorageBytes = Math.max(0, totalStorageBytes - usedStorageBytes);
+        const remainingStorageGB = Number((remainingStorageBytes / (1024 * 1024 * 1024)).toFixed(2));
+        const storagePercentUsed = Number(((usedStorageBytes / totalStorageBytes) * 100).toFixed(2));
+
+        cloudinaryStats = {
+          plan,
+          lastUpdated: usage.last_updated || new Date().toISOString(),
+          totalLimitBytes: totalStorageBytes,
+          totalLimitGB: totalStorageGB,
+          usedBytes: usedStorageBytes,
+          usedMB: usedStorageMB,
+          usedGB: usedStorageGB,
+          remainingBytes: remainingStorageBytes,
+          remainingGB: remainingStorageGB,
+          percentUsed: storagePercentUsed,
+          credits: {
+            total: creditsLimit,
+            used: creditsUsed,
+            remaining: creditsRemaining,
+            percentUsed: creditsPercentUsed
+          },
+          objects: usage.objects?.usage ?? usage.resources ?? 0,
+          bandwidthBytes: usage.bandwidth?.usage || 0,
+          bandwidthMB: Number(((usage.bandwidth?.usage || 0) / (1024 * 1024)).toFixed(2)),
+          transformations: usage.transformations?.usage || 0,
+          status: creditsPercentUsed >= 90 ? 'critical' : creditsPercentUsed >= 75 ? 'warning' : 'healthy'
+        };
+      }
+    } catch (cldErr) {
+      console.error('Error fetching Cloudinary stats:', cldErr.message);
+      cloudinaryStats = {
+        error: cldErr.message,
+        status: 'error'
+      };
+    }
+
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      mongodb: mongoStats,
+      cloudinary: cloudinaryStats
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

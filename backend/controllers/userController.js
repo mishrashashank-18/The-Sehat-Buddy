@@ -111,7 +111,7 @@ export const verifyOtp = async (req, res) => {
     
     res.json({
       success: true,
-      token: generateToken(user._id, 'user'),
+      token: generateToken(user._id, 'user', user.tokenVersion || 0),
       user: { name: user.name, email: user.email, id: user._id }
     });
   } catch (error) {
@@ -122,8 +122,31 @@ export const verifyOtp = async (req, res) => {
 export const authUser = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email }).select('+password');
-    if (user && (await user.matchPassword(password))) {
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    const user = await User.findOne({ email: (email || '').toLowerCase().trim() }).select('+password +failedLoginAttempts +lockUntil');
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Account lockout check
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
+      });
+    }
+
+    if (await user.matchPassword(password)) {
+      if (user.failedLoginAttempts > 0 || user.lockUntil) {
+        user.failedLoginAttempts = 0;
+        user.lockUntil = undefined;
+        await user.save();
+      }
+
       if (!user.isVerified) {
         const otp = generateOTP();
         user.otp = otp;
@@ -158,11 +181,26 @@ export const authUser = async (req, res) => {
 
       res.json({
         success: true,
-        token: generateToken(user._id, 'user'),
+        token: generateToken(user._id, 'user', user.tokenVersion || 0),
         user: { name: user.name, email: user.email, id: user._id }
       });
     } else {
-      res.status(401).json({ success: false, message: 'Invalid email or password' });
+      user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+      if (user.failedLoginAttempts >= 5) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        user.failedLoginAttempts = 0;
+        await user.save();
+        return res.status(423).json({
+          success: false,
+          message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
+        });
+      }
+      await user.save();
+      const remainingAttempts = Math.max(0, 5 - user.failedLoginAttempts);
+      return res.status(401).json({
+        success: false,
+        message: `Invalid email or password. ${remainingAttempts} attempt(s) remaining before temporary lockout.`
+      });
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -280,17 +318,24 @@ export const listAppointments = async (req, res) => {
 export const cancelAppointment = async (req, res) => {
   try {
     const appointmentId = req.body.appointmentId;
+    if (!appointmentId) {
+      return res.status(400).json({ success: false, message: 'Appointment ID is required' });
+    }
     const appointment = await Appointment.findById(appointmentId);
-    if (appointment.userId !== req.user.id) {
-       return res.status(401).json({ success: false, message: 'Not authorized' });
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    if (appointment.userId?.toString() !== req.user.id?.toString()) {
+       return res.status(403).json({ success: false, message: 'Forbidden: You can only cancel your own appointments' });
     }
     await Appointment.findByIdAndUpdate(appointmentId, { cancelled: true });
 
     // Release doctor slot
     const doctor = await Doctor.findById(appointment.docId);
-    let slots_booked = doctor.slots_booked;
-    slots_booked[appointment.slotDate] = slots_booked[appointment.slotDate].filter(e => e !== appointment.slotTime);
-    await Doctor.findByIdAndUpdate(appointment.docId, { slots_booked });
+    if (doctor && doctor.slots_booked && Array.isArray(doctor.slots_booked[appointment.slotDate])) {
+      doctor.slots_booked[appointment.slotDate] = doctor.slots_booked[appointment.slotDate].filter(e => e !== appointment.slotTime);
+      await Doctor.findByIdAndUpdate(appointment.docId, { slots_booked: doctor.slots_booked });
+    }
 
     res.json({ success: true, message: 'Appointment Cancelled' });
   } catch (error) {
@@ -345,7 +390,7 @@ export const googleLogin = async (req, res) => {
 
     res.json({
       success: true,
-      token: generateToken(user._id, 'user'),
+      token: generateToken(user._id, 'user', user.tokenVersion || 0),
       data: {
         id: user._id,
         name: user.name,

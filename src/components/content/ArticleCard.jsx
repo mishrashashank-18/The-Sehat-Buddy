@@ -1,19 +1,39 @@
 import React from 'react';
+import { ExternalLink } from 'lucide-react';
 import styles from './ArticleCard.module.css';
 
 const ArticleCard = ({ article, onNavigate }) => {
+  const handleClick = (e) => {
+    if (article?.link && article.link.trim()) {
+      let targetUrl = article.link.trim();
+      if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('/')) {
+        targetUrl = `https://${targetUrl}`;
+      }
+      if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      } else if (targetUrl.startsWith('/')) {
+        window.location.href = targetUrl;
+      }
+      return;
+    }
+
+    if (onNavigate) {
+      onNavigate('coming-soon', 'articles');
+    }
+  };
+
   return (
     <div
       className={styles.card}
-      onClick={() => onNavigate && onNavigate('coming-soon', 'articles')}
+      onClick={handleClick}
       style={{ cursor: 'pointer' }}
-      title={`Read article: ${article.title}`}
+      title={article?.link ? `Read article: ${article.title} (${article.link})` : `Read article: ${article.title}`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onNavigate && onNavigate('coming-soon', 'articles');
+          handleClick(e);
         }
       }}
     >
@@ -28,14 +48,21 @@ const ArticleCard = ({ article, onNavigate }) => {
         />
       </div>
       <div className={styles.content}>
-        <div 
-          className={styles.tag} 
-          style={{ 
-            backgroundColor: article.categoryBg,
-            color: article.categoryColor
-          }}
-        >
-          {article.category}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+          <div 
+            className={styles.tag} 
+            style={{ 
+              backgroundColor: article.categoryBg,
+              color: article.categoryColor
+            }}
+          >
+            {article.category}
+          </div>
+          {article?.link && (
+            <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }} title={`External link: ${article.link}`}>
+              <ExternalLink size={12} />
+            </span>
+          )}
         </div>
         <h3 className={styles.title}>{article.title}</h3>
         <p className={styles.readTime}>{article.readTime}</p>

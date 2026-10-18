@@ -6,6 +6,9 @@ const adminSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
   role: { type: String, default: 'admin' },
+  tokenVersion: { type: Number, default: 0 },
+  failedLoginAttempts: { type: Number, default: 0, select: false },
+  lockUntil: { type: Date, select: false }
 }, { timestamps: true });
 
 adminSchema.pre('save', async function() {
