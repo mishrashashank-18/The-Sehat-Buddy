@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Building2,
   Bed,
-  HeartPulse,
   Phone,
   MapPin,
   Clock,
@@ -34,6 +33,7 @@ import { useData } from '../../context/useData';
 import { api } from '../../services/api';
 import HospitalLocationPicker from './HospitalLocationPicker';
 import SpecialityFormModal from '../admin/SpecialityFormModal';
+import logoImg from '../../assets/images/logo.png';
 import styles from './HospitalDashboard.module.css';
 
 const INITIAL_WARDS = [
@@ -499,7 +499,7 @@ const HospitalDashboard = ({ onNavigate }) => {
       <header className={styles.topbar}>
         <div className={styles.brandGroup}>
           <div className={styles.logoIcon}>
-            <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
+            <img src={logoImg} alt="The Sehat Buddy" style={{ height: '26px', maxWidth: '32px', objectFit: 'contain' }} />
           </div>
           <div>
             <div className={styles.brandTitleWrap}>

@@ -24,7 +24,7 @@ const STORAGE_KEY_CORPORATE = 'sehat_buddy_corporate_v2';
 const STORAGE_KEY_FAQS = 'sehat_buddy_faqs_v2';
 const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
 const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
-const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v2';
+const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v3';
 
 // Real-time synchronization channel across browser tabs & windows
 const SYNC_CHANNEL_NAME = 'sehat_buddy_sync_bus_v1';
@@ -215,10 +215,22 @@ export const DataProvider = ({ children }) => {
   // 11. Site Identity & Branding State
   const [branding, setBranding] = useState(() => {
     try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('sehat_buddy_branding_v2');
+      }
       const saved = localStorage.getItem(STORAGE_KEY_BRANDING);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return { ...initialBranding, ...parsed };
+        if (parsed && typeof parsed === 'object') {
+          if (!parsed.logoImage || parsed.logoType === 'default') {
+            parsed.logoImage = '/logo.png';
+            parsed.logoType = 'image';
+          }
+          if (parsed.favicon && (parsed.favicon.includes('M24.5 17.5') || parsed.favicon.includes('M9.5 15.5'))) {
+            parsed.favicon = '/favicon.png';
+          }
+          return { ...initialBranding, ...parsed };
+        }
       }
     } catch (e) {
       console.error('Failed to parse branding from localStorage', e);
@@ -499,25 +511,7 @@ export const DataProvider = ({ children }) => {
     }
   }, [branding]);
 
-  // Synchronize dynamic favicon with document head
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const faviconHref = branding?.favicon || DEFAULT_FAVICON_CIRCULAR;
-    if (!faviconHref) return;
 
-    let iconLink = document.querySelector("link[rel='icon']") || document.querySelector("link[rel='shortcut icon']");
-    if (!iconLink) {
-      iconLink = document.createElement('link');
-      iconLink.rel = 'icon';
-      document.head.appendChild(iconLink);
-    }
-    iconLink.href = faviconHref;
-
-    const altIconLink = document.querySelector("link[rel='alternate icon']");
-    if (altIconLink) {
-      altIconLink.href = faviconHref;
-    }
-  }, [branding?.favicon]);
 
   // Doctor CRUD operations
   const addDoctor = (doctorData) => {

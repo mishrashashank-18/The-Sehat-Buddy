@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  HeartPulse,
   Upload,
   Image as ImageIcon,
   Trash2,
@@ -14,32 +13,68 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
-import { DEFAULT_FAVICON_CIRCULAR } from '../../data/branding';
+import { DEFAULT_FAVICON, DEFAULT_FAVICON_CIRCULAR } from '../../data/branding';
+import { NEW_SEHAT_BUDDY_FAVICON } from '../../data/faviconDataUri';
+import logoImg from '../../assets/images/logo.png';
 import styles from './BrandingManager.module.css';
 
 // Client-side helper to crop any image into a high-res circular favicon
 const makeCircularFavicon = (imageUrl) => {
   return new Promise((resolve) => {
+    if (
+      !imageUrl ||
+      imageUrl.includes('M24.5 17.5') ||
+      imageUrl.includes('M9.5 15.5') ||
+      imageUrl === NEW_SEHAT_BUDDY_FAVICON ||
+      imageUrl === '/favicon.png' ||
+      imageUrl === '/favicon.ico' ||
+      imageUrl === '/logo.png' ||
+      imageUrl.includes('logo.png')
+    ) {
+      return resolve(NEW_SEHAT_BUDDY_FAVICON);
+    }
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const size = 64;
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, size, size);
+      try {
+        const canvas = document.createElement('canvas');
+        const size = 128;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(imageUrl);
+        ctx.clearRect(0, 0, size, size);
 
-      // Circle clip
-      ctx.beginPath();
-      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
+        // Circle clip
+        ctx.beginPath();
+        ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
 
-      ctx.drawImage(img, 0, 0, size, size);
-      resolve(canvas.toDataURL('image/png'));
+        // White background inside circle
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw image centered preserving aspect ratio
+        const aspect = (img.width || 1) / (img.height || 1);
+        const maxInner = size * 0.62;
+        let drawW = maxInner;
+        let drawH = maxInner;
+        if (aspect >= 1) {
+          drawH = maxInner / aspect;
+        } else {
+          drawW = maxInner * aspect;
+        }
+        const drawX = (size - drawW) / 2;
+        const drawY = (size - drawH) / 2 + 3;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+        resolve(canvas.toDataURL('image/png'));
+      } catch {
+        resolve(imageUrl);
+      }
     };
-    img.onerror = () => resolve(imageUrl);
+    img.onerror = () => resolve(NEW_SEHAT_BUDDY_FAVICON);
     img.src = imageUrl;
   });
 };
@@ -50,12 +85,12 @@ const BrandingManager = ({ showToast }) => {
   const [formData, setFormData] = useState({
     siteName: branding?.siteName || 'The Sehat Buddy',
     tagline: branding?.tagline || 'Your Health. Our Priority.',
-    logoType: branding?.logoType || 'default', // 'default' | 'image' | 'none'
-    logoImage: branding?.logoImage || '',
+    logoType: branding?.logoType || 'image', // 'default' | 'image' | 'none'
+    logoImage: branding?.logoImage || '/logo.png',
     showLogo: branding?.showLogo !== false,
     showTagline: branding?.showTagline !== false,
     faviconType: branding?.faviconType || 'default', // 'default' | 'custom' | 'logo'
-    favicon: branding?.favicon || DEFAULT_FAVICON_CIRCULAR,
+    favicon: branding?.favicon || DEFAULT_FAVICON,
     faviconCircular: branding?.faviconCircular !== false
   });
 
@@ -69,12 +104,12 @@ const BrandingManager = ({ showToast }) => {
       setFormData({
         siteName: branding.siteName || 'The Sehat Buddy',
         tagline: branding.tagline || 'Your Health. Our Priority.',
-        logoType: branding.logoType || 'default',
-        logoImage: branding.logoImage || '',
+        logoType: branding.logoType || 'image',
+        logoImage: branding.logoImage || '/logo.png',
         showLogo: branding.showLogo !== false,
         showTagline: branding.showTagline !== false,
         faviconType: branding.faviconType || 'default',
-        favicon: branding.favicon || DEFAULT_FAVICON_CIRCULAR,
+        favicon: branding.favicon || DEFAULT_FAVICON,
         faviconCircular: branding.faviconCircular !== false
       });
     }
@@ -293,7 +328,12 @@ const BrandingManager = ({ showToast }) => {
                     className={styles.previewCustomImg}
                   />
                 ) : (
-                  <HeartPulse size={36} color="#2563EB" strokeWidth={2.4} />
+                  <img
+                    src={logoImg}
+                    alt="Logo"
+                    className={styles.previewCustomImg}
+                    style={{ height: '36px', objectFit: 'contain' }}
+                  />
                 )}
               </div>
             )}
@@ -412,10 +452,10 @@ const BrandingManager = ({ showToast }) => {
               onClick={() => setFormData({ ...formData, logoType: 'default', showLogo: true })}
             >
               <div className={styles.modeIcon}>
-                <HeartPulse size={24} color="#2563EB" />
+                <img src={logoImg} alt="Default Logo" style={{ height: '24px', maxWidth: '30px', objectFit: 'contain' }} />
               </div>
               <span className={styles.modeTitle}>Default Icon</span>
-              <span className={styles.modeDesc}>Official Heartbeat Medical Pulse Icon</span>
+              <span className={styles.modeDesc}>Official Sehat Buddy Logo</span>
             </div>
 
             {/* Mode 2: Custom Upload */}
