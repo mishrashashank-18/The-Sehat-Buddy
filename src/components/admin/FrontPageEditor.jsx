@@ -1046,9 +1046,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <UploadCloud size={22} />
                   </div>
                   <div>
-                    <div className={styles.videoUploadTitle}>Upload Custom Video to Cloudinary</div>
+                    <div className={styles.videoUploadTitle}>Upload Explainer Video to Database & CDN</div>
                     <p className={styles.videoUploadDesc}>
-                      Upload direct video (.mp4, .webm, .mov up to 100MB). Streamed securely to Cloudinary CDN and automatically saved to the website.
+                      Upload direct video (.mp4, .webm, .mov up to 100MB). Stored safely and plays directly on the website front page.
                     </p>
                   </div>
                 </div>
@@ -1075,7 +1075,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     ) : (
                       <>
                         <UploadCloud size={16} />
-                        <span>Upload Video to Cloudinary</span>
+                        <span>Upload Video to Database</span>
                       </>
                     )}
                   </button>
@@ -1086,7 +1086,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               {isVideoUploading && (
                 <div style={{ marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748B', marginBottom: '4px' }}>
-                    <span>Uploading and processing in Cloudinary CDN...</span>
+                    <span>Uploading and processing video for database storage...</span>
                     <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{videoUploadProgress}%</span>
                   </div>
                   <div className={styles.videoProgressBar}>
@@ -1095,28 +1095,29 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 </div>
               )}
 
-              {/* Status indicator if currently pointing to Cloudinary */}
-              {heroForm.whyChooseVideoUrl?.includes('cloudinary.com') && !isVideoUploading && (
+              {/* Status indicator if currently has an active video */}
+              {heroForm.whyChooseVideoUrl && !isVideoUploading && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', marginTop: '6px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={styles.cloudinaryBadge}>
-                      <CheckCircle size={13} /> Cloudinary Video Active
+                      <CheckCircle size={13} /> Active Video Loaded
                     </span>
-                    <span style={{ fontSize: '0.78rem', color: '#475569', wordBreak: 'break-all' }}>
-                      {heroForm.whyChooseVideoUrl.split('/').pop()}
+                    <span style={{ fontSize: '0.78rem', color: '#475569', wordBreak: 'break-all', maxWidth: '350px' }}>
+                      {heroForm.whyChooseVideoUrl}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
-                      const defaultYt = 'https://www.youtube.com/watch?v=zCCD52Pty4A';
-                      setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: defaultYt }));
-                      updateHeroContent({ whyChooseVideoUrl: defaultYt });
-                      showToast('Reverted to default YouTube explainer video.');
+                      setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: '' }));
+                      updateHeroContent({ whyChooseVideoUrl: '' });
+                      showToast('Explainer video removed from front page.');
                     }}
-                    style={{ background: 'transparent', border: 'none', color: '#64748B', fontSize: '0.75rem', cursor: 'pointer', textDecoration: 'underline' }}
+                    style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.75rem', fontWeight: 600, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
+                    title="Remove this video from front page"
                   >
-                    Reset to Default YouTube
+                    <Trash2 size={13} />
+                    <span>Remove Video</span>
                   </button>
                 </div>
               )}
@@ -1124,7 +1125,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
             <div className={styles.formGrid}>
               <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                <label>Video URL (Cloudinary, YouTube, or Direct MP4 link)</label>
+                <label>Video URL (Database, Cloudinary, YouTube, or Direct MP4 link)</label>
                 <input
                   type="text"
                   value={heroForm.whyChooseVideoUrl}
@@ -1135,10 +1136,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       handleSaveWhyVideo();
                     }
                   }}
-                  placeholder="https://www.youtube.com/watch?v=... or https://res.cloudinary.com/..."
+                  placeholder="Paste video link or leave empty to hide video player"
                 />
                 <span style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                  Upload a video to Cloudinary using the button above, or paste any YouTube URL / external MP4 link. Press Enter to save.
+                  Upload a video to database using the button above, or paste any video URL / YouTube link. Press Enter to save.
                 </span>
               </div>
 

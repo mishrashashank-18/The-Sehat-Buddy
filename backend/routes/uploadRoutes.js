@@ -218,13 +218,6 @@ router.post('/video', protect, (req, res, next) => {
       cloudName !== 'your_cloudinary_cloud_name' &&
       !cloudName.includes('your_');
 
-    if (!isCloudinaryConfigured) {
-      return res.status(500).json({
-        success: false,
-        message: 'Cloudinary credentials are not configured in backend/.env'
-      });
-    }
-
     if (!req.file && (!req.body || !req.body.video)) {
       return res.status(400).json({ success: false, message: 'No video file or URL provided' });
     }
@@ -233,31 +226,54 @@ router.post('/video', protect, (req, res, next) => {
     const cld = getCloudinary();
 
     if (req.file) {
-      const uploadResult = await new Promise((resolve, reject) => {
-        cld.uploader.upload_large(
-          filePath,
-          {
-            resource_type: 'video',
-            folder,
-            chunk_size: 6000000
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-      });
+      if (isCloudinaryConfigured) {
+        try {
+          const uploadResult = await new Promise((resolve, reject) => {
+            cld.uploader.upload_large(
+              filePath,
+              {
+                resource_type: 'video',
+                folder,
+                chunk_size: 6000000
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+          });
 
-      notifyStorageChanged('cloudinary:video');
+          notifyStorageChanged('cloudinary:video');
+          return res.json({
+            success: true,
+            url: uploadResult.secure_url || uploadResult.url,
+            public_id: uploadResult.public_id,
+            duration: uploadResult.duration,
+            format: uploadResult.format,
+            width: uploadResult.width,
+            height: uploadResult.height,
+            provider: 'cloudinary'
+          });
+        } catch (cloudErr) {
+          console.warn('Cloudinary video upload failed, saving to local database storage:', cloudErr.message);
+        }
+      }
+
+      // Direct Server & Database Video Storage Fallback
+      const localUploadDir = path.resolve(__dirname, '../uploads/videos');
+      if (!fs.existsSync(localUploadDir)) {
+        fs.mkdirSync(localUploadDir, { recursive: true });
+      }
+      const localDestPath = path.join(localUploadDir, req.file.filename);
+      fs.copyFileSync(filePath, localDestPath);
+      const videoRelativeUrl = `/uploads/videos/${req.file.filename}`;
+
+      notifyStorageChanged('local:video');
       return res.json({
         success: true,
-        url: uploadResult.secure_url || uploadResult.url,
-        public_id: uploadResult.public_id,
-        duration: uploadResult.duration,
-        format: uploadResult.format,
-        width: uploadResult.width,
-        height: uploadResult.height,
-        provider: 'cloudinary'
+        url: videoRelativeUrl,
+        public_id: req.file.filename,
+        provider: 'local'
       });
     }
 

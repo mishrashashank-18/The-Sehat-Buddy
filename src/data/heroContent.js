@@ -13,7 +13,7 @@ export const initialHeroContent = {
     { id: 3, label: 'Quick', value: 'Appointments' }
   ],
   whyChooseTitle: 'Why Choose The Sehat Buddy?',
-  whyChooseVideoUrl: 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+  whyChooseVideoUrl: '',
   whyChooseVideoText: 'Watch how\nSehat Buddy\nworks for you',
   whyChooseVideoAutoplay: true,
   newsletterTitle: 'Stay updated with\nhealth tips & offers',

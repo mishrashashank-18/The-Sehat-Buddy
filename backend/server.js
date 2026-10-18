@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
@@ -84,6 +85,17 @@ app.use(cors({
 
 // 3. Request Body Parser with payload limit
 app.use(express.json({ limit: '10mb' }));
+
+// Static uploads directory for direct database & local media streaming
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const videosDir = path.join(uploadsDir, 'videos');
+if (!fs.existsSync(videosDir)) {
+  fs.mkdirSync(videosDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // 4. NoSQL Query & Body Sanitization (blocks operator injection like $gt, $where)
 app.use(mongoSanitize);
