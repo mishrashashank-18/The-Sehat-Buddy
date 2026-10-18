@@ -179,7 +179,7 @@ const getComprehensiveBio = (doc) => {
 
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, reviews } = useData();
+  const { doctors, reviews, faqs } = useData();
   const [activeReel, setActiveReel] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
@@ -1258,16 +1258,30 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                         'Cashless Insurance'
                       ];
 
-                      const faqsToRender = (Array.isArray(doctor?.faqs) && doctor.faqs.length > 0)
+                      const specificDoctorFaqs = (faqs || [])
+                        .filter(f => f.isActive && f.targetType === 'doctor' && (
+                          (f.targetId && (String(f.targetId) === String(doctor.id || doctor._id))) ||
+                          (f.targetName && doctor.name && f.targetName.toLowerCase() === doctor.name.toLowerCase())
+                        ))
+                        .map((f, i) => ({
+                          icon: defaultIcons[i % defaultIcons.length],
+                          category: f.category || defaultCategories[i % defaultCategories.length] || 'Doctor FAQ',
+                          q: f.question,
+                          a: f.answer
+                        }));
+
+                      const embeddedDocFaqs = (Array.isArray(doctor?.faqs) && doctor.faqs.length > 0)
                         ? doctor.faqs.map((f, i) => ({
-                            icon: defaultIcons[i % defaultIcons.length],
-                            category: f.category || defaultCategories[i % defaultCategories.length],
+                            icon: defaultIcons[(specificDoctorFaqs.length + i) % defaultIcons.length],
+                            category: f.category || defaultCategories[(specificDoctorFaqs.length + i) % defaultCategories.length] || 'General FAQ',
                             q: f.q || f.question,
                             a: f.a || f.answer,
                             steps: f.steps,
                             note: f.note
                           }))
-                        : defaultDoctorFaqs;
+                        : (specificDoctorFaqs.length > 0 ? [] : defaultDoctorFaqs);
+
+                      const faqsToRender = [...specificDoctorFaqs, ...embeddedDocFaqs];
 
                       return faqsToRender.map((faq, idx) => {
                         const isOpen = expandedFaq === idx;

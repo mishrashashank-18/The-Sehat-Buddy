@@ -8,7 +8,13 @@ import styles from './PopularDoctors.module.css';
 const PopularDoctors = ({ onNavigate }) => {
   const { doctors } = useData();
 
-  const displayDoctors = doctors && doctors.length > 0 ? doctors : [];
+  // Filter doctors that have been starred by Admin
+  const starDoctors = (doctors || []).filter(doc => Boolean(doc.isStarDoctor));
+
+  // If any doctors are starred by admin, display those in Popular Doctors!
+  // Fall back to all doctors if no doctors have been starred yet
+  const displayDoctors = starDoctors.length > 0 ? starDoctors : (doctors && doctors.length > 0 ? doctors : []);
+
   // Duplicate doctors for seamless infinite marquee loop (running left)
   const marqueeDoctors = displayDoctors.length > 0
     ? (displayDoctors.length < 5
@@ -21,7 +27,7 @@ const PopularDoctors = ({ onNavigate }) => {
       <Container>
         <SectionHeader
           title="Popular Doctors"
-          linkText={`View All Doctors (${displayDoctors.length})`}
+          linkText={`View All Doctors (${doctors?.length || displayDoctors.length})`}
           onLinkClick={() => onNavigate('find-doctors')}
         />
 

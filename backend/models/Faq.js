@@ -8,6 +8,13 @@ const faqSchema = new mongoose.Schema({
     enum: ['Insurance & Cashless', 'Surgeries & Procedures', 'Hospitals & Admissions', 'Doctors & Consultations', 'General'],
     default: 'General'
   },
+  targetType: { 
+    type: String, 
+    enum: ['doctor', 'hospital', 'general'], 
+    default: 'general' 
+  },
+  targetId: { type: String, default: '' },
+  targetName: { type: String, default: '' },
   order: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });

@@ -181,7 +181,7 @@ const FAQ_ICONS = [
 ];
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors, reviews } = useData();
+  const { hospitals, doctors, reviews, faqs } = useData();
   const [activeReel, setActiveReel] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
   const [activePhoto, setActivePhoto] = useState(null);
@@ -834,6 +834,19 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
             <div className={styles.faqList}>
               {[
+                ...((faqs || [])
+                  .filter(f => f.isActive && f.targetType === 'hospital' && (
+                    (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
+                    (f.targetName && hospital.name && (
+                      f.targetName.toLowerCase().includes(hospital.name.toLowerCase()) ||
+                      hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
+                    ))
+                  ))
+                  .map(f => ({
+                    q: f.question,
+                    a: f.answer
+                  }))
+                ),
                 {
                   q: `How does 100% cashless insurance pre-authorization work at ${hospital.name}?`,
                   steps: [

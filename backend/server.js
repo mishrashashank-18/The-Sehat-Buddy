@@ -18,6 +18,8 @@ import faqRoutes from './routes/faqRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import specialityRoutes from './routes/specialityRoutes.js';
 
+import mongoSanitize from './middleware/mongoSanitize.js';
+
 // Resolve directory name
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,12 +27,31 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from backend/.env (or root fallback)
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const DEV_JWT_FALLBACK = 'sehatbuddy_super_secure_jwt_secret_dev_fallback_2026';
+const jwtSecret = process.env.JWT_SECRET;
+
+// Fail-fast security validation on startup
+if (NODE_ENV === 'production') {
+  if (!jwtSecret || jwtSecret === DEV_JWT_FALLBACK) {
+    console.error('FATAL SECURITY CONFIGURATION: JWT_SECRET must be set to a strong unique secret in production environment. Aborting startup.');
+    process.exit(1);
+  }
+  if (jwtSecret.length < 32) {
+    console.error('FATAL SECURITY CONFIGURATION: JWT_SECRET must be at least 32 characters in production. Aborting startup.');
+    process.exit(1);
+  }
+} else {
+  if (!jwtSecret || jwtSecret === DEV_JWT_FALLBACK) {
+    console.warn('⚠️ SECURITY NOTICE: Running in development mode with developer JWT fallback secret. Set a 32+ character JWT_SECRET in .env before deploying to production.');
+  }
+}
+
 // Connect to MongoDB
 connectDB();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // 1. Security Headers via Helmet
@@ -60,6 +81,9 @@ app.use(cors({
 
 // 3. Request Body Parser with payload limit
 app.use(express.json({ limit: '10mb' }));
+
+// 4. NoSQL Query & Body Sanitization (blocks operator injection like $gt, $where)
+app.use(mongoSanitize);
 
 // 4. Rate Limiting Protection
 // General API rate limiter (500 requests per 15 minutes per IP)
