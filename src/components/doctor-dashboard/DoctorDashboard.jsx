@@ -141,15 +141,35 @@ const DoctorDashboard = ({ onNavigate }) => {
   const { doctors, updateDoctor, deleteDoctor } = useData();
 
   // Active doctor selection (get from login if available)
-  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const [selectedDoctorId, setSelectedDoctorId] = useState(() => {
-    if (storedUser && (storedUser._id || storedUser.id)) {
-      return storedUser._id || storedUser.id;
+  const storedUser = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {
+      return {};
     }
-    return doctors[0]?.id || doctors[0]?._id || 1;
-  });
-  
-  const activeDoctor = doctors.find(d => String(d.id) === String(selectedDoctorId) || String(d._id) === String(selectedDoctorId)) || doctors[0] || {};
+  }, []);
+
+  const [selectedDoctorId, setSelectedDoctorId] = useState(null);
+
+  const activeDoctor = React.useMemo(() => {
+    if (selectedDoctorId) {
+      const found = doctors.find(d => String(d.id || d._id) === String(selectedDoctorId));
+      if (found) return found;
+    }
+    const userId = storedUser._id || storedUser.id;
+    if (userId) {
+      const found = doctors.find(d => String(d.id || d._id) === String(userId));
+      if (found) return found;
+    }
+    if (storedUser.email) {
+      const found = doctors.find(d => d.email && d.email.toLowerCase() === storedUser.email.toLowerCase());
+      if (found) return found;
+    }
+    if (storedUser.name && (storedUser.specialization || storedUser.specialty)) {
+      return { ...storedUser, id: userId || 'auth-doctor' };
+    }
+    return doctors[0] || {};
+  }, [doctors, storedUser, selectedDoctorId]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState(() => {

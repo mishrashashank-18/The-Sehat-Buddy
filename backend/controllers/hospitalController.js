@@ -502,7 +502,13 @@ export const getHospitals = async (req, res) => {
 
 export const getHospitalById = async (req, res) => {
   try {
-    const hospital = await Hospital.findById(req.params.id).select('-password').populate('star_doctors', '-password');
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      hospital = await Hospital.findById(req.params.id).select('-password').populate('star_doctors', '-password');
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] }).select('-password').populate('star_doctors', '-password');
+    }
     if (hospital) {
       res.json({ success: true, data: hospital });
     } else {
@@ -515,7 +521,13 @@ export const getHospitalById = async (req, res) => {
 
 export const updateHospital = async (req, res) => {
   try {
-    const hospital = await Hospital.findById(req.params.id);
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      hospital = await Hospital.findById(req.params.id);
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] });
+    }
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Hospital not found' });
     }
@@ -635,7 +647,13 @@ export const deleteHospital = async (req, res) => {
       });
     }
 
-    const hospital = await Hospital.findById(req.params.id);
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      hospital = await Hospital.findById(req.params.id);
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] });
+    }
     if (hospital) {
       await hospital.deleteOne();
       res.json({ success: true, message: 'Hospital deleted successfully' });

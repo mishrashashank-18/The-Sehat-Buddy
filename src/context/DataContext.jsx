@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DataContext } from './context';
 import { api } from '../services/api';
 import { initialHeroContent } from '../data/heroContent';
@@ -28,6 +28,7 @@ const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v3';
 
 // Real-time synchronization channel across browser tabs & windows
 const SYNC_CHANNEL_NAME = 'sehat_buddy_sync_bus_v1';
+export const CURRENT_TAB_ID = 'tab_' + Math.random().toString(36).slice(2, 9) + '_' + Date.now();
 let broadcastChan = null;
 try {
   if (typeof BroadcastChannel !== 'undefined') {
@@ -39,12 +40,13 @@ try {
 
 export const broadcastSync = (key, data) => {
   try {
-    broadcastChan?.postMessage({ type: 'SEHAT_SYNC', key, data, timestamp: Date.now() });
-  } catch {}
-  try {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('sehat_sync_event', { detail: { key, data } }));
-    }
+    broadcastChan?.postMessage({
+      type: 'SEHAT_SYNC',
+      senderTabId: CURRENT_TAB_ID,
+      key,
+      data,
+      timestamp: Date.now()
+    });
   } catch {}
 };
 
@@ -354,23 +356,25 @@ export const DataProvider = ({ children }) => {
     };
   }, []);
 
-  // Real-time inter-tab & focus receiver (BroadcastChannel + storage events + tab focus)
+  // Real-time inter-tab receiver (BroadcastChannel + storage events with loop prevention)
   useEffect(() => {
+    const isSame = (prev, next) => JSON.stringify(prev) === JSON.stringify(next);
+
     const handleBroadcastMessage = (event) => {
-      const { type, key, data } = event.data || {};
-      if (type === 'SEHAT_SYNC' && data) {
-        if (key === STORAGE_KEY_DOCTORS && Array.isArray(data)) setDoctors(data);
-        else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data)) setHospitals(data);
-        else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(data);
-        else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(data);
-        else if (key === STORAGE_KEY_SERVICES && Array.isArray(data)) setServices(data);
-        else if (key === STORAGE_KEY_FEATURES && Array.isArray(data)) setFeatures(data);
-        else if (key === STORAGE_KEY_ARTICLES && Array.isArray(data)) setArticles(data);
-        else if (key === STORAGE_KEY_CORPORATE && Array.isArray(data)) setCorporateTieups(data);
-        else if (key === STORAGE_KEY_FAQS && Array.isArray(data)) setFaqs(data);
-        else if (key === STORAGE_KEY_REVIEWS && Array.isArray(data)) setReviews(data);
-        else if (key === STORAGE_KEY_SPECIALITIES && Array.isArray(data)) setSpecialitiesProcedures(data);
-      }
+      const { type, senderTabId, key, data } = event.data || {};
+      if (type !== 'SEHAT_SYNC' || !data || senderTabId === CURRENT_TAB_ID) return;
+
+      if (key === STORAGE_KEY_DOCTORS && Array.isArray(data)) setDoctors(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data)) setHospitals(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_SERVICES && Array.isArray(data)) setServices(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_FEATURES && Array.isArray(data)) setFeatures(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_ARTICLES && Array.isArray(data)) setArticles(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_CORPORATE && Array.isArray(data)) setCorporateTieups(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_FAQS && Array.isArray(data)) setFaqs(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_REVIEWS && Array.isArray(data)) setReviews(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_SPECIALITIES && Array.isArray(data)) setSpecialitiesProcedures(prev => (isSame(prev, data) ? prev : data));
     };
 
     if (broadcastChan) {
@@ -381,160 +385,55 @@ export const DataProvider = ({ children }) => {
       if (!e.key || !e.newValue) return;
       try {
         const parsed = JSON.parse(e.newValue);
-        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed)) setDoctors(parsed);
-        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed)) setHospitals(parsed);
-        else if (e.key === STORAGE_KEY_BRANDING) setBranding(parsed);
-        else if (e.key === STORAGE_KEY_HERO) setHeroContent(parsed);
-        else if (e.key === STORAGE_KEY_SERVICES && Array.isArray(parsed)) setServices(parsed);
-        else if (e.key === STORAGE_KEY_FEATURES && Array.isArray(parsed)) setFeatures(parsed);
-        else if (e.key === STORAGE_KEY_ARTICLES && Array.isArray(parsed)) setArticles(parsed);
-        else if (e.key === STORAGE_KEY_CORPORATE && Array.isArray(parsed)) setCorporateTieups(parsed);
-        else if (e.key === STORAGE_KEY_FAQS && Array.isArray(parsed)) setFaqs(parsed);
-        else if (e.key === STORAGE_KEY_REVIEWS && Array.isArray(parsed)) setReviews(parsed);
-        else if (e.key === STORAGE_KEY_SPECIALITIES && Array.isArray(parsed)) setSpecialitiesProcedures(parsed);
+        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed)) setDoctors(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed)) setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_BRANDING) setBranding(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_HERO) setHeroContent(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_SERVICES && Array.isArray(parsed)) setServices(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_FEATURES && Array.isArray(parsed)) setFeatures(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_ARTICLES && Array.isArray(parsed)) setArticles(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_CORPORATE && Array.isArray(parsed)) setCorporateTieups(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_FAQS && Array.isArray(parsed)) setFaqs(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_REVIEWS && Array.isArray(parsed)) setReviews(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_SPECIALITIES && Array.isArray(parsed)) setSpecialitiesProcedures(prev => (isSame(prev, parsed) ? prev : parsed));
       } catch {}
     };
 
     window.addEventListener('storage', handleStorageEvent);
 
-    const handleFocusSync = () => {
-      try {
-        const d = localStorage.getItem(STORAGE_KEY_DOCTORS);
-        if (d) setDoctors(JSON.parse(d));
-        const h = localStorage.getItem(STORAGE_KEY_HOSPITALS);
-        if (h) setHospitals(JSON.parse(h));
-        const b = localStorage.getItem(STORAGE_KEY_BRANDING);
-        if (b) setBranding(JSON.parse(b));
-        const fa = localStorage.getItem(STORAGE_KEY_FAQS);
-        if (fa) setFaqs(JSON.parse(fa));
-        const heroLocal = localStorage.getItem(STORAGE_KEY_HERO);
-        if (heroLocal) setHeroContent(JSON.parse(heroLocal));
-        const sLocal = localStorage.getItem(STORAGE_KEY_SERVICES);
-        if (sLocal) setServices(JSON.parse(sLocal));
-        const fLocal = localStorage.getItem(STORAGE_KEY_FEATURES);
-        if (fLocal) setFeatures(JSON.parse(fLocal));
-        const aLocal = localStorage.getItem(STORAGE_KEY_ARTICLES);
-        if (aLocal) setArticles(JSON.parse(aLocal));
-        const cLocal = localStorage.getItem(STORAGE_KEY_CORPORATE);
-        if (cLocal) setCorporateTieups(JSON.parse(cLocal));
-      } catch {}
-    };
-
-    window.addEventListener('focus', handleFocusSync);
-    const handleVis = () => {
-      if (document.visibilityState === 'visible') {
-        handleFocusSync();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVis);
-
     return () => {
       if (broadcastChan) broadcastChan.onmessage = null;
       window.removeEventListener('storage', handleStorageEvent);
-      window.removeEventListener('focus', handleFocusSync);
-      document.removeEventListener('visibilitychange', handleVis);
     };
   }, []);
 
-  // Sync to localStorage and broadcast real-time updates
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_HERO, JSON.stringify(heroContent));
-      broadcastSync(STORAGE_KEY_HERO, heroContent);
-    } catch (e) {
-      console.error('Failed to save heroContent to localStorage', e);
-    }
-  }, [heroContent]);
+  // Sync to localStorage and broadcast real-time updates with loop prevention
+  const lastSyncRef = useRef({});
 
-  useEffect(() => {
+  const syncState = (key, value) => {
     try {
-      localStorage.setItem(STORAGE_KEY_SERVICES, JSON.stringify(services));
-      broadcastSync(STORAGE_KEY_SERVICES, services);
+      const serialized = JSON.stringify(value);
+      if (lastSyncRef.current[key] !== serialized) {
+        lastSyncRef.current[key] = serialized;
+        localStorage.setItem(key, serialized);
+        broadcastSync(key, value);
+      }
     } catch (e) {
-      console.error('Failed to save services to localStorage', e);
+      console.error(`Failed to sync ${key} to localStorage`, e);
     }
-  }, [services]);
+  };
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_FEATURES, JSON.stringify(features));
-      broadcastSync(STORAGE_KEY_FEATURES, features);
-    } catch (e) {
-      console.error('Failed to save features to localStorage', e);
-    }
-  }, [features]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ARTICLES, JSON.stringify(articles));
-      broadcastSync(STORAGE_KEY_ARTICLES, articles);
-    } catch (e) {
-      console.error('Failed to save articles to localStorage', e);
-    }
-  }, [articles]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(doctors));
-      broadcastSync(STORAGE_KEY_DOCTORS, doctors);
-    } catch (e) {
-      console.error('Failed to save doctors to localStorage', e);
-    }
-  }, [doctors]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(hospitals));
-      broadcastSync(STORAGE_KEY_HOSPITALS, hospitals);
-    } catch (e) {
-      console.error('Failed to save hospitals to localStorage', e);
-    }
-  }, [hospitals]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(corporateTieups));
-      broadcastSync(STORAGE_KEY_CORPORATE, corporateTieups);
-    } catch (e) {
-      console.error('Failed to save corporateTieups to localStorage', e);
-    }
-  }, [corporateTieups]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(faqs));
-      broadcastSync(STORAGE_KEY_FAQS, faqs);
-    } catch (e) {
-      console.error('Failed to save faqs to localStorage', e);
-    }
-  }, [faqs]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(reviews));
-      broadcastSync(STORAGE_KEY_REVIEWS, reviews);
-    } catch (e) {
-      console.error('Failed to save reviews to localStorage', e);
-    }
-  }, [reviews]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SPECIALITIES, JSON.stringify(specialitiesProcedures));
-      broadcastSync(STORAGE_KEY_SPECIALITIES, specialitiesProcedures);
-    } catch (e) {
-      console.error('Failed to save specialitiesProcedures to localStorage', e);
-    }
-  }, [specialitiesProcedures]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_BRANDING, JSON.stringify(branding));
-      broadcastSync(STORAGE_KEY_BRANDING, branding);
-    } catch (e) {
-      console.error('Failed to save branding to localStorage', e);
-    }
-  }, [branding]);
+  useEffect(() => { syncState(STORAGE_KEY_HERO, heroContent); }, [heroContent]);
+  useEffect(() => { syncState(STORAGE_KEY_SERVICES, services); }, [services]);
+  useEffect(() => { syncState(STORAGE_KEY_FEATURES, features); }, [features]);
+  useEffect(() => { syncState(STORAGE_KEY_ARTICLES, articles); }, [articles]);
+  useEffect(() => { syncState(STORAGE_KEY_DOCTORS, doctors); }, [doctors]);
+  useEffect(() => { syncState(STORAGE_KEY_HOSPITALS, hospitals); }, [hospitals]);
+  useEffect(() => { syncState(STORAGE_KEY_CORPORATE, corporateTieups); }, [corporateTieups]);
+  useEffect(() => { syncState(STORAGE_KEY_FAQS, faqs); }, [faqs]);
+  useEffect(() => { syncState(STORAGE_KEY_REVIEWS, reviews); }, [reviews]);
+  useEffect(() => { syncState(STORAGE_KEY_SPECIALITIES, specialitiesProcedures); }, [specialitiesProcedures]);
+  useEffect(() => { syncState(STORAGE_KEY_BRANDING, branding); }, [branding]);
 
 
 
@@ -559,11 +458,12 @@ export const DataProvider = ({ children }) => {
     return newDoctor;
   };
 
-  const updateDoctor = (id, updatedData) => {
+  const updateDoctor = async (id, updatedData) => {
+    let mergedDoctor = null;
     setDoctors(prev => {
       const updated = prev.map(doc => {
         if (matchesId(doc, id)) {
-          const merged = {
+          mergedDoctor = {
             ...doc,
             ...updatedData,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
@@ -575,17 +475,18 @@ export const DataProvider = ({ children }) => {
             licenseNumber: updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : doc.licenseNumber,
             faqs: updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs
           };
-          api.updateDoctor(id, merged).catch(() => {});
-          return merged;
+          return mergedDoctor;
         }
         return doc;
       });
-      try {
-        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
-        broadcastSync(STORAGE_KEY_DOCTORS, updated);
-      } catch {}
       return updated;
     });
+
+    try {
+      await api.updateDoctor(id, mergedDoctor || updatedData);
+    } catch (err) {
+      console.warn('Backend updateDoctor failed, local state retained:', err);
+    }
   };
 
   const updateDoctorFaqs = async (doctorId, faqs, hospitalId = null) => {
@@ -665,11 +566,12 @@ export const DataProvider = ({ children }) => {
     return newHospital;
   };
 
-  const updateHospital = (id, updatedData) => {
+  const updateHospital = async (id, updatedData) => {
+    let mergedHospital = null;
     setHospitals(prev => {
       const updated = prev.map(hosp => {
         if (matchesId(hosp, id)) {
-          const merged = {
+          mergedHospital = {
             ...hosp,
             ...updatedData,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) : hosp.rating,
@@ -693,17 +595,18 @@ export const DataProvider = ({ children }) => {
             latitude: updatedData.latitude !== undefined ? (updatedData.latitude === '' || updatedData.latitude === null ? undefined : Number(updatedData.latitude)) : hosp.latitude,
             longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude
           };
-          api.updateHospital(id, merged).catch(() => {});
-          return merged;
+          return mergedHospital;
         }
         return hosp;
       });
-      try {
-        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
-        broadcastSync(STORAGE_KEY_HOSPITALS, updated);
-      } catch {}
       return updated;
     });
+
+    try {
+      await api.updateHospital(id, mergedHospital || updatedData);
+    } catch (err) {
+      console.warn('Backend updateHospital failed, local state retained:', err);
+    }
   };
 
   const deleteHospital = (id) => {
