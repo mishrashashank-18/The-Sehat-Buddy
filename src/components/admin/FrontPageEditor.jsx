@@ -436,6 +436,22 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     setCustomPhotoUrlInput('');
   };
 
+  const handleDeleteCustomHeroPhoto = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    const defaultImage = PRESET_HERO_IMAGES[0].url;
+    setHeroForm(prev => ({ ...prev, heroImage: defaultImage }));
+    setCustomHeroImage('');
+    setCustomPhotoUrlInput('');
+    try {
+      localStorage.removeItem('sehat_custom_hero_image');
+    } catch {}
+    updateHeroContent({ heroImage: defaultImage });
+    showToast('Photo removed. Reset to default preset photo.');
+  };
+
   // Add Service
   const handleCreateService = (e) => {
     e.preventDefault();
@@ -751,8 +767,17 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               {heroForm.heroImage && !PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
                 <div
                   className={`${styles.imagePreset} ${styles.imagePresetActive}`}
+                  style={{ position: 'relative' }}
                   title="Currently active custom photo"
                 >
+                  <button
+                    type="button"
+                    className={styles.deletePresetCornerBtn}
+                    onClick={handleDeleteCustomHeroPhoto}
+                    title="Delete custom photo and reset to default"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                   <img src={heroForm.heroImage} alt="Custom Hero" />
                   <span>✓ Custom Active</span>
                 </div>
@@ -762,9 +787,18 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               {customHeroImage && PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) && (
                 <div
                   className={styles.imagePreset}
+                  style={{ position: 'relative' }}
                   onClick={() => handleSelectHeroImage(customHeroImage, 'Custom Photo')}
                   title="Switch back to your custom uploaded photo"
                 >
+                  <button
+                    type="button"
+                    className={styles.deletePresetCornerBtn}
+                    onClick={handleDeleteCustomHeroPhoto}
+                    title="Delete custom photo"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                   <img src={customHeroImage} alt="Custom Hero" />
                   <span>Custom Photo</span>
                 </div>
@@ -823,7 +857,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               </div>
             </div>
 
-            {/* Live Hero Preview Banner */}
+            {/* Live Hero Preview Banner with Delete Photo option */}
             {heroForm.heroImage && (
               <div className={styles.currentHeroPreviewBanner}>
                 <img
@@ -838,6 +872,27 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <span className={styles.heroPreviewTag}>Live on Homepage</span>
                   <span className={styles.heroPreviewUrl}>{heroForm.heroImage}</span>
                 </div>
+                {!PRESET_HERO_IMAGES.some(p => isPresetActive(p.url, heroForm.heroImage)) ? (
+                  <button
+                    type="button"
+                    className={styles.deleteHeroPhotoBtn}
+                    onClick={handleDeleteCustomHeroPhoto}
+                    title="Delete custom photo and revert to default preset"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete Photo</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.resetHeroPhotoBtn}
+                    onClick={handleDeleteCustomHeroPhoto}
+                    title="Reset to default hero photo"
+                  >
+                    <RotateCcw size={13} />
+                    <span>Reset to Default</span>
+                  </button>
+                )}
               </div>
             )}
 
