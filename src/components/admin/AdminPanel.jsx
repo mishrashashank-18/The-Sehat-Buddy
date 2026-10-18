@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  HeartPulse,
   LayoutDashboard,
   Stethoscope,
   Building2,
@@ -37,6 +36,7 @@ import FaqFormModal from './FaqFormModal';
 import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
+import logoImg from '../../assets/images/logo.png';
 import styles from './AdminPanel.module.css';
 
 const AdminPanel = ({ onExit, onNavigate }) => {
@@ -232,15 +232,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         <div className={styles.brandGroup}>
           {branding?.showLogo !== false && branding?.logoType !== 'none' && (
             <div className={styles.logoIcon}>
-              {branding?.logoType === 'image' && branding?.logoImage ? (
-                <img
-                  src={branding.logoImage}
-                  alt={branding?.siteName || 'Logo'}
-                  style={{ height: '28px', maxWidth: '36px', objectFit: 'contain', display: 'block' }}
-                />
-              ) : (
-                <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
-              )}
+              <img
+                src={branding?.logoType === 'image' && branding?.logoImage ? branding.logoImage : logoImg}
+                alt={branding?.siteName || 'Logo'}
+                style={{ height: '28px', maxWidth: '36px', objectFit: 'contain', display: 'block' }}
+              />
             </div>
           )}
           <div>

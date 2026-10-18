@@ -1,6 +1,6 @@
 import React from 'react';
-import { HeartPulse } from 'lucide-react';
 import { useData } from '../../context/useData';
+import logoImg from '../../assets/images/logo.png';
 import Container from './Container';
 import styles from './Footer.module.css';
 
@@ -17,15 +17,11 @@ const Footer = ({ onNavigate }) => {
             <div className={styles.logoGroup} onClick={() => onNavigate && onNavigate('site')} style={{ cursor: 'pointer' }}>
               {branding?.showLogo !== false && branding?.logoType !== 'none' && (
                 <div className={styles.logoIcon}>
-                  {branding?.logoType === 'image' && branding?.logoImage ? (
-                    <img
-                      src={branding.logoImage}
-                      alt={branding?.siteName || 'Logo'}
-                      style={{ height: '28px', maxWidth: '120px', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <HeartPulse size={24} color="var(--color-primary)" />
-                  )}
+                  <img
+                    src={branding?.logoType === 'image' && branding?.logoImage ? branding.logoImage : logoImg}
+                    alt={branding?.siteName || 'The Sehat Buddy'}
+                    style={{ height: '26px', maxWidth: '120px', objectFit: 'contain' }}
+                  />
                 </div>
               )}
               <div className={styles.logoText}>

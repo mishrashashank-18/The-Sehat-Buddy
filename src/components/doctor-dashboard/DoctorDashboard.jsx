@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  HeartPulse,
   Calendar,
   Clock,
   Video,
@@ -38,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
+import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
 
 const Instagram = ({ size = 18, color = "currentColor", style }) => (
@@ -798,7 +798,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       <header className={styles.topbar}>
         <div className={styles.brandGroup}>
           <div className={styles.logoIcon}>
-            <HeartPulse size={26} color="#2563EB" strokeWidth={2.5} />
+            <img src={logoImg} alt="The Sehat Buddy" style={{ height: '26px', maxWidth: '32px', objectFit: 'contain' }} />
           </div>
           <div>
             <div className={styles.brandTitleWrap}>

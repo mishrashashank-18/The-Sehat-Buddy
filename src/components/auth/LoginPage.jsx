@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
-import { Mail, Lock, HeartPulse, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
+import { Mail, Lock, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
+import logoImg from '../../assets/images/logo.png';
 import styles from './LoginPage.module.css';
 
 const LoginPage = ({ role, setView }) => {
@@ -644,7 +645,7 @@ const LoginPage = ({ role, setView }) => {
         <div className={styles.imageSection} style={{ backgroundImage: `url(${image})` }}>
           <div className={styles.imageOverlay}>
             <div className={styles.brand}>
-              <HeartPulse size={36} className={styles.brandIcon} />
+              <img src={logoImg} alt="Sehat Buddy" style={{ height: '38px', objectFit: 'contain' }} />
               <span className={styles.brandText}>Sehat Buddy</span>
             </div>
             <div className={styles.heroText}>

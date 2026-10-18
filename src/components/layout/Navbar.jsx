@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HeartPulse, ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
+import { ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
 import { useData } from '../../context/useData';
+import logoImg from '../../assets/images/logo.png';
 import Container from './Container';
 import styles from './Navbar.module.css';
 
@@ -144,15 +145,11 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
         <div className={styles.logoGroup} onClick={handleGoHome}>
           {branding?.showLogo !== false && branding?.logoType !== 'none' && (
             <div className={styles.logoIcon}>
-              {branding?.logoType === 'image' && branding?.logoImage ? (
-                <img
-                  src={branding.logoImage}
-                  alt={branding?.siteName || 'Logo'}
-                  className={styles.customLogoImg}
-                />
-              ) : (
-                <HeartPulse size={34} color="#2563EB" strokeWidth={2.4} />
-              )}
+              <img
+                src={branding?.logoType === 'image' && branding?.logoImage ? branding.logoImage : logoImg}
+                alt={branding?.siteName || 'The Sehat Buddy'}
+                className={styles.customLogoImg}
+              />
             </div>
           )}
           <div className={styles.logoText}>

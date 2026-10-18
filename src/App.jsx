@@ -22,6 +22,7 @@ import FindHospitals from './components/hospitals/FindHospitals';
 import HospitalProfile from './components/hospitals/HospitalProfile';
 import ComingSoon from './components/common/ComingSoon';
 import { useData } from './context/useData';
+import { NEW_SEHAT_BUDDY_FAVICON } from './data/faviconDataUri';
 import './styles/global.css';
 
 function MainWebsite({ onNavigate, currentView }) {
@@ -102,11 +103,20 @@ const resolveCurrentView = () => {
   return 'site';
 };
 
-const SEHAT_BUDDY_FAVICON_SVG = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23FFFFFF'/%3E%3Cpath d='M24.5 17.5c1.3-1.3 2.6-2.8 2.6-4.8 0-2.3-1.9-4.2-4.2-4.2-1.5 0-2.6.4-3.9 1.7-1.3-1.3-2.4-1.7-3.9-1.7-2.3 0-4.2 1.9-4.2 4.2 0 2 1.3 3.5 2.6 4.8l6.1 6.1 5-6.1Z' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9.5 15.5h3.6l.6-.9 1.8 3.8 1.8-5.8 1.4 2.9h4.8' stroke='%232563EB' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E`;
-
 const makeCircularFavicon = (imageUrl) => {
   return new Promise((resolve) => {
-    if (!imageUrl) return resolve(SEHAT_BUDDY_FAVICON_SVG);
+    if (
+      !imageUrl ||
+      imageUrl.includes('M24.5 17.5') ||
+      imageUrl.includes('M9.5 15.5') ||
+      imageUrl === NEW_SEHAT_BUDDY_FAVICON ||
+      imageUrl === '/favicon.png' ||
+      imageUrl === '/favicon.ico' ||
+      imageUrl === '/logo.png' ||
+      imageUrl.includes('logo.png')
+    ) {
+      return resolve(NEW_SEHAT_BUDDY_FAVICON);
+    }
     if (imageUrl.startsWith('data:image/svg+xml') && imageUrl.includes('circle')) {
       return resolve(imageUrl);
     }
@@ -131,16 +141,26 @@ const makeCircularFavicon = (imageUrl) => {
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, size, size);
 
-        // Draw image centered inside circle
-        const pad = 4;
-        ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2);
+        // Draw image centered inside circle preserving aspect ratio
+        const aspect = (img.width || 1) / (img.height || 1);
+        const maxInner = size * 0.62;
+        let drawW = maxInner;
+        let drawH = maxInner;
+        if (aspect >= 1) {
+          drawH = maxInner / aspect;
+        } else {
+          drawW = maxInner * aspect;
+        }
+        const drawX = (size - drawW) / 2;
+        const drawY = (size - drawH) / 2 + 1.5;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
         resolve(canvas.toDataURL('image/png'));
       } catch {
         resolve(imageUrl);
       }
     };
-    img.onerror = () => resolve(imageUrl);
+    img.onerror = () => resolve(NEW_SEHAT_BUDDY_FAVICON);
     img.src = imageUrl;
   });
 };
@@ -157,10 +177,14 @@ function AppContent() {
     }
 
     let isMounted = true;
-    const rawFavicon =
-      branding?.showLogo && branding?.logoType === 'image' && branding?.logoImage
-        ? branding.logoImage
-        : SEHAT_BUDDY_FAVICON_SVG;
+    let rawFavicon =
+      branding?.favicon &&
+      branding.favicon !== '/favicon.png' &&
+      branding.favicon !== '/favicon.ico' &&
+      branding.favicon !== '/logo.png' &&
+      !branding.favicon.includes('M24.5 17.5')
+        ? branding.favicon
+        : NEW_SEHAT_BUDDY_FAVICON;
 
     const applyFavicon = (url) => {
       if (!isMounted) return;
@@ -176,13 +200,14 @@ function AppContent() {
       shortcut.rel = 'shortcut icon';
       shortcut.href = link.href;
       document.head.appendChild(shortcut);
+
+      const appleTouch = document.createElement('link');
+      appleTouch.rel = 'apple-touch-icon';
+      appleTouch.href = link.href;
+      document.head.appendChild(appleTouch);
     };
 
-    if (rawFavicon === SEHAT_BUDDY_FAVICON_SVG) {
-      applyFavicon(SEHAT_BUDDY_FAVICON_SVG);
-    } else {
-      makeCircularFavicon(rawFavicon).then(applyFavicon);
-    }
+    makeCircularFavicon(rawFavicon).then(applyFavicon);
 
     return () => {
       isMounted = false;
