@@ -413,6 +413,39 @@
   flex: 1;
 }
 
+.aboutTextContent p {
+  margin: 0;
+}
+
+.readMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 0 0 0;
+  width: fit-content;
+  transition: color 0.15s ease;
+}
+
+.readMoreBtn:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+.readMoreChevron {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  color: #2563eb;
+}
+
+.readMoreChevronOpen {
+  transform: rotate(180deg);
+}
+
 /* Consultation & Booking Card - height: 100% aligns bottom with aboutCard */
 .bookingCard {
   background: white;

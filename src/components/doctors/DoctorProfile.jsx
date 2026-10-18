@@ -184,6 +184,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [activeVideo, setActiveVideo] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
   // Booking interaction states
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
@@ -728,15 +729,39 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
               </div>
             </div>
 
-            {/* Integrated About Section with Rich Clinical Bio */}
+            {/* Integrated About Section with Rich Clinical Bio (Single Paragraph by Default + More Option) */}
             <div className={styles.unifiedAboutSection}>
               <h3 className={styles.sectionHeading}>
                 About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
               </h3>
               <div className={styles.aboutTextContent}>
-                {getComprehensiveBio(doctor).map((para, pIdx) => (
-                  <p key={pIdx}>{para}</p>
-                ))}
+                {(() => {
+                  const bioParas = getComprehensiveBio(doctor);
+                  if (bioParas.length === 0) return null;
+
+                  return (
+                    <>
+                      <p>{bioParas[0]}</p>
+                      {isAboutExpanded && bioParas.slice(1).map((para, pIdx) => (
+                        <p key={pIdx + 1}>{para}</p>
+                      ))}
+                      {bioParas.length > 1 && (
+                        <button
+                          type="button"
+                          className={styles.readMoreBtn}
+                          onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+                          aria-expanded={isAboutExpanded}
+                        >
+                          <span>{isAboutExpanded ? 'Show Less' : 'More'}</span>
+                          <ChevronDown
+                            size={14}
+                            className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
+                          />
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
