@@ -54,3 +54,15 @@
     gap: 16px;
   }
 }
+
+@media (max-width: 480px) {
+  .cardItem {
+    width: 290px;
+  }
+}
+
+@media (max-width: 360px) {
+  .cardItem {
+    width: 260px;
+  }
+}

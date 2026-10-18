@@ -135,6 +135,10 @@ export const updateDoctor = async (req, res) => {
       }
       if (req.body.instagram !== undefined) doctor.instagram = req.body.instagram;
       if (req.body.facebook !== undefined) doctor.facebook = req.body.facebook;
+      if (req.body.faqs !== undefined) {
+        doctor.faqs = Array.isArray(req.body.faqs) ? req.body.faqs : [];
+        doctor.markModified('faqs');
+      }
       
       if (req.file) {
         doctor.image = req.file.path;

@@ -95,13 +95,36 @@
 
 @media (max-width: 1024px) {
   .searchCard {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 20px;
   }
-  .divider {
-    display: none;
+  .searchBtn {
+    width: 100%;
+    margin-top: 4px;
   }
   .wrapper {
     margin-top: -30px;
+    margin-bottom: 50px;
+  }
+}
+
+@media (max-width: 640px) {
+  .wrapper {
+    margin-top: -16px;
+    margin-bottom: 36px;
+  }
+  .searchCard {
+    padding: 16px;
+    border-radius: 16px;
+    gap: 12px;
+  }
+  .input, .select {
+    height: 44px;
+    font-size: 13.5px;
+  }
+  .searchBtn {
+    height: 44px;
+    font-size: 13.5px;
   }
 }

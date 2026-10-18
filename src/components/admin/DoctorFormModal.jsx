@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, Stethoscope, Building2, AlertCircle } from 'lucide-react';
+import { X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, Plus, Trash2, Edit2 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
@@ -55,7 +55,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         instagram: doctorToEdit.instagram || '',
         facebook: doctorToEdit.facebook || '',
         reels: Array.isArray(doctorToEdit.reels) ? [...doctorToEdit.reels, '', '', '', '', ''].slice(0, 5) : ['', '', '', '', ''],
-        youtube_videos: Array.isArray(doctorToEdit.youtube_videos) ? [...doctorToEdit.youtube_videos, '', ''].slice(0, 2) : ['', '']
+        youtube_videos: Array.isArray(doctorToEdit.youtube_videos) ? [...doctorToEdit.youtube_videos, '', ''].slice(0, 2) : ['', ''],
+        faqs: Array.isArray(doctorToEdit.faqs) ? doctorToEdit.faqs : []
       };
     }
     return {
@@ -77,9 +78,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       instagram: '',
       facebook: '',
       reels: ['', '', '', '', ''],
-      youtube_videos: ['', '']
+      youtube_videos: ['', ''],
+      faqs: []
     };
   });
+
+  const [newFaqQ, setNewFaqQ] = useState('');
+  const [newFaqA, setNewFaqA] = useState('');
+  const [editingFaqIdx, setEditingFaqIdx] = useState(null);
+  const [editingFaqData, setEditingFaqData] = useState({ q: '', a: '' });
 
   const [imageType, setImageType] = useState(() => {
     if (doctorToEdit && typeof doctorToEdit.image === 'string' && doctorToEdit.image.startsWith('http')) {
@@ -166,7 +173,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
       qualifications: formData.degree,
       contact_number: formData.phone,
-      available: formData.available
+      available: formData.available,
+      faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== '')
     };
 
     if (doctorToEdit) {
@@ -514,6 +522,163 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               />
             </div>
           ))}
+
+          {/* Doctor Profile FAQs (Managed by Admin or Hospital) */}
+          <div className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <HelpCircle size={16} />
+              Public Doctor Page FAQs
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                const defaults = [
+                  { q: `How can I book an appointment with ${formData.name || 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
+                  { q: 'What do I need to bring at the clinic?', a: 'Carry a valid government ID, insurance policy e-card (for cashless claim), and previous medical reports.' },
+                  { q: 'Is my consultation confidential?', a: 'Yes, 100% private and protected under standard medical privacy regulations.' },
+                  { q: 'Can I reschedule my appointment?', a: 'Yes, appointments can be easily rescheduled prior to your booked slot.' },
+                  { q: 'Does the doctor accept cashless health insurance?', a: 'Yes, consultations and hospital procedures qualify for cashless mediclaim pre-authorization.' }
+                ];
+                setFormData(prev => ({ ...prev, faqs: defaults }));
+              }}
+              style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Load Defaults
+            </button>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
+            Frequently Asked Questions shown on this doctor's public profile page. (Only Admin or their registered Hospital can modify these).
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+            {(formData.faqs && formData.faqs.length > 0) ? (
+              formData.faqs.map((faq, fIdx) => (
+                <div
+                  key={fIdx}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '10px 12px'
+                  }}
+                >
+                  {editingFaqIdx === fIdx ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input
+                        type="text"
+                        value={editingFaqData.q}
+                        onChange={(e) => setEditingFaqData({ ...editingFaqData, q: e.target.value })}
+                        placeholder="Question..."
+                        style={{ width: '100%', padding: '6px 8px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                      />
+                      <textarea
+                        rows={2}
+                        value={editingFaqData.a}
+                        onChange={(e) => setEditingFaqData({ ...editingFaqData, a: e.target.value })}
+                        placeholder="Answer..."
+                        style={{ width: '100%', padding: '6px 8px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                      />
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!editingFaqData.q.trim()) return;
+                            const updated = [...formData.faqs];
+                            updated[fIdx] = { ...editingFaqData };
+                            setFormData({ ...formData, faqs: updated });
+                            setEditingFaqIdx(null);
+                          }}
+                          style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingFaqIdx(null)}
+                          style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', cursor: 'pointer' }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b', marginBottom: '2px' }}>
+                          Q{fIdx + 1}: {faq.q || faq.question}
+                        </div>
+                        <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                          {faq.a || faq.answer}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingFaqIdx(fIdx);
+                            setEditingFaqData({ q: faq.q || faq.question || '', a: faq.a || faq.answer || '' });
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '4px' }}
+                          title="Edit FAQ"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = formData.faqs.filter((_, i) => i !== fIdx);
+                            setFormData({ ...formData, faqs: updated });
+                          }}
+                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          title="Delete FAQ"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                No custom FAQs yet. Default platform FAQs will be displayed.
+              </span>
+            )}
+          </div>
+
+          {/* Add New FAQ Form */}
+          <div style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '12px' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155', display: 'block', marginBottom: '8px' }}>
+              + Add Custom FAQ for this Doctor
+            </span>
+            <input
+              type="text"
+              placeholder="Question (e.g. Does Dr. Roy perform laparoscopic surgeries?)"
+              value={newFaqQ}
+              onChange={(e) => setNewFaqQ(e.target.value)}
+              style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '6px', boxSizing: 'border-box' }}
+            />
+            <textarea
+              rows={2}
+              placeholder="Answer..."
+              value={newFaqA}
+              onChange={(e) => setNewFaqA(e.target.value)}
+              style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!newFaqQ.trim()) return;
+                const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                setFormData({ ...formData, faqs: updated });
+                setNewFaqQ('');
+                setNewFaqA('');
+              }}
+              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+            >
+              <Plus size={14} /> Add FAQ
+            </button>
+          </div>
         </div>
 
         <div className={styles.footer}>

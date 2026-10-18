@@ -36,3 +36,23 @@
   color: #5B6B73;
   line-height: 1.6;
 }
+
+@media (max-width: 768px) {
+  .item {
+    flex-direction: row;
+    text-align: left;
+    gap: 16px;
+    align-items: flex-start;
+    padding: 0;
+  }
+  .iconWrapper {
+    margin-bottom: 0;
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+  }
+  .title {
+    font-size: 14.5px;
+    margin-bottom: 4px;
+  }
+}

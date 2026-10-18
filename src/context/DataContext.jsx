@@ -12,7 +12,7 @@ import { initialFaqs } from '../data/faqs';
 import { initialReviews } from '../data/reviews';
 import { initialSpecialitiesProcedures } from '../data/specialitiesProcedures';
 import { defaultAcceptedInsurances } from '../data/insurancePartners';
-import { initialBranding } from '../data/branding';
+import { initialBranding, DEFAULT_FAVICON_CIRCULAR } from '../data/branding';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
@@ -25,6 +25,40 @@ const STORAGE_KEY_FAQS = 'sehat_buddy_faqs_v2';
 const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
 const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
 const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v2';
+
+// Real-time synchronization channel across browser tabs & windows
+const SYNC_CHANNEL_NAME = 'sehat_buddy_sync_bus_v1';
+let broadcastChan = null;
+try {
+  if (typeof BroadcastChannel !== 'undefined') {
+    broadcastChan = new BroadcastChannel(SYNC_CHANNEL_NAME);
+  }
+} catch (e) {
+  broadcastChan = null;
+}
+
+export const broadcastSync = (key, data) => {
+  try {
+    broadcastChan?.postMessage({ type: 'SEHAT_SYNC', key, data, timestamp: Date.now() });
+  } catch {}
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sehat_sync_event', { detail: { key, data } }));
+    }
+  } catch {}
+};
+
+// Robust ID matching helper that safely handles MongoDB _id, numeric id, and email
+export const matchesId = (item, id) => {
+  if (!item || id === undefined || id === null) return false;
+  const sId = String(id).trim();
+  if (!sId) return false;
+  return (
+    (item.id !== undefined && item.id !== null && String(item.id).trim() === sId) ||
+    (item._id !== undefined && item._id !== null && String(item._id).trim() === sId) ||
+    (item.email && sId.includes('@') && item.email.toLowerCase().trim() === sId.toLowerCase())
+  );
+};
 
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB with fallback)
@@ -211,8 +245,8 @@ export const DataProvider = ({ children }) => {
         if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)) {
           setDoctors(prevDoctors => {
             return docsRes.value.map(d => {
-              const existing = prevDoctors.find(p => String(p.id || p._id) === String(d._id || d.id));
-              const initial = initialDoctors.find(i => String(i.id) === String(d.id || d._id) || i.name?.toLowerCase() === d.name?.toLowerCase());
+              const existing = prevDoctors.find(p => matchesId(p, d._id || d.id));
+              const initial = initialDoctors.find(i => matchesId(i, d.id || d._id) || (i.name && d.name && i.name.toLowerCase() === d.name.toLowerCase()));
               return {
                 ...d,
                 id: d._id || d.id,
@@ -280,10 +314,12 @@ export const DataProvider = ({ children }) => {
 
     fetchBackendData();
 
-    // Poll periodically to keep data fresh without excessive network chatter
+    // Fast intelligent polling when tab is active (4 seconds)
     const intervalId = setInterval(() => {
-      fetchBackendData();
-    }, 60000);
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchBackendData();
+      }
+    }, 4000);
 
     return () => {
       isMounted = false;
@@ -291,10 +327,83 @@ export const DataProvider = ({ children }) => {
     };
   }, []);
 
-  // Sync to localStorage
+  // Real-time inter-tab & focus receiver (BroadcastChannel + storage events + tab focus)
+  useEffect(() => {
+    const handleBroadcastMessage = (event) => {
+      const { type, key, data } = event.data || {};
+      if (type === 'SEHAT_SYNC' && data) {
+        if (key === STORAGE_KEY_DOCTORS && Array.isArray(data)) setDoctors(data);
+        else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data)) setHospitals(data);
+        else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(data);
+        else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(data);
+        else if (key === STORAGE_KEY_SERVICES && Array.isArray(data)) setServices(data);
+        else if (key === STORAGE_KEY_FEATURES && Array.isArray(data)) setFeatures(data);
+        else if (key === STORAGE_KEY_ARTICLES && Array.isArray(data)) setArticles(data);
+        else if (key === STORAGE_KEY_CORPORATE && Array.isArray(data)) setCorporateTieups(data);
+        else if (key === STORAGE_KEY_FAQS && Array.isArray(data)) setFaqs(data);
+        else if (key === STORAGE_KEY_REVIEWS && Array.isArray(data)) setReviews(data);
+        else if (key === STORAGE_KEY_SPECIALITIES && Array.isArray(data)) setSpecialitiesProcedures(data);
+      }
+    };
+
+    if (broadcastChan) {
+      broadcastChan.onmessage = handleBroadcastMessage;
+    }
+
+    const handleStorageEvent = (e) => {
+      if (!e.key || !e.newValue) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed)) setDoctors(parsed);
+        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed)) setHospitals(parsed);
+        else if (e.key === STORAGE_KEY_BRANDING) setBranding(parsed);
+        else if (e.key === STORAGE_KEY_HERO) setHeroContent(parsed);
+        else if (e.key === STORAGE_KEY_SERVICES && Array.isArray(parsed)) setServices(parsed);
+        else if (e.key === STORAGE_KEY_FEATURES && Array.isArray(parsed)) setFeatures(parsed);
+        else if (e.key === STORAGE_KEY_ARTICLES && Array.isArray(parsed)) setArticles(parsed);
+        else if (e.key === STORAGE_KEY_CORPORATE && Array.isArray(parsed)) setCorporateTieups(parsed);
+        else if (e.key === STORAGE_KEY_FAQS && Array.isArray(parsed)) setFaqs(parsed);
+        else if (e.key === STORAGE_KEY_REVIEWS && Array.isArray(parsed)) setReviews(parsed);
+        else if (e.key === STORAGE_KEY_SPECIALITIES && Array.isArray(parsed)) setSpecialitiesProcedures(parsed);
+      } catch {}
+    };
+
+    window.addEventListener('storage', handleStorageEvent);
+
+    const handleFocusSync = () => {
+      try {
+        const d = localStorage.getItem(STORAGE_KEY_DOCTORS);
+        if (d) setDoctors(JSON.parse(d));
+        const h = localStorage.getItem(STORAGE_KEY_HOSPITALS);
+        if (h) setHospitals(JSON.parse(h));
+        const b = localStorage.getItem(STORAGE_KEY_BRANDING);
+        if (b) setBranding(JSON.parse(b));
+        const fa = localStorage.getItem(STORAGE_KEY_FAQS);
+        if (fa) setFaqs(JSON.parse(fa));
+      } catch {}
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') {
+        handleFocusSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVis);
+
+    return () => {
+      if (broadcastChan) broadcastChan.onmessage = null;
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
+  }, []);
+
+  // Sync to localStorage and broadcast real-time updates
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_HERO, JSON.stringify(heroContent));
+      broadcastSync(STORAGE_KEY_HERO, heroContent);
     } catch (e) {
       console.error('Failed to save heroContent to localStorage', e);
     }
@@ -303,6 +412,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SERVICES, JSON.stringify(services));
+      broadcastSync(STORAGE_KEY_SERVICES, services);
     } catch (e) {
       console.error('Failed to save services to localStorage', e);
     }
@@ -311,6 +421,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_FEATURES, JSON.stringify(features));
+      broadcastSync(STORAGE_KEY_FEATURES, features);
     } catch (e) {
       console.error('Failed to save features to localStorage', e);
     }
@@ -319,6 +430,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_ARTICLES, JSON.stringify(articles));
+      broadcastSync(STORAGE_KEY_ARTICLES, articles);
     } catch (e) {
       console.error('Failed to save articles to localStorage', e);
     }
@@ -327,6 +439,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(doctors));
+      broadcastSync(STORAGE_KEY_DOCTORS, doctors);
     } catch (e) {
       console.error('Failed to save doctors to localStorage', e);
     }
@@ -335,6 +448,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(hospitals));
+      broadcastSync(STORAGE_KEY_HOSPITALS, hospitals);
     } catch (e) {
       console.error('Failed to save hospitals to localStorage', e);
     }
@@ -343,6 +457,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(corporateTieups));
+      broadcastSync(STORAGE_KEY_CORPORATE, corporateTieups);
     } catch (e) {
       console.error('Failed to save corporateTieups to localStorage', e);
     }
@@ -351,6 +466,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(faqs));
+      broadcastSync(STORAGE_KEY_FAQS, faqs);
     } catch (e) {
       console.error('Failed to save faqs to localStorage', e);
     }
@@ -359,6 +475,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(reviews));
+      broadcastSync(STORAGE_KEY_REVIEWS, reviews);
     } catch (e) {
       console.error('Failed to save reviews to localStorage', e);
     }
@@ -367,6 +484,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_SPECIALITIES, JSON.stringify(specialitiesProcedures));
+      broadcastSync(STORAGE_KEY_SPECIALITIES, specialitiesProcedures);
     } catch (e) {
       console.error('Failed to save specialitiesProcedures to localStorage', e);
     }
@@ -375,10 +493,31 @@ export const DataProvider = ({ children }) => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY_BRANDING, JSON.stringify(branding));
+      broadcastSync(STORAGE_KEY_BRANDING, branding);
     } catch (e) {
       console.error('Failed to save branding to localStorage', e);
     }
   }, [branding]);
+
+  // Synchronize dynamic favicon with document head
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const faviconHref = branding?.favicon || DEFAULT_FAVICON_CIRCULAR;
+    if (!faviconHref) return;
+
+    let iconLink = document.querySelector("link[rel='icon']") || document.querySelector("link[rel='shortcut icon']");
+    if (!iconLink) {
+      iconLink = document.createElement('link');
+      iconLink.rel = 'icon';
+      document.head.appendChild(iconLink);
+    }
+    iconLink.href = faviconHref;
+
+    const altIconLink = document.querySelector("link[rel='alternate icon']");
+    if (altIconLink) {
+      altIconLink.href = faviconHref;
+    }
+  }, [branding?.favicon]);
 
   // Doctor CRUD operations
   const addDoctor = (doctorData) => {
@@ -389,7 +528,14 @@ export const DataProvider = ({ children }) => {
       reviews: doctorData.reviews ? `${doctorData.reviews}` : '10+',
       price: parseInt(doctorData.price, 10) || 500,
     };
-    setDoctors(prev => [newDoctor, ...prev]);
+    setDoctors(prev => {
+      const updated = [newDoctor, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_DOCTORS, updated);
+      } catch {}
+      return updated;
+    });
     api.addDoctor(newDoctor).catch(() => {});
     return newDoctor;
   };
@@ -397,7 +543,7 @@ export const DataProvider = ({ children }) => {
   const updateDoctor = (id, updatedData) => {
     setDoctors(prev => {
       const updated = prev.map(doc => {
-        if (String(doc.id || doc._id) === String(id)) {
+        if (matchesId(doc, id)) {
           const merged = {
             ...doc,
             ...updatedData,
@@ -407,7 +553,8 @@ export const DataProvider = ({ children }) => {
             certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
             memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
             careerExperience: updatedData.careerExperience !== undefined ? updatedData.careerExperience : doc.careerExperience,
-            licenseNumber: updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : doc.licenseNumber
+            licenseNumber: updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : doc.licenseNumber,
+            faqs: updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs
           };
           api.updateDoctor(id, merged).catch(() => {});
           return merged;
@@ -416,13 +563,43 @@ export const DataProvider = ({ children }) => {
       });
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_DOCTORS, updated);
       } catch {}
       return updated;
     });
   };
 
+  const updateDoctorFaqs = async (doctorId, faqs, hospitalId = null) => {
+    setDoctors(prev => {
+      const updated = prev.map(doc => {
+        if (matchesId(doc, doctorId)) {
+          return { ...doc, faqs };
+        }
+        return doc;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_DOCTORS, updated);
+      } catch {}
+      return updated;
+    });
+
+    if (hospitalId) {
+      await api.updateDoctorFaqsByHospital(hospitalId, doctorId, faqs);
+    } else {
+      await api.updateDoctor(doctorId, { faqs });
+    }
+  };
+
   const deleteDoctor = (id) => {
-    setDoctors(prev => prev.filter(doc => String(doc.id || doc._id) !== String(id)));
+    setDoctors(prev => {
+      const updated = prev.filter(doc => !matchesId(doc, id));
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_DOCTORS, updated);
+      } catch {}
+      return updated;
+    });
     api.deleteDoctor(id).catch(() => {});
   };
 
@@ -457,15 +634,22 @@ export const DataProvider = ({ children }) => {
       latitude: hospitalData.latitude !== undefined ? Number(hospitalData.latitude) : undefined,
       longitude: hospitalData.longitude !== undefined ? Number(hospitalData.longitude) : undefined
     };
-    setHospitals(prev => [newHospital, ...prev]);
+    setHospitals(prev => {
+      const updated = [newHospital, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+      } catch {}
+      return updated;
+    });
     api.addHospital(newHospital).catch(() => {});
     return newHospital;
   };
 
   const updateHospital = (id, updatedData) => {
-    setHospitals(prev =>
-      prev.map(hosp => {
-        if (String(hosp.id || hosp._id) === String(id)) {
+    setHospitals(prev => {
+      const updated = prev.map(hosp => {
+        if (matchesId(hosp, id)) {
           const merged = {
             ...hosp,
             ...updatedData,
@@ -494,12 +678,24 @@ export const DataProvider = ({ children }) => {
           return merged;
         }
         return hosp;
-      })
-    );
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+      } catch {}
+      return updated;
+    });
   };
 
   const deleteHospital = (id) => {
-    setHospitals(prev => prev.filter(hosp => String(hosp.id || hosp._id) !== String(id)));
+    setHospitals(prev => {
+      const updated = prev.filter(hosp => !matchesId(hosp, id));
+      try {
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+      } catch {}
+      return updated;
+    });
     api.deleteHospital(id).catch(() => {});
   };
 
@@ -666,7 +862,7 @@ export const DataProvider = ({ children }) => {
 
   const updateFaq = (id, updatedData) => {
     setFaqs(prev => prev.map(f => {
-      if (String(f.id || f._id) === String(id)) {
+      if (matchesId(f, id)) {
         const merged = { ...f, ...updatedData };
         api.updateFaq(id, merged).catch(() => {});
         return merged;
@@ -676,7 +872,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const deleteFaq = (id) => {
-    setFaqs(prev => prev.filter(f => String(f.id || f._id) !== String(id)));
+    setFaqs(prev => prev.filter(f => !matchesId(f, id)));
     api.deleteFaq(id).catch(() => {});
   };
 
@@ -701,7 +897,7 @@ export const DataProvider = ({ children }) => {
 
   const updateReview = (id, updatedData) => {
     setReviews(prev => prev.map(r => {
-      if (String(r.id || r._id) === String(id)) {
+      if (matchesId(r, id)) {
         const merged = { ...r, ...updatedData };
         api.updateReview(id, merged).catch(() => {});
         return merged;
@@ -711,7 +907,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const deleteReview = (id) => {
-    setReviews(prev => prev.filter(r => String(r.id || r._id) !== String(id)));
+    setReviews(prev => prev.filter(r => !matchesId(r, id)));
     api.deleteReview(id).catch(() => {});
   };
 
@@ -742,7 +938,7 @@ export const DataProvider = ({ children }) => {
 
   const updateSpecialityProcedure = (id, updatedData) => {
     setSpecialitiesProcedures(prev => prev.map(s => {
-      if (String(s.id || s._id) === String(id)) {
+      if (matchesId(s, id)) {
         const merged = { ...s, ...updatedData };
         api.updateSpecialityProcedure(id, merged).catch(() => {});
         return merged;
@@ -752,7 +948,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const deleteSpecialityProcedure = (id) => {
-    setSpecialitiesProcedures(prev => prev.filter(s => String(s.id || s._id) !== String(id)));
+    setSpecialitiesProcedures(prev => prev.filter(s => !matchesId(s, id)));
     api.deleteSpecialityProcedure(id).catch(() => {});
   };
 
@@ -821,6 +1017,7 @@ export const DataProvider = ({ children }) => {
         hospitals,
         addDoctor,
         updateDoctor,
+        updateDoctorFaqs,
         deleteDoctor,
         addHospital,
         updateHospital,

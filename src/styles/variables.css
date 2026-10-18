@@ -1,10 +1,12 @@
-﻿:root {
+:root {
   /* Colors */
   --color-primary: #2563EB;
   --color-primary-dark: #1D4ED8;
   --color-newsletter-bg: #1E3A8A;
   --color-heading: #0F172A;
   --color-body: #475569;
+  --color-bg-warm: #FFFFFF;
+  --color-bg-page: #FFFFFF;
   --color-bg-light: #F0F9FF;
   --color-bg-mint: #E0F2FE;
   --color-white: #FFFFFF;
@@ -55,4 +57,16 @@
 
   /* Typography */
   --font-family: 'Poppins', sans-serif;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --padding-x: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --padding-x: 12px;
+  }
 }

@@ -1,4 +1,4 @@
-﻿.statsContainer {
+.statsContainer {
   display: inline-flex;
   align-items: center;
   gap: 24px;
@@ -44,10 +44,30 @@
 
 @media (max-width: 768px) {
   .statsContainer {
+    width: 100%;
+    max-width: 480px;
     flex-wrap: wrap;
     justify-content: center;
+    gap: 16px;
+    padding: 14px 18px;
   }
   .divider {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .statsContainer {
+    padding: 12px 14px;
+    gap: 12px;
+  }
+  .statItem {
+    gap: 8px;
+  }
+  .value {
+    font-size: 14px;
+  }
+  .label {
+    font-size: 11px;
   }
 }

@@ -79,12 +79,49 @@ export const api = {
     return doctorData;
   },
 
+  async updateDoctorFaqsByHospital(hospitalId, doctorId, faqs) {
+    try {
+      const res = await fetch(`${API_BASE}/hospitals/${hospitalId}/doctor-faqs/${doctorId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ faqs })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+
+    // Fallback to admin update
+    try {
+      const res2 = await fetch(`${API_BASE}/admin/update-doctor/${doctorId}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ faqs })
+      });
+      if (res2.ok) {
+        const data2 = await res2.json();
+        return data2.data || data2;
+      }
+    } catch {}
+
+    return { faqs };
+  },
+
   async deleteDoctor(id) {
-    const res = await fetch(`${API_BASE}/admin/delete-doctor/${id}`, { 
+    try {
+      const res = await fetch(`${API_BASE}/doctors/${id}`, { 
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (res.ok) return handleResponse(res);
+    } catch {}
+
+    const res2 = await fetch(`${API_BASE}/admin/delete-doctor/${id}`, { 
       method: 'DELETE',
       headers: getAuthHeaders()
     });
-    return handleResponse(res);
+    return handleResponse(res2);
   },
 
   // Hospitals
@@ -118,6 +155,60 @@ export const api = {
     const res = await fetch(`${API_BASE}/hospitals/${id}`, { 
       method: 'DELETE',
       headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async checkHospitalEmail(email) {
+    const res = await fetch(`${API_BASE}/hospitals/check-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  async setInitialHospitalPassword(email, password) {
+    const res = await fetch(`${API_BASE}/hospitals/set-initial-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    return handleResponse(res);
+  },
+
+  async loginHospital(email, password) {
+    const res = await fetch(`${API_BASE}/hospitals/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    return handleResponse(res);
+  },
+
+  async forgotHospitalPassword(email) {
+    const res = await fetch(`${API_BASE}/hospitals/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    return handleResponse(res);
+  },
+
+  async verifyHospitalResetOtp(email, otp) {
+    const res = await fetch(`${API_BASE}/hospitals/verify-reset-otp`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp })
+    });
+    return handleResponse(res);
+  },
+
+  async resetHospitalPassword(email, otp, newPassword) {
+    const res = await fetch(`${API_BASE}/hospitals/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, newPassword })
     });
     return handleResponse(res);
   },

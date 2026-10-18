@@ -389,6 +389,212 @@
   box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
 }
 
+/* Browser Tab Preview in Header Card */
+.browserPreviewSection {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.browserPreviewHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.browserPreviewBadge {
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0284c7;
+  background: #f0f9ff;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.browserWindowMockup {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.browserControls {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 0 12px;
+  background: #e2e8f0;
+  gap: 12px;
+}
+
+.browserDots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.dotRed, .dotYellow, .dotGreen {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dotRed {
+  background-color: #ef4444;
+}
+
+.dotYellow {
+  background-color: #f59e0b;
+}
+
+.dotGreen {
+  background-color: #10b981;
+}
+
+.browserTab {
+  background: #ffffff;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.browserTabFavicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.browserTabTitle {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.browserTabClose {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.browserAddressBar {
+  background: #ffffff;
+  padding: 6px 14px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.browserAddressLock {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.browserAddressText {
+  font-size: 0.75rem;
+  color: #475569;
+  font-family: monospace;
+}
+
+/* Favicon Details Card */
+.faviconDetailsCard {
+  margin-top: 16px;
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.faviconRow {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.faviconPreviewBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 12px 18px;
+  min-width: 100px;
+}
+
+.faviconActiveImg {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border: 2px solid #e2e8f0;
+}
+
+.faviconSizeText {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.faviconControls {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faviconButtonsRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.uploadFaviconBtn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.uploadFaviconBtn:hover {
+  background: #1d4ed8;
+}
+
 @media (max-width: 768px) {
   .inputGrid {
     grid-template-columns: 1fr;
@@ -398,5 +604,9 @@
   }
   .previewMockNav {
     display: none;
+  }
+  .faviconRow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

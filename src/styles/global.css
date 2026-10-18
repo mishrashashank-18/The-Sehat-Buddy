@@ -7,18 +7,34 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: var(--font-family);
   color: var(--color-body);
-  background-color: var(--color-white);
+  background-color: var(--color-white, #FFFFFF);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  width: 100%;
+  max-width: 100%;
   overflow-x: hidden;
+  position: relative;
+}
+
+img, video, iframe {
+  max-width: 100%;
+  height: auto;
 }
 
 h1, h2, h3, h4, h5, h6 {
   color: var(--color-heading);
   font-weight: 600;
+  word-break: break-word;
 }
 
 a {

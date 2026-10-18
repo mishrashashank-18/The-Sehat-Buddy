@@ -1,6 +1,6 @@
 .pageWrapper {
-  padding: 24px 0 90px;
-  background-color: #f8fafc;
+  padding: 32px 0 90px;
+  background-color: var(--color-white, #ffffff);
   min-height: 80vh;
 }
 
@@ -8,52 +8,53 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--color-text-light);
-  background: none;
-  border: none;
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-  margin-bottom: 20px;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  transition: all 0.2s ease;
+  color: #475569;
   background: white;
   border: 1px solid #e2e8f0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 22px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
 }
 
 .backBtn:hover {
   color: var(--color-primary);
   border-color: var(--color-primary);
   background: #eff6ff;
+  transform: translateY(-1px);
 }
 
 /* Hospital Hero Card */
 .profileCard {
-  background: white;
-  border-radius: var(--radius-lg);
-  padding: 32px;
+  background: #ffffff;
+  border-radius: 28px;
+  padding: 34px 38px;
   display: grid;
-  grid-template-columns: 360px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 36px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  border: 1px solid #edf2f7;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
   margin-bottom: 36px;
 }
 
 .imageCol {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  width: 320px;
+  flex-shrink: 0;
 }
 
 .imageWrapper {
   position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
-  border-radius: var(--radius-lg);
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .imageWrapper img {
@@ -63,64 +64,56 @@
   display: block;
 }
 
-.emergencyBadge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background: #dc2626;
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 100px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.4);
-}
-
 .cityBadge {
   position: absolute;
   bottom: 12px;
   left: 12px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(6px);
-  color: white;
-  font-size: 0.8rem;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 100px;
-  display: flex;
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35);
 }
 
 .contactBox {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: var(--radius-md);
-  padding: 16px;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 18px;
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
+  margin-top: 16px;
 }
 
 .contactItem {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 0.9rem;
-  color: var(--color-text);
+  font-size: 0.94rem;
+  color: #0f172a;
   text-decoration: none;
-  transition: color 0.2s;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+
+.contactItem strong {
+  font-weight: 700;
+  color: #0f172a;
+  margin-left: 3px;
 }
 
 .contactItem:hover {
-  color: var(--color-primary);
+  color: #0284c7;
 }
 
-.contactItem svg {
-  color: var(--color-primary);
+.contactIcon {
+  color: #0284c7;
   flex-shrink: 0;
 }
 
@@ -128,72 +121,87 @@
 .infoCol {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .headerRow {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 2px;
   gap: 16px;
 }
 
-.titleSection h1 {
-  font-size: 2.1rem;
-  font-weight: 700;
-  color: var(--color-heading, #0f172a);
-  margin-bottom: 8px;
-  line-height: 1.2;
+.titleSection {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.hospitalTitle {
+  font-size: 2.15rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  line-height: 1.18;
+  letter-spacing: -0.02em;
 }
 
 .verifiedPill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 12px;
-  background-color: #eff6ff;
-  color: #2563eb;
-  border-radius: 100px;
-  font-size: 0.85rem;
+  padding: 5px 14px;
+  background-color: #dbeafe;
+  color: #0284c7;
+  border-radius: 9999px;
+  font-size: 0.84rem;
   font-weight: 600;
+  margin-bottom: 14px;
 }
 
 .rating {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #fef9c3;
+  background: #fef3c7;
   padding: 6px 14px;
-  border-radius: 100px;
-  color: #854d0e;
+  border-radius: 9999px;
+  color: #92400e;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   flex-shrink: 0;
+}
+
+.reviewCount {
+  font-size: 0.84rem;
+  opacity: 0.85;
+  font-weight: 600;
 }
 
 .locationActionRow {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 20px;
+  margin-bottom: 18px;
 }
 
 .addressRow {
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  color: var(--color-text-light);
-  font-size: 0.95rem;
+  color: #334155;
+  font-size: 0.92rem;
   line-height: 1.5;
-  margin-bottom: 0;
+  font-weight: 500;
   flex: 1;
-  min-width: 250px;
+  max-width: 490px;
 }
 
-.addressRow svg {
-  color: var(--color-primary);
+.addressPinIcon {
+  color: #0284c7;
   flex-shrink: 0;
   margin-top: 3px;
 }
@@ -204,30 +212,31 @@
   gap: 8px;
   align-items: stretch;
   flex-shrink: 0;
+  width: 185px;
 }
 
 .insuranceBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background: #059669;
+  gap: 7px;
+  background: #16a34a;
   color: #ffffff;
   border: none;
   border-radius: 10px;
-  padding: 8px 18px;
-  font-size: 0.92rem;
+  padding: 9px 16px;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.22);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
   transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .insuranceBtn:hover {
-  background: #047857;
+  background: #15803d;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(5, 150, 105, 0.32);
+  box-shadow: 0 6px 16px rgba(22, 163, 74, 0.32);
 }
 
 .insuranceBtn:active {
@@ -238,16 +247,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   background: #2563eb;
   color: #ffffff;
   border: none;
   border-radius: 10px;
-  padding: 8px 18px;
-  font-size: 0.92rem;
+  padding: 9px 16px;
+  font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
   transition: all 0.2s ease;
   white-space: nowrap;
 }
@@ -279,7 +288,7 @@
   border: 1px solid #fecaca;
   padding: 8px 14px;
   border-radius: 8px;
-  margin-top: -10px;
+  margin-top: -8px;
   margin-bottom: 16px;
   display: flex;
   align-items: center;
@@ -289,37 +298,69 @@
 .statsRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
-.statPill {
+.statPillBeds {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: #f1f5f9;
-  border-radius: 10px;
-  font-size: 0.88rem;
+  gap: 7px;
+  padding: 7px 14px;
+  background: #ecfdf5;
+  border-radius: 8px;
+  font-size: 0.86rem;
   font-weight: 600;
-  color: #334155;
+  color: #065f46;
 }
 
-.statPill svg {
-  color: var(--color-primary);
+.statPillBeds svg {
+  color: #059669;
+}
+
+.statPillEmergency {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: #fef2f2;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.statPillEmergency svg {
+  color: #dc2626;
+}
+
+.statPillEst {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #0369a1;
+}
+
+.statPillEst svg {
+  color: #0284c7;
 }
 
 .specialtiesSection {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .sectionSubLabel {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  margin-bottom: 8px;
+  letter-spacing: 0.06em;
+  color: #1e293b;
+  margin-bottom: 10px;
 }
 
 .specialtiesWrap {
@@ -329,25 +370,67 @@
 }
 
 .specBadge {
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-size: 0.82rem;
+  font-size: 0.84rem;
   font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid #dbeafe;
+  padding: 5px 14px;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.specLavender {
+  background: #ede9fe;
+  color: #4338ca;
+  border: 1px solid #ddd6fe;
+}
+
+.specBlue {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.specPeach {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fed7aa;
+}
+
+.specSky {
+  background: #e0f2fe;
+  color: #0284c7;
+  border: 1px solid #bae6fd;
+}
+
+.specIndigo {
+  background: #e0e7ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+}
+
+.specMint {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.specRose {
+  background: #fce7f3;
+  color: #9d174d;
+  border: 1px solid #fbcfe8;
 }
 
 .aboutBox {
   margin-top: auto;
   padding-top: 16px;
-  border-top: 1px solid #f1f5f9;
+  border-top: 1px solid #e2e8f0;
 }
 
 .aboutBox p {
-  color: #475569;
-  font-size: 0.95rem;
-  line-height: 1.6;
+  color: #334155;
+  font-size: 0.91rem;
+  line-height: 1.62;
+  margin: 0;
 }
 
 /* Sections Common Header */
@@ -815,6 +898,12 @@
 @media (max-width: 1024px) {
   .profileCard {
     grid-template-columns: 1fr;
+    padding: 26px;
+    gap: 28px;
+  }
+  .imageCol {
+    width: 100%;
+    max-width: 480px;
   }
 }
 
@@ -822,14 +911,54 @@
   .headerRow {
     flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
+  }
+
+  .locationActionRow {
+    flex-direction: column;
+    gap: 14px;
   }
   
   .headerActionsStack {
     width: 100%;
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .headerActionsStack button {
+    flex: 1;
+  }
+
+  .hospitalTitle {
+    font-size: 1.65rem;
   }
 
   .doctorsGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .profileCard {
+    padding: 16px 14px;
+    border-radius: 16px;
+    gap: 20px;
+  }
+  .hospitalTitle {
+    font-size: 1.4rem;
+  }
+  .practoNavWrap {
+    padding: 6px 10px;
+    margin-bottom: 20px;
+    gap: 6px;
+  }
+  .practoNavTab {
+    padding: 8px 12px;
+    font-size: 0.88rem;
+  }
+  .faqCard {
+    padding: 20px 14px;
+    border-radius: 16px;
   }
 }
 
@@ -877,45 +1006,84 @@
   font-weight: 700;
 }
 
-/* MediBuddy-style FAQs */
+/* Redesigned FAQs matching reference */
 .faqCard {
   background: #ffffff;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border-radius: 24px;
+  padding: 34px 38px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
   border: 1px solid #e2e8f0;
 }
 
 .faqHeader {
-  border-bottom: 2px solid #f1f5f9;
-  padding-bottom: 16px;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 26px;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.faqIllustrationWrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.faqHeaderTextWrap {
+  display: flex;
+  flex-direction: column;
 }
 
 .faqTitle {
-  font-size: 1.35rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.85rem;
+  font-weight: 800;
   color: #0f172a;
   margin: 0 0 6px 0;
+  letter-spacing: -0.02em;
+}
+
+.faqTitleIcon {
+  color: #0284c7;
+  flex-shrink: 0;
 }
 
 .faqSubtitle {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   color: #64748b;
   margin: 0;
+  line-height: 1.5;
+  max-width: 680px;
 }
 
 .faqList {
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
 .faqItem {
-  border-bottom: 1px solid #e2e8f0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
-.faqItem:last-child {
-  border-bottom: none;
+.faqItem:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.faqItemOpen {
+  border-color: #93c5fd;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.06);
 }
 
 .faqQuestionBtn {
@@ -924,19 +1092,36 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 0;
+  padding: 14px 20px;
   background: none;
   border: none;
   text-align: left;
-  font-size: 1.02rem;
-  font-weight: 600;
-  color: #1e293b;
   cursor: pointer;
-  transition: color 0.15s ease;
+  transition: background-color 0.15s ease;
 }
 
-.faqQuestionBtn:hover {
-  color: #2563eb;
+.faqQuestionLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.faqIconWrap {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.faqQuestionText {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.45;
 }
 
 .faqChevron {
@@ -950,29 +1135,52 @@
 }
 
 .faqAnswer {
-  padding: 0 0 20px 0;
-  color: #475569;
-  font-size: 0.95rem;
+  padding: 14px 24px 20px 72px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.94rem;
   line-height: 1.65;
 }
 
 .faqStepsList {
-  margin: 0 0 12px 0;
+  margin: 6px 0 10px 0;
   padding-left: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .faqStepsList li {
   color: #334155;
-  font-size: 0.94rem;
+  font-size: 0.92rem;
   line-height: 1.5;
 }
 
 .faqNote {
-  margin: 10px 0 0 0;
-  color: #64748b;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: #f0f9ff;
+  border-left: 3px solid #0284c7;
+  border-radius: 4px;
   font-size: 0.88rem;
-  font-style: italic;
+  color: #0369a1;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .faqCard {
+    padding: 24px 20px;
+  }
+  .faqHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .faqTitle {
+    font-size: 1.4rem;
+  }
+  .faqAnswer {
+    padding: 14px 18px 18px 20px;
+  }
 }

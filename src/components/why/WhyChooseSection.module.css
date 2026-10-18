@@ -212,6 +212,27 @@
 @media (max-width: 768px) {
   .featuresGrid {
     flex-direction: column;
-    gap: 24px;
+    gap: 20px;
+  }
+  .rightContent {
+    padding: 28px 20px;
+  }
+  .title {
+    font-size: 22px;
+    margin-bottom: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .leftContent {
+    flex: 0 0 200px;
+    height: 200px;
+  }
+  .rightContent {
+    padding: 20px 14px;
+  }
+  .title {
+    font-size: 19px;
+    margin-bottom: 18px;
   }
 }

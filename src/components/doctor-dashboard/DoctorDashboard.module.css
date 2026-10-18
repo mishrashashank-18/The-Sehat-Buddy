@@ -899,13 +899,16 @@
 
 @media (max-width: 600px) {
   .topbar {
-    padding: 10px 16px;
+    padding: 10px 14px;
     flex-direction: column;
     gap: 12px;
+    align-items: stretch;
   }
   .headerRight {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
   }
   .kpiGrid {
     grid-template-columns: 1fr;
@@ -917,5 +920,36 @@
   .aptStatusCol {
     align-items: flex-start;
     width: 100%;
+  }
+  .profileBanner {
+    padding: 16px;
+    border-radius: 14px;
+  }
+  .statusButtonGroup {
+    flex-direction: column;
+    width: 100%;
+  }
+  .statusOption {
+    width: 100%;
+    justify-content: center;
+  }
+  .tabsBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .tabsList {
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  .tabBtn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+  .grid2 {
+    grid-template-columns: 1fr;
   }
 }

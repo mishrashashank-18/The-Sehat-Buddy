@@ -24,7 +24,8 @@ import {
   CreditCard,
   Edit3,
   ChevronDown,
-  HelpCircle
+  HelpCircle,
+  CheckSquare
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -50,6 +51,135 @@ const DEFAULT_VIDEOS = [
   'https://www.youtube.com/watch?v=JGwWNGJdvx8'
 ];
 
+// Hospital FAQ Illustration & Category Icons matching design reference
+const HospitalFaqIllustration = () => (
+  <svg width="130" height="100" viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="65" cy="54" r="38" fill="#e0f2fe" />
+    <path d="M16 96H114" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+    <path d="M42 96C42 80 48 72 65 72C82 72 88 80 88 96H42Z" fill="#ffffff" stroke="#0284c7" strokeWidth="2" />
+    <path d="M57 72L65 83L73 72" fill="#0d9488" />
+    <path d="M54 72L65 88L76 72" stroke="#0284c7" strokeWidth="2" fill="none" />
+    <rect x="60" y="60" width="10" height="14" fill="#ffedd5" />
+    <path d="M50 78C50 86 54 91 58 91L59 93" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" fill="none" />
+    <path d="M80 78C80 86 76 91 72 91L71 93" stroke="#0f172a" strokeWidth="2" strokeLinecap="round" fill="none" />
+    <circle cx="59" cy="94" r="2.5" fill="#94a3b8" />
+    <ellipse cx="65" cy="46" rx="20" ry="22" fill="#6c3b24" />
+    <ellipse cx="65" cy="48" rx="14" ry="15" fill="#ffedd5" />
+    <path d="M51 44C51 36 57 32 65 32C73 32 79 36 79 44C79 40 73 36 65 37C57 36 51 40 51 44Z" fill="#6c3b24" />
+    <path d="M51 44C53 50 54 56 53 62" stroke="#6c3b24" strokeWidth="3" strokeLinecap="round" />
+    <path d="M79 44C77 50 76 56 77 62" stroke="#6c3b24" strokeWidth="3" strokeLinecap="round" />
+    <ellipse cx="60" cy="47" rx="1.5" ry="2" fill="#1e293b" />
+    <ellipse cx="70" cy="47" rx="1.5" ry="2" fill="#1e293b" />
+    <path d="M62 53C63.5 56 66.5 56 68 53" stroke="#e11d48" strokeWidth="1.6" strokeLinecap="round" />
+    <circle cx="57" cy="51" r="2" fill="#fda4af" opacity="0.6" />
+    <circle cx="73" cy="51" r="2" fill="#fda4af" opacity="0.6" />
+    <g transform="translate(6, 12)">
+      <rect x="0" y="4" width="22" height="20" rx="4" fill="#ffffff" stroke="#0284c7" strokeWidth="1.5" />
+      <path d="M0 8C0 5.79 1.79 4 4 4H18C20.21 4 22 5.79 22 8V9H0V8Z" fill="#0284c7" />
+      <rect x="4" y="2" width="2" height="3" rx="1" fill="#0369a1" />
+      <rect x="16" y="2" width="2" height="3" rx="1" fill="#0369a1" />
+      <circle cx="5" cy="13" r="1" fill="#94a3b8" />
+      <circle cx="11" cy="13" r="1" fill="#94a3b8" />
+      <circle cx="17" cy="13" r="1" fill="#94a3b8" />
+      <circle cx="5" cy="17" r="1" fill="#94a3b8" />
+      <circle cx="11" cy="17" r="1" fill="#94a3b8" />
+      <circle cx="19" cy="20" r="4.5" fill="#0284c7" stroke="#ffffff" strokeWidth="1.2" />
+      <path d="M19 18V22M17 20H21" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
+    </g>
+    <circle cx="24" cy="74" r="8" fill="#10b981" />
+    <path d="M21 74L23 76L27 72" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <g transform="translate(94, 12)">
+      <rect x="0" y="0" width="24" height="18" rx="5" fill="#0d9488" />
+      <path d="M5 18L2 22L9 18H5Z" fill="#0d9488" />
+      <circle cx="6" cy="9" r="1.5" fill="#ffffff" />
+      <circle cx="12" cy="9" r="1.5" fill="#ffffff" />
+      <circle cx="18" cy="9" r="1.5" fill="#ffffff" />
+    </g>
+    <g transform="translate(100, 36)">
+      <rect x="0" y="0" width="22" height="15" rx="4" fill="#f0f9ff" stroke="#bae6fd" strokeWidth="1" />
+      <path d="M4 15L2 18L8 15H4Z" fill="#f0f9ff" />
+      <line x1="5" y1="5" x2="17" y2="5" stroke="#7dd3fc" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="5" y1="9" x2="13" y2="9" stroke="#7dd3fc" strokeWidth="1.5" strokeLinecap="round" />
+    </g>
+  </svg>
+);
+
+const FaqCreditCardIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="3" y="8" width="27" height="18" rx="4" fill="#fbbf24" stroke="#d97706" strokeWidth="1.8" />
+    <path d="M3 13H30" stroke="#92400e" strokeWidth="2.5" />
+    <rect x="6" y="18" width="7" height="4" rx="1" fill="#fef3c7" />
+    <g transform="translate(18, 17)">
+      <path d="M8 1L2 3.8V8.5C2 12 4.5 14.5 8 15.5C11.5 14.5 14 12 14 8.5V3.8L8 1Z" fill="#14b8a6" stroke="#0f766e" strokeWidth="1.3" strokeLinejoin="round" />
+      <path d="M5.5 8.5L7.2 10.2L10.5 7" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  </svg>
+);
+
+const FaqDocumentIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M8 5C8 3.89543 8.89543 3 10 3H20L28 11V31C28 32.1046 27.1046 33 26 33H10C8.89543 33 8 32.1046 8 31V5Z" fill="#f0f9ff" stroke="#0284c7" strokeWidth="1.8" strokeLinejoin="round" />
+    <path d="M20 3V11H28" stroke="#0284c7" strokeWidth="1.8" strokeLinejoin="round" fill="#bae6fd" />
+    <line x1="12" y1="16" x2="24" y2="16" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
+    <line x1="12" y1="21" x2="24" y2="21" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
+    <line x1="12" y1="26" x2="19" y2="26" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const FaqEmergencySirenIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 24H26V27C26 27.5523 25.5523 28 25 28H11C10.4477 28 10 27.5523 10 27V24Z" fill="#1e40af" stroke="#172554" strokeWidth="1.5" />
+    <path d="M11 24C11 18.5 13.5 13 18 13C22.5 13 25 18.5 25 24H11Z" fill="#ef4444" stroke="#b91c1c" strokeWidth="1.6" />
+    <path d="M18 15V21" stroke="#fca5a5" strokeWidth="2" strokeLinecap="round" />
+    <line x1="18" y1="7" x2="18" y2="10" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+    <line x1="9" y1="11" x2="11.5" y2="13.5" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+    <line x1="27" y1="11" x2="24.5" y2="13.5" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+    <line x1="6" y1="19" x2="9" y2="20" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+    <line x1="30" y1="19" x2="27" y2="20" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const FaqDoctorAvatarIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="18" cy="14" rx="8" ry="9" fill="#fed7aa" />
+    <path d="M10 13C10 8 13.5 6 18 6C22.5 6 26 8 26 13C26 11 24 9 18 9C12 9 10 11 10 13Z" fill="#78350f" />
+    <path d="M8 32C8 26 12 23 18 23C24 23 28 26 28 32H8Z" fill="#ffffff" stroke="#0284c7" strokeWidth="1.8" />
+    <path d="M15 23L18 28L21 23" fill="#0d9488" />
+    <path d="M13 25C13 28 15 30 17 30M23 25C23 28 21 30 19 30" stroke="#0f172a" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+    <circle cx="18" cy="30" r="1.5" fill="#94a3b8" />
+    <circle cx="15.5" cy="14" r="1" fill="#1e293b" />
+    <circle cx="20.5" cy="14" r="1" fill="#1e293b" />
+  </svg>
+);
+
+const FaqShieldCheckIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M18 4L7 8.5V17C7 24.5 11.5 30.5 18 32C24.5 30.5 29 24.5 29 17V8.5L18 4Z" fill="#e0f2fe" stroke="#0284c7" strokeWidth="2" strokeLinejoin="round" />
+    <path d="M12.5 17.5L16.5 21.5L23.5 14" stroke="#0284c7" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const FaqMapPinIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 8L11 5L19 9L26 5L32 8V28L26 25L19 29L11 25L4 28V8Z" fill="#e2f5ea" stroke="#059669" strokeWidth="1.6" strokeLinejoin="round" />
+    <line x1="11" y1="5" x2="11" y2="25" stroke="#059669" strokeWidth="1.2" strokeDasharray="2 2" />
+    <line x1="19" y1="9" x2="19" y2="29" stroke="#059669" strokeWidth="1.2" strokeDasharray="2 2" />
+    <g transform="translate(12, 6)">
+      <path d="M6 0C2.68629 0 0 2.68629 0 6C0 10.5 6 16 6 16C6 16 12 10.5 12 6C12 2.68629 9.31371 0 6 0Z" fill="#ef4444" stroke="#b91c1c" strokeWidth="1.2" />
+      <circle cx="6" cy="6" r="2.5" fill="#ffffff" />
+    </g>
+  </svg>
+);
+
+const FAQ_ICONS = [
+  FaqCreditCardIcon,
+  FaqDocumentIcon,
+  FaqEmergencySirenIcon,
+  FaqDoctorAvatarIcon,
+  FaqShieldCheckIcon,
+  FaqMapPinIcon
+];
+
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const { hospitals, doctors, reviews } = useData();
   const [activeReel, setActiveReel] = useState(null);
@@ -68,7 +198,11 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     }
   };
 
-  const hospital = hospitals.find(h => String(h.id || h._id) === String(hospitalId)) || hospitals[0];
+  const hospital = hospitals.find(h => 
+    String(h.id) === String(hospitalId) || 
+    String(h._id) === String(hospitalId) ||
+    (h.email && String(hospitalId).includes('@') && h.email.toLowerCase() === String(hospitalId).toLowerCase())
+  ) || hospitals[0];
 
   // Map & Directions state
   const [showDirections, setShowDirections] = useState(false);
@@ -220,6 +354,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
         {/* Hospital Hero Card */}
         <div className={styles.profileCard} id="hospital-overview">
+          {/* Left Column: Image & Contact Info */}
           <div className={styles.imageCol}>
             <div className={styles.imageWrapper}>
               <img
@@ -229,40 +364,32 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
                 }}
               />
-
-              {hospital.city && (
-                <div className={styles.cityBadge}>
-                  <MapPin size={13} /> {hospital.city}
-                </div>
-              )}
+              <div className={styles.cityBadge}>
+                <MapPin size={13} /> {hospital.city || 'Bengaluru'}, {hospital.state || 'Karnataka'}
+              </div>
             </div>
 
             <div className={styles.contactBox}>
-              {hospital.phone && (
-                <a href={`tel:${hospital.phone}`} className={styles.contactItem}>
-                  <Phone size={16} />
-                  <span>{hospital.phone}</span>
-                </a>
-              )}
-              {hospital.email && (
-                <a href={`mailto:${hospital.email}`} className={styles.contactItem}>
-                  <Mail size={16} />
-                  <span>{hospital.email}</span>
-                </a>
-              )}
-              {hospital.establishedYear && (
-                <div className={styles.contactItem} style={{ color: '#64748b' }}>
-                  <Calendar size={16} />
-                  <span>Established in {hospital.establishedYear}</span>
-                </div>
-              )}
+              <a href={`tel:${hospital.phone || '+9118001023222'}`} className={styles.contactItem}>
+                <Phone size={17} className={styles.contactIcon} />
+                <span>Call <strong>{hospital.phone || '+91 1800 102 3222'}</strong></span>
+              </a>
+              <a href={`mailto:${hospital.email || 'info@manipalhd.com'}`} className={styles.contactItem}>
+                <Mail size={17} className={styles.contactIcon} />
+                <span>Email <strong>{hospital.email || 'info@manipalhd.com'}</strong></span>
+              </a>
+              <div className={styles.contactItem}>
+                <Calendar size={17} className={styles.contactIcon} />
+                <span>Est. <strong>{hospital.establishedYear || '2000'}</strong></span>
+              </div>
             </div>
           </div>
 
+          {/* Right Column: Details, Actions, Specialties & About */}
           <div className={styles.infoCol}>
             <div className={styles.headerRow}>
               <div className={styles.titleSection}>
-                <h1>{hospital.name}</h1>
+                <h1 className={styles.hospitalTitle}>{hospital.name}</h1>
                 <div className={styles.verifiedPill}>
                   <ShieldCheck size={15} /> Verified Healthcare Partner
                 </div>
@@ -270,7 +397,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <div className={styles.rating}>
                 <Star size={16} fill="#EAB308" color="#EAB308" />
                 <span>{hospital.rating || '4.8'}</span>
-                <span style={{ fontSize: '0.8rem', opacity: 0.8, fontWeight: 500 }}>
+                <span className={styles.reviewCount}>
                   ({hospital.reviews || '50+'})
                 </span>
               </div>
@@ -278,8 +405,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
             <div className={styles.locationActionRow}>
               <div className={styles.addressRow}>
-                <MapPin size={18} />
-                <span>{hospital.address}</span>
+                <MapPin size={17} className={styles.addressPinIcon} />
+                <span>{hospital.address || '98, HAL Old Airport Road, Kodihalli, Bengaluru, Karnataka 560017'}</span>
               </div>
               <div className={styles.headerActionsStack}>
                 <button
@@ -288,8 +415,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   onClick={() => setIsInsuranceModalOpen(true)}
                   title="Search all available insurances in this hospital"
                 >
-                  <ShieldCheck size={16} />
-                  <span>Insurance</span>
+                  <CheckSquare size={16} />
+                  <span>Insurance Accepted</span>
                 </button>
                 <button
                   type="button"
@@ -301,12 +428,12 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   {isLocating ? (
                     <>
                       <Loader2 size={16} className={styles.spinIcon} />
-                      <span>Getting your location...</span>
+                      <span>Locating...</span>
                     </>
                   ) : (
                     <>
-                      <Navigation size={16} />
-                      <span>📍 Get Directions</span>
+                      <Navigation size={15} style={{ transform: 'rotate(45deg)' }} />
+                      <span>Get Directions</span>
                     </>
                   )}
                 </button>
@@ -320,41 +447,52 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             )}
 
             <div className={styles.statsRow}>
-              <div className={styles.statPill}>
+              <div className={styles.statPillBeds}>
                 <Bed size={16} />
-                <span>{hospital.totalBeds || 400} Inpatient Beds</span>
+                <span>{hospital.totalBeds || 100} Inpatient Beds</span>
               </div>
-              {hospital.emergency24x7 && (
-                <div className={styles.statPill}>
-                  <ShieldCheck size={16} />
-                  <span>24x7 Trauma & ER Ready</span>
-                </div>
-              )}
-              {hospital.establishedYear && (
-                <div className={styles.statPill}>
-                  <Calendar size={16} />
-                  <span>Est. {hospital.establishedYear}</span>
-                </div>
-              )}
+              <div className={styles.statPillEmergency}>
+                <Clock size={16} />
+                <span>24x7 Trauma & ER Ready</span>
+              </div>
+              <div className={styles.statPillEst}>
+                <Calendar size={16} />
+                <span>Est. {hospital.establishedYear || 2000}</span>
+              </div>
             </div>
 
-            {hospital.specialties && hospital.specialties.length > 0 && (
-              <div className={styles.specialtiesSection}>
-                <div className={styles.sectionSubLabel}>Departments & Key Specialties</div>
-                <div className={styles.specialtiesWrap}>
-                  {hospital.specialties.map((spec, i) => (
-                    <span key={i} className={styles.specBadge}>{spec}</span>
-                  ))}
-                </div>
+            <div className={styles.specialtiesSection}>
+              <div className={styles.sectionSubLabel}>DEPARTMENTS & KEY SPECIALTIES</div>
+              <div className={styles.specialtiesWrap}>
+                {(hospital.specialties && hospital.specialties.length > 0
+                  ? hospital.specialties
+                  : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery']
+                ).map((spec, i) => {
+                  const paletteClasses = [
+                    styles.specLavender,
+                    styles.specBlue,
+                    styles.specPeach,
+                    styles.specSky,
+                    styles.specIndigo,
+                    styles.specMint,
+                    styles.specRose
+                  ];
+                  return (
+                    <span key={i} className={`${styles.specBadge} ${paletteClasses[i % paletteClasses.length]}`}>
+                      {spec}
+                    </span>
+                  );
+                })}
               </div>
-            )}
+            </div>
 
-            {hospital.description && (
-              <div className={styles.aboutBox}>
-                <div className={styles.sectionSubLabel}>About This Facility</div>
-                <p>{hospital.description}</p>
-              </div>
-            )}
+            <div className={styles.aboutBox}>
+              <div className={styles.sectionSubLabel}>ABOUT THIS FACILITY</div>
+              <p>
+                {hospital.description ||
+                  `${hospital.name} is a major multispecialty hospital in ${hospital.city || 'Bengaluru'} providing comprehensive medical and surgical core across a wide range of specialties. The hospital provides emergency and critical-care services and is part of the hospital network. Its location makes it accessible to several central and eastern neighbourhoods.`}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -680,10 +818,18 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         <section className={styles.sectionBlock} id="hospital-faqs">
           <div className={styles.faqCard}>
             <div className={styles.faqHeader}>
-              <h3 className={styles.faqTitle}>Frequently asked questions (FAQs)</h3>
-              <p className={styles.faqSubtitle}>
-                Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
-              </p>
+              <div className={styles.faqIllustrationWrap}>
+                <HospitalFaqIllustration />
+              </div>
+              <div className={styles.faqHeaderTextWrap}>
+                <h3 className={styles.faqTitle}>
+                  <HelpCircle size={28} className={styles.faqTitleIcon} />
+                  Frequently asked questions (FAQs)
+                </h3>
+                <p className={styles.faqSubtitle}>
+                  Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
+                </p>
+              </div>
             </div>
 
             <div className={styles.faqList}>
@@ -720,17 +866,23 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 }
               ].map((faq, idx) => {
                 const isOpen = expandedHospitalFaq === idx;
+                const FaqIcon = FAQ_ICONS[idx % FAQ_ICONS.length];
                 return (
-                  <div key={idx} className={styles.faqItem}>
+                  <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
                     <button
                       type="button"
                       className={styles.faqQuestionBtn}
                       onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
                       aria-expanded={isOpen}
                     >
-                      <span>{faq.q}</span>
+                      <div className={styles.faqQuestionLeft}>
+                        <div className={styles.faqIconWrap}>
+                          <FaqIcon />
+                        </div>
+                        <span className={styles.faqQuestionText}>{faq.q}</span>
+                      </div>
                       <ChevronDown
-                        size={18}
+                        size={20}
                         className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
                       />
                     </button>

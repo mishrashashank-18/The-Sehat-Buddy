@@ -27,7 +27,8 @@ import {
   Activity,
   Edit2,
   Search,
-  Filter
+  Filter,
+  HelpCircle
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -62,6 +63,7 @@ const HospitalDashboard = ({ onNavigate }) => {
     hospitals,
     doctors,
     updateHospital,
+    updateDoctorFaqs,
     addDoctor,
     specialitiesProcedures,
     addSpecialityProcedure,
@@ -140,6 +142,51 @@ const HospitalDashboard = ({ onNavigate }) => {
     isStarDoctor: false
   });
   const [isAddingDoc, setIsAddingDoc] = useState(false);
+
+  // Doctor FAQs management modal (managed by registered hospital)
+  const [isDoctorFaqModalOpen, setIsDoctorFaqModalOpen] = useState(false);
+  const [selectedFaqDoctor, setSelectedFaqDoctor] = useState(null);
+  const [doctorFaqsList, setDoctorFaqsList] = useState([]);
+  const [newDoctorFaqQ, setNewDoctorFaqQ] = useState('');
+  const [newDoctorFaqA, setNewDoctorFaqA] = useState('');
+  const [editingDoctorFaqIdx, setEditingDoctorFaqIdx] = useState(null);
+  const [editingDoctorFaqData, setEditingDoctorFaqData] = useState({ q: '', a: '' });
+  const [isSavingDoctorFaqs, setIsSavingDoctorFaqs] = useState(false);
+
+  const handleOpenDoctorFaqModal = (doc) => {
+    setSelectedFaqDoctor(doc);
+    const existing = Array.isArray(doc.faqs) && doc.faqs.length > 0 ? doc.faqs : [
+      { q: `How can I book an appointment with ${doc.name}?`, a: `Appointments for ${doc.name} at ${activeHospital.name || 'our hospital'} can be booked through The Sehat Buddy platform with instant confirmation.` },
+      { q: 'What should I carry for the clinic consultation?', a: 'Carry a valid photo ID, insurance card (if cashless), and any recent medical records or prescriptions.' },
+      { q: 'Is cashless insurance pre-authorization available?', a: `Yes, ${activeHospital.name || 'our hospital'} offers 100% cashless treatment with all leading TPAs and insurers.` },
+      { q: 'Can I reschedule or cancel my appointment?', a: 'Yes, appointments can be easily rescheduled or cancelled prior to the scheduled slot time.' }
+    ];
+    setDoctorFaqsList(existing);
+    setNewDoctorFaqQ('');
+    setNewDoctorFaqA('');
+    setEditingDoctorFaqIdx(null);
+    setIsDoctorFaqModalOpen(true);
+  };
+
+  const handleSaveDoctorFaqs = async () => {
+    if (!selectedFaqDoctor) return;
+    setIsSavingDoctorFaqs(true);
+    try {
+      const validFaqs = doctorFaqsList.filter(f => (f.q || f.question || '').trim() !== '');
+      await updateDoctorFaqs(
+        selectedFaqDoctor.id || selectedFaqDoctor._id,
+        validFaqs,
+        activeHospital.id || activeHospital._id
+      );
+      showToast(`Public FAQs for ${selectedFaqDoctor.name} updated and published!`);
+      setIsDoctorFaqModalOpen(false);
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to update doctor FAQs.');
+    } finally {
+      setIsSavingDoctorFaqs(false);
+    }
+  };
 
   const [toastMessage, setToastMessage] = useState('');
   const showToast = (msg) => {
@@ -848,7 +895,31 @@ const HospitalDashboard = ({ onNavigate }) => {
                           </td>
                           <td>{doc.availableDays || 'Mon - Fri (10am - 4pm)'}</td>
                           <td>
-                            <span className={styles.onDutyBadge}>On Duty</span>
+                            {(() => {
+                              const status = doc.availabilityStatus || (doc.available === false ? 'On Leave' : 'Available');
+                              if (status === 'Busy') {
+                                return (
+                                  <span className={styles.statusBadgeBusy}>
+                                    <span className={`${styles.statusDot} ${styles.dotBusy}`}></span>
+                                    In Surgery / Busy
+                                  </span>
+                                );
+                              }
+                              if (status === 'On Leave') {
+                                return (
+                                  <span className={styles.statusBadgeLeave}>
+                                    <span className={`${styles.statusDot} ${styles.dotLeave}`}></span>
+                                    On Leave
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className={styles.statusBadgeAvailable}>
+                                  <span className={`${styles.statusDot} ${styles.dotAvailable}`}></span>
+                                  Available
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td>
                             <button
@@ -867,12 +938,35 @@ const HospitalDashboard = ({ onNavigate }) => {
                             </button>
                           </td>
                           <td>
-                            <button
-                              className={styles.pageDoctorBtn}
-                              onClick={() => showToast(`Sent clinical emergency notification to ${doc.name}`)}
-                            >
-                              Page Doctor
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDoctorFaqModal(doc)}
+                                style={{
+                                  background: '#f0f9ff',
+                                  color: '#0284c7',
+                                  border: '1px solid #bae6fd',
+                                  borderRadius: '6px',
+                                  padding: '6px 10px',
+                                  fontSize: '0.78rem',
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title={`Manage public FAQs for ${doc.name}`}
+                              >
+                                <HelpCircle size={13} />
+                                Doctor FAQs
+                              </button>
+                              <button
+                                className={styles.pageDoctorBtn}
+                                onClick={() => showToast(`Sent clinical emergency notification to ${doc.name}`)}
+                              >
+                                Page Doctor
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1080,9 +1174,28 @@ const HospitalDashboard = ({ onNavigate }) => {
                           />
                           <div className={styles.starDocMeta}>
                             <h4>{doc.name}</h4>
-                            <p>
-                              {doc.specialty || doc.specialization}
-                              <span style={{ color: '#059669', fontWeight: 600 }}> • Hospital Staff</span>
+                            <p style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', margin: '3px 0 0' }}>
+                              <span>{doc.specialty || doc.specialization}</span>
+                              <span style={{
+                                fontSize: '0.72rem',
+                                padding: '1px 7px',
+                                borderRadius: '999px',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: (doc.availabilityStatus === 'Busy') ? '#fef3c7' : (doc.availabilityStatus === 'On Leave' || doc.available === false) ? '#fee2e2' : '#dcfce7',
+                                color: (doc.availabilityStatus === 'Busy') ? '#b45309' : (doc.availabilityStatus === 'On Leave' || doc.available === false) ? '#b91c1c' : '#15803d',
+                                border: `1px solid ${(doc.availabilityStatus === 'Busy') ? '#fde68a' : (doc.availabilityStatus === 'On Leave' || doc.available === false) ? '#fecaca' : '#bbf7d0'}`
+                              }}>
+                                <span style={{
+                                  width: '5px',
+                                  height: '5px',
+                                  borderRadius: '50%',
+                                  backgroundColor: (doc.availabilityStatus === 'Busy') ? '#d97706' : (doc.availabilityStatus === 'On Leave' || doc.available === false) ? '#dc2626' : '#16a34a'
+                                }}></span>
+                                {doc.availabilityStatus === 'Busy' ? 'Busy' : (doc.availabilityStatus === 'On Leave' || doc.available === false) ? 'On Leave' : 'Available'}
+                              </span>
                             </p>
                           </div>
                           <Star
@@ -2119,6 +2232,251 @@ const HospitalDashboard = ({ onNavigate }) => {
           }}
           onSave={handleSaveSpecialityProcedure}
         />
+      )}
+
+      {/* Manage Doctor Profile FAQs Modal */}
+      {isDoctorFaqModalOpen && selectedFaqDoctor && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setIsDoctorFaqModalOpen(false)}
+          style={{ zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '620px',
+              width: '92%',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <HelpCircle size={20} color="#0284c7" />
+                  Manage FAQs for {selectedFaqDoctor.name}
+                </h3>
+                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Hospital Authority • Displayed on {selectedFaqDoctor.name}'s public doctor profile page
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDoctorFaqModalOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', padding: '4px' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <ShieldCheck size={18} color="#0284c7" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div style={{ fontSize: '0.84rem', color: '#0369a1', lineHeight: 1.45 }}>
+                  As the registered hospital center (<strong>{activeHospital.name}</strong>), you maintain and verify clinical policy FAQs for your affiliated specialists. Changes published here reflect immediately on the doctor's live profile page.
+                </div>
+              </div>
+
+              {/* List of Existing FAQs */}
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b' }}>
+                    Current FAQs ({doctorFaqsList.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaults = [
+                        { q: `How can I book an appointment with ${selectedFaqDoctor.name}?`, a: `Appointments for ${selectedFaqDoctor.name} at ${activeHospital.name || 'our hospital'} can be booked online through The Sehat Buddy platform.` },
+                        { q: 'What should I carry for the clinic consultation?', a: 'Carry a valid photo ID, health insurance policy e-card, and any previous doctor prescriptions or test reports.' },
+                        { q: 'Is cashless insurance pre-authorization available?', a: `Yes, ${activeHospital.name || 'our hospital'} provides 100% cashless pre-authorization with all major insurance TPAs.` },
+                        { q: 'Can I reschedule or cancel my appointment?', a: 'Yes, patients can reschedule or cancel before their slot time through their patient account.' }
+                      ];
+                      setDoctorFaqsList(defaults);
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Reset to Hospital Defaults
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                  {doctorFaqsList.map((faq, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '10px 12px'
+                      }}
+                    >
+                      {editingDoctorFaqIdx === idx ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <input
+                            type="text"
+                            value={editingDoctorFaqData.q}
+                            onChange={(e) => setEditingDoctorFaqData({ ...editingDoctorFaqData, q: e.target.value })}
+                            placeholder="Question..."
+                            style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #0284c7', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                          <textarea
+                            rows={2}
+                            value={editingDoctorFaqData.a}
+                            onChange={(e) => setEditingDoctorFaqData({ ...editingDoctorFaqData, a: e.target.value })}
+                            placeholder="Answer..."
+                            style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #0284c7', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!editingDoctorFaqData.q.trim()) return;
+                                const updated = [...doctorFaqsList];
+                                updated[idx] = { ...editingDoctorFaqData };
+                                setDoctorFaqsList(updated);
+                                setEditingDoctorFaqIdx(null);
+                              }}
+                              style={{ background: '#0284c7', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Done
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDoctorFaqIdx(null)}
+                              style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, fontSize: '0.86rem', color: '#0f172a', marginBottom: '3px' }}>
+                              Q{idx + 1}: {faq.q || faq.question}
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.4 }}>
+                              {faq.a || faq.answer}
+                            </div>
+                          </div>
+                          <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDoctorFaqIdx(idx);
+                                setEditingDoctorFaqData({ q: faq.q || faq.question || '', a: faq.a || faq.answer || '' });
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#0284c7', cursor: 'pointer', padding: '4px' }}
+                              title="Edit"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDoctorFaqsList(prev => prev.filter((_, i) => i !== idx));
+                              }}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Add New FAQ Block */}
+              <div style={{ background: '#f8fafc', border: '1.5px dashed #cbd5e1', borderRadius: '10px', padding: '14px' }}>
+                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#1e293b', display: 'block', marginBottom: '8px' }}>
+                  + Add Custom FAQ for {selectedFaqDoctor.name}
+                </span>
+                <input
+                  type="text"
+                  placeholder="Question (e.g. Does the doctor provide second opinion consultations?)"
+                  value={newDoctorFaqQ}
+                  onChange={(e) => setNewDoctorFaqQ(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
+                />
+                <textarea
+                  rows={2}
+                  placeholder="Answer..."
+                  value={newDoctorFaqA}
+                  onChange={(e) => setNewDoctorFaqA(e.target.value)}
+                  style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', boxSizing: 'border-box' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!newDoctorFaqQ.trim()) return;
+                    setDoctorFaqsList(prev => [...prev, { q: newDoctorFaqQ.trim(), a: newDoctorFaqA.trim() }]);
+                    setNewDoctorFaqQ('');
+                    setNewDoctorFaqA('');
+                  }}
+                  style={{
+                    background: '#0284c7',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '7px 14px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Plus size={14} /> Add to Roster FAQs
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setIsDoctorFaqModalOpen(false)}
+                style={{ padding: '9px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isSavingDoctorFaqs}
+                onClick={handleSaveDoctorFaqs}
+                style={{
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#0284c7',
+                  color: '#ffffff',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: isSavingDoctorFaqs ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isSavingDoctorFaqs ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <CheckCircle size={15} />}
+                Publish Doctor FAQs
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

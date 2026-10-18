@@ -48,3 +48,42 @@
   line-height: 1.5;
   white-space: pre-wrap;
 }
+
+@media (max-width: 768px) {
+  .card {
+    height: auto;
+    min-height: 190px;
+    padding: 16px 8px;
+  }
+  .iconWrapper {
+    width: 68px;
+    height: 68px;
+  }
+  .title {
+    font-size: 14px;
+    margin-top: 10px;
+    margin-bottom: 4px;
+  }
+  .subtitle {
+    font-size: 11.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    min-height: 170px;
+    padding: 12px 6px;
+    border-radius: 12px;
+  }
+  .iconWrapper {
+    width: 58px;
+    height: 58px;
+  }
+  .title {
+    font-size: 13px;
+  }
+  .subtitle {
+    font-size: 10.5px;
+    line-height: 1.35;
+  }
+}

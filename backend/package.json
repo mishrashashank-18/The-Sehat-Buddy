@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "seed": "node scripts/seed.js",
+    "seed:corporate": "node scripts/seed_corporate.js",
+    "add-items": "node scripts/add_items.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

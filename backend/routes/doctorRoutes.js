@@ -10,7 +10,8 @@ import {
   getDoctors,
   getDoctorById,
   doctorDashboard,
-  updateDoctorProfile
+  updateDoctorProfile,
+  deleteDoctorProfile
 } from '../controllers/doctorController.js';
 import { protect } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
@@ -30,8 +31,9 @@ router.post('/verify-reset-otp', verifyDoctorResetOtp);
 router.post('/reset-password', resetDoctorPassword);
 router.post('/add-by-hospital', addDoctorByHospital);
 
-// Doctor profile update
+// Doctor profile update & delete
 router.put('/:id', upload.single('image'), updateDoctorProfile);
+router.delete('/:id', deleteDoctorProfile);
 
 // Dashboard
 router.get('/dashboard', protect, doctorDashboard);

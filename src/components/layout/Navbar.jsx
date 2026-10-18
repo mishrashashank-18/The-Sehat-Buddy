@@ -390,7 +390,26 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
               </select>
             </div>
 
-            {!user && (
+            {user ? (
+              <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#1e293b', padding: '0 4px' }}>
+                  Hi, {user.name}
+                </span>
+                <button
+                  type="button"
+                  className={styles.logoutBtn}
+                  onClick={() => {
+                    localStorage.removeItem('token');
+                    setUser(null);
+                    setIsMobileMenuOpen(false);
+                    if (onNavigate) onNavigate('site');
+                  }}
+                  style={{ width: '100%', textAlign: 'center' }}
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
                 className={styles.mobileLoginBtn}

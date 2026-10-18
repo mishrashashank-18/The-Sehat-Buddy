@@ -102,3 +102,22 @@
   opacity: 0.8;
   text-decoration: underline;
 }
+
+@media (max-width: 480px) {
+  .card {
+    padding: 12px;
+    gap: 12px;
+  }
+  .imageWrapper {
+    width: 90px;
+  }
+  .name {
+    font-size: 15px;
+  }
+  .specialty {
+    font-size: 13px;
+  }
+  .experience {
+    font-size: 12px;
+  }
+}

@@ -410,12 +410,60 @@
   }
 }
 
+@media (max-width: 768px) {
+  .container {
+    height: 64px;
+  }
+
+  .locationWrapper {
+    display: none;
+  }
+
+  .actions {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    height: 60px;
+  }
+
+  .logoGroup {
+    gap: 8px;
+  }
+
+  .customLogoImg {
+    height: 32px;
+    max-width: 110px;
+  }
+
+  .logoText h1 {
+    font-size: 1.1rem;
+  }
+
+  .logoText p {
+    font-size: 0.65rem;
+  }
+
+  .actions .loginBtn {
+    display: none;
+  }
+
+  .userGreeting {
+    display: none;
+  }
+}
+
 /* Mobile Menu Drawer */
 .mobileMenu {
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
   padding: 16px 20px 24px;
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .mobileNavLinks {

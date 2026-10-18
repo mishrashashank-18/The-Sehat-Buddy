@@ -1,12 +1,27 @@
+import mongoose from 'mongoose';
 import Hospital from '../models/Hospital.js';
 import Doctor from '../models/Doctor.js';
 import generateToken from '../utils/generateToken.js';
+import { sendEmail } from '../utils/email.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const hospital = await Hospital.findOne({ email });
-    if (hospital && (await hospital.matchPassword(password))) {
+    const hospital = await Hospital.findOne({ email: (email || '').toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    const isFirstLogin = Boolean(hospital.isFirstLogin || !hospital.passwordSet || hospital.password === 'CHANGEME_PENDING_SETUP');
+    if (isFirstLogin) {
+      return res.status(401).json({
+        success: false,
+        isFirstLogin: true,
+        message: 'First-time login detected. Please create your password first.'
+      });
+    }
+
+    if (await hospital.matchPassword(password)) {
       res.json({
         success: true,
         token: generateToken(hospital._id),
@@ -17,6 +32,210 @@ export const authHospital = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Check if hospital email exists in database and determine if it's their first login
+ */
+export const checkHospitalEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    }
+
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered hospital account found with this email. Please contact the platform administrator to register your hospital.'
+      });
+    }
+
+    const isFirstLogin = Boolean(hospital.isFirstLogin || !hospital.passwordSet || hospital.password === 'CHANGEME_PENDING_SETUP');
+
+    return res.json({
+      success: true,
+      exists: true,
+      isFirstLogin,
+      name: hospital.name,
+      email: hospital.email,
+      city: hospital.city
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Set password for first-time hospital login
+ */
+export const setInitialHospitalPassword = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital account not found' });
+    }
+
+    hospital.password = password;
+    hospital.isFirstLogin = false;
+    hospital.passwordSet = true;
+    await hospital.save();
+
+    return res.json({
+      success: true,
+      message: 'Password set successfully! Logging in...',
+      token: generateToken(hospital._id),
+      user: hospital
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Hospital requested OTP for password reset
+ */
+export const forgotHospitalPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    }
+
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered hospital account found with this email. Please check your email or contact the platform administrator.'
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    hospital.otp = otp;
+    hospital.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    await hospital.save();
+
+    try {
+      await sendEmail({
+        email: hospital.email,
+        subject: 'Password Reset OTP - Sehat Buddy Hospital Portal',
+        message: `Hello ${hospital.name},\n\nYour OTP for resetting your hospital portal password is ${otp}. It is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 520px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
+              <h2 style="color: #2563eb; margin: 0; font-size: 20px;">Sehat Buddy • Hospital Portal</h2>
+            </div>
+            <p style="font-size: 15px;">Hello <strong>${hospital.name}</strong>,</p>
+            <p style="font-size: 14px; color: #475569;">You requested to reset your hospital portal password. Use the 6-digit OTP below to verify your identity and set a new password:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <div style="background: #eff6ff; border: 1px dashed #3b82f6; padding: 14px 28px; font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #1d4ed8; border-radius: 10px; display: inline-block;">
+                ${otp}
+              </div>
+            </div>
+            <p style="font-size: 13px; color: #64748b;">⏱️ This OTP is valid for <strong>10 minutes</strong>. If you did not request a password reset, please safely ignore this email.</p>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error('Error sending hospital password reset OTP email:', emailErr.message);
+    }
+
+    console.log(`[HOSPITAL RESET OTP] OTP for ${hospital.email} is: ${otp}`);
+
+    return res.json({
+      success: true,
+      message: `A 6-digit OTP has been sent to ${hospital.email}.`
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Verify hospital reset OTP
+ */
+export const verifyHospitalResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+    }
+
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital account not found' });
+    }
+
+    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    }
+
+    if (hospital.otpExpires && new Date(hospital.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verified successfully.'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Reset hospital password using verified OTP
+ */
+export const resetHospitalPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
+    }
+
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital account not found' });
+    }
+
+    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+    }
+
+    if (hospital.otpExpires && new Date(hospital.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    hospital.password = newPassword;
+    hospital.isFirstLogin = false;
+    hospital.passwordSet = true;
+    hospital.otp = undefined;
+    hospital.otpExpires = undefined;
+    await hospital.save();
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully! Logging you in...',
+      token: generateToken(hospital._id),
+      user: hospital
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -134,13 +353,24 @@ export const registerHospital = async (req, res) => {
     }
 
     const hospital = await Hospital.create({ 
-      name, email, password: password || 'password123', address, city, state, zip, phone, description, 
-      specialities: parsedSpecialities, image,
-      rating: rating || 4.5,
+      name, 
+      email: email.toLowerCase().trim(), 
+      password: password || 'CHANGEME_PENDING_SETUP', 
+      address: address || (city ? `${city} Central Campus` : 'Main Medical Campus'), 
+      city: city || 'Delhi', 
+      state: state || '', 
+      zip: zip || '', 
+      phone: phone || '', 
+      description: description || '', 
+      specialities: parsedSpecialities, 
+      image: image || 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80',
+      rating: rating || 4.8,
       reviews: reviews || '50+',
       totalBeds: totalBeds || 100,
       emergency24x7: emergency24x7 !== undefined ? emergency24x7 : true,
-      establishedYear,
+      establishedYear: establishedYear || 2005,
+      isFirstLogin: true,
+      passwordSet: false,
       reels: reels || [],
       youtube_videos: youtube_videos || [],
       star_doctors: resolvedStarDoctors,
@@ -295,5 +525,63 @@ export const deleteHospital = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Update FAQs for a doctor registered under this hospital
+ */
+export const updateDoctorFaqsByHospital = async (req, res) => {
+  const { hospitalId, doctorId } = req.params;
+  const { faqs } = req.body;
+
+  try {
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(hospitalId)) {
+      hospital = await Hospital.findById(hospitalId);
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ name: new RegExp(`^${hospitalId}$`, 'i') });
+    }
+
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(doctorId)) {
+      doctor = await Doctor.findById(doctorId);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: doctorId });
+    }
+
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    // Verify doctor is registered under this hospital
+    if (hospital) {
+      const hospitalName = hospital.name.toLowerCase().trim();
+      const docHospital = (doctor.hospital || '').toLowerCase().trim();
+      const isAffiliated = docHospital === hospitalName || !docHospital || (hospital.staff_doctors || []).some(
+        sd => (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase() === doctor.email?.toLowerCase()
+      );
+
+      if (!isAffiliated) {
+        return res.status(403).json({
+          success: false,
+          message: `Doctor ${doctor.name} is not registered under ${hospital.name}. Only their registered hospital or an admin can update their FAQs.`
+        });
+      }
+    }
+
+    doctor.faqs = Array.isArray(faqs) ? faqs : [];
+    doctor.markModified('faqs');
+    const updated = await doctor.save();
+
+    return res.json({
+      success: true,
+      message: `Doctor FAQs updated successfully by ${hospital ? hospital.name : 'Hospital'}`,
+      data: updated
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

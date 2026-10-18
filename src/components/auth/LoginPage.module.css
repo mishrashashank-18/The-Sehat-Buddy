@@ -277,3 +277,39 @@
   margin-bottom: 20px;
   border-left: 4px solid #ef4444;
 }
+
+@media (max-width: 768px) {
+  .authContainer {
+    padding: 16px 12px;
+  }
+  .authWrapper {
+    min-height: auto;
+    border-radius: 20px;
+  }
+  .formSection {
+    padding: 28px 24px;
+  }
+  .formHeader h2 {
+    font-size: 1.45rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .authContainer {
+    padding: 10px 8px;
+  }
+  .authWrapper {
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  }
+  .formSection {
+    padding: 20px 14px;
+  }
+  .formHeader h2 {
+    font-size: 1.3rem;
+  }
+  .iconWrapper {
+    width: 56px;
+    height: 56px;
+  }
+}

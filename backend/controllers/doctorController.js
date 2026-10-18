@@ -336,7 +336,11 @@ export const updateDoctorProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
 
-    Object.assign(doctor, req.body);
+    // FAQs on doctor page can only be updated by the hospital or admin, not by the doctor
+    const updateData = { ...req.body };
+    delete updateData.faqs;
+
+    Object.assign(doctor, updateData);
     if (req.body.awards !== undefined) {
       doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];
       doctor.markModified('awards');
@@ -376,3 +380,24 @@ export const updateDoctorProfile = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+export const deleteDoctorProfile = async (req, res) => {
+  try {
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      doctor = await Doctor.findById(req.params.id);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: req.params.id });
+    }
+    if (doctor) {
+      await doctor.deleteOne();
+      return res.json({ success: true, message: 'Doctor profile deleted successfully' });
+    } else {
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+

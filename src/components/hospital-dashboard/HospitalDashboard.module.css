@@ -691,6 +691,67 @@
   border-radius: 6px;
 }
 
+.statusBadgeAvailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.statusBadgeBusy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.statusBadgeLeave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotAvailable {
+  background-color: #16a34a;
+}
+
+.dotBusy {
+  background-color: #d97706;
+}
+
+.dotLeave {
+  background-color: #dc2626;
+}
+
 .pageDoctorBtn {
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -1102,6 +1163,8 @@
   .headerRight {
     width: 100%;
     justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
   }
   .kpiGrid {
     grid-template-columns: 1fr;
@@ -1115,6 +1178,45 @@
   }
   .occupancyGaugeCard {
     width: 100%;
+  }
+  .tabsBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .tabsList {
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  .tabBtn {
+    flex-shrink: 0;
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+  .tableHeaderRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 14px 16px;
+  }
+  .tableWrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    padding: 10px 12px;
+  }
+  .facilityBanner {
+    padding: 16px;
+    border-radius: 14px;
+  }
+  .facilityNameCol h2 {
+    font-size: 1.35rem;
   }
 }
 

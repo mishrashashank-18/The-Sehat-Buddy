@@ -1,7 +1,7 @@
 .section {
   padding: 44px 0 40px 0;
-  background-color: #F8FAFC;
-  border-top: 1px solid #E2E8F0;
+  background-color: var(--color-white, #ffffff);
+  border-top: 1px solid var(--color-border, #E2E8F0);
   position: relative;
   overflow: hidden;
 }
@@ -223,5 +223,20 @@
   .marqueeTrack {
     animation-duration: 24s;
     gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .title {
+    font-size: 1.2rem;
+  }
+
+  .cardItem {
+    width: 175px;
+  }
+
+  .statsPill {
+    width: 100%;
+    justify-content: center;
   }
 }

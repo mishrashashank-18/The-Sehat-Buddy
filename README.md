@@ -1,55 +1,88 @@
 # The Sehat Buddy 🏥
 
-**The Sehat Buddy** is a modern web application designed to seamlessly connect users with top-tier healthcare services. It provides an intuitive platform to discover popular doctors, explore essential health services, and access valuable health-related content.
+**The Sehat Buddy** is a modern, full-stack healthcare platform connecting patients with top medical specialists, verified hospitals, clinical services, and corporate wellness programs with real-time updates and responsive device support.
 
-## 🚀 Features
+## 🚀 Key Features
 
-- **Find Doctors**: Easily search, discover, and connect with popular doctors.
-- **Healthcare Services**: Explore a comprehensive range of available healthcare services.
-- **Health Content**: Access curated, informative health-related content and resources.
-- **Modern UI**: A clean, responsive, and user-friendly interface ensuring a smooth experience across devices.
+- **Specialist & Doctor Discovery**: Search, filter, and view detailed profiles with career timelines, awards, patient reviews, and educational video reels.
+- **Hospital Network & Clinical Rosters**: Explore accredited hospitals, departments, vacant beds, ambulance/ER contacts, and live-navigated routing.
+- **Real-Time Cross-Tab Synchronization**: Dynamic availability statuses (`Available`, `In Surgery / Busy`, `On Leave`) synced instantly between Doctor and Hospital dashboards without page refresh.
+- **Dedicated Portals**:
+  - **Doctor Portal**: Manage availability, consultation hours, credentials, and appointments.
+  - **Hospital Portal**: Manage hospital profile, emergency beds, wards, doctors, and star doctor badges.
+  - **Admin Panel**: Full platform control, CMS front page editor, branding manager, and directory moderation.
+- **Fully Responsive**: Optimized fluid experience across smartphones (320px–480px), tablets (768px–1024px), laptops, and high-res desktop monitors.
 
 ## 🛠️ Tech Stack
 
-- **Frontend Framework**: [React](https://react.dev/) (v19)
+### Frontend
+- **Framework**: [React](https://react.dev/) (v19)
 - **Build Tool**: [Vite](https://vitejs.dev/)
 - **Icons**: [Lucide React](https://lucide.dev/)
-- **Linting**: [Oxlint](https://oxc.rs/)
+- **Maps & Routing**: [Leaflet](https://leafletjs.com/) & [React-Leaflet](https://react-leaflet.js.org/)
+- **Styles**: Modular CSS with CSS Variables & Responsive Media Queries
 
-## 📦 Getting Started
-
-### Prerequisites
-
-Ensure you have [Node.js](https://nodejs.org/) installed on your local machine.
-
-### Installation
-
-1. Navigate to the project directory:
-   ```bash
-   cd "Sehat Buddy"
-   ```
-
-2. Install the necessary dependencies:
-   ```bash
-   npm install
-   ```
-
-## 📜 Available Scripts
-
-In the project directory, you can run the following scripts:
-
-- `npm run dev`: Starts the development server with Hot Module Replacement (HMR).
-- `npm run build`: Builds the application for production to the `dist` folder.
-- `npm run lint`: Runs Oxlint to identify issues and maintain code quality.
-- `npm run preview`: Locally previews the production build.
+### Backend
+- **Runtime**: [Node.js](https://nodejs.org/) & [Express](https://expressjs.com/)
+- **Database**: [MongoDB](https://www.mongodb.com/) with Mongoose ODM
+- **Authentication**: JWT & Bcrypt password hashing
+- **Media Storage**: Cloudinary integration for doctor/hospital uploads
 
 ## 📁 Project Structure
 
-- `src/components/`: Reusable React components (Navbar, Hero, Doctors, etc.)
-- `src/data/`: Mock data or data fetching logic
-- `src/styles/`: Global stylesheets and theme configurations
-- `src/assets/`: Static assets like images and icons
+```text
+The-Sehat-Buddy/
+├── backend/                  # Express REST API
+│   ├── config/               # Database and Cloudinary configuration
+│   ├── controllers/          # Business logic (admin, doctor, hospital, user)
+│   ├── data/                 # Seed datasets and initial templates
+│   ├── middleware/           # Auth and error middleware
+│   ├── models/               # Mongoose schemas (Doctor, Hospital, User, etc.)
+│   ├── routes/               # API route definitions
+│   ├── scripts/              # Database seeding and migration utilities
+│   ├── utils/                # Token generation and mail helpers
+│   └── server.js             # Express entry point
+├── src/                      # React frontend
+│   ├── assets/               # Production icons and images
+│   ├── components/           # Feature-based modular UI components
+│   │   ├── admin/            # Admin dashboard and modals
+│   │   ├── auth/             # Login and onboarding flow
+│   │   ├── common/           # Error boundary, buttons, section headers
+│   │   ├── content/          # Health articles and newsletter cards
+│   │   ├── corporate/        # Corporate tieups marquee section
+│   │   ├── doctor-dashboard/ # Clinical doctor workspace
+│   │   ├── doctors/          # Doctor cards, list, and profile view
+│   │   ├── hero/             # Hero banner and quick stats
+│   │   ├── hospital-dashboard/# Hospital bed & roster management
+│   │   ├── hospitals/        # Hospital cards, profile, and map routing
+│   │   ├── insurance/        # Cashless insurance check modals
+│   │   ├── layout/           # Navbar, Footer, Container
+│   │   ├── reviews/          # Review submission modal
+│   │   ├── search/           # Global specialty and location search bar
+│   │   ├── services/         # Healthcare services grid
+│   │   ├── specialities/     # Medical procedures & treatments
+│   │   └── why/              # Value proposition and feature items
+│   ├── context/              # Centralized data store and real-time sync
+│   ├── data/                 # Default mock data fallbacks
+│   ├── services/             # API clients and OSM routing proxy
+│   └── styles/               # Global CSS and theme design tokens
+├── public/                   # Static favicon and vector assets
+├── package.json              # Root dependencies and unified scripts
+└── vite.config.js            # Vite configuration
+```
+
+## 📜 Available Scripts
+
+In the project root:
+
+- `npm run dev`: Starts the Vite frontend dev server at `http://localhost:5173`.
+- `npm run server`: Runs the backend API at `http://localhost:5000`.
+- `npm run server:dev`: Runs the backend API with auto-reload (`node --watch`).
+- `npm run server:seed`: Seeds MongoDB Atlas with doctors and hospitals dataset.
+- `npm run build`: Compiles production frontend bundle to `dist/`.
+- `npm run lint`: Runs Oxlint code verification.
+- `npm run preview`: Previews the production build locally.
 
 ## 📄 License
 
-This project is proprietary.
+Proprietary © The Sehat Buddy. All rights reserved.

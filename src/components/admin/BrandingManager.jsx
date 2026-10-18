@@ -9,11 +9,40 @@ import {
   CheckCircle2,
   Sparkles,
   Eye,
-  Type
+  Type,
+  Globe
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
+import { DEFAULT_FAVICON_CIRCULAR } from '../../data/branding';
 import styles from './BrandingManager.module.css';
+
+// Client-side helper to crop any image into a high-res circular favicon
+const makeCircularFavicon = (imageUrl) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const size = 64;
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, size, size);
+
+      // Circle clip
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+
+      ctx.drawImage(img, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(imageUrl);
+    img.src = imageUrl;
+  });
+};
 
 const BrandingManager = ({ showToast }) => {
   const { branding, updateBranding, resetBranding } = useData();
@@ -24,11 +53,16 @@ const BrandingManager = ({ showToast }) => {
     logoType: branding?.logoType || 'default', // 'default' | 'image' | 'none'
     logoImage: branding?.logoImage || '',
     showLogo: branding?.showLogo !== false,
-    showTagline: branding?.showTagline !== false
+    showTagline: branding?.showTagline !== false,
+    faviconType: branding?.faviconType || 'default', // 'default' | 'custom' | 'logo'
+    favicon: branding?.favicon || DEFAULT_FAVICON_CIRCULAR,
+    faviconCircular: branding?.faviconCircular !== false
   });
 
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
   const fileInputRef = useRef(null);
+  const faviconInputRef = useRef(null);
 
   useEffect(() => {
     if (branding) {
@@ -38,7 +72,10 @@ const BrandingManager = ({ showToast }) => {
         logoType: branding.logoType || 'default',
         logoImage: branding.logoImage || '',
         showLogo: branding.showLogo !== false,
-        showTagline: branding.showTagline !== false
+        showTagline: branding.showTagline !== false,
+        faviconType: branding.faviconType || 'default',
+        favicon: branding.favicon || DEFAULT_FAVICON_CIRCULAR,
+        faviconCircular: branding.faviconCircular !== false
       });
     }
   }, [branding]);
@@ -98,6 +135,110 @@ const BrandingManager = ({ showToast }) => {
       fileInputRef.current.value = '';
     }
     if (showToast) showToast('Custom logo removed. Default icon restored.');
+  };
+
+  // Handle local favicon upload
+  const handleFaviconUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.name.endsWith('.ico')) {
+      alert('Please upload a valid image file (PNG, SVG, ICO, JPG, WebP).');
+      return;
+    }
+
+    setIsUploadingFavicon(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        let dataUrl = reader.result;
+        if (formData.faviconCircular) {
+          try {
+            dataUrl = await makeCircularFavicon(dataUrl);
+          } catch {
+            // fallback to original
+          }
+        }
+
+        setFormData((prev) => ({
+          ...prev,
+          faviconType: 'custom',
+          favicon: dataUrl
+        }));
+
+        try {
+          const uploadRes = await api.uploadImage(file, 'favicons');
+          if (uploadRes && uploadRes.url) {
+            let processedUrl = uploadRes.url;
+            if (formData.faviconCircular) {
+              try {
+                processedUrl = await makeCircularFavicon(processedUrl);
+              } catch {}
+            }
+            setFormData((prev) => ({
+              ...prev,
+              favicon: processedUrl
+            }));
+          }
+        } catch {
+          // fallback
+        }
+        setIsUploadingFavicon(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Failed to read favicon file:', err);
+      setIsUploadingFavicon(false);
+    }
+  };
+
+  // Reset favicon back to default circular icon
+  const handleResetFavicon = () => {
+    setFormData((prev) => ({
+      ...prev,
+      faviconType: 'default',
+      favicon: DEFAULT_FAVICON_CIRCULAR,
+      faviconCircular: true
+    }));
+    if (faviconInputRef.current) {
+      faviconInputRef.current.value = '';
+    }
+    if (showToast) showToast('Favicon reset to default circular icon.');
+  };
+
+  // Sync favicon with brand logo
+  const handleUseLogoAsFavicon = async () => {
+    if (!formData.logoImage) {
+      alert('Please upload or set a custom brand logo first.');
+      return;
+    }
+    let fav = formData.logoImage;
+    if (formData.faviconCircular) {
+      try {
+        fav = await makeCircularFavicon(fav);
+      } catch {}
+    }
+    setFormData((prev) => ({
+      ...prev,
+      faviconType: 'logo',
+      favicon: fav
+    }));
+    if (showToast) showToast('Favicon updated to match brand logo!');
+  };
+
+  // Toggle circular crop for favicon
+  const handleToggleFaviconCircular = async (checked) => {
+    let newFavicon = formData.favicon;
+    if (checked && formData.favicon && !formData.favicon.includes('data:image/svg+xml')) {
+      try {
+        newFavicon = await makeCircularFavicon(formData.favicon);
+      } catch {}
+    }
+    setFormData((prev) => ({
+      ...prev,
+      faviconCircular: checked,
+      favicon: newFavicon
+    }));
   };
 
   // Save changes
@@ -169,6 +310,42 @@ const BrandingManager = ({ showToast }) => {
             <span>Find Doctors</span>
             <span>Hospitals</span>
             <div className={styles.previewMockBtn}>Login / Sign Up</div>
+          </div>
+        </div>
+
+        {/* Browser Tab Preview */}
+        <div className={styles.browserPreviewSection}>
+          <div className={styles.browserPreviewHeader}>
+            <span className={styles.browserPreviewBadge}>
+              <Globe size={13} /> Browser Tab Preview
+            </span>
+            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              Live appearance in user's browser tab & bookmarks
+            </span>
+          </div>
+          <div className={styles.browserWindowMockup}>
+            <div className={styles.browserControls}>
+              <div className={styles.browserDots}>
+                <span className={styles.dotRed}></span>
+                <span className={styles.dotYellow}></span>
+                <span className={styles.dotGreen}></span>
+              </div>
+              <div className={styles.browserTab}>
+                <img
+                  src={formData.favicon || DEFAULT_FAVICON_CIRCULAR}
+                  alt="Favicon"
+                  className={styles.browserTabFavicon}
+                />
+                <span className={styles.browserTabTitle}>
+                  {formData.siteName || 'The Sehat Buddy'} - Health & Care
+                </span>
+                <span className={styles.browserTabClose}>&times;</span>
+              </div>
+            </div>
+            <div className={styles.browserAddressBar}>
+              <span className={styles.browserAddressLock}>🔒</span>
+              <span className={styles.browserAddressText}>https://thesehatbuddy.com</span>
+            </div>
           </div>
         </div>
       </div>
@@ -320,6 +497,160 @@ const BrandingManager = ({ showToast }) => {
               </div>
             </div>
           )}
+        </div>
+
+        {/* 3. Favicon Configuration */}
+        <div>
+          <h3 className={styles.sectionTitle}>
+            <Globe size={18} color="#2563eb" /> Browser Favicon (Circle Icon)
+          </h3>
+          <p className={styles.sectionDesc}>
+            Set the icon displayed in browser tabs, bookmarks, and mobile shortcuts. You can use the official circular medical icon, upload your own custom icon, or sync directly from your brand logo.
+          </p>
+
+          <div className={styles.logoModeGrid}>
+            {/* Mode 1: Default Circular Icon */}
+            <div
+              className={`${styles.logoModeCard} ${formData.faviconType === 'default' ? styles.logoModeSelected : ''}`}
+              onClick={() => {
+                setFormData((prev) => ({
+                  ...prev,
+                  faviconType: 'default',
+                  favicon: DEFAULT_FAVICON_CIRCULAR,
+                  faviconCircular: true
+                }));
+              }}
+            >
+              <div className={styles.modeIcon}>
+                <img
+                  src={DEFAULT_FAVICON_CIRCULAR}
+                  alt="Default circular favicon"
+                  style={{ width: 28, height: 28, borderRadius: '50%' }}
+                />
+              </div>
+              <span className={styles.modeTitle}>Default Circular Icon</span>
+              <span className={styles.modeDesc}>Official blue circular health pulse icon</span>
+            </div>
+
+            {/* Mode 2: Custom Upload */}
+            <div
+              className={`${styles.logoModeCard} ${formData.faviconType === 'custom' ? styles.logoModeSelected : ''}`}
+              onClick={() => {
+                setFormData((prev) => ({
+                  ...prev,
+                  faviconType: 'custom'
+                }));
+              }}
+            >
+              <div className={styles.modeIcon}>
+                <Upload size={24} color="#2563EB" />
+              </div>
+              <span className={styles.modeTitle}>Custom Upload</span>
+              <span className={styles.modeDesc}>Upload PNG, ICO, SVG, or JPG favicon</span>
+            </div>
+
+            {/* Mode 3: Match Brand Logo */}
+            <div
+              className={`${styles.logoModeCard} ${formData.faviconType === 'logo' ? styles.logoModeSelected : ''}`}
+              onClick={handleUseLogoAsFavicon}
+            >
+              <div className={styles.modeIcon}>
+                <Sparkles size={24} color="#2563EB" />
+              </div>
+              <span className={styles.modeTitle}>Match Brand Logo</span>
+              <span className={styles.modeDesc}>Auto-crop brand logo into circular favicon</span>
+            </div>
+          </div>
+
+          {/* Favicon Settings & Upload Box */}
+          <div className={styles.faviconDetailsCard}>
+            <div className={styles.faviconRow}>
+              <div className={styles.faviconPreviewBadge}>
+                <img
+                  src={formData.favicon || DEFAULT_FAVICON_CIRCULAR}
+                  alt="Active Favicon"
+                  className={styles.faviconActiveImg}
+                />
+                <span className={styles.faviconSizeText}>Live Favicon</span>
+              </div>
+
+              <div className={styles.faviconControls}>
+                <label className={styles.toggleRow}>
+                  <input
+                    type="checkbox"
+                    checked={formData.faviconCircular}
+                    onChange={(e) => handleToggleFaviconCircular(e.target.checked)}
+                    className={styles.toggleCheckbox}
+                  />
+                  <div>
+                    <span className={styles.toggleText} style={{ fontWeight: 700, color: '#0f172a' }}>
+                      Auto-crop Favicon as Circle (Recommended)
+                    </span>
+                    <p style={{ margin: '2px 0 0 0', fontSize: '0.78rem', color: '#64748b' }}>
+                      Rounds edges to give a clean circular appearance in browser tabs and bookmarks.
+                    </p>
+                  </div>
+                </label>
+
+                <div className={styles.faviconButtonsRow}>
+                  <button
+                    type="button"
+                    onClick={() => faviconInputRef.current?.click()}
+                    className={styles.uploadFaviconBtn}
+                  >
+                    <Upload size={15} /> Upload Favicon File
+                  </button>
+                  <input
+                    type="file"
+                    ref={faviconInputRef}
+                    onChange={handleFaviconUpload}
+                    accept="image/png,image/x-icon,image/svg+xml,image/jpeg,image/webp,.ico"
+                    className={styles.hiddenFileInput}
+                  />
+
+                  {formData.favicon !== DEFAULT_FAVICON_CIRCULAR && (
+                    <button
+                      type="button"
+                      onClick={handleResetFavicon}
+                      className={styles.removeLogoBtn}
+                    >
+                      <RotateCcw size={14} /> Reset to Default Favicon
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* External Favicon URL Input */}
+            <div className={styles.inputGroup} style={{ marginTop: '16px' }}>
+              <label className={styles.label}>Or Provide Custom Favicon Image URL</label>
+              <input
+                type="url"
+                value={formData.favicon?.startsWith('data:') ? '' : formData.favicon}
+                onChange={async (e) => {
+                  const url = e.target.value;
+                  let processed = url;
+                  if (formData.faviconCircular && url) {
+                    try {
+                      processed = await makeCircularFavicon(url);
+                    } catch {}
+                  }
+                  setFormData((prev) => ({
+                    ...prev,
+                    faviconType: 'custom',
+                    favicon: processed || DEFAULT_FAVICON_CIRCULAR
+                  }));
+                }}
+                placeholder="https://example.com/favicon.png"
+                className={styles.textInput}
+              />
+            </div>
+            {isUploadingFavicon && (
+              <div style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 600, marginTop: '8px' }}>
+                Processing favicon upload...
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action Bar */}

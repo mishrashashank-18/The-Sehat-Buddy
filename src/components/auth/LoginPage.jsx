@@ -21,6 +21,10 @@ const LoginPage = ({ role, setView }) => {
   const [docStep, setDocStep] = useState('email');
   const [docInfo, setDocInfo] = useState(null);
 
+  // Hospital specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning) OR 'reset-otp' / 'reset-new-password'
+  const [hospStep, setHospStep] = useState('email');
+  const [hospInfo, setHospInfo] = useState(null);
+
   const roleInfo = {
     admin: {
       title: 'Admin Portal',
@@ -44,7 +48,15 @@ const LoginPage = ({ role, setView }) => {
     },
     hospital: {
       title: 'Hospital Portal',
-      subtitle: 'Manage hospital operations and staff',
+      subtitle: hospStep === 'set-password'
+        ? (hospInfo?.name ? `Welcome, ${hospInfo.name}! Please set your account password.` : 'Welcome to the hospital portal. Set your new account password.')
+        : (hospStep === 'reset-otp'
+          ? 'Enter the 6-digit OTP sent to your registered hospital email.'
+          : (hospStep === 'reset-new-password'
+            ? 'Set a new password for your hospital account.'
+            : (hospStep === 'password'
+              ? (hospInfo?.name ? `Welcome back, ${hospInfo.name}!` : 'Enter your password to access your hospital dashboard')
+              : 'Enter your registered hospital email address'))),
       icon: <Building2 size={48} className={styles.roleIcon} />,
       image: 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&q=80&w=1000'
     },
@@ -291,6 +303,238 @@ const LoginPage = ({ role, setView }) => {
     }
   };
 
+  // ==========================================
+  // HOSPITAL AUTHENTICATION FLOW
+  // ==========================================
+
+  // HOSPITAL STEP 1: Check Email & Fetch Hospital Name from Database
+  const handleHospitalEmailCheck = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setHospInfo(data);
+        if (data.isFirstLogin) {
+          setHospStep('set-password');
+        } else {
+          setHospStep('password');
+        }
+      } else {
+        setError(data.message || 'No registered hospital account found with this email. Please contact the platform administrator to register your hospital.');
+      }
+    } catch (err) {
+      setError('Could not connect to authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // HOSPITAL STEP 2A: Set Initial Password on First Login
+  const handleHospitalSetPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/set-initial-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        window.location.href = '/hospital';
+      } else {
+        setError(data.message || 'Failed to set password. Please try again.');
+      }
+    } catch (err) {
+      setError('An error occurred while saving your password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // HOSPITAL STEP 2B: Returning Hospital Password Login
+  const handleHospitalLoginWithPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        window.location.href = '/hospital';
+      } else if (data.isFirstLogin) {
+        setHospStep('set-password');
+        setError('First-time login detected. Please create your password below.');
+      } else {
+        setError(data.message || 'Invalid password. Please try again.');
+      }
+    } catch (err) {
+      setError('Login failed. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // HOSPITAL PASSWORD RESET STEP 1: Request OTP to Email
+  const handleHospitalRequestResetOtp = async (customEmail) => {
+    const targetEmail = (customEmail || email).trim().toLowerCase();
+    if (!targetEmail) {
+      setError('Please enter your hospital email first.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setEmail(targetEmail);
+        setOtp('');
+        setHospStep('reset-otp');
+        setSuccessMessage(data.message || `A 6-digit OTP has been sent to ${targetEmail}`);
+      } else {
+        setError(data.message || 'Could not send reset OTP. Please check your email.');
+      }
+    } catch (err) {
+      setError('Failed to connect to authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // HOSPITAL PASSWORD RESET STEP 2: Verify OTP
+  const handleHospitalVerifyResetOtp = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      setError('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/verify-reset-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setPassword('');
+        setConfirmPassword('');
+        setHospStep('reset-new-password');
+        setSuccessMessage('OTP verified! Please create your new hospital password.');
+      } else {
+        setError(data.message || 'Invalid or expired OTP. Please try again.');
+      }
+    } catch (err) {
+      setError('Error verifying OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // HOSPITAL PASSWORD RESET STEP 3: Submit New Password
+  const handleHospitalResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/hospitals/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          password
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        localStorage.setItem('token', data.token);
+        if (data.user) {
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+        window.location.href = '/hospital';
+      } else {
+        setError(data.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (err) {
+      setError('An error occurred while resetting your password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setError('');
@@ -421,11 +665,17 @@ const LoginPage = ({ role, setView }) => {
                 setPassword('');
                 setConfirmPassword('');
               }
+              else if (role === 'hospital' && hospStep !== 'email') {
+                setHospStep('email');
+                setError('');
+                setPassword('');
+                setConfirmPassword('');
+              }
               else setView ? setView('home') : window.location.pathname = '/';
             }}
           >
             <ArrowLeft size={20} />
-            {showOtp ? 'Back to Login' : (role === 'doctor' && docStep !== 'email' ? 'Back to Email' : 'Back to Home')}
+            {showOtp ? 'Back to Login' : ((role === 'doctor' && docStep !== 'email') || (role === 'hospital' && hospStep !== 'email') ? 'Back to Email' : 'Back to Home')}
           </button>
           
           <div className={styles.formHeader}>
@@ -441,7 +691,15 @@ const LoginPage = ({ role, setView }) => {
                       : (docStep === 'reset-new-password'
                         ? 'Create New Password'
                         : title)))
-                  : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`))}
+                  : (role === 'hospital'
+                    ? (hospStep === 'set-password'
+                      ? 'Set Hospital Password'
+                      : (hospStep === 'reset-otp'
+                        ? 'Verify Reset OTP'
+                        : (hospStep === 'reset-new-password'
+                          ? 'Create New Password'
+                          : title)))
+                    : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`)))}
             </h2>
             <p>
               {showOtp
@@ -844,6 +1102,375 @@ const LoginPage = ({ role, setView }) => {
                 </form>
               )}
             </div>
+          ) : role === 'hospital' ? (
+            <div>
+              {/* STEP 1: ENTER HOSPITAL EMAIL & PRESS ENTER */}
+              {hospStep === 'email' && (
+                <form className={styles.authForm} onSubmit={handleHospitalEmailCheck}>
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospEmail">Hospital Official Email Address</label>
+                    <div className={styles.inputWrapper}>
+                      <Mail size={20} className={styles.inputIcon} />
+                      <input
+                        type="email"
+                        id="hospEmail"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="e.g. admin@manipalhospitals.com"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '4px 0 16px 0' }}>
+                    💡 Enter your registered hospital email. If your hospital was registered by an admin, your hospital details will be retrieved from the database, and you can set your password on the next step.
+                  </p>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Checking Hospital Email...' : 'Continue (Press Enter)'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => {
+                        if (!email.trim()) {
+                          setError('Please enter your hospital email above first to reset your password.');
+                          return;
+                        }
+                        handleHospitalRequestResetOtp(email);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#2563eb',
+                        fontSize: '0.84rem',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontWeight: 500,
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Forgot password? Reset via Email OTP
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 2A: FIRST-TIME HOSPITAL LOGIN: GREET HOSPITAL & SET PASSWORD */}
+              {hospStep === 'set-password' && (
+                <form className={styles.authForm} onSubmit={handleHospitalSetPassword}>
+                  <div style={{
+                    background: '#eff6ff',
+                    border: '1.5px solid #bfdbfe',
+                    borderRadius: '12px',
+                    padding: '16px 18px',
+                    marginBottom: '18px'
+                  }}>
+                    <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '1.02rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Sparkles size={18} color="#2563eb" /> First-Time Hospital Setup
+                    </div>
+                    <div style={{ marginTop: '8px', fontSize: '1.2rem', color: '#0f172a', fontWeight: 800 }}>
+                      🏥 Welcome, {hospInfo?.name || 'Hospital'}!
+                    </div>
+                    <div style={{ fontSize: '0.84rem', color: '#475569', marginTop: '3px' }}>
+                      {email} {hospInfo?.city ? `• ${hospInfo.city}` : ''}
+                    </div>
+                    <div style={{ fontSize: '0.82rem', color: '#2563eb', marginTop: '6px' }}>
+                      Please create a secure password to access your Hospital Dashboard.
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospNewPassword">Create New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="hospNewPassword"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="At least 6 characters"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospConfirmPassword">Confirm Password</label>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="hospConfirmPassword"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="Re-enter your password"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Activating Hospital Account...' : 'Set Password & Enter Hospital Dashboard'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHospStep('email');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setError('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#2563eb', textDecoration: 'none' }}
+                    >
+                      ← Use a different hospital email
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 2B: RETURNING HOSPITAL PASSWORD LOGIN */}
+              {hospStep === 'password' && (
+                <form className={styles.authForm} onSubmit={handleHospitalLoginWithPassword}>
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '14px 18px',
+                    marginBottom: '18px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: '#64748b', display: 'block', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 700 }}>
+                        Hospital Account
+                      </span>
+                      <strong style={{ fontSize: '1.1rem', color: '#0f172a', display: 'block', marginTop: '2px' }}>
+                        🏥 Welcome, {hospInfo?.name || 'Hospital'}!
+                      </strong>
+                      <span style={{ fontSize: '0.82rem', color: '#64748b' }}>{email}</span>
+                    </div>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHospStep('email');
+                        setPassword('');
+                        setError('');
+                      }}
+                      style={{ fontSize: '0.82rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}
+                    >
+                      Change
+                    </a>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label htmlFor="hospLoginPassword">Password</label>
+                      <a
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleHospitalRequestResetOtp(email);
+                        }}
+                        style={{ fontSize: '0.82rem', color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}
+                      >
+                        Forgot password?
+                      </a>
+                    </div>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="hospLoginPassword"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Authenticating...' : 'Sign In to Hospital Dashboard'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHospStep('email');
+                        setPassword('');
+                        setError('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#2563eb', textDecoration: 'none' }}
+                    >
+                      ← Use a different hospital email
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3A: HOSPITAL PASSWORD RESET - ENTER OTP */}
+              {hospStep === 'reset-otp' && (
+                <form className={styles.authForm} onSubmit={handleHospitalVerifyResetOtp}>
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospResetOtp">Enter 6-Digit OTP</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type="text"
+                        id="hospResetOtp"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        maxLength={6}
+                        placeholder="••••••"
+                        style={{ letterSpacing: '6px', fontSize: '1.2rem', fontWeight: 700, textAlign: 'center' }}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 16px 0', fontSize: '0.84rem' }}>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleHospitalRequestResetOtp(email)}
+                      style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                    >
+                      Didn't get code? Resend OTP
+                    </button>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading || otp.length < 6}>
+                    {loading ? 'Verifying OTP...' : 'Verify OTP & Continue'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHospStep('email');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3B: HOSPITAL PASSWORD RESET - CREATE NEW PASSWORD */}
+              {hospStep === 'reset-new-password' && (
+                <form className={styles.authForm} onSubmit={handleHospitalResetPasswordSubmit}>
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: '12px',
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    fontSize: '0.86rem',
+                    color: '#15803d',
+                    fontWeight: 500
+                  }}>
+                    Create a new password for your hospital account ({email}).
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospNewPasswordReset">New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="hospNewPasswordReset"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="At least 6 characters"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="hospConfirmResetPassword">Confirm New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="hospConfirmResetPassword"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="Re-enter your new password"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Updating Password...' : 'Save New Password & Sign In'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setHospStep('email');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
+                </form>
+              )}
+            </div>
           ) : showOtp ? (
             /* OTP FLOW FOR OTHER ROLES */
             <form className={styles.authForm} onSubmit={handleVerifyOtp}>
@@ -968,7 +1595,7 @@ const LoginPage = ({ role, setView }) => {
             </>
           )}
           
-          {role !== 'admin' && role !== 'doctor' && !showOtp && (
+          {role !== 'admin' && role !== 'doctor' && role !== 'hospital' && !showOtp && (
             <div className={styles.signupPrompt}>
               {isLogin ? "Don't have an account? " : "Already have an account? "}
               <a href="#" onClick={(e) => {
@@ -978,6 +1605,12 @@ const LoginPage = ({ role, setView }) => {
               }}>
                 {isLogin ? 'Sign up here' : 'Sign in here'}
               </a>
+            </div>
+          )}
+
+          {role === 'hospital' && hospStep === 'email' && (
+            <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.84rem', color: '#64748b' }}>
+              Want to partner your hospital on Sehat Buddy? Contact Platform Administrator.
             </div>
           )}
         </div>

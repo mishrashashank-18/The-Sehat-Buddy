@@ -225,13 +225,13 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
   const validate = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Hospital name is required';
-    if (!formData.city.trim()) newErrors.city = 'City is required';
-    if (!formData.address.trim()) newErrors.address = 'Full address is required';
-    if (!formData.totalBeds || Number(formData.totalBeds) <= 0) {
-      newErrors.totalBeds = 'Valid bed capacity is required';
+    if (!formData.email.trim()) {
+      newErrors.email = 'Official Hospital email is required for login';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      newErrors.email = 'Please enter a valid email address';
     }
-    if (formData.specialties.length === 0) {
-      newErrors.specialties = 'Select at least one department';
+    if (formData.totalBeds && Number(formData.totalBeds) <= 0) {
+      newErrors.totalBeds = 'Valid bed capacity is required';
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -286,19 +286,21 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
     const payload = {
       name: formData.name.trim(),
-      city: formData.city.trim(),
-      address: formData.address.trim(),
-      rating: parseFloat(formData.rating) || 4.7,
-      reviews: formData.reviews || '100+',
+      email: formData.email.trim().toLowerCase(),
+      city: formData.city.trim() || 'Delhi',
+      address: formData.address.trim() || `${formData.city || 'Central'} Medical Campus`,
+      rating: parseFloat(formData.rating) || 4.8,
+      reviews: formData.reviews || '50+',
       totalBeds: parseInt(formData.totalBeds, 10) || 100,
       emergency24x7: Boolean(formData.emergency24x7),
-      phone: formData.phone.trim(),
-      email: formData.email.trim() || `${formData.name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@sehatbuddy.com`,
-      password: 'password123', // Default required password for DB
-      establishedYear: parseInt(formData.establishedYear, 10) || 2000,
+      phone: formData.phone.trim() || '+91 11 2000 3000',
+      password: hospitalToEdit ? undefined : 'CHANGEME_PENDING_SETUP',
+      isFirstLogin: hospitalToEdit ? hospitalToEdit.isFirstLogin : true,
+      passwordSet: hospitalToEdit ? hospitalToEdit.passwordSet : false,
+      establishedYear: parseInt(formData.establishedYear, 10) || 2005,
       description: formData.description.trim(),
-      specialties: formData.specialties,
-      specialities: formData.specialties, // DB mapping
+      specialties: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'],
+      specialities: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'], // DB mapping
       image: finalImage,
       reels: formData.reels.map(r => r.trim()).filter(Boolean),
       youtube_videos: formData.youtube_videos.map(v => v.trim()).filter(Boolean),
@@ -308,7 +310,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       cashlessInsurance: formData.cashlessInsurance,
       acceptedInsurances: formData.acceptedInsurances,
       tpaHelpdesk: {
-        phone: formData.tpaPhone.trim() || formData.phone.trim(),
+        phone: formData.tpaPhone.trim() || formData.phone.trim() || '080-45678900',
         email: formData.tpaEmail.trim() || formData.email.trim(),
         preAuthTime: formData.tpaPreAuthTime.trim() || '30 Mins Cashless Pre-Approval'
       },
@@ -418,14 +420,32 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       <form onSubmit={handleSubmit} className={styles.form}>
         <div className={styles.body}>
           {/* General Info */}
-          <div className={styles.sectionHeader}>Hospital Overview</div>
+          <div className={styles.sectionHeader}>Hospital Overview & Portal Credentials</div>
+
+          <div style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            fontSize: '0.86rem',
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <ShieldCheck size={20} color="#16a34a" style={{ flexShrink: 0 }} />
+            <div>
+              <strong>Hospital Portal Access:</strong> When the hospital logs into the Hospital Portal with this email, their name will be fetched automatically from the database, and they will be prompted to set their password on first login.
+            </div>
+          </div>
 
           <div className={styles.grid2}>
             <div className={styles.formGroup}>
               <label>Hospital Name <span className={styles.req}>*</span></label>
               <input
                 type="text"
-                placeholder="e.g. Fortis Memorial Hospital"
+                placeholder="e.g. Manipal Hospital"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className={errors.name ? styles.inputError : ''}
@@ -434,15 +454,37 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             </div>
 
             <div className={styles.formGroup}>
-              <label>City / Location <span className={styles.req}>*</span></label>
+              <label>Official Hospital Email (Login ID) <span className={styles.req}>*</span></label>
+              <input
+                type="email"
+                placeholder="e.g. admin@manipalhospitals.com"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className={errors.email ? styles.inputError : ''}
+              />
+              {errors.email && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.email}</span>}
+            </div>
+          </div>
+
+          <div className={styles.grid2}>
+            <div className={styles.formGroup}>
+              <label>City / Location</label>
               <input
                 type="text"
-                placeholder="e.g. Delhi, Gurgaon, Mumbai..."
+                placeholder="e.g. Delhi, Bangalore, Mumbai..."
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                className={errors.city ? styles.inputError : ''}
               />
-              {errors.city && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.city}</span>}
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Helpline / Contact Phone</label>
+              <input
+                type="text"
+                placeholder="+91 11 2000 3000"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
             </div>
           </div>
 
@@ -535,27 +577,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             </label>
           </div>
 
-          <div className={styles.grid2}>
-            <div className={styles.formGroup}>
-              <label>Helpline / Emergency Phone</label>
-              <input
-                type="text"
-                placeholder="+91 11 2000 3000"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              />
-            </div>
 
-            <div className={styles.formGroup}>
-              <label>Official Email</label>
-              <input
-                type="email"
-                placeholder="contact@hospital.org"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              />
-            </div>
-          </div>
 
           {/* Specialties */}
           <div className={styles.sectionHeader}>Key Medical Departments & Centers</div>
