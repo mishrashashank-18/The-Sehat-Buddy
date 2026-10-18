@@ -1447,22 +1447,25 @@
 
 .storageGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .storageCard {
   background: #ffffff;
   border: 1px solid var(--color-border);
   border-radius: 16px;
-  padding: 22px;
+  padding: 20px 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
   position: relative;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .storageCard:hover {
@@ -1501,15 +1504,18 @@
 
 .storageCardHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-height: 48px;
 }
 
 .storageCardTitleGroup {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .storageIconWrap {
@@ -1538,40 +1544,48 @@
 }
 
 .storagePlatformTag {
-  font-size: 0.72rem;
+  font-size: 0.70rem;
   font-weight: 600;
   text-transform: uppercase;
   color: #64748b;
   letter-spacing: 0.03em;
+  line-height: 1.2;
 }
 
 .storageCardTitle {
-  font-size: 1.15rem;
+  font-size: 1.12rem;
   font-weight: 700;
   color: var(--color-heading);
   margin: 2px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .storageBadgeGroup {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .statusPill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 999px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .statusDot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .statusPillHealthy {
@@ -1609,10 +1623,13 @@
 .storageHeroMetric {
   display: flex;
   flex-direction: column;
-  padding: 12px 16px;
+  justify-content: center;
+  padding: 14px 16px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
+  min-height: 104px;
+  box-sizing: border-box;
 }
 
 .storageHeroRemaining {
@@ -1630,7 +1647,7 @@
 }
 
 .storageHeroUnit {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: #64748b;
 }
@@ -1643,9 +1660,12 @@
 }
 
 .storageHeroSub {
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   color: #64748b;
   margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Progress bar */
@@ -1657,7 +1677,7 @@
 
 .progressBarTrack {
   width: 100%;
-  height: 12px;
+  height: 10px;
   background: #e2e8f0;
   border-radius: 999px;
   position: relative;
@@ -1676,8 +1696,8 @@
   right: -3px;
   top: 50%;
   transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: #ffffff;
   border: 3.5px solid #10b981;
@@ -1716,45 +1736,46 @@
   color: #94a3b8;
   font-weight: 600;
   gap: 8px;
+  min-height: 26px;
 }
 
-.progressActiveBadgeMongo {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #047857;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  padding: 3px 9px;
-  border-radius: 6px;
-}
-
-.progressActiveBadgeCld {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.76rem;
-  font-weight: 700;
-  color: #0369a1;
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  padding: 3px 9px;
-  border-radius: 6px;
-}
-
+.progressActiveBadgeMongo,
+.progressActiveBadgeCld,
 .progressActiveBadgeBrevo {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.progressActiveBadgeMongo {
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.progressActiveBadgeCld {
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+}
+
+.progressActiveBadgeBrevo {
   color: #0891b2;
   background: #ecfeff;
   border: 1px solid #a5f3fc;
-  padding: 3px 9px;
-  border-radius: 6px;
+}
+
+.statusDotGreen {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  flex-shrink: 0;
 }
 
 .statusDotBlue {
@@ -1762,6 +1783,7 @@
   height: 7px;
   border-radius: 50%;
   background-color: #0284c7;
+  flex-shrink: 0;
 }
 
 .statusDotCyan {
@@ -1769,6 +1791,7 @@
   height: 7px;
   border-radius: 50%;
   background-color: #06b6d4;
+  flex-shrink: 0;
 }
 
 .progressCapacityLabel {
@@ -1776,6 +1799,7 @@
   font-weight: 600;
   color: #64748b;
   text-align: right;
+  white-space: nowrap;
 }
 
 /* 4-Item Metric Pills Grid */
@@ -1792,6 +1816,9 @@
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-height: 56px;
+  box-sizing: border-box;
   gap: 2px;
 }
 
@@ -1799,12 +1826,14 @@
   font-size: 0.72rem;
   color: #64748b;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .detailPillVal {
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--color-heading);
+  white-space: nowrap;
 }
 
 .textEmerald {
@@ -1824,16 +1853,23 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding-top: 10px;
+  padding-top: 12px;
   border-top: 1px dashed #e2e8f0;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   color: #64748b;
+  margin-top: auto;
+  gap: 6px;
 }
 
 .storageFooterRow span {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.storageFooterRow span svg {
+  flex-shrink: 0;
 }
 
 /* Spinning animation */
@@ -1846,7 +1882,13 @@
   to { transform: rotate(360deg); }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .storageGrid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
   .storageGrid {
     grid-template-columns: 1fr;
   }

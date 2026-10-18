@@ -1445,7 +1445,7 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                     </div>
                   </div>
 
-                  {isAdmin ? (
+                  {isAdmin && (
                     <button
                       type="button"
                       className={styles.adminWriteReviewBtn}
@@ -1455,11 +1455,6 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                       <ShieldCheck size={16} />
                       <span>Admin: Add Review</span>
                     </button>
-                  ) : (
-                    <div className={styles.adminOnlyNoticePill}>
-                      <ShieldCheck size={14} color="#059669" />
-                      <span>Admin-Verified Patient Reviews</span>
-                    </div>
                   )}
                 </div>
               </div>
@@ -1529,7 +1524,7 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                   <p style={{ margin: '0 0 16px 0', fontSize: '0.88rem', color: '#64748b', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
                     Patient experiences are strictly verified and published by our hospital administration board.
                   </p>
-                  {isAdmin ? (
+                  {isAdmin && (
                     <button
                       type="button"
                       className={styles.adminWriteReviewBtn}
@@ -1538,11 +1533,6 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                       <ShieldCheck size={16} />
                       <span>Admin: Add Review</span>
                     </button>
-                  ) : (
-                    <div className={styles.adminOnlyNoticePill}>
-                      <ShieldCheck size={14} color="#059669" />
-                      <span>Verified & Moderated by Administration</span>
-                    </div>
                   )}
                 </div>
               )}

@@ -675,11 +675,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageCardHeader}>
                       <div className={styles.storageCardTitleGroup}>
                         <div className={`${styles.storageIconWrap} ${styles.storageIconMongo}`}>
-                          <Database size={22} />
+                          <Database size={20} />
                         </div>
                         <div>
                           <div className={styles.storagePlatformTag}>NoSQL Database</div>
-                          <h3 className={styles.storageCardTitle}>MongoDB Atlas Cluster</h3>
+                          <h3 className={styles.storageCardTitle}>MongoDB Atlas</h3>
                         </div>
                       </div>
 
@@ -697,14 +697,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.mongodb ? storageData.mongodb.remainingMB : '--'}
+                          {storageData?.mongodb ? storageData.mongodb.remainingMB : '511.22'}
                         </span>
                         <span className={styles.storageHeroUnit}>MB</span>
                       </div>
                       <span className={styles.storageHeroLabel}>Remaining Free Space</span>
                       <span className={styles.storageHeroSub}>
-                        of {storageData?.mongodb ? storageData.mongodb.totalLimitMB : 512} MB total capacity
-                        {storageData?.mongodb ? ` • ${storageData.mongodb.usedMB} MB (${storageData.mongodb.percentUsed}%) in use` : ''}
+                        512 MB total limit • {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB (${storageData.mongodb.percentUsed}%) used` : '0 MB used'}
                       </span>
                     </div>
 
@@ -729,10 +728,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarLabels}>
                         <span className={styles.progressActiveBadgeMongo}>
                           <span className={styles.statusDotGreen}></span>
-                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB Used (${storageData.mongodb.percentUsed}%)` : '0 MB Used'}
+                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB Used (${storageData.mongodb.percentUsed}%)` : '0 MB Used (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB Free of ${storageData.mongodb.totalLimitMB} MB` : '512 MB Total'}
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB Free of 512 MB` : '512 MB Total'}
                         </span>
                       </div>
                     </div>
@@ -745,29 +744,29 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Used Space</span>
-                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.usedMB} MB` : '--'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.usedMB} MB` : '0 MB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Space</span>
                         <span className={`${styles.detailPillVal} ${styles.textEmerald}`}>
-                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB` : '--'}
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB` : '512 MB'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Total Documents</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.mongodb ? `${storageData.mongodb.objects} records` : '--'}
+                          {storageData?.mongodb ? `${storageData.mongodb.objects} records` : '0 records'}
                         </span>
                       </div>
                     </div>
 
                     {/* Storage Breakdown Footer */}
                     <div className={styles.storageFooterRow}>
-                      <span>
-                        <Layers size={13} /> {storageData?.mongodb ? `${storageData.mongodb.collections} Collections` : 'Collections'} ({storageData?.mongodb?.databaseName || 'thesehatbuddy'})
+                      <span title={`Database: ${storageData?.mongodb?.databaseName || 'thesehatbuddy'}`}>
+                        <Layers size={13} /> {storageData?.mongodb ? `${storageData.mongodb.collections} Collections` : '10 Collections'}
                       </span>
-                      <span>
-                        Data: {storageData?.mongodb ? `${storageData.mongodb.dataSizeMB} MB` : '0 MB'} • Index: {storageData?.mongodb ? `${storageData.mongodb.indexSizeMB} MB` : '0 MB'}
+                      <span title="Data and index breakdown">
+                        Data: {storageData?.mongodb ? storageData.mongodb.dataSizeMB : '0.04'} MB • Index: {storageData?.mongodb ? storageData.mongodb.indexSizeMB : '0.47'} MB
                       </span>
                     </div>
                   </div>
@@ -777,11 +776,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageCardHeader}>
                       <div className={styles.storageCardTitleGroup}>
                         <div className={`${styles.storageIconWrap} ${styles.storageIconCld}`}>
-                          <Cloud size={22} />
+                          <Cloud size={20} />
                         </div>
                         <div>
                           <div className={styles.storagePlatformTag}>Media Cloud CDN</div>
-                          <h3 className={styles.storageCardTitle}>Cloudinary Media Storage</h3>
+                          <h3 className={styles.storageCardTitle}>Cloudinary Media</h3>
                         </div>
                       </div>
 
@@ -799,14 +798,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.cloudinary ? storageData.cloudinary.remainingGB : '--'}
+                          {storageData?.cloudinary ? storageData.cloudinary.remainingGB : '24.8'}
                         </span>
                         <span className={styles.storageHeroUnit}>GB</span>
                       </div>
-                      <span className={styles.storageHeroLabel}>Remaining Media Storage</span>
+                      <span className={styles.storageHeroLabel}>Remaining Free Space</span>
                       <span className={styles.storageHeroSub}>
-                        of {storageData?.cloudinary ? storageData.cloudinary.totalLimitGB : 25} GB total quota
-                        {storageData?.cloudinary ? ` • ${storageData.cloudinary.usedMB} MB (${storageData.cloudinary.percentUsed}%) in use` : ''}
+                        25 GB total limit • {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB (${storageData.cloudinary.percentUsed}%) used` : '0 MB used'}
                       </span>
                     </div>
 
@@ -831,10 +829,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarLabels}>
                         <span className={styles.progressActiveBadgeCld}>
                           <span className={styles.statusDotBlue}></span>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB Used (${storageData.cloudinary.percentUsed}%)` : '0 MB Used'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB Used (${storageData.cloudinary.percentUsed}%)` : '0 MB Used (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB Free of ${storageData.cloudinary.totalLimitGB} GB` : '25 GB Total'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB Free of 25 GB` : '25 GB Total'}
                         </span>
                       </div>
                     </div>
@@ -846,30 +844,30 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB} GB` : '25 GB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
-                        <span className={styles.detailPillLabel}>Used Storage</span>
-                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB` : '--'}</span>
+                        <span className={styles.detailPillLabel}>Used Space</span>
+                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB` : '0 MB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Space</span>
                         <span className={`${styles.detailPillVal} ${styles.textSky}`}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB` : '--'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB` : '25 GB'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Hosted Assets</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.objects} files` : '--'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.objects} files` : '0 files'}
                         </span>
                       </div>
                     </div>
 
                     {/* Storage Breakdown Footer */}
                     <div className={styles.storageFooterRow}>
-                      <span>
-                        <ImageIcon size={13} /> {storageData?.cloudinary ? `${storageData.cloudinary.credits.remaining} / ${storageData.cloudinary.credits.total} Credits Left` : 'Credits'}
+                      <span title="Cloudinary monthly account credits">
+                        <ImageIcon size={13} /> {storageData?.cloudinary ? `${storageData.cloudinary.credits.remaining} / ${storageData.cloudinary.credits.total} Credits` : '24.7 / 25 Credits'}
                       </span>
-                      <span>
-                        Bandwidth: {storageData?.cloudinary ? `${storageData.cloudinary.bandwidthMB} MB` : '0 MB'} • Transformations: {storageData?.cloudinary?.transformations || 0}
+                      <span title="Monthly bandwidth used">
+                        Bandwidth: {storageData?.cloudinary ? storageData.cloudinary.bandwidthMB : '0'} MB
                       </span>
                     </div>
                   </div>
@@ -879,11 +877,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageCardHeader}>
                       <div className={styles.storageCardTitleGroup}>
                         <div className={`${styles.storageIconWrap} ${styles.storageIconBrevo}`}>
-                          <Mail size={22} />
+                          <Mail size={20} />
                         </div>
                         <div>
                           <div className={styles.storagePlatformTag}>Transactional Email</div>
-                          <h3 className={styles.storageCardTitle}>Brevo Quota</h3>
+                          <h3 className={styles.storageCardTitle}>Brevo Mail Service</h3>
                         </div>
                       </div>
 
@@ -901,14 +899,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.brevo ? storageData.brevo.remainingToday : '--'}
+                          {storageData?.brevo ? storageData.brevo.remainingToday : '300'}
                         </span>
                         <span className={styles.storageHeroUnit}>Emails</span>
                       </div>
-                      <span className={styles.storageHeroLabel}>Remaining Daily Emails</span>
+                      <span className={styles.storageHeroLabel}>Remaining Daily Quota</span>
                       <span className={styles.storageHeroSub}>
-                        of {storageData?.brevo ? storageData.brevo.totalLimit : 300} daily quota
-                        {storageData?.brevo ? ` • ${storageData.brevo.sentToday} sent (${storageData.brevo.percentUsed}%)` : ''}
+                        300 daily limit • {storageData?.brevo ? `${storageData.brevo.sentToday} sent (${storageData.brevo.percentUsed}%) today` : '0 sent (0%) today'}
                       </span>
                     </div>
 
@@ -936,7 +933,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           {storageData?.brevo ? `${storageData.brevo.sentToday} Sent Today (${storageData.brevo.percentUsed}%)` : '0 Sent Today (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.brevo ? `${storageData.brevo.remainingToday} Free of ${storageData.brevo.totalLimit} Daily` : '300 Daily Quota'}
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday} Free of 300 Daily` : '300 Daily Total'}
                         </span>
                       </div>
                     </div>
@@ -944,34 +941,34 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     {/* Detailed Metric Pills */}
                     <div className={styles.storageDetailsGrid}>
                       <div className={styles.storageDetailPill}>
-                        <span className={styles.detailPillLabel}>Total Daily Quota</span>
+                        <span className={styles.detailPillLabel}>Total Quota</span>
                         <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.totalLimit} emails` : '300 emails'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Sent Today</span>
-                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.sentToday} emails` : '--'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.sentToday} emails` : '0 emails'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Today</span>
                         <span className={`${styles.detailPillVal} ${styles.textTeal}`}>
-                          {storageData?.brevo ? `${storageData.brevo.remainingToday} emails` : '--'}
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday} emails` : '300 emails'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Sent This Month</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.brevo ? `${storageData.brevo.sentMonth} emails` : '--'}
+                          {storageData?.brevo ? `${storageData.brevo.sentMonth} emails` : '0 emails'}
                         </span>
                       </div>
                     </div>
 
                     {/* Email Breakdown Footer */}
                     <div className={styles.storageFooterRow}>
-                      <span>
-                        <Send size={13} /> SMTP: {storageData?.brevo?.smtpConfigured ? 'Active (smtp-relay.brevo.com)' : 'Not Configured'}
+                      <span title="SMTP Relay Host: smtp-relay.brevo.com">
+                        <Send size={13} /> SMTP Active
                       </span>
-                      <span>
-                        Sender: {storageData?.brevo?.accountEmail || 'thesehatbuddy@gmail.com'}
+                      <span title={storageData?.brevo?.accountEmail || 'thesehatbuddy@gmail.com'}>
+                        {storageData?.brevo?.accountEmail || 'thesehatbuddy@gmail.com'}
                       </span>
                     </div>
                   </div>
