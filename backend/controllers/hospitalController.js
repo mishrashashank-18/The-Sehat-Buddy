@@ -4,6 +4,7 @@ import Doctor from '../models/Doctor.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -478,6 +479,7 @@ export const registerHospital = async (req, res) => {
     });
     
     if (hospital) {
+      broadcastDbChange('hospitals', 'insert', hospital._id, hospital);
       res.status(201).json({
         success: true,
         token: generateToken(hospital._id),
@@ -631,6 +633,7 @@ export const updateHospital = async (req, res) => {
     const updatedHospital = await hospital.save();
 
     const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');
+    broadcastDbChange('hospitals', 'update', updatedHospital._id, populated || updatedHospital);
     res.json({ success: true, message: 'Hospital updated', data: populated || updatedHospital });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -655,7 +658,9 @@ export const deleteHospital = async (req, res) => {
       hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] });
     }
     if (hospital) {
+      const hospId = hospital._id;
       await hospital.deleteOne();
+      broadcastDbChange('hospitals', 'delete', hospId);
       res.json({ success: true, message: 'Hospital deleted successfully' });
     } else {
       res.status(404).json({ success: false, message: 'Hospital not found' });

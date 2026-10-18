@@ -33,9 +33,11 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
-  Save
+  Save,
+  Printer
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { broadcastSync } from '../../context/DataContext';
 import { api } from '../../services/api';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
@@ -189,12 +191,29 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast(`Status set to ${label}`);
   };
 
-  // Appointments state
-  const [appointments, setAppointments] = useState(INITIAL_APPOINTMENTS);
+  const activeDocId = activeDoctor?.id || activeDoctor?._id || 'default';
+
+  // Appointments state with persistent storage per doctor
+  const [appointments, setAppointments] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`sehatbuddy_doc_appointments_${activeDocId}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_APPOINTMENTS;
+  });
   const [appointmentFilter, setAppointmentFilter] = useState('all');
 
-  // Prescriptions state
-  const [prescriptions, setPrescriptions] = useState(INITIAL_PRESCRIPTIONS);
+  // Prescriptions state with persistent storage per doctor
+  const [prescriptions, setPrescriptions] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`sehatbuddy_doc_prescriptions_${activeDocId}`);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_PRESCRIPTIONS;
+  });
+
+  // Selected prescription for formatted printable PDF preview
+  const [selectedRxForPrint, setSelectedRxForPrint] = useState(null);
 
   // Active Tab: 'appointments' | 'prescriptions' | 'profile'
   const [activeTab, setActiveTab] = useState('appointments');
@@ -230,12 +249,100 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const initialDoctorIdRef = React.useRef(null);
 
+  // Fetch remote appointments if doctor is authenticated
+  const fetchRemoteAppointments = React.useCallback(() => {
+    if (!activeDocId || activeDocId === 'default') return;
+    api.getDoctorDashboard().then(data => {
+      if (Array.isArray(data) && data.length > 0) {
+        setAppointments(prev => {
+          const remoteMapped = data.map(apt => ({
+            id: apt._id || apt.id,
+            patientName: apt.userData?.name || 'Patient',
+            age: apt.userData?.age || 30,
+            gender: apt.userData?.gender || 'Male',
+            time: apt.slotTime || '02:00 PM',
+            date: apt.slotDate || 'Today',
+            type: 'In-Clinic',
+            symptoms: 'Clinical Consultation Booking',
+            status: apt.isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : 'Confirmed'),
+            phone: apt.userData?.phone || '+91 98000 00000'
+          }));
+          const existingIds = new Set(prev.map(p => String(p.id)));
+          const fresh = remoteMapped.filter(r => !existingIds.has(String(r.id)));
+          if (fresh.length === 0) {
+            // Also update any changed status (e.g., cancelled or completed)
+            const updated = prev.map(p => {
+              const matched = remoteMapped.find(r => String(r.id) === String(p.id));
+              return matched ? { ...p, status: matched.status } : p;
+            });
+            try {
+              localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(updated));
+            } catch {}
+            return updated;
+          }
+          const merged = [...fresh, ...prev];
+          try {
+            localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(merged));
+          } catch {}
+          return merged;
+        });
+      }
+    }).catch(() => {});
+  }, [activeDocId]);
+
+  // Load appointments & prescriptions whenever active doctor switches, and sync with backend
+  React.useEffect(() => {
+    if (!activeDocId || activeDocId === 'default') return;
+    try {
+      const savedApts = localStorage.getItem(`sehatbuddy_doc_appointments_${activeDocId}`);
+      if (savedApts) setAppointments(JSON.parse(savedApts));
+      else setAppointments(INITIAL_APPOINTMENTS);
+
+      const savedRx = localStorage.getItem(`sehatbuddy_doc_prescriptions_${activeDocId}`);
+      if (savedRx) setPrescriptions(JSON.parse(savedRx));
+      else setPrescriptions(INITIAL_PRESCRIPTIONS);
+    } catch {}
+
+    fetchRemoteAppointments();
+  }, [activeDocId, fetchRemoteAppointments]);
+
+  // Real-time synchronization listener for appointments
+  React.useEffect(() => {
+    const handleAppointmentsSync = () => {
+      fetchRemoteAppointments();
+    };
+
+    window.addEventListener('sehat_appointments_changed', handleAppointmentsSync);
+    window.addEventListener('sehat_db_change', (e) => {
+      if (e.detail?.collection === 'appointments') {
+        fetchRemoteAppointments();
+      }
+    });
+
+    const handleStorageChange = (e) => {
+      if (e.key === `sehatbuddy_doc_appointments_${activeDocId}` && e.newValue) {
+        try {
+          setAppointments(JSON.parse(e.newValue));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('sehat_appointments_changed', handleAppointmentsSync);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [activeDocId, fetchRemoteAppointments]);
+
   React.useEffect(() => {
     const currentId = activeDoctor?.id || activeDoctor?._id;
-    if (currentId && String(currentId) !== String(initialDoctorIdRef.current)) {
+    if (currentId && (String(currentId) !== String(initialDoctorIdRef.current) || !profileForm?.name)) {
       initialDoctorIdRef.current = String(currentId);
       setProfileForm({
         ...activeDoctor,
+        name: activeDoctor.name || '',
+        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
         experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience) : (activeDoctor.experience || 5),
         licenseNumber: activeDoctor.licenseNumber || '',
         awards: Array.isArray(activeDoctor.awards) ? activeDoctor.awards : [],
@@ -246,7 +353,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []
       });
     }
-  }, [activeDoctor?.id, activeDoctor?._id]);
+  }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.name]);
 
   // Awards handlers
   const handleAddAward = (e) => {
@@ -625,18 +732,30 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   // Save All Profile Settings
-  const handleSaveAllProfileSettings = (e) => {
+  const handleSaveAllProfileSettings = async (e) => {
     e?.preventDefault?.();
-    updateDoctor(activeDoctor.id || activeDoctor._id, {
+    const docId = activeDoctor.id || activeDoctor._id;
+    if (!docId) return;
+
+    const payload = {
       ...profileForm,
-      experience: parseInt(profileForm.experience, 10) || 5,
+      name: profileForm.name || activeDoctor.name || 'Doctor',
+      specialization: profileForm.specialty || profileForm.specialization || 'General Medicine',
+      specialty: profileForm.specialty || profileForm.specialization || 'General Medicine',
+      fees: Number(profileForm.price ?? profileForm.fees) || 500,
+      price: Number(profileForm.price ?? profileForm.fees) || 500,
+      experience: parseInt(profileForm.experience, 10) || 0,
+      jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant',
+      licenseNumber: profileForm.licenseNumber || '',
       awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
       certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
       memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
       careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
       reels: Array.isArray(profileForm.reels) ? profileForm.reels : [],
       youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []
-    });
+    };
+
+    await updateDoctor(docId, payload);
     showToast('All profile details, credentials, media & fees saved successfully!');
   };
 
@@ -740,10 +859,34 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Appointment status actions
   const updateAppointmentStatus = (id, newStatus) => {
-    setAppointments(prev =>
-      prev.map(apt => (apt.id === id ? { ...apt, status: newStatus } : apt))
-    );
+    setAppointments(prev => {
+      const updated = prev.map(apt => (apt.id === id ? { ...apt, status: newStatus } : apt));
+      try {
+        localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(updated));
+        broadcastSync(`sehatbuddy_doc_appointments_${activeDocId}`, updated);
+      } catch {}
+      return updated;
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sehat_appointments_changed', { detail: { id, status: newStatus } }));
+    }
     showToast(`Appointment marked as ${newStatus}`);
+  };
+
+  const handleDeleteAppointment = (id) => {
+    if (!window.confirm('Are you sure you want to remove this appointment from your queue?')) return;
+    setAppointments(prev => {
+      const updated = prev.filter(apt => apt.id !== id);
+      try {
+        localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(updated));
+        broadcastSync(`sehatbuddy_doc_appointments_${activeDocId}`, updated);
+      } catch {}
+      return updated;
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sehat_appointments_changed', { detail: { id, action: 'delete' } }));
+    }
+    showToast('Appointment removed from queue');
   };
 
   const handleAddAppointment = (e) => {
@@ -763,7 +906,17 @@ const DoctorDashboard = ({ onNavigate }) => {
       phone: newAppointmentData.phone || '+91 98000 00000'
     };
 
-    setAppointments(prev => [newApt, ...prev]);
+    setAppointments(prev => {
+      const updated = [newApt, ...prev];
+      try {
+        localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(updated));
+        broadcastSync(`sehatbuddy_doc_appointments_${activeDocId}`, updated);
+      } catch {}
+      return updated;
+    });
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('sehat_appointments_changed', { detail: { appointment: newApt, action: 'add' } }));
+    }
     setIsNewAppointmentModalOpen(false);
     setNewAppointmentData({
       patientName: '',
@@ -790,7 +943,13 @@ const DoctorDashboard = ({ onNavigate }) => {
       followUp: newPrescriptionData.followUp
     };
 
-    setPrescriptions(prev => [newRx, ...prev]);
+    setPrescriptions(prev => {
+      const updated = [newRx, ...prev];
+      try {
+        localStorage.setItem(`sehatbuddy_doc_prescriptions_${activeDocId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     setIsPrescriptionModalOpen(false);
     setNewPrescriptionData({
       patientName: '',
@@ -799,6 +958,18 @@ const DoctorDashboard = ({ onNavigate }) => {
       followUp: 'After 7 days'
     });
     showToast(`Prescription saved for ${newRx.patientName}`);
+  };
+
+  const handleDeletePrescription = (id) => {
+    if (!window.confirm('Are you sure you want to delete this clinical prescription note?')) return;
+    setPrescriptions(prev => {
+      const updated = prev.filter(rx => rx.id !== id);
+      try {
+        localStorage.setItem(`sehatbuddy_doc_prescriptions_${activeDocId}`, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    showToast('Prescription note deleted.');
   };
 
   // Filtered appointments
@@ -868,8 +1039,8 @@ const DoctorDashboard = ({ onNavigate }) => {
           <div className={styles.doctorCardMini}>
             <div style={{ position: 'relative', display: 'inline-block' }}>
               <img
-                src={activeDoctor.image}
-                alt={activeDoctor.name}
+                src={profileForm.image || activeDoctor.image}
+                alt={activeDoctor.name || 'Doctor'}
                 className={styles.doctorAvatar}
                 onClick={() => setIsPhotoZoomOpen(true)}
                 title="Click to view full photo"
@@ -973,8 +1144,12 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
             <div>
               <span className={styles.kpiLabel}>Appointments Today</span>
-              <div className={styles.kpiValue}>{appointments.length} Scheduled</div>
-              <span className={styles.kpiSub}>3 Completed</span>
+              <div className={styles.kpiValue}>
+                {appointments.filter(a => a.date === 'Today').length || appointments.length} Scheduled
+              </div>
+              <span className={styles.kpiSub}>
+                {appointments.filter(a => a.status === 'Completed').length} Completed
+              </span>
             </div>
           </div>
 
@@ -984,8 +1159,10 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
             <div>
               <span className={styles.kpiLabel}>Consultation Fee</span>
-              <div className={styles.kpiValue}>₹{activeDoctor.price || 700}</div>
-              <span className={styles.kpiSub}>Estimated Daily: ₹{(activeDoctor.price || 700) * appointments.length}</span>
+              <div className={styles.kpiValue}>₹{activeDoctor.price || activeDoctor.fees || 700}</div>
+              <span className={styles.kpiSub}>
+                Estimated Daily: ₹{(activeDoctor.price || activeDoctor.fees || 700) * (appointments.filter(a => a.date === 'Today').length || appointments.length)}
+              </span>
             </div>
           </div>
 
@@ -1130,13 +1307,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     </span>
 
                     <div className={styles.aptActionBtns}>
-                      {apt.status !== 'Completed' && (
+                      {apt.status !== 'Completed' ? (
                         <button
                           className={styles.completeBtn}
                           onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
                           title="Mark Completed"
                         >
                           <Check size={14} /> Completed
+                        </button>
+                      ) : (
+                        <button
+                          className={styles.completeBtn}
+                          style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}
+                          onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
+                          title="Reopen appointment"
+                        >
+                          <RotateCcw size={13} /> Reopen
                         </button>
                       )}
                       {apt.type === 'Video Call' && apt.status !== 'Completed' && (
@@ -1147,6 +1333,26 @@ const DoctorDashboard = ({ onNavigate }) => {
                           <Video size={14} /> Start Call
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid #fecdd3',
+                          color: '#e11d48',
+                          borderRadius: '7px',
+                          padding: '5px 8px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.76rem',
+                          fontWeight: 600
+                        }}
+                        title="Delete appointment"
+                      >
+                        <Trash2 size={13} />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1185,13 +1391,37 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
 
                   <div className={styles.rxFooter}>
-                    <small>Prescribed by {activeDoctor.name}</small>
-                    <button
-                      className={styles.printBtn}
-                      onClick={() => showToast(`Generating PDF prescription for ${rx.patientName}...`)}
-                    >
-                      Export PDF
-                    </button>
+                    <small>Prescribed by {activeDoctor.name || 'Doctor'}</small>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        className={styles.printBtn}
+                        onClick={() => setSelectedRxForPrint(rx)}
+                        title="Print or export PDF prescription"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <Printer size={13} />
+                        Export PDF
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePrescription(rx.id)}
+                        style={{
+                          background: '#fff1f2',
+                          border: '1px solid #fecdd3',
+                          color: '#e11d48',
+                          borderRadius: '6px',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          display: 'inline-flex',
+                          alignItems: 'center'
+                        }}
+                        title="Delete prescription note"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1241,22 +1471,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                   {/* Save Settings */}
                   <button
                     type="button"
-                    onClick={() => {
-                      updateDoctor(activeDoctor.id || activeDoctor._id, {
-                        ...profileForm,
-                        specialization: profileForm.specialty,
-                        fees: profileForm.price,
-                        experience: parseInt(profileForm.experience) || 0,
-                        licenseNumber: profileForm.licenseNumber || '',
-                        awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
-                        certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
-                        memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
-                        careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
-                        reels: Array.isArray(profileForm.reels) ? profileForm.reels : [],
-                        youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []
-                      });
-                      showToast('All profile details, credentials, media & fees saved successfully!');
-                    }}
+                    onClick={handleSaveAllProfileSettings}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -2576,22 +2791,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 <button
                   type="button"
                   className={styles.saveBtn}
-                  onClick={() => {
-                    updateDoctor(activeDoctor.id || activeDoctor._id, {
-                      ...profileForm,
-                      specialization: profileForm.specialty,
-                      fees: profileForm.price,
-                      experience: parseInt(profileForm.experience) || 0,
-                      licenseNumber: profileForm.licenseNumber || '',
-                      awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
-                      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
-                      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
-                      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
-                      reels: Array.isArray(profileForm.reels) ? profileForm.reels : [],
-                      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []
-                    });
-                    showToast('Profile, credentials, awards & experience saved successfully!');
-                  }}
+                  onClick={handleSaveAllProfileSettings}
                 >
                   Save Settings
                 </button>
@@ -2775,6 +2975,185 @@ const DoctorDashboard = ({ onNavigate }) => {
           </div>
         </div>
       )}
+      {/* Printable Prescription Preview Modal */}
+      {selectedRxForPrint && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setSelectedRxForPrint(null)}
+          style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(5px)', padding: '16px' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '620px',
+              width: '100%',
+              boxShadow: '0 25px 60px rgba(0, 0, 0, 0.3)',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            {/* Modal Actions Bar (Not Printed) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a', fontWeight: 700, fontSize: '0.95rem' }}>
+                <Printer size={18} color="#2563eb" />
+                <span>Clinical Prescription & Patient Summary</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '7px',
+                    padding: '6px 14px',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                  }}
+                >
+                  <Printer size={14} /> Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRxForPrint(null)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    alignItems: 'center'
+                  }}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Prescription Sheet */}
+            <div
+              id="printable-rx-sheet"
+              style={{
+                padding: '32px 36px',
+                background: '#ffffff',
+                color: '#0f172a',
+                fontFamily: 'system-ui, -apple-system, sans-serif'
+              }}
+            >
+              {/* Doctor & Hospital Letterhead */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #2563eb', paddingBottom: '16px', marginBottom: '20px' }}>
+                <div>
+                  <h2 style={{ margin: '0 0 4px 0', fontSize: '1.35rem', color: '#1e3a8a', fontWeight: 800 }}>
+                    {activeDoctor.name}
+                  </h2>
+                  <div style={{ fontSize: '0.86rem', color: '#3b82f6', fontWeight: 600 }}>
+                    {activeDoctor.degree || activeDoctor.qualifications || 'MBBS, MD'} • {activeDoctor.specialty || activeDoctor.specialization}
+                  </div>
+                  {activeDoctor.licenseNumber && (
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '3px' }}>
+                      Medical Reg No: <strong>{activeDoctor.licenseNumber}</strong>
+                    </div>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                    {activeDoctor.hospital || 'The Sehat Buddy Clinic'}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                    The Sehat Buddy Telehealth & Clinical Network
+                  </div>
+                  {(activeDoctor.phone || activeDoctor.contact_number) && (
+                    <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                      Ph: {activeDoctor.phone || activeDoctor.contact_number}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Patient Meta Strip */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 16px', marginBottom: '22px', fontSize: '0.86rem' }}>
+                <div>
+                  <span style={{ color: '#64748b' }}>Patient: </span>
+                  <strong style={{ color: '#0f172a' }}>{selectedRxForPrint.patientName}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Date: </span>
+                  <strong style={{ color: '#0f172a' }}>{selectedRxForPrint.date}</strong>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b' }}>Rx ID: </span>
+                  <strong style={{ color: '#2563eb' }}>RX-{String(selectedRxForPrint.id).slice(-6)}</strong>
+                </div>
+              </div>
+
+              {/* Clinical Diagnosis */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                  Clinical Diagnosis / Impression
+                </div>
+                <div style={{ fontSize: '0.95rem', color: '#0f172a', fontWeight: 600, background: '#f0f9ff', padding: '10px 14px', borderRadius: '8px', borderLeft: '4px solid #0284c7' }}>
+                  {selectedRxForPrint.diagnosis}
+                </div>
+              </div>
+
+              {/* Rx Prescriptions Section */}
+              <div style={{ marginBottom: '22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1.2rem', fontWeight: 800, color: '#1e3a8a', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '1.5rem', fontFamily: 'serif', fontStyle: 'italic' }}>℞</span>
+                  <span style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.6px', color: '#64748b', fontWeight: 700 }}>
+                    Medication Protocol & Dosage
+                  </span>
+                </div>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px 16px', fontSize: '0.92rem', color: '#1e293b', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {selectedRxForPrint.medications}
+                </div>
+              </div>
+
+              {/* Advice / Follow-up */}
+              {selectedRxForPrint.followUp && (
+                <div style={{ marginBottom: '28px' }}>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>
+                    Follow-up Instructions & Advice
+                  </div>
+                  <div style={{ fontSize: '0.88rem', color: '#334155' }}>
+                    {selectedRxForPrint.followUp}
+                  </div>
+                </div>
+              )}
+
+              {/* Signature / Validation Footer */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                  Digitally issued via The Sehat Buddy Healthcare Portal
+                  <br />Valid without physical signature if QR/Code verified.
+                </div>
+                <div style={{ textAlign: 'center', minWidth: '160px' }}>
+                  <div style={{ height: '36px', borderBottom: '1.5px dashed #94a3b8', marginBottom: '6px' }}></div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+                    {activeDoctor.name}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                    Physician Signature & Stamp
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Doctor Photo Zoom Preview Modal */}
       {isPhotoZoomOpen && (
         <div

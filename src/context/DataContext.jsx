@@ -240,118 +240,224 @@ export const DataProvider = ({ children }) => {
     return initialBranding;
   });
 
-  // Fetch from Backend API periodically for real-time updates
-  useEffect(() => {
-    let isMounted = true;
-    const fetchBackendData = async () => {
-      try {
-        const [docsRes, hospsRes, contentRes, faqsRes, reviewsRes, specsRes] = await Promise.allSettled([
-          api.getDoctors(),
-          api.getHospitals(),
-          api.getContent(),
-          api.getFaqs(),
-          api.getReviews(),
-          api.getSpecialitiesProcedures()
-        ]);
+  // Helper mapping functions
+  const mapDoctorList = (docList, prevDoctors = []) => {
+    return docList.map(d => {
+      const existing = prevDoctors.find(p => matchesId(p, d._id || d.id));
+      const initial = initialDoctors.find(i => matchesId(i, d.id || d._id) || (i.name && d.name && i.name.toLowerCase() === d.name.toLowerCase()));
+      return {
+        ...d,
+        id: d._id || d.id,
+        specialty: d.specialization || d.specialty || 'General Physician',
+        price: d.fees || d.price || 500,
+        experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience'),
+        licenseNumber: d.licenseNumber || existing?.licenseNumber || initial?.licenseNumber || '',
+        awards: Array.isArray(d.awards) && d.awards.length > 0 ? d.awards : (Array.isArray(existing?.awards) && existing.awards.length > 0 ? existing.awards : (initial?.awards || [])),
+        certifications: Array.isArray(d.certifications) && d.certifications.length > 0 ? d.certifications : (Array.isArray(existing?.certifications) && existing.certifications.length > 0 ? existing.certifications : (initial?.certifications || [])),
+        memberships: Array.isArray(d.memberships) && d.memberships.length > 0 ? d.memberships : (Array.isArray(existing?.memberships) && existing.memberships.length > 0 ? existing.memberships : (initial?.memberships || [])),
+        careerExperience: Array.isArray(d.careerExperience) && d.careerExperience.length > 0 ? d.careerExperience : (Array.isArray(existing?.careerExperience) && existing.careerExperience.length > 0 ? existing.careerExperience : (initial?.careerExperience || []))
+      };
+    });
+  };
 
-        if (!isMounted) return;
+  const mapHospitalList = (hospList) => {
+    return hospList.map(h => ({
+      ...h,
+      id: h._id || h.id,
+      specialties: h.specialities || h.specialties || [],
+      reels: h.reels || [],
+      youtube_videos: h.youtube_videos || [],
+      photos: Array.isArray(h.photos) ? h.photos : [],
+      star_doctors: h.star_doctors || [],
+      cashlessInsurance: h.cashlessInsurance !== undefined ? h.cashlessInsurance : true,
+      acceptedInsurances: Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0 ? h.acceptedInsurances : defaultAcceptedInsurances,
+      tpaHelpdesk: h.tpaHelpdesk || {
+        phone: h.phone || '080-45678900',
+        email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
+        preAuthTime: '30 Mins Cashless Pre-Approval'
+      },
+      insuranceHelpline: h.insuranceHelpline || '1800-SEHAT-CARE'
+    }));
+  };
 
-        if (docsRes.status === 'fulfilled' && Array.isArray(docsRes.value)) {
-          setDoctors(prevDoctors => {
-            return docsRes.value.map(d => {
-              const existing = prevDoctors.find(p => matchesId(p, d._id || d.id));
-              const initial = initialDoctors.find(i => matchesId(i, d.id || d._id) || (i.name && d.name && i.name.toLowerCase() === d.name.toLowerCase()));
-              return {
-                ...d,
-                id: d._id || d.id,
-                specialty: d.specialization || d.specialty || 'General Physician',
-                price: d.fees || d.price || 500,
-                experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience'),
-                licenseNumber: d.licenseNumber || existing?.licenseNumber || initial?.licenseNumber || '',
-                awards: Array.isArray(d.awards) && d.awards.length > 0 ? d.awards : (Array.isArray(existing?.awards) && existing.awards.length > 0 ? existing.awards : (initial?.awards || [])),
-                certifications: Array.isArray(d.certifications) && d.certifications.length > 0 ? d.certifications : (Array.isArray(existing?.certifications) && existing.certifications.length > 0 ? existing.certifications : (initial?.certifications || [])),
-                memberships: Array.isArray(d.memberships) && d.memberships.length > 0 ? d.memberships : (Array.isArray(existing?.memberships) && existing.memberships.length > 0 ? existing.memberships : (initial?.memberships || [])),
-                careerExperience: Array.isArray(d.careerExperience) && d.careerExperience.length > 0 ? d.careerExperience : (Array.isArray(existing?.careerExperience) && existing.careerExperience.length > 0 ? existing.careerExperience : (initial?.careerExperience || []))
-              };
-            });
+  // Modular real-time refresh operations
+  const refreshDoctors = async () => {
+    try {
+      const data = await api.getDoctors();
+      if (Array.isArray(data)) {
+        setDoctors(prev => mapDoctorList(data, prev));
+      }
+    } catch {}
+  };
+
+  const refreshHospitals = async () => {
+    try {
+      const data = await api.getHospitals();
+      if (Array.isArray(data)) {
+        setHospitals(mapHospitalList(data));
+      }
+    } catch {}
+  };
+
+  const refreshContent = async () => {
+    try {
+      const data = await api.getContent();
+      if (data) {
+        const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData } = data;
+        if (hero) {
+          setHeroContent(prev => {
+            const cleanHero = { ...hero };
+            if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
+              cleanHero.heroImage = prev.heroImage || initialHeroContent.heroImage;
+            }
+            const merged = { ...initialHeroContent, ...cleanHero, ...prev };
+            if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+            return merged;
           });
         }
-        if (hospsRes.status === 'fulfilled' && Array.isArray(hospsRes.value)) {
-          setHospitals(hospsRes.value.map(h => ({
-            ...h,
-            id: h._id || h.id,
-            specialties: h.specialities || h.specialties || [],
-            reels: h.reels || [],
-            youtube_videos: h.youtube_videos || [],
-            photos: Array.isArray(h.photos) ? h.photos : [],
-            star_doctors: h.star_doctors || [],
-            cashlessInsurance: h.cashlessInsurance !== undefined ? h.cashlessInsurance : true,
-            acceptedInsurances: Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0 ? h.acceptedInsurances : defaultAcceptedInsurances,
-            tpaHelpdesk: h.tpaHelpdesk || {
-              phone: h.phone || '080-45678900',
-              email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
-              preAuthTime: '30 Mins Cashless Pre-Approval'
-            },
-            insuranceHelpline: h.insuranceHelpline || '1800-SEHAT-CARE'
-          })));
+        if (bData && typeof bData === 'object') {
+          setBranding(prev => {
+            const isPrevCustomized = (prev?.siteName && prev.siteName !== 'The Sehat Buddy') || (prev?.tagline && prev.tagline !== 'Your Health. Our Priority.');
+            const isBackendDefault = bData?.siteName === 'The Sehat Buddy' && (!bData?.tagline || bData?.tagline === 'Your Health. Our Priority.');
+            if (isPrevCustomized && isBackendDefault) return prev;
+            const merged = { ...prev, ...bData };
+            if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
+            return merged;
+          });
         }
-        if (contentRes.status === 'fulfilled' && contentRes.value) {
-          const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData } = contentRes.value;
-          if (hero) {
-            setHeroContent(prev => {
-              const cleanHero = { ...hero };
-              if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
-                cleanHero.heroImage = prev.heroImage || initialHeroContent.heroImage;
+        if (Array.isArray(sList) && sList.length > 0) setServices(prev => (prev && prev.length > 0 ? prev : sList));
+        if (Array.isArray(fList) && fList.length > 0) setFeatures(prev => (prev && prev.length > 0 ? prev : fList));
+        if (Array.isArray(aList) && aList.length > 0) setArticles(prev => (prev && prev.length > 0 ? prev : aList));
+        if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(prev => (prev && prev.length > 0 ? prev : cList));
+      }
+    } catch {}
+  };
+
+  const refreshFaqs = async () => {
+    try {
+      const data = await api.getFaqs();
+      if (Array.isArray(data) && data.length > 0) {
+        setFaqs(data.map(f => ({ ...f, id: f._id || f.id })));
+      }
+    } catch {}
+  };
+
+  const refreshReviews = async () => {
+    try {
+      const data = await api.getReviews();
+      if (Array.isArray(data) && data.length > 0) {
+        setReviews(data.map(r => ({ ...r, id: r._id || r.id })));
+      }
+    } catch {}
+  };
+
+  const refreshSpecialities = async () => {
+    try {
+      const data = await api.getSpecialitiesProcedures();
+      if (Array.isArray(data) && data.length > 0) {
+        setSpecialitiesProcedures(data.map(s => ({ ...s, id: s._id || s.id })));
+      }
+    } catch {}
+  };
+
+  const refreshAll = async () => {
+    await Promise.allSettled([
+      refreshDoctors(),
+      refreshHospitals(),
+      refreshContent(),
+      refreshFaqs(),
+      refreshReviews(),
+      refreshSpecialities()
+    ]);
+  };
+
+  // Zero-latency real-time synchronization via Server-Sent Events (SSE)
+  useEffect(() => {
+    let eventSource = null;
+    let retryTimer = null;
+    let isMounted = true;
+
+    // Initial immediate fetch
+    refreshAll();
+
+    const connectRealtimeSSE = () => {
+      if (!isMounted) return;
+      try {
+        eventSource = new EventSource('/api/realtime-stream');
+
+        eventSource.addEventListener('connected', () => {
+          // SSE Handshake active
+        });
+
+        eventSource.addEventListener('db_change', (e) => {
+          if (!e.data || !isMounted) return;
+          try {
+            const payload = JSON.parse(e.data);
+            const { collection } = payload;
+
+            // Broadcast global window events for dashboards and views
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sehat_db_change', { detail: payload }));
+              if (collection === 'appointments') {
+                window.dispatchEvent(new CustomEvent('sehat_appointments_changed', { detail: payload }));
               }
-              // Base defaults -> backend data -> local customizations (prev) take top priority!
-              const merged = { ...initialHeroContent, ...cleanHero, ...prev };
-              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
-              return merged;
-            });
+            }
+
+            // Instant sub-second targeted refresh based on modified collection
+            if (collection === 'doctors') {
+              refreshDoctors();
+            } else if (collection === 'hospitals') {
+              refreshHospitals();
+            } else if (collection === 'contents') {
+              refreshContent();
+            } else if (collection === 'faqs') {
+              refreshFaqs();
+            } else if (collection === 'reviews') {
+              refreshReviews();
+            } else if (collection === 'specialityprocedures') {
+              refreshSpecialities();
+            } else if (collection === 'appointments') {
+              // Notification event already dispatched
+            } else {
+              refreshAll();
+            }
+          } catch (err) {
+            console.error('Error parsing db_change payload:', err);
           }
-          if (bData && typeof bData === 'object') {
-            setBranding(prev => {
-              // If local state has custom values and backend returns default placeholder, preserve local customization
-              const isPrevCustomized = (prev?.siteName && prev.siteName !== 'The Sehat Buddy') || (prev?.tagline && prev.tagline !== 'Your Health. Our Priority.');
-              const isBackendDefault = bData?.siteName === 'The Sehat Buddy' && (!bData?.tagline || bData?.tagline === 'Your Health. Our Priority.');
-              if (isPrevCustomized && isBackendDefault) {
-                return prev;
-              }
-              const merged = { ...prev, ...bData };
-              if (JSON.stringify(prev) === JSON.stringify(merged)) return prev;
-              return merged;
-            });
+        });
+
+        eventSource.onerror = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
           }
-          if (Array.isArray(sList) && sList.length > 0) setServices(prev => (prev && prev.length > 0 ? prev : sList));
-          if (Array.isArray(fList) && fList.length > 0) setFeatures(prev => (prev && prev.length > 0 ? prev : fList));
-          if (Array.isArray(aList) && aList.length > 0) setArticles(prev => (prev && prev.length > 0 ? prev : aList));
-          if (Array.isArray(cList) && cList.length > 0) setCorporateTieups(prev => (prev && prev.length > 0 ? prev : cList));
-        }
-        if (faqsRes.status === 'fulfilled' && Array.isArray(faqsRes.value) && faqsRes.value.length > 0) {
-          setFaqs(faqsRes.value.map(f => ({ ...f, id: f._id || f.id })));
-        }
-        if (reviewsRes.status === 'fulfilled' && Array.isArray(reviewsRes.value) && reviewsRes.value.length > 0) {
-          setReviews(reviewsRes.value.map(r => ({ ...r, id: r._id || r.id })));
-        }
-        if (specsRes.status === 'fulfilled' && Array.isArray(specsRes.value) && specsRes.value.length > 0) {
-          setSpecialitiesProcedures(specsRes.value.map(s => ({ ...s, id: s._id || s.id })));
-        }
+          if (isMounted) {
+            retryTimer = setTimeout(connectRealtimeSSE, 3000);
+          }
+        };
       } catch {
-        // Backend not available, seamlessly fall back to local storage and default data
+        if (isMounted) {
+          retryTimer = setTimeout(connectRealtimeSSE, 5000);
+        }
       }
     };
 
-    fetchBackendData();
+    connectRealtimeSSE();
 
-    // Intelligent background polling when tab is active (20 seconds)
+    // Fallback periodic heartbeat polling (every 20 seconds when document is visible)
     const intervalId = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
-        fetchBackendData();
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && isMounted) {
+        refreshAll();
       }
     }, 20000);
 
     return () => {
       isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
       clearInterval(intervalId);
     };
   }, []);
@@ -1002,7 +1108,15 @@ export const DataProvider = ({ children }) => {
         deleteSpecialityProcedure,
         resetFrontPageDefaults,
         resetToDefaults,
-        stats
+        stats,
+        // Real-time synchronization hooks
+        refreshAll,
+        refreshDoctors,
+        refreshHospitals,
+        refreshContent,
+        refreshFaqs,
+        refreshReviews,
+        refreshSpecialities
       }}
     >
       {children}

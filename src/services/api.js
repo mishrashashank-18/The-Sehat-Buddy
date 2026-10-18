@@ -52,6 +52,26 @@ export const api = {
   },
 
   async updateDoctor(id, doctorData) {
+    let role = null;
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      role = user.role;
+    } catch {}
+
+    if (role === 'doctor') {
+      try {
+        const res = await fetch(`${API_BASE}/doctors/${id}`, {
+          method: 'PUT',
+          headers: getAuthHeaders(),
+          body: JSON.stringify(doctorData)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data.data || data;
+        }
+      } catch {}
+    }
+
     try {
       const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
         method: 'PUT',
@@ -77,6 +97,19 @@ export const api = {
     } catch {}
 
     return doctorData;
+  },
+
+  async getDoctorDashboard() {
+    try {
+      const res = await fetch(`${API_BASE}/doctors/dashboard`, {
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+    return [];
   },
 
   async updateDoctorFaqsByHospital(hospitalId, doctorId, faqs) {

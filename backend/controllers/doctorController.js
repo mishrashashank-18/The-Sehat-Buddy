@@ -5,6 +5,7 @@ import Hospital from '../models/Hospital.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -375,6 +376,7 @@ export const addDoctorByHospital = async (req, res) => {
       }
     }
 
+    broadcastDbChange('doctors', 'insert', doctor._id, doctor);
     return res.status(201).json({
       success: true,
       message: 'Doctor added successfully to hospital roster!',
@@ -396,7 +398,13 @@ export const getDoctors = async (req, res) => {
 
 export const getDoctorById = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id).select('-password');
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      doctor = await Doctor.findById(req.params.id).select('-password');
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: req.params.id }).select('-password');
+    }
     if (doctor) {
       res.json({ success: true, data: doctor });
     } else {
@@ -503,6 +511,7 @@ export const updateDoctorProfile = async (req, res) => {
     delete docObj.otpExpires;
     delete docObj.otpAttempts;
 
+    broadcastDbChange('doctors', 'update', docObj._id, docObj);
     return res.json({ success: true, message: 'Doctor profile updated', data: docObj });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -511,16 +520,6 @@ export const updateDoctorProfile = async (req, res) => {
 
 export const deleteDoctorProfile = async (req, res) => {
   try {
-    const isAdmin = req.user && req.user.role === 'admin';
-    const isHospital = req.user && req.user.role === 'hospital';
-
-    if (!isAdmin && !isHospital) {
-      return res.status(403).json({
-        success: false,
-        message: 'Forbidden: Only an administrator or affiliated hospital can delete a doctor profile'
-      });
-    }
-
     let doctor = null;
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
       doctor = await Doctor.findById(req.params.id);
@@ -528,12 +527,25 @@ export const deleteDoctorProfile = async (req, res) => {
     if (!doctor) {
       doctor = await Doctor.findOne({ id: req.params.id });
     }
-    if (doctor) {
-      await doctor.deleteOne();
-      return res.json({ success: true, message: 'Doctor profile deleted successfully' });
-    } else {
+    if (!doctor) {
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
+
+    const isSelf = req.user && req.user.id === doctor._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isHospital = req.user && req.user.role === 'hospital';
+
+    if (!isSelf && !isAdmin && !isHospital) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only the doctor, an administrator, or affiliated hospital can delete this profile'
+      });
+    }
+
+    const docId = doctor._id;
+    await doctor.deleteOne();
+    broadcastDbChange('doctors', 'delete', docId);
+    return res.json({ success: true, message: 'Doctor profile deleted successfully' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

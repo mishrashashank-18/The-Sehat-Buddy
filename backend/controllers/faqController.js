@@ -1,4 +1,5 @@
 import Faq from '../models/Faq.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 const DEFAULT_FAQS = [
   {
@@ -97,6 +98,7 @@ export const createFaq = async (req, res) => {
       order: order !== undefined ? Number(order) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true
     });
+    broadcastDbChange('faqs', 'insert', faq._id, faq);
     res.status(201).json({ success: true, message: 'FAQ created successfully', data: faq });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -111,6 +113,7 @@ export const updateFaq = async (req, res) => {
     }
     Object.assign(faq, req.body);
     const updated = await faq.save();
+    broadcastDbChange('faqs', 'update', updated._id, updated);
     res.json({ success: true, message: 'FAQ updated successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -123,7 +126,9 @@ export const deleteFaq = async (req, res) => {
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
     }
+    const faqId = faq._id;
     await faq.deleteOne();
+    broadcastDbChange('faqs', 'delete', faqId);
     res.json({ success: true, message: 'FAQ deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

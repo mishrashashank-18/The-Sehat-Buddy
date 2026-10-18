@@ -19,7 +19,7 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import specialityRoutes from './routes/specialityRoutes.js';
 
 import mongoSanitize from './middleware/mongoSanitize.js';
-import { initMongoDBChangeStream } from './services/storageMonitor.js';
+import { initMongoDBChangeStream, streamRealtimeDatabase } from './services/storageMonitor.js';
 
 // Resolve directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -142,6 +142,9 @@ app.get('/api/health', (req, res) => {
 app.get('/api/stats', (req, res) => {
   res.json({ success: true, data: { status: "Please use admin/dashboard" } });
 });
+
+// Realtime Server-Sent Events stream for entire website, pages, and all dashboards
+app.get('/api/realtime-stream', streamRealtimeDatabase);
 
 // API Routes
 app.use('/api/admin', adminRoutes);

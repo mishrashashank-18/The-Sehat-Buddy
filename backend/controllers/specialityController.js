@@ -1,4 +1,5 @@
 import SpecialityProcedure from '../models/SpecialityProcedure.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 const DEFAULT_SPECIALITIES_PROCEDURES = [
   {
@@ -273,6 +274,7 @@ export const createSpecialityProcedure = async (req, res) => {
       procedures: Array.isArray(procedures) ? procedures : []
     });
 
+    broadcastDbChange('specialityprocedures', 'insert', item._id, item);
     res.status(201).json({ success: true, message: 'Item created successfully', data: item });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -287,6 +289,7 @@ export const updateSpecialityProcedure = async (req, res) => {
     }
     Object.assign(item, req.body);
     const updated = await item.save();
+    broadcastDbChange('specialityprocedures', 'update', updated._id, updated);
     res.json({ success: true, message: 'Updated successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -299,7 +302,9 @@ export const deleteSpecialityProcedure = async (req, res) => {
     if (!item) {
       return res.status(404).json({ success: false, message: 'Speciality / Procedure not found' });
     }
+    const itemId = item._id;
     await item.deleteOne();
+    broadcastDbChange('specialityprocedures', 'delete', itemId);
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

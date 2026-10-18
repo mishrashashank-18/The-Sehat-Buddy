@@ -7,7 +7,7 @@ import Appointment from '../models/Appointment.js';
 import validatePassword from '../utils/validatePassword.js';
 import { cloudinary } from '../config/cloudinary.js';
 import EmailLog from '../models/EmailLog.js';
-import { calculateStorageStats, streamStorageStats } from '../services/storageMonitor.js';
+import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '../services/storageMonitor.js';
 
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
@@ -130,6 +130,7 @@ export const addDoctor = async (req, res) => {
       name, email, password: password || 'password123', specialization, experience, about, fees, address: parsedAddress, image, reels: reels || [], youtube_videos: youtube_videos || [], instagram, facebook,
       rating: rating || 4.8, reviews: reviews || '50+', hospital, qualifications, contact_number, available: available !== undefined ? available : true
     });
+    broadcastDbChange('doctors', 'insert', doctor._id, doctor);
     res.status(201).json({ success: true, message: 'Doctor added', data: doctor });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -221,6 +222,7 @@ export const updateDoctor = async (req, res) => {
         doctor.image = req.body.image;
       }
       const updatedDoctor = await doctor.save();
+      broadcastDbChange('doctors', 'update', updatedDoctor._id, updatedDoctor);
       res.json({ success: true, message: 'Doctor updated', data: updatedDoctor });
     } else {
       res.status(404).json({ success: false, message: 'Doctor not found' });
@@ -234,7 +236,9 @@ export const deleteDoctor = async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     if (doctor) {
+      const docId = doctor._id;
       await doctor.deleteOne();
+      broadcastDbChange('doctors', 'delete', docId);
       res.json({ success: true, message: 'Doctor deleted' });
     } else {
       res.status(404).json({ success: false, message: 'Doctor not found' });

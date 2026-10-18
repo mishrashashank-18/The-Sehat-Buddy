@@ -1,6 +1,7 @@
 import express from 'express';
 import Content from '../models/Content.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -77,6 +78,7 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
     if (!cachedContent) cachedContent = {};
     cachedContent[type] = bodyData;
     lastFetchTime = Date.now();
+    broadcastDbChange('contents', 'update', content._id, { type, data: bodyData });
     res.json({ success: true, data: content, message: `${type} updated` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

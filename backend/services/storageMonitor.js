@@ -213,6 +213,21 @@ export const notifyStorageChanged = (source = 'mutation') => {
   }, 350);
 };
 
+export const realtimeEvents = new EventEmitter();
+realtimeEvents.setMaxListeners(500);
+
+export const broadcastDbChange = (collection, operation = 'update', docId = null, fullDocument = null) => {
+  const payload = {
+    collection: (collection || '').toLowerCase(),
+    operation,
+    docId: docId ? docId.toString() : null,
+    fullDocument,
+    timestamp: Date.now()
+  };
+  realtimeEvents.emit('db_change', payload);
+  notifyStorageChanged(`mutation:${collection}:${operation}`);
+};
+
 // Initialize native MongoDB Atlas Change Stream
 export const initMongoDBChangeStream = () => {
   if (changeStream) {
@@ -226,8 +241,22 @@ export const initMongoDBChangeStream = () => {
       changeStream = mongoose.connection.watch([], { fullDocument: 'default' });
       
       changeStream.on('change', (change) => {
-        // As soon as any collection receives insert, update, delete, or drop, notify clients!
-        notifyStorageChanged(`mongodb:${change.operationType}`);
+        const collection = (change.ns?.coll || '').toLowerCase();
+        const operation = change.operationType;
+        const docId = change.documentKey?._id?.toString() || null;
+        const fullDocument = change.fullDocument || null;
+
+        // Broadcast to all connected website visitors & dashboards in real-time
+        realtimeEvents.emit('db_change', {
+          collection,
+          operation,
+          docId,
+          fullDocument,
+          timestamp: Date.now()
+        });
+
+        // As soon as any collection receives insert, update, delete, or drop, recalculate storage
+        notifyStorageChanged(`mongodb:${operation}:${collection}`);
       });
 
       changeStream.on('error', (err) => {
@@ -246,6 +275,41 @@ export const initMongoDBChangeStream = () => {
   } catch (err) {
     console.warn('Unable to initialize MongoDB change stream:', err.message);
   }
+};
+
+// Public Server-Sent Events (SSE) route handler for whole website & all dashboards realtime updates
+export const streamRealtimeDatabase = (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (res.flushHeaders) res.flushHeaders();
+
+  res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', time: Date.now() })}\n\n`);
+
+  const onDbChange = (payload) => {
+    try {
+      res.write(`event: db_change\ndata: ${JSON.stringify(payload)}\n\n`);
+    } catch (err) {
+      console.error('Realtime SSE stream write error:', err.message);
+    }
+  };
+
+  realtimeEvents.on('db_change', onDbChange);
+
+  // Send periodic ping to prevent firewall/proxy timeouts
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': heartbeat\n\n');
+    } catch {
+      clearInterval(heartbeat);
+    }
+  }, 20000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    realtimeEvents.off('db_change', onDbChange);
+  });
 };
 
 // Server-Sent Events (SSE) route handler for real-time streaming

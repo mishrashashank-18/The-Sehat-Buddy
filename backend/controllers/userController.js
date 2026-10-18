@@ -4,6 +4,7 @@ import Appointment from '../models/Appointment.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -300,6 +301,10 @@ export const bookAppointment = async (req, res) => {
       console.log('Error sending email:', err.message);
     }
 
+    try {
+      broadcastDbChange('appointments', 'insert', newAppointment._id, newAppointment);
+    } catch {}
+
     res.json({ success: true, message: 'Appointment Booked', data: newAppointment });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -336,6 +341,10 @@ export const cancelAppointment = async (req, res) => {
       doctor.slots_booked[appointment.slotDate] = doctor.slots_booked[appointment.slotDate].filter(e => e !== appointment.slotTime);
       await Doctor.findByIdAndUpdate(appointment.docId, { slots_booked: doctor.slots_booked });
     }
+
+    try {
+      broadcastDbChange('appointments', 'update', appointmentId, { cancelled: true });
+    } catch {}
 
     res.json({ success: true, message: 'Appointment Cancelled' });
   } catch (error) {

@@ -1,4 +1,5 @@
 import Review from '../models/Review.js';
+import { broadcastDbChange } from '../services/storageMonitor.js';
 
 const DEFAULT_REVIEWS = [
   {
@@ -129,6 +130,7 @@ export const createReview = async (req, res) => {
       status: 'approved' // auto-approve for seamless public experience, admin can moderate anytime
     });
 
+    broadcastDbChange('reviews', 'insert', review._id, review);
     res.status(201).json({ success: true, message: 'Review submitted successfully', data: review });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -143,6 +145,7 @@ export const updateReview = async (req, res) => {
     }
     Object.assign(review, req.body);
     const updated = await review.save();
+    broadcastDbChange('reviews', 'update', updated._id, updated);
     res.json({ success: true, message: 'Review updated successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -155,7 +158,9 @@ export const deleteReview = async (req, res) => {
     if (!review) {
       return res.status(404).json({ success: false, message: 'Review not found' });
     }
+    const revId = review._id;
     await review.deleteOne();
+    broadcastDbChange('reviews', 'delete', revId);
     res.json({ success: true, message: 'Review deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
