@@ -47,6 +47,8 @@ import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
 import logoImg from '../../assets/images/logo.png';
+import styles from './AdminPanel.module.css';
+
 // Smart Calibrated Progress Scale so active database/cloud usage is always clearly visible on the line
 // instead of collapsing into 0px due to massive total capacity (e.g. 0.8 MB / 512 MB = 0.16%)
 const getVisualProgressPercent = (used, total, actualPercent) => {
