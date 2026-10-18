@@ -5,14 +5,19 @@ import User from '../models/User.js';
 import Hospital from '../models/Hospital.js';
 
 export const protect = async (req, res, next) => {
-  let token;
+  let token = null;
 
   if (
     req.headers.authorization &&
     req.headers.authorization.startsWith('Bearer')
   ) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (token) {
     try {
-      token = req.headers.authorization.split(' ')[1];
       const secret = process.env.JWT_SECRET || (
         process.env.NODE_ENV === 'production'
           ? (() => { throw new Error('FATAL: JWT_SECRET environment variable is missing in production'); })()

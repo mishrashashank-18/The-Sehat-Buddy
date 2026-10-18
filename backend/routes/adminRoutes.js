@@ -7,7 +7,8 @@ import {
   getDashboardData,
   updateDoctor,
   deleteDoctor,
-  getStorageStats
+  getStorageStats,
+  streamStorageStats
 } from '../controllers/adminController.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
@@ -30,5 +31,6 @@ router.delete('/delete-doctor/:id', protect, requireAdmin, deleteDoctor);
 router.get('/all-doctors', protect, requireAdmin, allDoctors);
 router.get('/dashboard', protect, requireAdmin, getDashboardData);
 router.get('/storage-stats', protect, requireAdmin, getStorageStats);
+router.get('/storage-stream', protect, requireAdmin, streamStorageStats);
 
 export default router;

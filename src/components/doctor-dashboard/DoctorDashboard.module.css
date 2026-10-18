@@ -178,14 +178,19 @@
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
-  flex-wrap: wrap;
-  gap: 20px;
+  flex-wrap: nowrap;
+  gap: 24px;
+  min-height: 116px;
+  box-sizing: border-box;
 }
 
 .doctorCardMini {
   display: flex;
   align-items: center;
   gap: 18px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .doctorAvatar {
@@ -195,17 +200,22 @@
   object-fit: cover;
   background: #edf7f5;
   border: 3px solid #d1fae5;
+  flex-shrink: 0;
 }
 
 .doctorMeta {
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .nameRow {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .nameRow h2 {
@@ -213,6 +223,10 @@
   font-weight: 700;
   margin: 0;
   color: var(--color-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .specialtyPill {
@@ -222,12 +236,18 @@
   font-weight: 600;
   padding: 3px 10px;
   border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .degreesText {
   font-size: 0.84rem;
   color: var(--color-body);
   margin: 4px 0 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .hospitalAffiliation {
@@ -238,6 +258,10 @@
   color: var(--color-primary);
   margin: 4px 0 0 0;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 /* Status Toggle */
@@ -246,6 +270,7 @@
   flex-direction: column;
   gap: 8px;
   align-items: flex-end;
+  flex-shrink: 0;
 }
 
 .statusLabel {
@@ -773,6 +798,8 @@
   border: 1px solid #d9e2e6;
   font-size: 0.88rem;
   font-family: inherit;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .formGroup input:focus,
@@ -891,9 +918,19 @@
   .profileBanner {
     flex-direction: column;
     align-items: flex-start;
+    flex-wrap: wrap;
+    min-height: auto;
+    gap: 16px;
+  }
+  .doctorCardMini {
+    width: 100%;
   }
   .statusToggleGroup {
     align-items: flex-start;
+    width: 100%;
+  }
+  .settingsGrid {
+    grid-template-columns: 1fr;
   }
 }
 

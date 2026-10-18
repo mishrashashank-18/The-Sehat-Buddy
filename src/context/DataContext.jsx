@@ -536,6 +536,16 @@ export const DataProvider = ({ children }) => {
     }
   }, [branding]);
 
+  // Realtime notification: Trigger cloud storage quota recalculation whenever any entity changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('storage-stats-refresh'));
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [doctors, hospitals, heroContent, services, features, articles, corporateTieups, faqs, reviews, specialitiesProcedures, branding]);
+
 
 
   // Doctor CRUD operations

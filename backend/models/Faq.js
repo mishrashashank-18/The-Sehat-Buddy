@@ -5,7 +5,6 @@ const faqSchema = new mongoose.Schema({
   answer: { type: String, required: true },
   category: { 
     type: String, 
-    enum: ['Insurance & Cashless', 'Surgeries & Procedures', 'Hospitals & Admissions', 'Doctors & Consultations', 'General'],
     default: 'General'
   },
   targetType: { 

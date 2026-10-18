@@ -7,6 +7,7 @@ import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { protect } from '../middleware/authMiddleware.js';
+import { notifyStorageChanged } from '../services/storageMonitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +133,7 @@ router.post('/image', protect, (req, res, next) => {
           });
 
         const result = await uploadStream();
+        notifyStorageChanged('cloudinary:image');
         return res.json({
           success: true,
           url: result.secure_url || result.url,
@@ -162,6 +164,7 @@ router.post('/image', protect, (req, res, next) => {
           folder,
           resource_type: 'image'
         });
+        notifyStorageChanged('cloudinary:image');
         return res.json({
           success: true,
           url: result.secure_url || result.url,
@@ -245,6 +248,7 @@ router.post('/video', protect, (req, res, next) => {
         );
       });
 
+      notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
         url: uploadResult.secure_url || uploadResult.url,
@@ -272,6 +276,7 @@ router.post('/video', protect, (req, res, next) => {
         );
       });
 
+      notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
         url: uploadResult.secure_url || uploadResult.url,

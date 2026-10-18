@@ -140,9 +140,15 @@ const SpecialityFormModal = ({ itemToEdit, onClose, onSave }) => {
             <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Description</label>
             <textarea
               rows={2}
-              placeholder="Brief overview of clinical scope, benefits, recovery..."
+              placeholder="Brief overview of clinical scope, benefits, recovery... (Press Ctrl+Enter to save)"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
               style={{ border: '1.5px solid #cbd5e1', borderRadius: '10px', padding: '10px 14px', outline: 'none', fontFamily: 'inherit' }}
             />
           </div>

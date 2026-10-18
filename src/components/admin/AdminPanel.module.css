@@ -426,7 +426,7 @@
 /* Stats */
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 18px;
 }
 
@@ -685,7 +685,8 @@
   flex-wrap: wrap;
 }
 
-.searchBox {
+.searchBox,
+.searchWrap {
   flex: 1;
   min-width: 240px;
   position: relative;
@@ -700,7 +701,8 @@
   pointer-events: none;
 }
 
-.searchBox input {
+.searchBox input,
+.searchWrap input {
   width: 100%;
   padding: 9px 36px 9px 38px;
   border-radius: 8px;
@@ -709,7 +711,8 @@
   background: #F1FAF8;
 }
 
-.searchBox input:focus {
+.searchBox input:focus,
+.searchWrap input:focus {
   outline: none;
   background: #ffffff;
   border-color: var(--color-primary);
@@ -1341,6 +1344,51 @@
   gap: 12px;
 }
 
+.realtimeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.pulseDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  position: relative;
+}
+
+.pulseGreen {
+  background: #22c55e;
+  box-shadow: 0 0 0 rgba(34, 197, 94, 0.4);
+  animation: pulseGreen 2s infinite;
+}
+
+.pulseAmber {
+  background: #f59e0b;
+  box-shadow: 0 0 0 rgba(245, 158, 11, 0.4);
+}
+
+@keyframes pulseGreen {
+  0% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
 .storageTimestamp {
   font-size: 0.78rem;
   color: #94a3b8;
@@ -1399,7 +1447,7 @@
 
 .storageGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
   gap: 20px;
 }
 
@@ -1441,6 +1489,16 @@
   background: linear-gradient(90deg, #38bdf8, #2563eb);
 }
 
+.brevoCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #0284c7, #06b6d4);
+}
+
 .storageCardHeader {
   display: flex;
   align-items: flex-start;
@@ -1472,6 +1530,11 @@
 .storageIconCld {
   background: #eff6ff;
   color: #2563eb;
+}
+
+.storageIconBrevo {
+  background: #f0fdfa;
+  color: #0284c7;
 }
 
 .storagePlatformTag {
@@ -1589,22 +1652,48 @@
 .progressBarWrap {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .progressBarTrack {
   width: 100%;
-  height: 10px;
+  height: 12px;
   background: #e2e8f0;
   border-radius: 999px;
-  overflow: hidden;
   position: relative;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .progressBarFill {
   height: 100%;
   border-radius: 999px;
+  position: relative;
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.progressGlowThumb {
+  position: absolute;
+  right: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3.5px solid #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.7), 0 2px 4px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+  z-index: 2;
+}
+
+.progressGlowThumbCld {
+  border-color: #0284c7;
+  box-shadow: 0 0 10px rgba(2, 132, 199, 0.7), 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+.progressGlowThumbBrevo {
+  border-color: #06b6d4;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.7), 0 2px 4px rgba(0, 0, 0, 0.15);
 }
 
 .progressMongo {
@@ -1615,17 +1704,78 @@
   background: linear-gradient(90deg, #38bdf8, #2563eb);
 }
 
+.progressBrevo {
+  background: linear-gradient(90deg, #06b6d4, #0284c7);
+}
+
 .progressBarLabels {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.74rem;
+  font-size: 0.75rem;
   color: #94a3b8;
   font-weight: 600;
+  gap: 8px;
 }
 
-.progressCenterLabel {
-  color: #475569;
+.progressActiveBadgeMongo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.progressActiveBadgeCld {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.progressActiveBadgeBrevo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #0891b2;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+
+.statusDotBlue {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #0284c7;
+}
+
+.statusDotCyan {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #06b6d4;
+}
+
+.progressCapacityLabel {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: right;
 }
 
 /* 4-Item Metric Pills Grid */
@@ -1663,6 +1813,10 @@
 
 .textSky {
   color: #0284c7 !important;
+}
+
+.textTeal {
+  color: #0d9488 !important;
 }
 
 /* Footer row inside card */

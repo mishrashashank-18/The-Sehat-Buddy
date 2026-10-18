@@ -86,16 +86,18 @@ const BrandingManager = ({ showToast }) => {
   const syncTimeoutRef = useRef(null);
 
   const [formData, setFormData] = useState({
-    siteName: branding?.siteName || 'The Sehat Buddy',
-    tagline: branding?.tagline || 'Your Health. Our Priority.',
-    logoType: branding?.logoType || 'image', // 'default' | 'image' | 'none'
-    logoImage: branding?.logoImage || '/logo.png',
+    siteName: branding?.siteName ?? 'The Sehat Buddy',
+    tagline: branding?.tagline ?? 'Your Health. Our Priority.',
+    logoType: branding?.logoType ?? 'image', // 'default' | 'image' | 'none'
+    logoImage: branding?.logoImage ?? '/logo.png',
     showLogo: branding?.showLogo !== false,
     showTagline: branding?.showTagline !== false,
-    faviconType: branding?.faviconType || 'default', // 'default' | 'custom' | 'logo'
-    favicon: branding?.favicon || DEFAULT_FAVICON,
+    faviconType: branding?.faviconType ?? 'default', // 'default' | 'custom' | 'logo'
+    favicon: branding?.favicon ?? DEFAULT_FAVICON,
     faviconCircular: branding?.faviconCircular !== false
   });
+
+  const formDataRef = useRef(formData);
 
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
@@ -107,9 +109,10 @@ const BrandingManager = ({ showToast }) => {
     isDirtyRef.current = true;
     setFormData((prev) => {
       const next = { ...prev, [field]: value };
+      formDataRef.current = next;
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
       syncTimeoutRef.current = setTimeout(() => {
-        updateBranding(next);
+        updateBranding(formDataRef.current);
       }, 350);
       return next;
     });
@@ -119,6 +122,7 @@ const BrandingManager = ({ showToast }) => {
     isDirtyRef.current = true;
     setFormData((prev) => {
       const next = { ...prev, ...fields };
+      formDataRef.current = next;
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
       updateBranding(next);
       return next;
@@ -127,7 +131,18 @@ const BrandingManager = ({ showToast }) => {
 
   const handleBlurSync = () => {
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-    updateBranding(formData);
+    updateBranding(formDataRef.current);
+  };
+
+  const handleKeyDownEnter = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+      updateBranding(formDataRef.current);
+      if (showToast) {
+        showToast('Branding settings saved successfully!');
+      }
+    }
   };
 
   useEffect(() => {
@@ -135,16 +150,17 @@ const BrandingManager = ({ showToast }) => {
     if (branding && !isDirtyRef.current) {
       setFormData((prev) => {
         const next = {
-          siteName: branding.siteName || 'The Sehat Buddy',
-          tagline: branding.tagline || 'Your Health. Our Priority.',
-          logoType: branding.logoType || 'image',
-          logoImage: branding.logoImage || '/logo.png',
+          siteName: branding.siteName ?? 'The Sehat Buddy',
+          tagline: branding.tagline ?? 'Your Health. Our Priority.',
+          logoType: branding.logoType ?? 'image',
+          logoImage: branding.logoImage ?? '/logo.png',
           showLogo: branding.showLogo !== false,
           showTagline: branding.showTagline !== false,
-          faviconType: branding.faviconType || 'default',
-          favicon: branding.favicon || DEFAULT_FAVICON,
+          faviconType: branding.faviconType ?? 'default',
+          favicon: branding.favicon ?? DEFAULT_FAVICON,
           faviconCircular: branding.faviconCircular !== false
         };
+        formDataRef.current = next;
         if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
         return next;
       });
@@ -317,14 +333,14 @@ const BrandingManager = ({ showToast }) => {
   // Save changes
   const handleSave = (e) => {
     if (e) e.preventDefault();
-    if (!formData.siteName.trim()) {
+    if (!formDataRef.current.siteName?.trim()) {
       alert('Website name cannot be empty.');
       return;
     }
 
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     isDirtyRef.current = false;
-    updateBranding(formData);
+    updateBranding(formDataRef.current);
     if (showToast) {
       showToast('Brand identity and logo successfully saved!');
     }
@@ -452,6 +468,7 @@ const BrandingManager = ({ showToast }) => {
                 value={formData.siteName}
                 onChange={(e) => updateFormField('siteName', e.target.value)}
                 onBlur={handleBlurSync}
+                onKeyDown={handleKeyDownEnter}
                 placeholder="e.g. The Sehat Buddy"
                 className={styles.textInput}
               />
@@ -464,6 +481,7 @@ const BrandingManager = ({ showToast }) => {
                 value={formData.tagline}
                 onChange={(e) => updateFormField('tagline', e.target.value)}
                 onBlur={handleBlurSync}
+                onKeyDown={handleKeyDownEnter}
                 placeholder="e.g. Your Health. Our Priority."
                 className={styles.textInput}
               />
@@ -565,6 +583,7 @@ const BrandingManager = ({ showToast }) => {
                     value={formData.logoImage}
                     onChange={(e) => updateFormField('logoImage', e.target.value)}
                     onBlur={handleBlurSync}
+                    onKeyDown={handleKeyDownEnter}
                     placeholder="https://example.com/logo.png"
                     className={styles.textInput}
                     style={{ flex: 1 }}
@@ -757,6 +776,7 @@ const BrandingManager = ({ showToast }) => {
                     });
                   }}
                   onBlur={handleBlurSync}
+                  onKeyDown={handleKeyDownEnter}
                   placeholder="https://example.com/favicon.png"
                   className={styles.textInput}
                 />

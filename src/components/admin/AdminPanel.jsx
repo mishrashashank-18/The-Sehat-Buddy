@@ -32,7 +32,9 @@ import {
   Server,
   Layers,
   Image as ImageIcon,
-  AlertTriangle
+  AlertTriangle,
+  Mail,
+  Send
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
@@ -45,7 +47,24 @@ import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
 import logoImg from '../../assets/images/logo.png';
-import styles from './AdminPanel.module.css';
+// Smart Calibrated Progress Scale so active database/cloud usage is always clearly visible on the line
+// instead of collapsing into 0px due to massive total capacity (e.g. 0.8 MB / 512 MB = 0.16%)
+const getVisualProgressPercent = (used, total, actualPercent) => {
+  const numUsed = Number(used) || 0;
+  const numTotal = Number(total) || 1;
+  const pct = actualPercent !== undefined && actualPercent !== null
+    ? Number(actualPercent)
+    : (numUsed / numTotal) * 100;
+
+  if (numUsed <= 0) return 0;
+  if (pct >= 100) return 100;
+
+  // Power scale (exponent 0.45) with minimum visible presence (8%)
+  // so 0.8 MB yields ~13% visible width, 190 MB yields ~18% visible width
+  const minVisible = 8;
+  const scaled = Math.pow(Math.min(pct / 100, 1), 0.45) * (100 - minVisible);
+  return Math.min(100, Math.max(minVisible, Number((minVisible + scaled).toFixed(1))));
+};
 
 const AdminPanel = ({ onExit, onNavigate }) => {
   const {
@@ -110,6 +129,23 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
   const [faqToEdit, setFaqToEdit] = useState(null);
 
+  // Dynamic categories for FAQ filter (standards + all custom categories present in FAQs)
+  const faqFilterCategories = React.useMemo(() => {
+    const defaultCats = [
+      'Insurance & Cashless',
+      'Surgeries & Procedures',
+      'Hospitals & Admissions',
+      'Doctors & Consultations',
+      'General'
+    ];
+    const set = new Set(defaultCats);
+    (faqs || []).forEach(f => {
+      const cat = (f?.category || '').trim();
+      if (cat) set.add(cat);
+    });
+    return Array.from(set);
+  }, [faqs]);
+
   // Search & Filters for Reviews
   const [reviewSearch, setReviewSearch] = useState('');
   const [reviewStatusFilter, setReviewStatusFilter] = useState('all');
@@ -149,34 +185,109 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     );
   };
 
-  // Storage Stats (MongoDB & Cloudinary)
+  // Realtime Cloud Quota & Storage Stats (MongoDB, Cloudinary & Brevo)
   const [storageData, setStorageData] = useState(null);
   const [loadingStorage, setLoadingStorage] = useState(false);
   const [storageError, setStorageError] = useState(null);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
-  const fetchStorageStats = useCallback(async () => {
+  const fetchStorageStats = useCallback(async (isSilent = false) => {
     try {
-      setLoadingStorage(true);
-      setStorageError(null);
+      if (!isSilent) setLoadingStorage(true);
       const res = await api.getStorageStats();
       if (res && res.success) {
         setStorageData(res);
+        setStorageError(null);
       } else {
-        setStorageError(res?.message || 'Could not fetch storage metrics');
+        if (!isSilent) setStorageError(res?.message || 'Could not fetch storage metrics');
       }
     } catch (err) {
-      console.error('Failed to load storage stats:', err);
-      setStorageError(err.message || 'Failed to load cloud storage stats');
+      if (!isSilent) {
+        console.error('Failed to load storage stats:', err);
+        setStorageError(err.message || 'Failed to load cloud storage stats');
+      }
     } finally {
-      setLoadingStorage(false);
+      if (!isSilent) setLoadingStorage(false);
     }
   }, []);
 
+  // Realtime SSE Stream & Auto-Sync
+  useEffect(() => {
+    let eventSource = null;
+    let isMounted = true;
+
+    const token = localStorage.getItem('token');
+    const apiBase = import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    const streamBase = apiBase.replace(/\/+$/, '');
+    const cleanBase = streamBase.endsWith('/api') ? streamBase : `${streamBase}/api`;
+    const sseUrl = `${cleanBase}/admin/storage-stream?token=${encodeURIComponent(token || '')}`;
+
+    if (token) {
+      try {
+        eventSource = new EventSource(sseUrl);
+
+        eventSource.onopen = () => {
+          if (isMounted) setIsRealtimeConnected(true);
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && data.success && isMounted) {
+              setStorageData(data);
+              setStorageError(null);
+            }
+          } catch {
+            // Heartbeats or parse error
+          }
+        };
+
+        eventSource.onerror = () => {
+          if (isMounted) setIsRealtimeConnected(false);
+        };
+      } catch (err) {
+        console.warn('Realtime EventSource error:', err);
+      }
+    }
+
+    // Immediate initial fetch
+    fetchStorageStats(false);
+
+    // Refresh when app mutations happen or window is re-focused
+    const handleMutationSync = () => {
+      fetchStorageStats(true);
+    };
+
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        fetchStorageStats(true);
+      }
+    };
+
+    window.addEventListener('storage-stats-refresh', handleMutationSync);
+    window.addEventListener('visibilitychange', handleVisibilitySync);
+    window.addEventListener('focus', handleMutationSync);
+
+    // Fallback periodic sync every 20 seconds
+    const intervalTimer = setInterval(() => {
+      fetchStorageStats(true);
+    }, 20000);
+
+    return () => {
+      isMounted = false;
+      if (eventSource) eventSource.close();
+      clearInterval(intervalTimer);
+      window.removeEventListener('storage-stats-refresh', handleMutationSync);
+      window.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.removeEventListener('focus', handleMutationSync);
+    };
+  }, [fetchStorageStats]);
+
   useEffect(() => {
     if (activeTab === 'overview') {
-      fetchStorageStats();
+      fetchStorageStats(false);
     }
-  }, [activeTab]);
+  }, [activeTab, fetchStorageStats]);
 
   // Filtered Doctors
   const filteredDoctors = doctors.filter(doc => {
@@ -317,19 +428,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             title="Open Hospital Operations Portal"
           >
             Hospital Dashboard
-          </button>
-
-          <button
-            className={styles.resetBtn}
-            onClick={() => setDeleteModalState({
-              isOpen: true,
-              type: 'reset',
-              item: { name: 'all customized doctors & hospitals' }
-            })}
-            title="Reset data back to initial seeds"
-          >
-            <RotateCcw size={16} />
-            <span>Reset Demo</span>
           </button>
 
           <button className={styles.viewSiteBtn} onClick={onExit}>
@@ -481,9 +579,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <p className={styles.pageSubtitle}>Monitor registered doctors, healthcare centers, and clinical capacities</p>
                 </div>
                 <div className={styles.headerBtnGroup}>
-                  <button className={styles.contentBtn} onClick={() => setActiveTab('content')}>
-                    <LayoutTemplate size={18} /> Edit Front Page
-                  </button>
                   <button className={styles.primaryBtn} onClick={handleOpenAddDoctor}>
                     <Plus size={18} /> Add Doctor
                   </button>
@@ -516,28 +611,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <span className={styles.statSub}>Across {uniqueCities.length || 1} cities</span>
                   </div>
                 </div>
-
-                <div className={styles.statCard}>
-                  <div className={`${styles.statIconWrap} ${styles.statIconPurple}`}>
-                    <Bed size={24} />
-                  </div>
-                  <div className={styles.statInfo}>
-                    <span className={styles.statLabel}>Total Inpatient Beds</span>
-                    <span className={styles.statValue}>{stats.totalBeds.toLocaleString()}</span>
-                    <span className={styles.statSub}>Available capacity</span>
-                  </div>
-                </div>
-
-                <div className={styles.statCard}>
-                  <div className={`${styles.statIconWrap} ${styles.statIconOrange}`}>
-                    <Clock size={24} />
-                  </div>
-                  <div className={styles.statInfo}>
-                    <span className={styles.statLabel}>24/7 Emergency</span>
-                    <span className={styles.statValue}>{stats.emergencyHospitals}</span>
-                    <span className={styles.statSub}>Critical emergency centers</span>
-                  </div>
-                </div>
               </div>
 
               {/* Cloud Infrastructure & Storage Quotas */}
@@ -548,19 +621,30 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <Server size={14} />
                       <span>Cloud Quotas & Capacity</span>
                     </div>
-                    <h2>Database & Media Storage Quotas</h2>
-                    <p>Live resource usage, allocated capacity, and remaining free space on MongoDB Atlas and Cloudinary</p>
+                    <h2>Database, Media & Email Quotas</h2>
+                    <p>Live resource usage, allocated capacity, and remaining free space / quota on MongoDB Atlas, Cloudinary, and Brevo</p>
                   </div>
 
                   <div className={styles.storageHeaderActions}>
+                    <div
+                      className={styles.realtimeBadge}
+                      title={isRealtimeConnected
+                        ? "Realtime live connection active directly to MongoDB Change Stream & Cloudinary"
+                        : "Realtime auto-sync active"
+                      }
+                    >
+                      <span className={`${styles.pulseDot} ${isRealtimeConnected ? styles.pulseGreen : styles.pulseAmber}`}></span>
+                      <span>{isRealtimeConnected ? 'Live Realtime' : 'Auto-Sync Active'}</span>
+                    </div>
+
                     {storageData?.timestamp && (
                       <span className={styles.storageTimestamp}>
-                        Updated {new Date(storageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        Updated {new Date(storageData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                       </span>
                     )}
                     <button
                       className={styles.storageRefreshBtn}
-                      onClick={fetchStorageStats}
+                      onClick={() => fetchStorageStats(false)}
                       disabled={loadingStorage}
                       title="Refresh real-time storage metrics"
                     >
@@ -598,8 +682,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           storageData?.mongodb?.status === 'warning' ? styles.statusPillWarning : styles.statusPillHealthy
                         }`}>
                           <span className={styles.statusDot}></span>
-                          {storageData?.mongodb?.status === 'critical' ? 'High Usage' :
-                           storageData?.mongodb?.status === 'warning' ? 'Moderate' : 'Healthy'}
+                          {storageData?.mongodb?.plan || 'M0 Free'} Plan
                         </span>
                       </div>
                     </div>
@@ -614,7 +697,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <span className={styles.storageHeroLabel}>Remaining Free Space</span>
                       <span className={styles.storageHeroSub}>
                         of {storageData?.mongodb ? storageData.mongodb.totalLimitMB : 512} MB total capacity
-                        {storageData?.mongodb ? ` (${storageData.mongodb.percentUsed}% consumed)` : ''}
+                        {storageData?.mongodb ? ` • ${storageData.mongodb.usedMB} MB (${storageData.mongodb.percentUsed}%) in use` : ''}
                       </span>
                     </div>
 
@@ -623,15 +706,27 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarTrack}>
                         <div
                           className={`${styles.progressBarFill} ${styles.progressMongo}`}
-                          style={{ width: `${Math.min(100, Math.max(storageData?.mongodb?.percentUsed || 0, 1.5))}%` }}
-                        ></div>
+                          style={{
+                            width: `${getVisualProgressPercent(
+                              storageData?.mongodb?.usedMB,
+                              storageData?.mongodb?.totalLimitMB,
+                              storageData?.mongodb?.percentUsed
+                            )}%`
+                          }}
+                        >
+                          {Number(storageData?.mongodb?.usedMB) > 0 && (
+                            <span className={styles.progressGlowThumb} title={`${storageData?.mongodb?.usedMB} MB used`}></span>
+                          )}
+                        </div>
                       </div>
                       <div className={styles.progressBarLabels}>
-                        <span>0 MB</span>
-                        <span className={styles.progressCenterLabel}>
-                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB used` : 'Calculating...'}
+                        <span className={styles.progressActiveBadgeMongo}>
+                          <span className={styles.statusDotGreen}></span>
+                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB Used (${storageData.mongodb.percentUsed}%)` : '0 MB Used'}
                         </span>
-                        <span>{storageData?.mongodb ? `${storageData.mongodb.totalLimitMB} MB Total` : '512 MB Total'}</span>
+                        <span className={styles.progressCapacityLabel}>
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB Free of ${storageData.mongodb.totalLimitMB} MB` : '512 MB Total'}
+                        </span>
                       </div>
                     </div>
 
@@ -704,7 +799,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <span className={styles.storageHeroLabel}>Remaining Media Storage</span>
                       <span className={styles.storageHeroSub}>
                         of {storageData?.cloudinary ? storageData.cloudinary.totalLimitGB : 25} GB total quota
-                        {storageData?.cloudinary ? ` (${storageData.cloudinary.percentUsed}% consumed)` : ''}
+                        {storageData?.cloudinary ? ` • ${storageData.cloudinary.usedMB} MB (${storageData.cloudinary.percentUsed}%) in use` : ''}
                       </span>
                     </div>
 
@@ -713,15 +808,27 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarTrack}>
                         <div
                           className={`${styles.progressBarFill} ${styles.progressCld}`}
-                          style={{ width: `${Math.min(100, Math.max(storageData?.cloudinary?.percentUsed || 0, 1.5))}%` }}
-                        ></div>
+                          style={{
+                            width: `${getVisualProgressPercent(
+                              storageData?.cloudinary?.usedMB,
+                              (storageData?.cloudinary?.totalLimitGB || 25) * 1024,
+                              storageData?.cloudinary?.percentUsed
+                            )}%`
+                          }}
+                        >
+                          {Number(storageData?.cloudinary?.usedMB) > 0 && (
+                            <span className={`${styles.progressGlowThumb} ${styles.progressGlowThumbCld}`} title={`${storageData?.cloudinary?.usedMB} MB used`}></span>
+                          )}
+                        </div>
                       </div>
                       <div className={styles.progressBarLabels}>
-                        <span>0 GB</span>
-                        <span className={styles.progressCenterLabel}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB used` : 'Calculating...'}
+                        <span className={styles.progressActiveBadgeCld}>
+                          <span className={styles.statusDotBlue}></span>
+                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB Used (${storageData.cloudinary.percentUsed}%)` : '0 MB Used'}
                         </span>
-                        <span>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB} GB Total` : '25 GB Total'}</span>
+                        <span className={styles.progressCapacityLabel}>
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB Free of ${storageData.cloudinary.totalLimitGB} GB` : '25 GB Total'}
+                        </span>
                       </div>
                     </div>
 
@@ -756,6 +863,108 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       </span>
                       <span>
                         Bandwidth: {storageData?.cloudinary ? `${storageData.cloudinary.bandwidthMB} MB` : '0 MB'} • Transformations: {storageData?.cloudinary?.transformations || 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Brevo Email Quota Card */}
+                  <div className={`${styles.storageCard} ${styles.brevoCard}`}>
+                    <div className={styles.storageCardHeader}>
+                      <div className={styles.storageCardTitleGroup}>
+                        <div className={`${styles.storageIconWrap} ${styles.storageIconBrevo}`}>
+                          <Mail size={22} />
+                        </div>
+                        <div>
+                          <div className={styles.storagePlatformTag}>Transactional Email</div>
+                          <h3 className={styles.storageCardTitle}>Brevo Quota</h3>
+                        </div>
+                      </div>
+
+                      <div className={styles.storageBadgeGroup}>
+                        <span className={`${styles.statusPill} ${
+                          storageData?.brevo?.status === 'critical' ? styles.statusPillCritical :
+                          storageData?.brevo?.status === 'warning' ? styles.statusPillWarning : styles.statusPillHealthy
+                        }`}>
+                          <span className={styles.statusDot}></span>
+                          {storageData?.brevo?.plan || 'Free'} Plan
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.storageHeroMetric}>
+                      <div className={styles.storageHeroRemaining}>
+                        <span className={styles.storageHeroNum}>
+                          {storageData?.brevo ? storageData.brevo.remainingToday : '--'}
+                        </span>
+                        <span className={styles.storageHeroUnit}>Emails</span>
+                      </div>
+                      <span className={styles.storageHeroLabel}>Remaining Daily Emails</span>
+                      <span className={styles.storageHeroSub}>
+                        of {storageData?.brevo ? storageData.brevo.totalLimit : 300} daily quota
+                        {storageData?.brevo ? ` • ${storageData.brevo.sentToday} sent (${storageData.brevo.percentUsed}%)` : ''}
+                      </span>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className={styles.progressBarWrap}>
+                      <div className={styles.progressBarTrack}>
+                        <div
+                          className={`${styles.progressBarFill} ${styles.progressBrevo}`}
+                          style={{
+                            width: `${getVisualProgressPercent(
+                              storageData?.brevo?.sentToday,
+                              storageData?.brevo?.totalLimit || 300,
+                              storageData?.brevo?.percentUsed
+                            )}%`
+                          }}
+                        >
+                          {Number(storageData?.brevo?.sentToday) > 0 && (
+                            <span className={`${styles.progressGlowThumb} ${styles.progressGlowThumbBrevo}`} title={`${storageData?.brevo?.sentToday} sent today`}></span>
+                          )}
+                        </div>
+                      </div>
+                      <div className={styles.progressBarLabels}>
+                        <span className={styles.progressActiveBadgeBrevo}>
+                          <span className={styles.statusDotCyan}></span>
+                          {storageData?.brevo ? `${storageData.brevo.sentToday} Sent Today (${storageData.brevo.percentUsed}%)` : '0 Sent Today (0%)'}
+                        </span>
+                        <span className={styles.progressCapacityLabel}>
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday} Free of ${storageData.brevo.totalLimit} Daily` : '300 Daily Quota'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Detailed Metric Pills */}
+                    <div className={styles.storageDetailsGrid}>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Total Daily Quota</span>
+                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.totalLimit} emails` : '300 emails'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Sent Today</span>
+                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.sentToday} emails` : '--'}</span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Remaining Today</span>
+                        <span className={`${styles.detailPillVal} ${styles.textTeal}`}>
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday} emails` : '--'}
+                        </span>
+                      </div>
+                      <div className={styles.storageDetailPill}>
+                        <span className={styles.detailPillLabel}>Sent This Month</span>
+                        <span className={styles.detailPillVal}>
+                          {storageData?.brevo ? `${storageData.brevo.sentMonth} emails` : '--'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Email Breakdown Footer */}
+                    <div className={styles.storageFooterRow}>
+                      <span>
+                        <Send size={13} /> SMTP: {storageData?.brevo?.smtpConfigured ? 'Active (smtp-relay.brevo.com)' : 'Not Configured'}
+                      </span>
+                      <span>
+                        Sender: {storageData?.brevo?.accountEmail || 'thesehatbuddy@gmail.com'}
                       </span>
                     </div>
                   </div>
@@ -1203,15 +1412,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Filters */}
               <div className={styles.filterBar}>
-                <div className={styles.searchWrap}>
+                <div className={styles.searchBox}>
                   <Search size={18} className={styles.searchIcon} />
                   <input
                     type="text"
                     placeholder="Search FAQs by question or answer keyword..."
                     value={faqSearch}
                     onChange={(e) => setFaqSearch(e.target.value)}
-                    className={styles.searchInput}
                   />
+                  {faqSearch && (
+                    <button className={styles.clearSearch} onClick={() => setFaqSearch('')}>×</button>
+                  )}
                 </div>
                 <div className={styles.filterGroup}>
                   <Filter size={16} className={styles.filterIcon} />
@@ -1221,11 +1432,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     className={styles.filterSelect}
                   >
                     <option value="all">All Categories ({faqs.length})</option>
-                    <option value="Insurance & Cashless">Insurance & Cashless</option>
-                    <option value="Surgeries & Procedures">Surgeries & Procedures</option>
-                    <option value="Hospitals & Admissions">Hospitals & Admissions</option>
-                    <option value="Doctors & Consultations">Doctors & Consultations</option>
-                    <option value="General">General</option>
+                    {faqFilterCategories.map(cat => {
+                      const count = faqs.filter(f => f.category === cat).length;
+                      return (
+                        <option key={cat} value={cat}>
+                          {cat} {count > 0 ? `(${count})` : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
@@ -1357,15 +1571,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Filters */}
               <div className={styles.filterBar}>
-                <div className={styles.searchWrap}>
+                <div className={styles.searchBox}>
                   <Search size={18} className={styles.searchIcon} />
                   <input
                     type="text"
                     placeholder="Search by patient name, hospital, surgery, or keywords..."
                     value={reviewSearch}
                     onChange={(e) => setReviewSearch(e.target.value)}
-                    className={styles.searchInput}
                   />
+                  {reviewSearch && (
+                    <button className={styles.clearSearch} onClick={() => setReviewSearch('')}>×</button>
+                  )}
                 </div>
                 <div className={styles.filterGroup}>
                   <Filter size={16} className={styles.filterIcon} />
@@ -1510,15 +1726,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Filters */}
               <div className={styles.filterBar}>
-                <div className={styles.searchWrap}>
+                <div className={styles.searchBox}>
                   <Search size={18} className={styles.searchIcon} />
                   <input
                     type="text"
                     placeholder="Search specialities, procedures, surgeries..."
                     value={specSearch}
                     onChange={(e) => setSpecSearch(e.target.value)}
-                    className={styles.searchInput}
                   />
+                  {specSearch && (
+                    <button className={styles.clearSearch} onClick={() => setSpecSearch('')}>×</button>
+                  )}
                 </div>
                 <div className={styles.filterGroup}>
                   <Filter size={16} className={styles.filterIcon} />

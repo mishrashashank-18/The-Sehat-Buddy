@@ -140,16 +140,26 @@ const INITIAL_PRESCRIPTIONS = [
 const DoctorDashboard = ({ onNavigate }) => {
   const { doctors, updateDoctor, deleteDoctor } = useData();
 
-  // Active doctor selection (get from login if available)
-  const storedUser = JSON.parse(localStorage.getItem('user') || '{}');
-  const [selectedDoctorId, setSelectedDoctorId] = useState(() => {
-    if (storedUser && (storedUser._id || storedUser.id)) {
-      return storedUser._id || storedUser.id;
+  // Active doctor selection: strictly locks to the authenticated doctor's account
+  const storedUser = React.useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {
+      return {};
     }
-    return doctors[0]?.id || doctors[0]?._id || 1;
-  });
-  
-  const activeDoctor = doctors.find(d => String(d.id) === String(selectedDoctorId) || String(d._id) === String(selectedDoctorId)) || doctors[0] || {};
+  }, []);
+
+  const activeDoctor = React.useMemo(() => {
+    if (storedUser && (storedUser._id || storedUser.id)) {
+      const match = doctors.find(d => String(d.id || d._id) === String(storedUser._id || storedUser.id));
+      if (match) return match;
+    }
+    if (storedUser && storedUser.email) {
+      const emailMatch = doctors.find(d => (d.email || '').toLowerCase().trim() === storedUser.email.toLowerCase().trim());
+      if (emailMatch) return emailMatch;
+    }
+    return doctors[0] || {};
+  }, [doctors, storedUser]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState(() => {
@@ -614,6 +624,22 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('Profile photo removed!');
   };
 
+  // Save All Profile Settings
+  const handleSaveAllProfileSettings = (e) => {
+    e?.preventDefault?.();
+    updateDoctor(activeDoctor.id || activeDoctor._id, {
+      ...profileForm,
+      experience: parseInt(profileForm.experience, 10) || 5,
+      awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
+      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
+      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
+      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
+      reels: Array.isArray(profileForm.reels) ? profileForm.reels : [],
+      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []
+    });
+    showToast('All profile details, credentials, media & fees saved successfully!');
+  };
+
   // Save About Section directly
   const [isSavingAbout, setIsSavingAbout] = useState(false);
   const handleSaveAbout = async () => {
@@ -893,12 +919,20 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
             <div className={styles.doctorMeta}>
               <div className={styles.nameRow}>
-                <h2>{activeDoctor.name}</h2>
-                <span className={styles.specialtyPill}>{activeDoctor.specialty}</span>
+                <h2 title={activeDoctor.name || 'Doctor'}>{activeDoctor.name}</h2>
+                <span className={styles.specialtyPill} title={activeDoctor.specialty}>{activeDoctor.specialty}</span>
               </div>
-              <p className={styles.degreesText}>{activeDoctor.degree || 'MBBS, MD'} • {activeDoctor.experience}</p>
-              <p className={styles.hospitalAffiliation}>
-                <Building2 size={13} /> {activeDoctor.hospital || 'Private Healthcare Center'}
+              <p
+                className={styles.degreesText}
+                title={`${activeDoctor.degree || 'MBBS, MD'} • ${typeof activeDoctor.experience === 'number' || (!isNaN(Number(activeDoctor.experience)) && String(activeDoctor.experience).trim() !== '') ? `${activeDoctor.experience}+ Years Experience` : (activeDoctor.experience || '10+ Years Experience')}`}
+              >
+                {activeDoctor.degree || 'MBBS, MD'} • {typeof activeDoctor.experience === 'number' || (!isNaN(Number(activeDoctor.experience)) && String(activeDoctor.experience).trim() !== '') ? `${activeDoctor.experience}+ Years Experience` : (activeDoctor.experience || '10+ Years Experience')}
+              </p>
+              <p className={styles.hospitalAffiliation} title={activeDoctor.hospital || 'Private Healthcare Center'}>
+                <Building2 size={13} style={{ flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeDoctor.hospital || 'Private Healthcare Center'}
+                </span>
               </p>
             </div>
           </div>
@@ -1241,40 +1275,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                     <Check size={15} />
                     <span>Save All Changes</span>
                   </button>
-
-                  {doctors.length > 1 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#eff6ff', padding: '6px 12px', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                      <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#1d4ed8' }}>Doctor Profile:</span>
-                      <select
-                        value={activeDoctor.id || activeDoctor._id}
-                        onChange={(e) => {
-                          const newId = e.target.value;
-                          setSelectedDoctorId(newId);
-                          const doc = doctors.find(d => String(d.id || d._id) === String(newId));
-                          if (doc) {
-                            setProfileForm({
-                              ...doc,
-                              experience: typeof doc.experience === 'string' ? parseInt(doc.experience) : (doc.experience || 5),
-                              licenseNumber: doc.licenseNumber || '',
-                              awards: Array.isArray(doc.awards) ? doc.awards : [],
-                              certifications: Array.isArray(doc.certifications) ? doc.certifications : [],
-                              memberships: Array.isArray(doc.memberships) ? doc.memberships : [],
-                              careerExperience: Array.isArray(doc.careerExperience) ? doc.careerExperience : [],
-                              reels: Array.isArray(doc.reels) ? doc.reels : [],
-                              youtube_videos: Array.isArray(doc.youtube_videos) ? doc.youtube_videos : []
-                            });
-                          }
-                        }}
-                        style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #93c5fd', fontSize: '0.84rem', fontWeight: 600, background: 'white', color: '#1e293b' }}
-                      >
-                        {doctors.map(d => (
-                          <option key={d.id || d._id} value={d.id || d._id}>
-                            {d.name} ({d.specialty || d.specialization || 'Doctor'})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1357,7 +1357,15 @@ const DoctorDashboard = ({ onNavigate }) => {
               </div>
 
               {/* SECTION: BASIC CLINICAL & CONSULTATION DETAILS */}
-              <div className={styles.settingsGrid}>
+              <form
+                onSubmit={handleSaveAllProfileSettings}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveAllProfileSettings(e);
+                  }
+                }}
+                className={styles.settingsGrid}
+              >
                 <div className={styles.formGroup}>
                   <label>Full Name</label>
                   <input
@@ -1390,8 +1398,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Experience (Years)</label>
                   <input
                     type="number"
-                    value={profileForm.experience || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, experience: Number(e.target.value) })}
+                    value={profileForm.experience ?? ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, experience: e.target.value === '' ? '' : Number(e.target.value) })}
                   />
                 </div>
 
@@ -1417,8 +1425,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Consultation Fee (₹)</label>
                   <input
                     type="number"
-                    value={profileForm.price || profileForm.fees || 700}
-                    onChange={(e) => setProfileForm({ ...profileForm, price: Number(e.target.value) })}
+                    value={profileForm.price ?? profileForm.fees ?? ''}
+                    onChange={(e) => setProfileForm({ ...profileForm, price: e.target.value === '' ? '' : Number(e.target.value) })}
                   />
                 </div>
 
@@ -1452,7 +1460,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     onChange={(e) => setProfileForm({ ...profileForm, availableDays: e.target.value })}
                   />
                 </div>
-              </div>
+              </form>
 
               {/* SECTION: ABOUT DOCTOR / PROFESSIONAL BIO */}
               <div style={{
@@ -1532,6 +1540,12 @@ const DoctorDashboard = ({ onNavigate }) => {
                     placeholder="Write your professional summary, clinical background, specializations, patient care approach, and institutional privileges here..."
                     value={profileForm.about || ''}
                     onChange={(e) => setProfileForm({ ...profileForm, about: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        handleSaveAbout();
+                      }
+                    }}
                     style={{
                       width: '100%',
                       boxSizing: 'border-box',
@@ -2377,7 +2391,15 @@ const DoctorDashboard = ({ onNavigate }) => {
 
               {/* SECTION: SOCIAL LINKS */}
               <h4 style={{ marginTop: '24px', marginBottom: '12px' }}>Social Profiles (Optional)</h4>
-              <div className={styles.settingsGrid}>
+              <form
+                onSubmit={handleSaveAllProfileSettings}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSaveAllProfileSettings(e);
+                  }
+                }}
+                className={styles.settingsGrid}
+              >
                 <div className={styles.formGroup}>
                   <label>Instagram URL</label>
                   <input
@@ -2414,7 +2436,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     onChange={(e) => setProfileForm({ ...profileForm, twitter: e.target.value })}
                   />
                 </div>
-              </div>
+              </form>
 
               {/* SECTION: DOCTOR PROFILE FAQS (GOVERNED BY REGISTERED HOSPITAL OR ADMIN) */}
               <div style={{ marginTop: '28px', borderTop: '1px solid #e2e8f0', paddingTop: '22px' }}>

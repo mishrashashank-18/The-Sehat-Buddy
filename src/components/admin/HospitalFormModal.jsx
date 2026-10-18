@@ -710,9 +710,15 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             <label>Hospital Description & Accreditations</label>
             <textarea
               rows={3}
-              placeholder="Overview of specialties, advanced technology, patient facilities..."
+              placeholder="Overview of specialties, advanced technology, patient facilities... (Press Ctrl+Enter to save)"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
             />
           </div>
 

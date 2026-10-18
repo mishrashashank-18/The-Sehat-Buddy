@@ -111,28 +111,28 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
   // Hero form local state
   const [heroForm, setHeroForm] = useState(() => ({
-    badge: heroContent?.badge || '',
-    titleLine1: heroContent?.titleLine1 || '',
-    titleLine2: heroContent?.titleLine2 || '',
-    titleHighlight: heroContent?.titleHighlight || '',
-    description: heroContent?.description || '',
+    badge: heroContent?.badge ?? '',
+    titleLine1: heroContent?.titleLine1 ?? '',
+    titleLine2: heroContent?.titleLine2 ?? '',
+    titleHighlight: heroContent?.titleHighlight ?? '',
+    description: heroContent?.description ?? '',
     heroImage: heroContent?.heroImage || heroFamily,
-    stat1Label: heroContent?.stats?.[0]?.label || 'Trusted by',
-    stat1Value: heroContent?.stats?.[0]?.value || '10M+ Users',
-    stat2Label: heroContent?.stats?.[1]?.label || 'Expert Doctors',
-    stat2Value: heroContent?.stats?.[1]?.value || '25,000+',
-    stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
-    stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
-    whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
-    whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
-    whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
+    stat1Label: heroContent?.stats?.[0]?.label ?? 'Trusted by',
+    stat1Value: heroContent?.stats?.[0]?.value ?? '10M+ Users',
+    stat2Label: heroContent?.stats?.[1]?.label ?? 'Expert Doctors',
+    stat2Value: heroContent?.stats?.[1]?.value ?? '25,000+',
+    stat3Label: heroContent?.stats?.[2]?.label ?? 'Quick',
+    stat3Value: heroContent?.stats?.[2]?.value ?? 'Appointments',
+    whyChooseTitle: heroContent?.whyChooseTitle ?? 'Why Choose The Sehat Buddy?',
+    whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+    whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
     whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
-    newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
-    newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
-    corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
-    corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
-    corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
-    corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
+    newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
+    newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter',
+    corporateBadge: heroContent?.corporateBadge ?? 'ENTERPRISE HEALTHCARE NETWORK',
+    corporateTitle: heroContent?.corporateTitle ?? 'Corporate Tie-ups & Partners',
+    corporateSubtitle: heroContent?.corporateSubtitle ?? 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+    corporateStat: heroContent?.corporateStat ?? '2.5M+ Corporate Lives Covered'
   }));
 
   // Keep heroFormRef in sync with heroForm
@@ -153,39 +153,49 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   React.useEffect(() => {
     if (!isHeroDirtyRef.current && heroContent) {
       setHeroForm({
-        badge: heroContent?.badge || '',
-        titleLine1: heroContent?.titleLine1 || '',
-        titleLine2: heroContent?.titleLine2 || '',
-        titleHighlight: heroContent?.titleHighlight || '',
-        description: heroContent?.description || '',
+        badge: heroContent?.badge ?? '',
+        titleLine1: heroContent?.titleLine1 ?? '',
+        titleLine2: heroContent?.titleLine2 ?? '',
+        titleHighlight: heroContent?.titleHighlight ?? '',
+        description: heroContent?.description ?? '',
         heroImage: heroContent?.heroImage || heroFamily,
-        stat1Label: heroContent?.stats?.[0]?.label || 'Trusted by',
-        stat1Value: heroContent?.stats?.[0]?.value || '10M+ Users',
-        stat2Label: heroContent?.stats?.[1]?.label || 'Expert Doctors',
-        stat2Value: heroContent?.stats?.[1]?.value || '25,000+',
-        stat3Label: heroContent?.stats?.[2]?.label || 'Quick',
-        stat3Value: heroContent?.stats?.[2]?.value || 'Appointments',
-        whyChooseTitle: heroContent?.whyChooseTitle || 'Why Choose The Sehat Buddy?',
-        whyChooseVideoUrl: heroContent?.whyChooseVideoUrl || 'https://www.youtube.com/watch?v=zCCD52Pty4A',
-        whyChooseVideoText: heroContent?.whyChooseVideoText || 'Watch how\nSehat Buddy\nworks for you',
+        stat1Label: heroContent?.stats?.[0]?.label ?? 'Trusted by',
+        stat1Value: heroContent?.stats?.[0]?.value ?? '10M+ Users',
+        stat2Label: heroContent?.stats?.[1]?.label ?? 'Expert Doctors',
+        stat2Value: heroContent?.stats?.[1]?.value ?? '25,000+',
+        stat3Label: heroContent?.stats?.[2]?.label ?? 'Quick',
+        stat3Value: heroContent?.stats?.[2]?.value ?? 'Appointments',
+        whyChooseTitle: heroContent?.whyChooseTitle ?? 'Why Choose The Sehat Buddy?',
+        whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+        whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
         whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
-        newsletterTitle: heroContent?.newsletterTitle || 'Stay updated with\nhealth tips & offers',
-        newsletterSubtitle: heroContent?.newsletterSubtitle || 'Subscribe to our newsletter',
-        corporateBadge: heroContent?.corporateBadge || 'ENTERPRISE HEALTHCARE NETWORK',
-        corporateTitle: heroContent?.corporateTitle || 'Corporate Tie-ups & Partners',
-        corporateSubtitle: heroContent?.corporateSubtitle || 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
-        corporateStat: heroContent?.corporateStat || '2.5M+ Corporate Lives Covered'
+        newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
+        newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter',
+        corporateBadge: heroContent?.corporateBadge ?? 'ENTERPRISE HEALTHCARE NETWORK',
+        corporateTitle: heroContent?.corporateTitle ?? 'Corporate Tie-ups & Partners',
+        corporateSubtitle: heroContent?.corporateSubtitle ?? 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+        corporateStat: heroContent?.corporateStat ?? '2.5M+ Corporate Lives Covered'
       });
     }
   }, [heroContent]);
 
   const handleHeroFieldChange = (field, value) => {
     isHeroDirtyRef.current = true;
+    if (heroFormRef.current) {
+      heroFormRef.current = { ...heroFormRef.current, [field]: value };
+    }
     setHeroForm(prev => {
       const updated = { ...prev, [field]: value };
       heroFormRef.current = updated;
       return updated;
     });
+  };
+
+  const handleHeroFieldBlur = (field, value) => {
+    const val = value !== undefined ? value : heroFormRef.current?.[field];
+    if (val !== undefined) {
+      updateHeroContent({ [field]: val });
+    }
   };
 
   const handleSwitchSubTab = (newTab) => {
@@ -485,12 +495,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   // Save Corporate Header
   const handleSaveCorporateHeader = (e) => {
     if (e) e.preventDefault();
+    const current = heroFormRef.current || heroForm;
     isHeroDirtyRef.current = false;
     updateHeroContent({
-      corporateBadge: heroForm.corporateBadge || '',
-      corporateTitle: heroForm.corporateTitle || '',
-      corporateSubtitle: heroForm.corporateSubtitle || '',
-      corporateStat: heroForm.corporateStat || ''
+      corporateBadge: current.corporateBadge ?? '',
+      corporateTitle: current.corporateTitle ?? '',
+      corporateSubtitle: current.corporateSubtitle ?? '',
+      corporateStat: current.corporateStat ?? ''
     });
     showToast('Corporate Tie-ups header & metrics updated successfully!');
   };
@@ -869,6 +880,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={svc.title}
                       onChange={(e) => updateService(svc.id, { title: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateService(svc.id, { title: svc.title });
+                          showToast(`Service "${svc.title}" saved!`);
+                        }
+                      }}
                     />
                   </div>
                   <div className={styles.formGroup}>
@@ -877,6 +895,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={svc.subtitle}
                       onChange={(e) => updateService(svc.id, { subtitle: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateService(svc.id, { subtitle: svc.subtitle });
+                          showToast(`Service "${svc.title}" saved!`);
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -925,24 +950,28 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
           </div>
 
           {/* Section Title */}
-          <div className={styles.formCard} style={{ marginBottom: '16px' }}>
+          <form
+            className={styles.formCard}
+            style={{ marginBottom: '16px' }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              isHeroDirtyRef.current = false;
+              updateHeroContent({ whyChooseTitle: heroForm.whyChooseTitle });
+              showToast('Section heading saved successfully!');
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-heading)' }}>
                   Why Choose Us Section Heading
                 </h4>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
-                  Customize the headline displayed on the homepage above the feature cards.
+                  Customize the headline displayed on the homepage above the feature cards. Press Enter to save.
                 </p>
               </div>
               <button
-                type="button"
+                type="submit"
                 className={styles.primarySaveBtn}
-                onClick={() => {
-                  isHeroDirtyRef.current = false;
-                  updateHeroContent({ whyChooseTitle: heroForm.whyChooseTitle });
-                  showToast('Section heading saved successfully!');
-                }}
               >
                 <CheckCircle size={15} /> Save Title
               </button>
@@ -951,18 +980,34 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               <label>Section Heading Title</label>
               <input
                 type="text"
-                value={heroForm.whyChooseTitle || ''}
+                value={heroForm.whyChooseTitle ?? ''}
                 onChange={(e) => handleHeroFieldChange('whyChooseTitle', e.target.value)}
-                onBlur={() => {
-                  updateHeroContent({ whyChooseTitle: heroForm.whyChooseTitle });
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    isHeroDirtyRef.current = false;
+                    const val = heroFormRef.current?.whyChooseTitle ?? e.target.value;
+                    updateHeroContent({ whyChooseTitle: val });
+                    showToast('Section heading saved successfully!');
+                  }
+                }}
+                onBlur={(e) => {
+                  handleHeroFieldBlur('whyChooseTitle', e.target.value);
                 }}
                 placeholder="e.g. Why Choose The Sehat Buddy?"
               />
             </div>
-          </div>
+          </form>
 
           {/* Explainer Video Settings */}
-          <div className={styles.formCard} style={{ marginBottom: '20px' }}>
+          <form
+            className={styles.formCard}
+            style={{ marginBottom: '20px' }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSaveWhyVideo();
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', borderBottom: '1px solid #e9eff2', paddingBottom: '12px' }}>
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600, color: 'var(--color-heading)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -970,12 +1015,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   "Watch How It Works" Video Control
                 </h4>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
-                  Manage the explainer video URL, play button text, and configure automatic video playback.
+                  Manage the explainer video URL, play button text, and configure automatic video playback. Press Enter to save.
                 </p>
               </div>
               <button
-                type="button"
-                onClick={handleSaveWhyVideo}
+                type="submit"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1085,10 +1129,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   type="text"
                   value={heroForm.whyChooseVideoUrl}
                   onChange={(e) => handleHeroFieldChange('whyChooseVideoUrl', e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveWhyVideo();
+                    }
+                  }}
                   placeholder="https://www.youtube.com/watch?v=... or https://res.cloudinary.com/..."
                 />
                 <span style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                  Upload a video to Cloudinary using the button above, or paste any YouTube URL / external MP4 link.
+                  Upload a video to Cloudinary using the button above, or paste any YouTube URL / external MP4 link. Press Enter to save.
                 </span>
               </div>
 
@@ -1098,6 +1148,12 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   rows={2}
                   value={heroForm.whyChooseVideoText}
                   onChange={(e) => handleHeroFieldChange('whyChooseVideoText', e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      handleSaveWhyVideo();
+                    }
+                  }}
                   placeholder="Watch how&#10;Sehat Buddy&#10;works for you"
                 />
               </div>
@@ -1145,7 +1201,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 </span>
               </div>
             )}
-          </div>
+          </form>
 
           <div className={styles.itemsList}>
             {features?.map((feat) => (
@@ -1161,6 +1217,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={feat.title}
                       onChange={(e) => updateFeature(feat.id, { title: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateFeature(feat.id, { title: feat.title });
+                          showToast(`Feature "${feat.title}" saved!`);
+                        }
+                      }}
                     />
                   </div>
                   <div className={styles.formGroup}>
@@ -1169,6 +1232,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={feat.description}
                       onChange={(e) => updateFeature(feat.id, { description: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateFeature(feat.id, { description: feat.description });
+                          showToast(`Feature "${feat.title}" saved!`);
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -1235,6 +1305,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={art.title}
                       onChange={(e) => updateArticle(art.id, { title: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateArticle(art.id, { title: art.title });
+                          showToast(`Article "${art.title}" saved!`);
+                        }
+                      }}
                     />
                   </div>
 
@@ -1245,6 +1322,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                         type="text"
                         value={art.category}
                         onChange={(e) => updateArticle(art.id, { category: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            updateArticle(art.id, { category: art.category });
+                            showToast(`Article "${art.title}" saved!`);
+                          }
+                        }}
                       />
                     </div>
                     <div className={styles.formGroup}>
@@ -1253,6 +1337,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                         type="text"
                         value={art.readTime}
                         onChange={(e) => updateArticle(art.id, { readTime: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            updateArticle(art.id, { readTime: art.readTime });
+                            showToast(`Article "${art.title}" saved!`);
+                          }
+                        }}
                       />
                     </div>
                   </div>
@@ -1266,6 +1357,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="url"
                       value={art.link || ''}
                       onChange={(e) => updateArticle(art.id, { link: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateArticle(art.id, { link: art.link });
+                          showToast(`Article link for "${art.title}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. https://example.com/article-slug or internal path"
                     />
                   </div>
@@ -1291,25 +1389,29 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
           </div>
 
           {/* Newsletter Box Content */}
-          <div className={styles.formCard} style={{ marginTop: '24px' }}>
+          <form
+            className={styles.formCard}
+            style={{ marginTop: '24px' }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              isHeroDirtyRef.current = false;
+              updateHeroContent({
+                newsletterTitle: heroForm.newsletterTitle,
+                newsletterSubtitle: heroForm.newsletterSubtitle
+              });
+              showToast('Newsletter card content saved!');
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div>
                 <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>Newsletter Card Content</h4>
                 <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748B' }}>
-                  Manage the promotional newsletter subscription box title and subtitle.
+                  Manage the promotional newsletter subscription box title and subtitle. Press Enter to save.
                 </p>
               </div>
               <button
-                type="button"
+                type="submit"
                 className={styles.primarySaveBtn}
-                onClick={() => {
-                  isHeroDirtyRef.current = false;
-                  updateHeroContent({
-                    newsletterTitle: heroForm.newsletterTitle,
-                    newsletterSubtitle: heroForm.newsletterSubtitle
-                  });
-                  showToast('Newsletter card content saved!');
-                }}
               >
                 <CheckCircle size={15} /> Save Newsletter Content
               </button>
@@ -1319,10 +1421,23 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Newsletter Title</label>
                 <textarea
                   rows={2}
-                  value={heroForm.newsletterTitle || ''}
+                  value={heroForm.newsletterTitle ?? ''}
                   onChange={(e) => handleHeroFieldChange('newsletterTitle', e.target.value)}
-                  onBlur={() => {
-                    updateHeroContent({ newsletterTitle: heroForm.newsletterTitle });
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      isHeroDirtyRef.current = false;
+                      const titleVal = heroFormRef.current?.newsletterTitle ?? e.target.value;
+                      const subVal = heroFormRef.current?.newsletterSubtitle ?? heroForm.newsletterSubtitle;
+                      updateHeroContent({
+                        newsletterTitle: titleVal,
+                        newsletterSubtitle: subVal
+                      });
+                      showToast('Newsletter card content saved!');
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleHeroFieldBlur('newsletterTitle', e.target.value);
                   }}
                 />
               </div>
@@ -1330,15 +1445,28 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Newsletter Subtitle</label>
                 <input
                   type="text"
-                  value={heroForm.newsletterSubtitle || ''}
+                  value={heroForm.newsletterSubtitle ?? ''}
                   onChange={(e) => handleHeroFieldChange('newsletterSubtitle', e.target.value)}
-                  onBlur={() => {
-                    updateHeroContent({ newsletterSubtitle: heroForm.newsletterSubtitle });
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      isHeroDirtyRef.current = false;
+                      const titleVal = heroFormRef.current?.newsletterTitle ?? heroForm.newsletterTitle;
+                      const subVal = heroFormRef.current?.newsletterSubtitle ?? e.target.value;
+                      updateHeroContent({
+                        newsletterTitle: titleVal,
+                        newsletterSubtitle: subVal
+                      });
+                      showToast('Newsletter card content saved!');
+                    }
+                  }}
+                  onBlur={(e) => {
+                    handleHeroFieldBlur('newsletterSubtitle', e.target.value);
                   }}
                 />
               </div>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
@@ -1362,16 +1490,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Top Badge Text</label>
                 <input
                   type="text"
-                  value={heroForm.corporateBadge || ''}
-                  onChange={(e) => {
-                    isHeroDirtyRef.current = true;
-                    setHeroForm(prev => ({ ...prev, corporateBadge: e.target.value }));
-                  }}
-                  onBlur={() => {
-                    updateHeroContent({
-                      corporateBadge: heroForm.corporateBadge || ''
-                    });
-                  }}
+                  value={heroForm.corporateBadge ?? ''}
+                  onChange={(e) => handleHeroFieldChange('corporateBadge', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('corporateBadge', e.target.value)}
                   placeholder="e.g. ENTERPRISE HEALTHCARE NETWORK"
                 />
               </div>
@@ -1380,16 +1501,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Covered Lives Stat Pill</label>
                 <input
                   type="text"
-                  value={heroForm.corporateStat || ''}
-                  onChange={(e) => {
-                    isHeroDirtyRef.current = true;
-                    setHeroForm(prev => ({ ...prev, corporateStat: e.target.value }));
-                  }}
-                  onBlur={() => {
-                    updateHeroContent({
-                      corporateStat: heroForm.corporateStat || ''
-                    });
-                  }}
+                  value={heroForm.corporateStat ?? ''}
+                  onChange={(e) => handleHeroFieldChange('corporateStat', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('corporateStat', e.target.value)}
                   placeholder="e.g. 2.5M+ Corporate Lives Covered"
                 />
               </div>
@@ -1398,16 +1512,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Heading Title</label>
                 <input
                   type="text"
-                  value={heroForm.corporateTitle || ''}
-                  onChange={(e) => {
-                    isHeroDirtyRef.current = true;
-                    setHeroForm(prev => ({ ...prev, corporateTitle: e.target.value }));
-                  }}
-                  onBlur={() => {
-                    updateHeroContent({
-                      corporateTitle: heroForm.corporateTitle || ''
-                    });
-                  }}
+                  value={heroForm.corporateTitle ?? ''}
+                  onChange={(e) => handleHeroFieldChange('corporateTitle', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('corporateTitle', e.target.value)}
                   placeholder="e.g. Corporate Tie-ups & Partners"
                 />
               </div>
@@ -1416,16 +1523,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Subtitle</label>
                 <textarea
                   rows={2}
-                  value={heroForm.corporateSubtitle || ''}
-                  onChange={(e) => {
-                    isHeroDirtyRef.current = true;
-                    setHeroForm(prev => ({ ...prev, corporateSubtitle: e.target.value }));
-                  }}
-                  onBlur={() => {
-                    updateHeroContent({
-                      corporateSubtitle: heroForm.corporateSubtitle || ''
-                    });
-                  }}
+                  value={heroForm.corporateSubtitle ?? ''}
+                  onChange={(e) => handleHeroFieldChange('corporateSubtitle', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('corporateSubtitle', e.target.value)}
                   placeholder="Describe your corporate healthcare partnership network..."
                 />
               </div>
@@ -1481,6 +1581,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={corp.name || ''}
                       onChange={(e) => updateCorporateTieup(corp.id, { name: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateCorporateTieup(corp.id, { name: corp.name });
+                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. Tata Consultancy Services"
                     />
                   </div>
@@ -1491,6 +1598,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={corp.logoText || ''}
                       onChange={(e) => updateCorporateTieup(corp.id, { logoText: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateCorporateTieup(corp.id, { logoText: corp.logoText });
+                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. TCS"
                     />
                   </div>
@@ -1501,6 +1615,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={corp.category || ''}
                       onChange={(e) => updateCorporateTieup(corp.id, { category: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateCorporateTieup(corp.id, { category: corp.category });
+                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. IT & Consulting"
                     />
                   </div>
@@ -1511,6 +1632,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={corp.benefit || ''}
                       onChange={(e) => updateCorporateTieup(corp.id, { benefit: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateCorporateTieup(corp.id, { benefit: corp.benefit });
+                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. Comprehensive Employee Wellness & Health Checks"
                     />
                   </div>
@@ -1521,6 +1649,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       type="text"
                       value={corp.employeesCovered || ''}
                       onChange={(e) => updateCorporateTieup(corp.id, { employeesCovered: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          updateCorporateTieup(corp.id, { employeesCovered: corp.employeesCovered });
+                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
+                        }
+                      }}
                       placeholder="e.g. 500,000+"
                     />
                   </div>

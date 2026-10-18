@@ -983,7 +983,13 @@ const HospitalDashboard = ({ onNavigate }) => {
           <div className={styles.tabContentArea}>
             <div className={styles.mediaGrid}>
               {/* Instagram Reels Card */}
-              <div className={styles.mediaCard}>
+              <form
+                className={styles.mediaCard}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveMedia();
+                }}
+              >
                 <div className={styles.mediaCardHeader}>
                   <div>
                     <h3>
@@ -994,9 +1000,9 @@ const HospitalDashboard = ({ onNavigate }) => {
                       </svg>
                       Instagram Reels (Max 5)
                     </h3>
-                    <p>Add up to 5 Instagram reel links to appear on this hospital's public center page (leave blank if fewer).</p>
+                    <p>Add up to 5 Instagram reel links to appear on this hospital's public center page (leave blank if fewer). Press Enter to save.</p>
                   </div>
-                  <button className={styles.saveBtn} onClick={handleSaveMedia}>
+                  <button type="submit" className={styles.saveBtn}>
                     Save Changes
                   </button>
                 </div>
@@ -1014,6 +1020,12 @@ const HospitalDashboard = ({ onNavigate }) => {
                           updated[index] = e.target.value;
                           setReels(updated);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveMedia();
+                          }
+                        }}
                       />
                       {reel && (
                         <a
@@ -1028,19 +1040,25 @@ const HospitalDashboard = ({ onNavigate }) => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </form>
 
               {/* YouTube Videos Card */}
-              <div className={styles.mediaCard}>
+              <form
+                className={styles.mediaCard}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveMedia();
+                }}
+              >
                 <div className={styles.mediaCardHeader}>
                   <div>
                     <h3>
                       <Video size={20} color="#ef4444" />
                       YouTube Videos (Max 5)
                     </h3>
-                    <p>Add up to 5 YouTube video links (regular video, watch link, or shorts) for virtual tours and health talks.</p>
+                    <p>Add up to 5 YouTube video links (regular video, watch link, or shorts) for virtual tours and health talks. Press Enter to save.</p>
                   </div>
-                  <button className={styles.saveBtn} onClick={handleSaveMedia}>
+                  <button type="submit" className={styles.saveBtn}>
                     Save Changes
                   </button>
                 </div>
@@ -1060,6 +1078,12 @@ const HospitalDashboard = ({ onNavigate }) => {
                           updated[index] = e.target.value;
                           setYoutubeVideos(updated);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveMedia();
+                          }
+                        }}
                       />
                       {video && (
                         <a
@@ -1074,7 +1098,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                     </div>
                   ))}
                 </div>
-              </div>
+              </form>
 
               {/* Star Doctors of this Hospital Card */}
               <div className={styles.mediaCard}>
@@ -1576,9 +1600,21 @@ const HospitalDashboard = ({ onNavigate }) => {
         {/* TAB 4: FACILITY PROFILE SETTINGS */}
         {activeTab === 'settings' && (
           <div className={styles.tabContentArea}>
-            <div className={styles.settingsCard}>
+            <form
+              className={styles.settingsCard}
+              onSubmit={(e) => {
+                e.preventDefault();
+                showToast('Hospital facility details saved!');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  showToast('Hospital facility details saved!');
+                }
+              }}
+            >
               <h3>Hospital Facility Profile</h3>
-              <p>Update hospital contact details, bed count, and accreditation info shown to public visitors.</p>
+              <p>Update hospital contact details, bed count, and accreditation info shown to public visitors. Press Enter to save.</p>
 
               <div className={styles.settingsGrid}>
                 <div className={styles.formGroup}>
@@ -1607,9 +1643,10 @@ const HospitalDashboard = ({ onNavigate }) => {
                   <label>Total Hospital Beds</label>
                   <input
                     type="number"
-                    value={activeHospital.totalBeds || 400}
+                    value={activeHospital.totalBeds ?? ''}
                     onChange={(e) => {
-                      updateHospital(activeHospital.id, { totalBeds: Number(e.target.value) });
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      updateHospital(activeHospital.id, { totalBeds: val });
                     }}
                   />
                 </div>
@@ -1618,9 +1655,10 @@ const HospitalDashboard = ({ onNavigate }) => {
                   <label>Established Year</label>
                   <input
                     type="number"
-                    value={activeHospital.establishedYear || 2000}
+                    value={activeHospital.establishedYear ?? ''}
                     onChange={(e) => {
-                      updateHospital(activeHospital.id, { establishedYear: Number(e.target.value) });
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      updateHospital(activeHospital.id, { establishedYear: val });
                     }}
                   />
                 </div>
@@ -1648,13 +1686,13 @@ const HospitalDashboard = ({ onNavigate }) => {
 
               <div className={styles.settingsSaveRow}>
                 <button
+                  type="submit"
                   className={styles.saveBtn}
-                  onClick={() => showToast('Hospital facility details saved!')}
                 >
                   Save Facility Profile
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         )}
 
@@ -2325,6 +2363,16 @@ const HospitalDashboard = ({ onNavigate }) => {
                             type="text"
                             value={editingDoctorFaqData.q}
                             onChange={(e) => setEditingDoctorFaqData({ ...editingDoctorFaqData, q: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                if (!editingDoctorFaqData.q.trim()) return;
+                                const updated = [...doctorFaqsList];
+                                updated[idx] = { ...editingDoctorFaqData };
+                                setDoctorFaqsList(updated);
+                                setEditingDoctorFaqIdx(null);
+                              }
+                            }}
                             placeholder="Question..."
                             style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #0284c7', outline: 'none', boxSizing: 'border-box' }}
                           />
@@ -2332,7 +2380,17 @@ const HospitalDashboard = ({ onNavigate }) => {
                             rows={2}
                             value={editingDoctorFaqData.a}
                             onChange={(e) => setEditingDoctorFaqData({ ...editingDoctorFaqData, a: e.target.value })}
-                            placeholder="Answer..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                                e.preventDefault();
+                                if (!editingDoctorFaqData.q.trim()) return;
+                                const updated = [...doctorFaqsList];
+                                updated[idx] = { ...editingDoctorFaqData };
+                                setDoctorFaqsList(updated);
+                                setEditingDoctorFaqIdx(null);
+                              }
+                            }}
+                            placeholder="Answer... (Press Ctrl+Enter to save)"
                             style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #0284c7', outline: 'none', boxSizing: 'border-box' }}
                           />
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
@@ -2408,13 +2466,31 @@ const HospitalDashboard = ({ onNavigate }) => {
                   placeholder="Question (e.g. Does the doctor provide second opinion consultations?)"
                   value={newDoctorFaqQ}
                   onChange={(e) => setNewDoctorFaqQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (!newDoctorFaqQ.trim()) return;
+                      setDoctorFaqsList(prev => [...prev, { q: newDoctorFaqQ.trim(), a: newDoctorFaqA.trim() }]);
+                      setNewDoctorFaqQ('');
+                      setNewDoctorFaqA('');
+                    }
+                  }}
                   style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
                 />
                 <textarea
                   rows={2}
-                  placeholder="Answer..."
+                  placeholder="Answer... (Press Ctrl+Enter to add)"
                   value={newDoctorFaqA}
                   onChange={(e) => setNewDoctorFaqA(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      if (!newDoctorFaqQ.trim()) return;
+                      setDoctorFaqsList(prev => [...prev, { q: newDoctorFaqQ.trim(), a: newDoctorFaqA.trim() }]);
+                      setNewDoctorFaqQ('');
+                      setNewDoctorFaqA('');
+                    }
+                  }}
                   style={{ width: '100%', padding: '8px 12px', fontSize: '0.85rem', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '10px', boxSizing: 'border-box' }}
                 />
                 <button

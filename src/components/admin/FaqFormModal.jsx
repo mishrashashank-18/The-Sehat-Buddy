@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, HelpCircle, Save, Building2, Stethoscope, Check } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag } from 'lucide-react';
 import { useData } from '../../context/useData';
 import styles from './DoctorFormModal.module.css';
 
@@ -12,7 +12,7 @@ const FAQ_CATEGORIES = [
 ];
 
 const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
-  const { doctors, hospitals } = useData();
+  const { doctors, hospitals, faqs } = useData();
 
   // Determine initial target type and values
   const initialTargetType = faqToEdit?.targetType === 'doctor' ? 'doctor' : 'hospital';
@@ -38,11 +38,32 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
     }
   }
 
+  const initialCategory = faqToEdit?.category || (initialTargetType === 'doctor' ? 'Doctors & Consultations' : 'Hospitals & Admissions');
+  const isInitialCustom = Boolean(initialCategory && !FAQ_CATEGORIES.includes(initialCategory));
+
+  const [isCustomCategory, setIsCustomCategory] = useState(isInitialCustom);
+  const [customCategory, setCustomCategory] = useState(isInitialCustom ? initialCategory : '');
+
+  // Extract previously used custom categories across all FAQs
+  const existingCustomCategories = useMemo(() => {
+    const set = new Set();
+    (faqs || []).forEach(f => {
+      const cat = (f?.category || '').trim();
+      if (cat && !FAQ_CATEGORIES.includes(cat)) {
+        set.add(cat);
+      }
+    });
+    if (isInitialCustom && initialCategory) {
+      set.add(initialCategory.trim());
+    }
+    return Array.from(set);
+  }, [faqs, isInitialCustom, initialCategory]);
+
   const [formData, setFormData] = useState({
     targetType: initialTargetType,
     targetId: initialTargetId,
     targetName: initialTargetName || (initialTargetType === 'doctor' ? doctors[0]?.name : hospitals[0]?.name) || '',
-    category: faqToEdit?.category || (initialTargetType === 'doctor' ? 'Doctors & Consultations' : 'Hospitals & Admissions'),
+    category: initialCategory,
     question: faqToEdit?.question || '',
     answer: faqToEdit?.answer || '',
     order: faqToEdit?.order !== undefined ? faqToEdit.order : 0,
@@ -58,7 +79,7 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
         targetType: 'doctor',
         targetId: defaultDoc ? (defaultDoc.id || defaultDoc._id) : '',
         targetName: defaultDoc ? defaultDoc.name : '',
-        category: 'Doctors & Consultations'
+        category: isCustomCategory ? prev.category : 'Doctors & Consultations'
       }));
     } else {
       const defaultHosp = hospitals[0];
@@ -67,7 +88,7 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
         targetType: 'hospital',
         targetId: defaultHosp ? (defaultHosp.id || defaultHosp._id) : '',
         targetName: defaultHosp ? defaultHosp.name : '',
-        category: 'Hospitals & Admissions'
+        category: isCustomCategory ? prev.category : 'Hospitals & Admissions'
       }));
     }
   };
@@ -102,7 +123,17 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
       alert(`Please select a specific ${formData.targetType === 'doctor' ? 'Doctor' : 'Hospital'}`);
       return;
     }
-    onSave(formData);
+
+    const finalCategory = isCustomCategory ? customCategory.trim() : formData.category;
+    if (!finalCategory) {
+      alert('Please select or specify a category for this FAQ');
+      return;
+    }
+
+    onSave({
+      ...formData,
+      category: finalCategory
+    });
   };
 
   return (
@@ -239,23 +270,90 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>FAQ Category *</label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              style={{
-                border: '1.5px solid #cbd5e1',
-                borderRadius: '10px',
-                padding: '10px 14px',
-                fontSize: '0.92rem',
-                outline: 'none'
-              }}
-            >
-              {FAQ_CATEGORIES.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Tag size={14} color="#2563eb" /> FAQ Category *
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !isCustomCategory;
+                  setIsCustomCategory(nextState);
+                  if (nextState && !customCategory && formData.category && !FAQ_CATEGORIES.includes(formData.category)) {
+                    setCustomCategory(formData.category);
+                  }
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#2563eb',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  padding: 0
+                }}
+              >
+                {isCustomCategory ? '← Choose standard category' : '+ Add custom category'}
+              </button>
+            </div>
+
+            {!isCustomCategory ? (
+              <select
+                value={formData.category}
+                onChange={(e) => {
+                  if (e.target.value === '__custom__') {
+                    setIsCustomCategory(true);
+                  } else {
+                    setFormData({ ...formData, category: e.target.value });
+                  }
+                }}
+                style={{
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  fontSize: '0.92rem',
+                  outline: 'none',
+                  background: '#ffffff'
+                }}
+              >
+                <optgroup label="Standard Categories">
+                  {FAQ_CATEGORIES.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </optgroup>
+                {existingCustomCategories.length > 0 && (
+                  <optgroup label="Saved Custom Categories">
+                    {existingCustomCategories.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </optgroup>
+                )}
+                <option value="__custom__">+ Add Custom Category...</option>
+              </select>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <input
+                  type="text"
+                  placeholder="e.g. Teleconsultation & Video Visits, Lab Tests & Diagnostics..."
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  autoFocus
+                  required
+                  style={{
+                    border: '1.5px solid #2563eb',
+                    background: '#f0f7ff',
+                    borderRadius: '10px',
+                    padding: '10px 14px',
+                    fontSize: '0.92rem',
+                    outline: 'none'
+                  }}
+                />
+                <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                  This custom category will be assigned to this FAQ and will automatically appear in category filter options.
+                </span>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -280,9 +378,15 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
             <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Detailed Answer *</label>
             <textarea
               rows={4}
-              placeholder="Provide a clear, patient-friendly answer..."
+              placeholder="Provide a clear, patient-friendly answer... (Press Ctrl+Enter to save)"
               value={formData.answer}
               onChange={(e) => setFormData({ ...formData, answer: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
               required
               style={{
                 border: '1.5px solid #cbd5e1',

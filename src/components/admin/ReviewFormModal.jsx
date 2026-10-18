@@ -328,7 +328,13 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
               rows={4}
               value={formData.comment}
               onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-              placeholder="Share details of the doctor consultation, clinical expertise, or hospital cashless admission experience..."
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
+              placeholder="Share details of the doctor consultation, clinical expertise, or hospital cashless admission experience... (Press Ctrl+Enter to save)"
               required
               style={{ border: '1.5px solid #cbd5e1', borderRadius: '10px', padding: '10px 14px', outline: 'none', fontFamily: 'inherit', resize: 'vertical' }}
             />

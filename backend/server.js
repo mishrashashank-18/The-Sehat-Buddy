@@ -19,6 +19,7 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import specialityRoutes from './routes/specialityRoutes.js';
 
 import mongoSanitize from './middleware/mongoSanitize.js';
+import { initMongoDBChangeStream } from './services/storageMonitor.js';
 
 // Resolve directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -47,8 +48,10 @@ if (NODE_ENV === 'production') {
   }
 }
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB & Initialize Realtime Change Stream
+connectDB().then(() => {
+  initMongoDBChangeStream();
+}).catch(() => {});
 
 const app = express();
 const PORT = process.env.PORT || 5000;

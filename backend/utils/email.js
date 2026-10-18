@@ -17,6 +17,8 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+import EmailLog from '../models/EmailLog.js';
+
 export const sendEmail = async (options) => {
     try {
         const mailOptions = {
@@ -29,9 +31,33 @@ export const sendEmail = async (options) => {
 
         const info = await transporter.sendMail(mailOptions);
         console.log('Message sent: %s', info.messageId);
+
+        try {
+            await EmailLog.create({
+                to: options.email,
+                subject: options.subject || 'Notification',
+                status: 'sent',
+                messageId: info.messageId
+            });
+        } catch (logErr) {
+            console.error('Failed to log email to DB:', logErr.message);
+        }
+
         return info;
     } catch (error) {
         console.error('Error sending email:', error);
+
+        try {
+            await EmailLog.create({
+                to: options.email,
+                subject: options.subject || 'Notification',
+                status: 'failed',
+                error: error.message
+            });
+        } catch (logErr) {
+            console.error('Failed to log failed email to DB:', logErr.message);
+        }
+
         throw error;
     }
 };

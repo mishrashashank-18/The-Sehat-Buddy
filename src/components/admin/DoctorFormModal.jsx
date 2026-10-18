@@ -449,9 +449,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             <label>Doctor Bio / Short Description</label>
             <textarea
               rows={3}
-              placeholder="Brief summary of professional experience, awards, or medical specialties..."
+              placeholder="Brief summary of professional experience, awards, or medical specialties... (Press Ctrl+Enter to save)"
               value={formData.about}
               onChange={(e) => setFormData({ ...formData, about: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
             />
           </div>
 
@@ -689,13 +695,33 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               placeholder="Question (e.g. Does Dr. Roy perform laparoscopic surgeries?)"
               value={newFaqQ}
               onChange={(e) => setNewFaqQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (!newFaqQ.trim()) return;
+                  const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                  setFormData({ ...formData, faqs: updated });
+                  setNewFaqQ('');
+                  setNewFaqA('');
+                }
+              }}
               style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '6px', boxSizing: 'border-box' }}
             />
             <textarea
               rows={2}
-              placeholder="Answer..."
+              placeholder="Answer... (Press Ctrl+Enter to add)"
               value={newFaqA}
               onChange={(e) => setNewFaqA(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  if (!newFaqQ.trim()) return;
+                  const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                  setFormData({ ...formData, faqs: updated });
+                  setNewFaqQ('');
+                  setNewFaqA('');
+                }
+              }}
               style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
             />
             <button
