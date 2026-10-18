@@ -19,6 +19,7 @@ import upload from '../config/cloudinary.js';
 const router = express.Router();
 
 // Public read routes
+router.get('/', getDoctors);
 router.get('/list', getDoctors);
 router.get('/:id', getDoctorById);
 
