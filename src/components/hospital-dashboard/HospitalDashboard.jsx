@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Building2,
   Bed,
@@ -10,7 +10,6 @@ import {
   Plus,
   Truck,
   CheckCircle,
-  ChevronDown,
   AlertTriangle,
   X,
   Video,
@@ -72,16 +71,32 @@ const HospitalDashboard = ({ onNavigate }) => {
     deleteSpecialityProcedure
   } = useData();
 
-  // Selected hospital
-  const [selectedHospitalId, setSelectedHospitalId] = useState(() => {
+  // Authenticated hospital user session
+  const loggedInUser = useMemo(() => {
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      if (user && (user._id || user.id)) return user._id || user.id;
-    } catch {}
-    return hospitals[0]?.id || hospitals[0]?._id || 1;
-  });
+      return JSON.parse(localStorage.getItem('user')) || {};
+    } catch {
+      return {};
+    }
+  }, []);
 
-  const activeHospital = hospitals.find(h => String(h.id || h._id) === String(selectedHospitalId)) || hospitals[0] || {};
+  const activeHospital = useMemo(() => {
+    const userId = loggedInUser._id || loggedInUser.id;
+    if (userId) {
+      const foundById = hospitals.find(h => String(h.id || h._id) === String(userId));
+      if (foundById) return foundById;
+    }
+    if (loggedInUser.email) {
+      const foundByEmail = hospitals.find(h => h.email && h.email.toLowerCase() === loggedInUser.email.toLowerCase());
+      if (foundByEmail) return foundByEmail;
+    }
+    if (loggedInUser.name) {
+      const foundByName = hospitals.find(h => h.name && h.name.toLowerCase() === loggedInUser.name.toLowerCase());
+      if (foundByName) return foundByName;
+      return { ...loggedInUser, id: userId || 'auth-hospital' };
+    }
+    return hospitals[0] || {};
+  }, [hospitals, loggedInUser]);
 
   // Tabs: 'beds' | 'doctors' | 'media' | 'emergency' | 'settings'
   const [activeTab, setActiveTab] = useState('beds');
@@ -514,23 +529,25 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Hospital Switcher & Portal Switcher */}
+        {/* Authenticated Facility Account & Quick Actions */}
         <div className={styles.headerRight}>
-          <div className={styles.hospitalSwitcher}>
-            <span className={styles.switcherLabel}>Active Facility:</span>
-            <div className={styles.selectWrap}>
-              <select
-                value={selectedHospitalId}
-                onChange={(e) => setSelectedHospitalId(e.target.value)}
-                className={styles.facilitySelect}
-              >
-                {hospitals.map(h => (
-                  <option key={h.id || h._id} value={h.id || h._id}>
-                    {h.name} ({h.city})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={14} className={styles.selectIcon} />
+          <div className={styles.facilityAccountBadge}>
+            <div className={styles.facilityAccountIcon}>
+              <Building2 size={16} />
+            </div>
+            <div className={styles.facilityAccountText}>
+              <div className={styles.facilityAccountTitle}>
+                <span className={styles.facilityAccountName} title={activeHospital.name}>
+                  {activeHospital.name || 'Hospital Facility'}
+                </span>
+                <span className={styles.authenticatedPill}>
+                  <span className={styles.authDot}></span>
+                  Active
+                </span>
+              </div>
+              <span className={styles.facilityAccountSub}>
+                {activeHospital.city ? `${activeHospital.city} • Verified Facility Account` : 'Authorized Facility Account'}
+              </span>
             </div>
           </div>
 
@@ -542,20 +559,23 @@ const HospitalDashboard = ({ onNavigate }) => {
             >
               <Globe size={13} /> View Public Center
             </button>
-            <button className={styles.navLinkBtn} onClick={() => onNavigate('site')}>
+            <button className={styles.navLinkBtn} onClick={() => onNavigate('site')} title="Go to Website">
               <ExternalLink size={13} /> Website
             </button>
-            <button className={styles.navLinkBtn} onClick={() => onNavigate('doctor')}>
-              <Stethoscope size={13} /> Doctor Portal
-            </button>
-            <button className={styles.navLinkBtn} onClick={() => onNavigate('admin')}>
-              <ShieldCheck size={13} /> Admin
-            </button>
-            <button className={`${styles.navLinkBtn} ${styles.navLinkLogout}`} onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
-              window.location.href = '/hospital';
-            }}>
+            {loggedInUser?.role === 'admin' && (
+              <button className={styles.navLinkBtn} onClick={() => onNavigate('admin')} title="Go to Admin Panel">
+                <ShieldCheck size={13} /> Admin
+              </button>
+            )}
+            <button
+              className={`${styles.navLinkBtn} ${styles.navLinkLogout}`}
+              onClick={() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.href = '/hospital';
+              }}
+              title="Sign out of hospital account"
+            >
               <LogOut size={13} /> Logout
             </button>
           </div>

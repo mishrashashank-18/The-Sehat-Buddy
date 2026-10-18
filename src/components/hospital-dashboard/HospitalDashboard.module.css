@@ -97,41 +97,81 @@
   gap: 20px;
 }
 
-.hospitalSwitcher {
+.facilityAccountBadge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 6px 14px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.facilityAccountIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.facilityAccountText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.facilityAccountTitle {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.switcherLabel {
-  font-size: 0.8rem;
-  color: var(--color-body);
-  font-weight: 500;
+.facilityAccountName {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+  max-width: 280px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.selectWrap {
-  position: relative;
-  display: flex;
+.authenticatedPill {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
 }
 
-.facilitySelect {
-  padding: 8px 30px 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-heading);
-  appearance: none;
-  cursor: pointer;
+.authDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #10b981;
 }
 
-.selectIcon {
-  position: absolute;
-  right: 10px;
-  pointer-events: none;
+.facilityAccountSub {
+  font-size: 0.73rem;
   color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .quickNavBtns {
