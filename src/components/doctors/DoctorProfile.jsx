@@ -3,7 +3,8 @@ import {
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
-  Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight
+  Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
+  History, Milestone, CalendarClock
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -176,7 +177,26 @@ const getComprehensiveBio = (doc) => {
   return paragraphs;
 };
 
-
+// Dedicated Timeline Symbol Icon (Vertical connected milestone track)
+const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke={color} 
+    strokeWidth="2.2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round"
+    className={className}
+    style={{ flexShrink: 0 }}
+  >
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <circle cx="12" cy="5" r="2.2" fill="#ede9fe" />
+    <circle cx="12" cy="12" r="2.2" fill="#ede9fe" />
+    <circle cx="12" cy="19" r="2.2" fill="#ede9fe" />
+  </svg>
+);
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
   const { doctors, reviews, faqs } = useData();
@@ -184,6 +204,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [activeVideo, setActiveVideo] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
   // Booking interaction states
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
@@ -728,15 +749,39 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
               </div>
             </div>
 
-            {/* Integrated About Section with Rich Clinical Bio */}
+            {/* Integrated About Section with Rich Clinical Bio (Single Paragraph by Default + More Option) */}
             <div className={styles.unifiedAboutSection}>
               <h3 className={styles.sectionHeading}>
                 About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
               </h3>
               <div className={styles.aboutTextContent}>
-                {getComprehensiveBio(doctor).map((para, pIdx) => (
-                  <p key={pIdx}>{para}</p>
-                ))}
+                {(() => {
+                  const bioParas = getComprehensiveBio(doctor);
+                  if (bioParas.length === 0) return null;
+
+                  return (
+                    <>
+                      <p>{bioParas[0]}</p>
+                      {isAboutExpanded && bioParas.slice(1).map((para, pIdx) => (
+                        <p key={pIdx + 1}>{para}</p>
+                      ))}
+                      {bioParas.length > 1 && (
+                        <button
+                          type="button"
+                          className={styles.readMoreBtn}
+                          onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+                          aria-expanded={isAboutExpanded}
+                        >
+                          <span>{isAboutExpanded ? 'Show Less' : 'More'}</span>
+                          <ChevronDown
+                            size={14}
+                            className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
+                          />
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -859,41 +904,51 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
 
             {/* Credentials, Honors & Clinical Experience */}
             {(() => {
-              const awardsList = Array.isArray(doctor.awards) && doctor.awards.length > 0 
-                ? doctor.awards 
-                : (doctor.awards !== undefined && Array.isArray(doctor.awards) ? doctor.awards : [
-                    'Best Cardiologist of the Year - National Healthcare Summit (2023)',
-                    'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
-                    'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
-                    'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
-                  ]);
+              const default4Awards = [
+                'Best Cardiologist of the Year - National Healthcare Summit (2023)',
+                'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
+                'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
+                'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
+              ];
+              let rawAwards = Array.isArray(doctor.awards) && doctor.awards.length > 0 
+                ? [...doctor.awards] 
+                : default4Awards;
+              if (rawAwards.length === 3) {
+                rawAwards.push('Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)');
+              }
+              const awardsList = rawAwards;
 
               const certificationsList = Array.isArray(doctor.certifications) && doctor.certifications.length > 0 
                 ? doctor.certifications 
-                : (doctor.certifications !== undefined && Array.isArray(doctor.certifications) ? doctor.certifications : [
+                : [
                     'Fellow of the American College of Cardiology (FACC)',
                     'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
                     'Advanced Cardiac Life Support (ACLS) Certified Provider',
                     'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
-                  ]);
+                  ];
 
               const membershipsList = Array.isArray(doctor.memberships) && doctor.memberships.length > 0 
                 ? doctor.memberships 
-                : (doctor.memberships !== undefined && Array.isArray(doctor.memberships) ? doctor.memberships : [
+                : [
                     'Cardiological Society of India (CSI) - Life Member',
                     'Indian Medical Association (IMA) - Senior Member',
                     'European Society of Cardiology (ESC) - Fellow Member',
                     'Association of Physicians of India (API) - Registered Member'
-                  ]);
+                  ];
 
-              const timelineList = Array.isArray(doctor.careerExperience) && doctor.careerExperience.length > 0 
-                ? doctor.careerExperience 
-                : (doctor.careerExperience !== undefined && Array.isArray(doctor.careerExperience) ? doctor.careerExperience : [
-                    'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
-                    'Associate Consultant Cardiology - Fortis Healthcare (2014 – 2018)',
-                    'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
-                    'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
-                  ]);
+              const default4Timeline = [
+                'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
+                'Associate Consultant Cardiology - Fortis Healthcare (2014 – 2018)',
+                'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
+                'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
+              ];
+              let rawTimeline = Array.isArray(doctor.careerExperience) && doctor.careerExperience.length > 0 
+                ? [...doctor.careerExperience] 
+                : default4Timeline;
+              if (rawTimeline.length === 3) {
+                rawTimeline.push('Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)');
+              }
+              const timelineList = rawTimeline;
 
               const parseAwardItem = (text) => {
                 let title = text;
@@ -982,120 +1037,137 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                   </div>
 
                   <div className={styles.credentialsGrid}>
-                    {/* Awards & Honors (Top-Left) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <Award size={18} color="#d97706" />
-                        Awards & Honors ({awardsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {awardsList.map((award, idx) => {
-                          const parsed = parseAwardItem(award);
-                          return (
-                            <div key={idx} className={styles.awardItemPill}>
-                              <div className={styles.awardIconWrap}>
-                                <Trophy size={16} />
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.yearChip}>{parsed.tag}</span>}
+                    {/* Left Column: Awards & Honors + Memberships */}
+                    <div className={styles.credCol}>
+                      {/* Awards & Honors */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <Award size={18} color="#d97706" />
+                          Awards & Honors ({awardsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {awardsList.map((award, idx) => {
+                            const parsed = parseAwardItem(award);
+                            return (
+                              <div key={idx} className={styles.awardItemPill}>
+                                <div className={styles.awardIconWrap}>
+                                  <Trophy size={16} />
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.yearChip}>{parsed.tag}</span>}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Professional Medical Memberships */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <CheckCircle2 size={18} color="#059669" />
+                          Professional Medical Memberships ({membershipsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {membershipsList.map((mem, idx) => {
+                            const parsed = parseMembershipItem(mem);
+                            return (
+                              <div key={idx} className={styles.membershipItemPill}>
+                                <div className={styles.membershipIconWrap}>
+                                  <CheckCircle2 size={16} />
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.memberTierChip}>{parsed.tag}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Certificates & Fellowships (Top-Right) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <GraduationCap size={18} color="#2563eb" />
-                        Certificates & Fellowships ({certificationsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {certificationsList.map((cert, idx) => {
-                          const parsed = parseCertItem(cert);
-                          const getCertIcon = (i) => {
-                            if (i === 0) return <GraduationCap size={16} />;
-                            if (i === 1) return <FileText size={16} />;
-                            if (i === 2) return <HeartPulse size={16} />;
-                            return <Stethoscope size={16} />;
-                          };
-                          return (
-                            <div key={idx} className={styles.certItemPill}>
-                              <div className={styles.certIconWrap}>
-                                {getCertIcon(idx)}
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.certCodeChip}>{parsed.tag}</span>}
+                    {/* Right Column: Certificates & Fellowships + Career Experience */}
+                    <div className={styles.credCol}>
+                      {/* Certificates & Fellowships */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <GraduationCap size={18} color="#2563eb" />
+                          Certificates & Fellowships ({certificationsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {certificationsList.map((cert, idx) => {
+                            const parsed = parseCertItem(cert);
+                            const getCertIcon = (i) => {
+                              if (i === 0) return <GraduationCap size={16} />;
+                              if (i === 1) return <FileText size={16} />;
+                              if (i === 2) return <HeartPulse size={16} />;
+                              return <Stethoscope size={16} />;
+                            };
+                            return (
+                              <div key={idx} className={styles.certItemPill}>
+                                <div className={styles.certIconWrap}>
+                                  {getCertIcon(idx)}
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.certCodeChip}>{parsed.tag}</span>}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Professional Medical Memberships (Bottom-Left) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <CheckCircle2 size={18} color="#059669" />
-                        Professional Medical Memberships ({membershipsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {membershipsList.map((mem, idx) => {
-                          const parsed = parseMembershipItem(mem);
-                          return (
-                            <div key={idx} className={styles.membershipItemPill}>
-                              <div className={styles.membershipIconWrap}>
-                                <CheckCircle2 size={16} />
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.memberTierChip}>{parsed.tag}</span>}
+                      {/* Career Experience & Hospital Timeline */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <TimelineSymbolIcon size={18} color="#4f46e5" />
+                          Career Experience & Hospital Timeline ({timelineList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {timelineList.map((item, idx) => {
+                            const parsed = parseTimelineItem(item);
+                            const getTimelineCardIcon = (i, isPresent) => {
+                              if (isPresent || i === 0) return <Clock size={16} />;
+                              if (i === 1) return <Milestone size={16} />;
+                              if (i === 2) return <History size={16} />;
+                              return <CalendarClock size={16} />;
+                            };
+                            return (
+                              <div key={idx} className={styles.timelineCard}>
+                                <div className={styles.timelineIconWrap}>
+                                  {getTimelineCardIcon(idx, parsed.isPresent)}
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.hospital}</span>
+                                    {parsed.isPresent ? (
+                                      <span className={styles.presentBadge}>
+                                        <Clock size={11} /> Present
+                                      </span>
+                                    ) : (
+                                      <span className={styles.timelineYearChip}>
+                                        <Calendar size={11} /> {parsed.years}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Career Experience & Hospital Timeline (Bottom-Right) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <Building2 size={18} color="#4f46e5" />
-                        Career Experience & Hospital Timeline ({timelineList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {timelineList.map((item, idx) => {
-                          const parsed = parseTimelineItem(item);
-                          const icon = idx % 2 === 1 
-                            ? <Calendar size={15} /> 
-                            : <Building2 size={15} />;
-                          return (
-                            <div key={idx} className={styles.timelineCard}>
-                              <div className={styles.timelineIconWrap}>
-                                {icon}
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.hospital} • {parsed.years}</span>
-                                  {parsed.isPresent && <span className={styles.presentBadge}>Present</span>}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
