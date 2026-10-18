@@ -23,7 +23,8 @@ export const initialDoctors = [
     awards: [
       'Best Cardiologist of the Year - National Healthcare Summit (2023)',
       'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
-      'Distinguished Clinical Researcher Award (2018)'
+      'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
+      'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
     ],
     certifications: [
       'Fellow of the American College of Cardiology (FACC)',
@@ -40,7 +41,8 @@ export const initialDoctors = [
     careerExperience: [
       'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 - Present)',
       'Associate Consultant Cardiology - Fortis Healthcare (2014 - 2018)',
-      'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 - 2014)'
+      'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 - 2014)',
+      'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 - 2011)'
     ],
     instagram: 'https://www.instagram.com/thesehatbuddy/',
     facebook: 'https://www.facebook.com/profile.php?id=61594704587784',

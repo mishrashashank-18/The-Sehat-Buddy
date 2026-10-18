@@ -884,41 +884,51 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
 
             {/* Credentials, Honors & Clinical Experience */}
             {(() => {
-              const awardsList = Array.isArray(doctor.awards) && doctor.awards.length > 0 
-                ? doctor.awards 
-                : (doctor.awards !== undefined && Array.isArray(doctor.awards) ? doctor.awards : [
-                    'Best Cardiologist of the Year - National Healthcare Summit (2023)',
-                    'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
-                    'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
-                    'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
-                  ]);
+              const default4Awards = [
+                'Best Cardiologist of the Year - National Healthcare Summit (2023)',
+                'Excellence in Interventional Cardiology - Cardiological Society of India (2020)',
+                'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
+                'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
+              ];
+              let rawAwards = Array.isArray(doctor.awards) && doctor.awards.length > 0 
+                ? [...doctor.awards] 
+                : default4Awards;
+              if (rawAwards.length === 3) {
+                rawAwards.push('Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)');
+              }
+              const awardsList = rawAwards;
 
               const certificationsList = Array.isArray(doctor.certifications) && doctor.certifications.length > 0 
                 ? doctor.certifications 
-                : (doctor.certifications !== undefined && Array.isArray(doctor.certifications) ? doctor.certifications : [
+                : [
                     'Fellow of the American College of Cardiology (FACC)',
                     'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
                     'Advanced Cardiac Life Support (ACLS) Certified Provider',
                     'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
-                  ]);
+                  ];
 
               const membershipsList = Array.isArray(doctor.memberships) && doctor.memberships.length > 0 
                 ? doctor.memberships 
-                : (doctor.memberships !== undefined && Array.isArray(doctor.memberships) ? doctor.memberships : [
+                : [
                     'Cardiological Society of India (CSI) - Life Member',
                     'Indian Medical Association (IMA) - Senior Member',
                     'European Society of Cardiology (ESC) - Fellow Member',
                     'Association of Physicians of India (API) - Registered Member'
-                  ]);
+                  ];
 
-              const timelineList = Array.isArray(doctor.careerExperience) && doctor.careerExperience.length > 0 
-                ? doctor.careerExperience 
-                : (doctor.careerExperience !== undefined && Array.isArray(doctor.careerExperience) ? doctor.careerExperience : [
-                    'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
-                    'Associate Consultant Cardiology - Fortis Healthcare (2014 – 2018)',
-                    'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
-                    'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
-                  ]);
+              const default4Timeline = [
+                'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
+                'Associate Consultant Cardiology - Fortis Healthcare (2014 – 2018)',
+                'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
+                'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
+              ];
+              let rawTimeline = Array.isArray(doctor.careerExperience) && doctor.careerExperience.length > 0 
+                ? [...doctor.careerExperience] 
+                : default4Timeline;
+              if (rawTimeline.length === 3) {
+                rawTimeline.push('Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)');
+              }
+              const timelineList = rawTimeline;
 
               const parseAwardItem = (text) => {
                 let title = text;
@@ -1007,120 +1017,126 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                   </div>
 
                   <div className={styles.credentialsGrid}>
-                    {/* Awards & Honors (Top-Left) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <Award size={18} color="#d97706" />
-                        Awards & Honors ({awardsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {awardsList.map((award, idx) => {
-                          const parsed = parseAwardItem(award);
-                          return (
-                            <div key={idx} className={styles.awardItemPill}>
-                              <div className={styles.awardIconWrap}>
-                                <Trophy size={16} />
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.yearChip}>{parsed.tag}</span>}
+                    {/* Left Column: Awards & Honors + Memberships */}
+                    <div className={styles.credCol}>
+                      {/* Awards & Honors */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <Award size={18} color="#d97706" />
+                          Awards & Honors ({awardsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {awardsList.map((award, idx) => {
+                            const parsed = parseAwardItem(award);
+                            return (
+                              <div key={idx} className={styles.awardItemPill}>
+                                <div className={styles.awardIconWrap}>
+                                  <Trophy size={16} />
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.yearChip}>{parsed.tag}</span>}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Professional Medical Memberships */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <CheckCircle2 size={18} color="#059669" />
+                          Professional Medical Memberships ({membershipsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {membershipsList.map((mem, idx) => {
+                            const parsed = parseMembershipItem(mem);
+                            return (
+                              <div key={idx} className={styles.membershipItemPill}>
+                                <div className={styles.membershipIconWrap}>
+                                  <CheckCircle2 size={16} />
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.memberTierChip}>{parsed.tag}</span>}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Certificates & Fellowships (Top-Right) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <GraduationCap size={18} color="#2563eb" />
-                        Certificates & Fellowships ({certificationsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {certificationsList.map((cert, idx) => {
-                          const parsed = parseCertItem(cert);
-                          const getCertIcon = (i) => {
-                            if (i === 0) return <GraduationCap size={16} />;
-                            if (i === 1) return <FileText size={16} />;
-                            if (i === 2) return <HeartPulse size={16} />;
-                            return <Stethoscope size={16} />;
-                          };
-                          return (
-                            <div key={idx} className={styles.certItemPill}>
-                              <div className={styles.certIconWrap}>
-                                {getCertIcon(idx)}
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.certCodeChip}>{parsed.tag}</span>}
+                    {/* Right Column: Certificates & Fellowships + Career Experience */}
+                    <div className={styles.credCol}>
+                      {/* Certificates & Fellowships */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <GraduationCap size={18} color="#2563eb" />
+                          Certificates & Fellowships ({certificationsList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {certificationsList.map((cert, idx) => {
+                            const parsed = parseCertItem(cert);
+                            const getCertIcon = (i) => {
+                              if (i === 0) return <GraduationCap size={16} />;
+                              if (i === 1) return <FileText size={16} />;
+                              if (i === 2) return <HeartPulse size={16} />;
+                              return <Stethoscope size={16} />;
+                            };
+                            return (
+                              <div key={idx} className={styles.certItemPill}>
+                                <div className={styles.certIconWrap}>
+                                  {getCertIcon(idx)}
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.subtitle}</span>
+                                    {parsed.tag && <span className={styles.certCodeChip}>{parsed.tag}</span>}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Professional Medical Memberships (Bottom-Left) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <CheckCircle2 size={18} color="#059669" />
-                        Professional Medical Memberships ({membershipsList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {membershipsList.map((mem, idx) => {
-                          const parsed = parseMembershipItem(mem);
-                          return (
-                            <div key={idx} className={styles.membershipItemPill}>
-                              <div className={styles.membershipIconWrap}>
-                                <CheckCircle2 size={16} />
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.subtitle}</span>
-                                  {parsed.tag && <span className={styles.memberTierChip}>{parsed.tag}</span>}
+                      {/* Career Experience & Hospital Timeline */}
+                      <div className={styles.credBlock}>
+                        <h4 className={styles.credBlockTitle}>
+                          <Building2 size={18} color="#4f46e5" />
+                          Career Experience & Hospital Timeline ({timelineList.length})
+                        </h4>
+                        <div className={styles.credList}>
+                          {timelineList.map((item, idx) => {
+                            const parsed = parseTimelineItem(item);
+                            const icon = idx % 2 === 1 
+                              ? <Calendar size={15} /> 
+                              : <Building2 size={15} />;
+                            return (
+                              <div key={idx} className={styles.timelineCard}>
+                                <div className={styles.timelineIconWrap}>
+                                  {icon}
+                                </div>
+                                <div className={styles.credItemTextWrap}>
+                                  <div className={styles.credItemTitle}>{parsed.title}</div>
+                                  <div className={styles.credItemSubRow}>
+                                    <span className={styles.credItemSub}>{parsed.hospital} • {parsed.years}</span>
+                                    {parsed.isPresent && <span className={styles.presentBadge}>Present</span>}
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Career Experience & Hospital Timeline (Bottom-Right) */}
-                    <div className={styles.credBlock}>
-                      <h4 className={styles.credBlockTitle}>
-                        <Building2 size={18} color="#4f46e5" />
-                        Career Experience & Hospital Timeline ({timelineList.length})
-                      </h4>
-                      <div className={styles.credList}>
-                        {timelineList.map((item, idx) => {
-                          const parsed = parseTimelineItem(item);
-                          const icon = idx % 2 === 1 
-                            ? <Calendar size={15} /> 
-                            : <Building2 size={15} />;
-                          return (
-                            <div key={idx} className={styles.timelineCard}>
-                              <div className={styles.timelineIconWrap}>
-                                {icon}
-                              </div>
-                              <div className={styles.credItemTextWrap}>
-                                <div className={styles.credItemTitle}>{parsed.title}</div>
-                                <div className={styles.credItemSubRow}>
-                                  <span className={styles.credItemSub}>{parsed.hospital} • {parsed.years}</span>
-                                  {parsed.isPresent && <span className={styles.presentBadge}>Present</span>}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>

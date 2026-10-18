@@ -869,8 +869,14 @@
 .credentialsGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 28px 32px;
+  gap: 32px;
   align-items: start;
+}
+
+.credCol {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
 }
 
 .credBlock {
