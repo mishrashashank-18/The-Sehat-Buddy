@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
 import { useData } from '../../context/useData';
 import logoImg from '../../assets/images/logo.png';
+import { API_BASE } from '../../services/api';
 import Container from './Container';
 import styles from './Navbar.module.css';
 
@@ -56,7 +57,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
   useEffect(() => {
     if (token) {
-      fetch('http://localhost:5000/api/user/profile', {
+      fetch(`${API_BASE}/user/profile`, {
         headers: { Authorization: `Bearer ${token}` }
       })
         .then((res) => res.json())

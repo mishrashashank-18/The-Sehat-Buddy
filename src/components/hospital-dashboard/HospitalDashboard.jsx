@@ -30,7 +30,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useData } from '../../context/useData';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import HospitalLocationPicker from './HospitalLocationPicker';
 import SpecialityFormModal from '../admin/SpecialityFormModal';
 import logoImg from '../../assets/images/logo.png';
@@ -279,7 +279,7 @@ const HospitalDashboard = ({ onNavigate }) => {
 
     setIsAddingDoc(true);
     try {
-      const res = await fetch('http://localhost:5000/api/doctors/add-by-hospital', {
+      const res = await fetch(`${API_BASE}/doctors/add-by-hospital`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { Mail, Lock, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
 import logoImg from '../../assets/images/logo.png';
+import { API_BASE } from '../../services/api';
 import styles from './LoginPage.module.css';
 
 const LoginPage = ({ role, setView }) => {
@@ -87,7 +88,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/check-email', {
+      const response = await fetch(`${API_BASE}/doctors/check-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
@@ -130,7 +131,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/set-initial-password', {
+      const response = await fetch(`${API_BASE}/doctors/set-initial-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -161,7 +162,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/login', {
+      const response = await fetch(`${API_BASE}/doctors/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -198,7 +199,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/forgot-password', {
+      const response = await fetch(`${API_BASE}/doctors/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: targetEmail }),
@@ -234,7 +235,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/verify-reset-otp', {
+      const response = await fetch(`${API_BASE}/doctors/verify-reset-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
@@ -276,7 +277,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/doctors/reset-password', {
+      const response = await fetch(`${API_BASE}/doctors/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -317,7 +318,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/check-email', {
+      const response = await fetch(`${API_BASE}/hospitals/check-email`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
@@ -360,7 +361,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/set-initial-password', {
+      const response = await fetch(`${API_BASE}/hospitals/set-initial-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -391,7 +392,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/login', {
+      const response = await fetch(`${API_BASE}/hospitals/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
@@ -431,7 +432,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/forgot-password', {
+      const response = await fetch(`${API_BASE}/hospitals/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: targetEmail }),
@@ -467,7 +468,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/verify-reset-otp', {
+      const response = await fetch(`${API_BASE}/hospitals/verify-reset-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
@@ -508,7 +509,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/api/hospitals/reset-password', {
+      const response = await fetch(`${API_BASE}/hospitals/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -543,7 +544,7 @@ const LoginPage = ({ role, setView }) => {
 
     try {
       const apiRole = role === 'doctor' ? 'doctors' : (role === 'hospital' ? 'hospitals' : role);
-      const response = await fetch(`http://localhost:5000/api/${apiRole}/verify-otp`, {
+      const response = await fetch(`${API_BASE}/${apiRole}/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: pendingEmail, otp }),
@@ -574,7 +575,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
 
     const apiRole = role === 'doctor' ? 'doctors' : (role === 'hospital' ? 'hospitals' : role);
-    const endpoint = isLogin ? `http://localhost:5000/api/${apiRole}/login` : `http://localhost:5000/api/${apiRole}/register`;
+    const endpoint = isLogin ? `${API_BASE}/${apiRole}/login` : `${API_BASE}/${apiRole}/register`;
     const payload = isLogin ? { email, password } : { name, email, password };
 
     try {
@@ -614,7 +615,7 @@ const LoginPage = ({ role, setView }) => {
     setLoading(true);
     
     try {
-      const response = await fetch('http://localhost:5000/api/user/google-login', {
+      const response = await fetch(`${API_BASE}/user/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken: credentialResponse.credential }),

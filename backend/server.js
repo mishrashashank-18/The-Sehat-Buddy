@@ -65,8 +65,12 @@ app.use(helmet({
 }));
 
 // 2. Strict CORS Configuration
-const allowedOrigins = [
-  CLIENT_URL,
+const configuredOrigins = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map(url => url.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+
+const defaultOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:5174',
@@ -74,15 +78,18 @@ const allowedOrigins = [
   'http://localhost:5175',
   'http://127.0.0.1:5175',
   'http://localhost:3000'
-].filter(Boolean);
+];
+
+const allowedOrigins = Array.from(new Set([...configuredOrigins, ...defaultOrigins]));
 
 app.use(cors({
   origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    const cleanOrigin = origin.replace(/\/+$/, '');
     if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      CLIENT_URL === '*' ||
-      (NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))
+      process.env.CLIENT_URL === '*' ||
+      allowedOrigins.includes(cleanOrigin) ||
+      (NODE_ENV !== 'production' && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin))
     ) {
       callback(null, true);
     } else {
@@ -117,9 +124,9 @@ const generalLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Skip rate limiting in development or for health check
+    // Skip rate limiting in development or for health checks
     if (NODE_ENV !== 'production') return true;
-    if (req.path === '/health' || req.path === '/api/health') return true;
+    if (req.path === '/health' || req.path === '/api/health' || req.path === '/') return true;
     return false;
   },
   message: { success: false, message: 'Too many requests from this IP, please try again after 15 minutes.' }
@@ -149,12 +156,21 @@ app.use('/api/hospitals/reset-password', authLimiter);
 app.use('/api/admin/login', authLimiter);
 app.use('/api/admin/register', authLimiter);
 
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.json({
+// Root & Health Checks for Cloud Run
+app.get(['/health', '/api/health'], (req, res) => {
+  res.status(200).json({
     status: 'healthy',
     environment: NODE_ENV,
     port: PORT,
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/', (req, res) => {
+  res.status(200).json({
+    status: 'online',
+    service: 'The Sehat Buddy Backend API',
+    environment: NODE_ENV,
     timestamp: new Date().toISOString()
   });
 });
@@ -195,8 +211,8 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-app.listen(PORT, () => {
-  console.log(`🩺 The Sehat Buddy Backend API running in [${NODE_ENV}] mode at http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🩺 The Sehat Buddy Backend API running in [${NODE_ENV}] mode at port ${PORT}`);
 });
 
 export default app;

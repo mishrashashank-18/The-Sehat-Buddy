@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DataContext } from './context';
-import { api } from '../services/api';
+import { api, API_BASE } from '../services/api';
 import { initialHeroContent } from '../data/heroContent';
 import { initialServices } from '../data/services';
 import { initialFeatures } from '../data/features';
@@ -383,7 +383,7 @@ export const DataProvider = ({ children }) => {
     const connectRealtimeSSE = () => {
       if (!isMounted) return;
       try {
-        eventSource = new EventSource('/api/realtime-stream');
+        eventSource = new EventSource(`${API_BASE}/realtime-stream`);
 
         eventSource.addEventListener('connected', () => {
           // SSE Handshake active
