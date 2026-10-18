@@ -3,7 +3,8 @@ import {
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
-  Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight
+  Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
+  History, Milestone, CalendarClock
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -176,7 +177,26 @@ const getComprehensiveBio = (doc) => {
   return paragraphs;
 };
 
-
+// Dedicated Timeline Symbol Icon (Vertical connected milestone track)
+const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke={color} 
+    strokeWidth="2.2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round"
+    className={className}
+    style={{ flexShrink: 0 }}
+  >
+    <line x1="12" y1="2" x2="12" y2="22" />
+    <circle cx="12" cy="5" r="2.2" fill="#ede9fe" />
+    <circle cx="12" cy="12" r="2.2" fill="#ede9fe" />
+    <circle cx="12" cy="19" r="2.2" fill="#ede9fe" />
+  </svg>
+);
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
   const { doctors, reviews, faqs } = useData();
@@ -1112,25 +1132,36 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                       {/* Career Experience & Hospital Timeline */}
                       <div className={styles.credBlock}>
                         <h4 className={styles.credBlockTitle}>
-                          <Building2 size={18} color="#4f46e5" />
+                          <TimelineSymbolIcon size={18} color="#4f46e5" />
                           Career Experience & Hospital Timeline ({timelineList.length})
                         </h4>
                         <div className={styles.credList}>
                           {timelineList.map((item, idx) => {
                             const parsed = parseTimelineItem(item);
-                            const icon = idx % 2 === 1 
-                              ? <Calendar size={15} /> 
-                              : <Building2 size={15} />;
+                            const getTimelineCardIcon = (i, isPresent) => {
+                              if (isPresent || i === 0) return <Clock size={16} />;
+                              if (i === 1) return <Milestone size={16} />;
+                              if (i === 2) return <History size={16} />;
+                              return <CalendarClock size={16} />;
+                            };
                             return (
                               <div key={idx} className={styles.timelineCard}>
                                 <div className={styles.timelineIconWrap}>
-                                  {icon}
+                                  {getTimelineCardIcon(idx, parsed.isPresent)}
                                 </div>
                                 <div className={styles.credItemTextWrap}>
                                   <div className={styles.credItemTitle}>{parsed.title}</div>
                                   <div className={styles.credItemSubRow}>
-                                    <span className={styles.credItemSub}>{parsed.hospital} • {parsed.years}</span>
-                                    {parsed.isPresent && <span className={styles.presentBadge}>Present</span>}
+                                    <span className={styles.credItemSub}>{parsed.hospital}</span>
+                                    {parsed.isPresent ? (
+                                      <span className={styles.presentBadge}>
+                                        <Clock size={11} /> Present
+                                      </span>
+                                    ) : (
+                                      <span className={styles.timelineYearChip}>
+                                        <Calendar size={11} /> {parsed.years}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
