@@ -55,7 +55,7 @@ const videoStorage = multer.diskStorage({
 
 const uploadVideo = multer({
   storage: videoStorage,
-  limits: { fileSize: 60 * 1024 * 1024 }, // 60MB limit
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit (matches Cloudinary Free Tier max video size)
   fileFilter: (req, file, cb) => {
     if (
       (file.mimetype && file.mimetype.startsWith('video/')) ||
@@ -193,7 +193,7 @@ router.post('/video', protect, (req, res, next) => {
   uploadVideo.single('video')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ success: false, message: 'Video file size exceeds maximum limit of 60MB' });
+        return res.status(400).json({ success: false, message: 'Video file size exceeds maximum limit of 100MB (Cloudinary Free Plan quota).' });
       }
       return res.status(400).json({ success: false, message: err.message });
     } else if (err) {
