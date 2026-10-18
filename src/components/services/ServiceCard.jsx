@@ -20,7 +20,7 @@ const ServiceCard = ({ service, onNavigate }) => {
     } else if (title.includes('kid') || title.includes('child') || title.includes('pediatric')) {
       onNavigate('coming-soon', 'kid-care');
     } else {
-      const slug = service.title ? service.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'feature';
+      const slug = service.title ? service.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'all-services';
       onNavigate('coming-soon', slug);
     }
   };
@@ -29,7 +29,11 @@ const ServiceCard = ({ service, onNavigate }) => {
     <div
       className={styles.card}
       onClick={handleClick}
-      style={{ backgroundColor: service.bgTint, borderColor: service.bgTint, cursor: 'pointer' }}
+      style={{
+        backgroundColor: service.bgTint,
+        borderColor: service.bgTint,
+        cursor: 'pointer'
+      }}
       title={`Click to explore ${service.title}`}
       role="button"
       tabIndex={0}
