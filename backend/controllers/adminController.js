@@ -8,11 +8,17 @@ import Appointment from '../models/Appointment.js';
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const admin = await Admin.findOne({ email });
+    const admin = await Admin.findOne({ email }).select('+password');
     if (admin && (await admin.matchPassword(password))) {
       res.json({
         success: true,
-        token: generateToken(admin._id),
+        token: generateToken(admin._id, 'admin'),
+        admin: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email,
+          role: 'admin'
+        }
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -25,15 +31,32 @@ export const authAdmin = async (req, res) => {
 export const registerAdmin = async (req, res) => {
   const { name, email, password } = req.body;
   try {
+    const existingAdminsCount = await Admin.countDocuments();
+    const adminSecret = req.headers['x-admin-secret'] || req.body.adminSecret;
+    const envSecret = process.env.ADMIN_REGISTRATION_SECRET;
+
+    // If an admin already exists in the system, registration requires an existing admin session OR valid secret
+    if (existingAdminsCount > 0) {
+      const hasValidSecret = envSecret && adminSecret && adminSecret === envSecret;
+      const isAuthedAdmin = req.user && req.user.role === 'admin';
+      if (!hasValidSecret && !isAuthedAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'Admin registration is restricted. Initial platform setup has already been completed.'
+        });
+      }
+    }
+
     const adminExists = await Admin.findOne({ email });
     if (adminExists) {
       return res.status(400).json({ success: false, message: 'Admin already exists' });
     }
-    const admin = await Admin.create({ name, email, password });
+    const admin = await Admin.create({ name, email, password, role: 'admin' });
     if (admin) {
       res.status(201).json({
         success: true,
-        token: generateToken(admin._id),
+        token: generateToken(admin._id, 'admin'),
+        message: 'Admin account created successfully'
       });
     } else {
       res.status(400).json({ success: false, message: 'Invalid admin data' });

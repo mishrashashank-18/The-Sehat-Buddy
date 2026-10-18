@@ -7,7 +7,7 @@ import { sendEmail } from '../utils/email.js';
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const hospital = await Hospital.findOne({ email: (email || '').toLowerCase().trim() });
+    const hospital = await Hospital.findOne({ email: (email || '').toLowerCase().trim() }).select('+password');
     if (!hospital) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -22,10 +22,16 @@ export const authHospital = async (req, res) => {
     }
 
     if (await hospital.matchPassword(password)) {
+      const hospObj = hospital.toObject();
+      delete hospObj.password;
+      delete hospObj.otp;
+      delete hospObj.otpExpires;
+      delete hospObj.otpAttempts;
+
       res.json({
         success: true,
-        token: generateToken(hospital._id),
-        user: hospital
+        token: generateToken(hospital._id, 'hospital'),
+        user: hospObj
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -92,11 +98,17 @@ export const setInitialHospitalPassword = async (req, res) => {
     hospital.passwordSet = true;
     await hospital.save();
 
+    const hospObj = hospital.toObject();
+    delete hospObj.password;
+    delete hospObj.otp;
+    delete hospObj.otpExpires;
+    delete hospObj.otpAttempts;
+
     return res.json({
       success: true,
       message: 'Password set successfully! Logging in...',
-      token: generateToken(hospital._id),
-      user: hospital
+      token: generateToken(hospital._id, 'hospital'),
+      user: hospObj
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -124,6 +136,7 @@ export const forgotHospitalPassword = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     hospital.otp = otp;
     hospital.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    hospital.otpAttempts = 0;
     await hospital.save();
 
     try {
@@ -151,8 +164,6 @@ export const forgotHospitalPassword = async (req, res) => {
       console.error('Error sending hospital password reset OTP email:', emailErr.message);
     }
 
-    console.log(`[HOSPITAL RESET OTP] OTP for ${hospital.email} is: ${otp}`);
-
     return res.json({
       success: true,
       message: `A 6-digit OTP has been sent to ${hospital.email}.`
@@ -163,7 +174,7 @@ export const forgotHospitalPassword = async (req, res) => {
 };
 
 /**
- * Verify hospital reset OTP
+ * Verify hospital reset OTP with attempt rate limiting
  */
 export const verifyHospitalResetOtp = async (req, res) => {
   try {
@@ -172,17 +183,33 @@ export const verifyHospitalResetOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
 
-    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpires +otpAttempts');
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Hospital account not found' });
     }
 
-    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    if (hospital.otpAttempts && hospital.otpAttempts >= 5) {
+      hospital.otp = undefined;
+      hospital.otpExpires = undefined;
+      await hospital.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated for security. Please request a new OTP.'
+      });
     }
 
     if (hospital.otpExpires && new Date(hospital.otpExpires) < new Date()) {
       return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
+      hospital.otpAttempts = (hospital.otpAttempts || 0) + 1;
+      await hospital.save();
+      const remaining = Math.max(0, 5 - hospital.otpAttempts);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. ${remaining} attempt(s) remaining.`
+      });
     }
 
     return res.json({
@@ -208,17 +235,29 @@ export const resetHospitalPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters' });
     }
 
-    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() });
+    const hospital = await Hospital.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpires +otpAttempts');
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Hospital account not found' });
     }
 
-    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP.' });
+    if (hospital.otpAttempts && hospital.otpAttempts >= 5) {
+      hospital.otp = undefined;
+      hospital.otpExpires = undefined;
+      await hospital.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated. Please request a new OTP.'
+      });
     }
 
     if (hospital.otpExpires && new Date(hospital.otpExpires) < new Date()) {
       return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!hospital.otp || hospital.otp !== String(otp).trim()) {
+      hospital.otpAttempts = (hospital.otpAttempts || 0) + 1;
+      await hospital.save();
+      return res.status(400).json({ success: false, message: 'Invalid OTP.' });
     }
 
     hospital.password = newPassword;
@@ -226,13 +265,20 @@ export const resetHospitalPassword = async (req, res) => {
     hospital.passwordSet = true;
     hospital.otp = undefined;
     hospital.otpExpires = undefined;
+    hospital.otpAttempts = 0;
     await hospital.save();
+
+    const hospObj = hospital.toObject();
+    delete hospObj.password;
+    delete hospObj.otp;
+    delete hospObj.otpExpires;
+    delete hospObj.otpAttempts;
 
     return res.json({
       success: true,
       message: 'Password reset successfully! Logging you in...',
-      token: generateToken(hospital._id),
-      user: hospital
+      token: generateToken(hospital._id, 'hospital'),
+      user: hospObj
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -427,88 +473,110 @@ export const getHospitalById = async (req, res) => {
 export const updateHospital = async (req, res) => {
   try {
     const hospital = await Hospital.findById(req.params.id);
-    if (hospital) {
-      Object.assign(hospital, req.body);
-      
-      // Sync any new staff doctors & emails BEFORE saving so they get ObjectIds
-      const incomingStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : (hospital.staff_doctors || []);
-      const incomingStaffEmails = Array.isArray(req.body.staff_emails) 
-          ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
-          : (req.body.staff_emails ? String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : (hospital.staff_emails || []));
-      
-      const combinedStaff = [
-        ...incomingStaffDoctors,
-        ...incomingStaffEmails.map(e => ({ email: e }))
-      ];
-      if (combinedStaff.length > 0) {
-        await syncHospitalStaff(req.body.name || hospital.name, combinedStaff, hospital._id);
-      }
-
-      if (req.body.specialities !== undefined) {
-        hospital.specialities = req.body.specialities;
-        hospital.markModified('specialities');
-      }
-      if (req.body.reels !== undefined) {
-        hospital.reels = Array.isArray(req.body.reels) ? req.body.reels : [];
-        hospital.markModified('reels');
-      }
-      if (req.body.youtube_videos !== undefined) {
-        hospital.youtube_videos = Array.isArray(req.body.youtube_videos) ? req.body.youtube_videos : [];
-        hospital.markModified('youtube_videos');
-      }
-      if (req.body.star_doctors !== undefined) {
-        const resolvedStarDoctors = [];
-        const inputStarDoctors = Array.isArray(req.body.star_doctors) ? req.body.star_doctors : [];
-        for (const sd of inputStarDoctors) {
-          if (/^[0-9a-fA-F]{24}$/.test(sd)) {
-            resolvedStarDoctors.push(sd);
-          } else if (typeof sd === 'string' && sd.includes('@')) {
-            const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
-            if (doc) resolvedStarDoctors.push(doc._id);
-          }
-        }
-        hospital.star_doctors = resolvedStarDoctors;
-        hospital.markModified('star_doctors');
-      }
-      if (req.body.photos !== undefined) {
-        hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
-        hospital.markModified('photos');
-      }
-      if (req.body.staff_doctors !== undefined) {
-        hospital.staff_doctors = incomingStaffDoctors;
-        hospital.markModified('staff_doctors');
-      }
-      if (req.body.staff_emails !== undefined) {
-        hospital.staff_emails = incomingStaffEmails;
-        hospital.markModified('staff_emails');
-      }
-      if (req.body.cashlessInsurance !== undefined) {
-        hospital.cashlessInsurance = Boolean(req.body.cashlessInsurance);
-      }
-      if (req.body.acceptedInsurances !== undefined) {
-        hospital.acceptedInsurances = Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : [];
-        hospital.markModified('acceptedInsurances');
-      }
-      if (req.body.tpaHelpdesk !== undefined) {
-        hospital.tpaHelpdesk = req.body.tpaHelpdesk;
-        hospital.markModified('tpaHelpdesk');
-      }
-      if (req.body.insuranceHelpline !== undefined) {
-        hospital.insuranceHelpline = req.body.insuranceHelpline;
-      }
-      if (req.file) {
-        hospital.image = req.file.path;
-      } else if (req.body.image) {
-        hospital.image = req.body.image;
-      }
-      
-      const updatedHospital = await hospital.save();
-
-      const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');
-      res.json({ success: true, message: 'Hospital updated', data: populated || updatedHospital });
-    } else {
-      res.status(404).json({ success: false, message: 'Hospital not found' });
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital not found' });
     }
+
+    // Authorization verification: only the hospital itself or a platform admin
+    const isSelf = req.user && req.user.id === hospital._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to modify this hospital profile'
+      });
+    }
+
+    // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
+    const allowedFields = [
+      'name', 'address', 'city', 'state', 'zip', 'phone', 'description',
+      'rating', 'reviews', 'totalBeds', 'emergency24x7', 'establishedYear',
+      'isVerified', 'cashlessInsurance', 'insuranceHelpline', 'latitude', 'longitude'
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        hospital[field] = req.body[field];
+        hospital.markModified(field);
+      }
+    });
+
+    // Sync any new staff doctors & emails BEFORE saving so they get ObjectIds
+    const incomingStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : (hospital.staff_doctors || []);
+    const incomingStaffEmails = Array.isArray(req.body.staff_emails) 
+        ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
+        : (req.body.staff_emails ? String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : (hospital.staff_emails || []));
+    
+    const combinedStaff = [
+      ...incomingStaffDoctors,
+      ...incomingStaffEmails.map(e => ({ email: e }))
+    ];
+    if (combinedStaff.length > 0) {
+      await syncHospitalStaff(req.body.name || hospital.name, combinedStaff, hospital._id);
+    }
+
+    if (req.body.specialities !== undefined) {
+      hospital.specialities = req.body.specialities;
+      hospital.markModified('specialities');
+    }
+    if (req.body.reels !== undefined) {
+      hospital.reels = Array.isArray(req.body.reels) ? req.body.reels : [];
+      hospital.markModified('reels');
+    }
+    if (req.body.youtube_videos !== undefined) {
+      hospital.youtube_videos = Array.isArray(req.body.youtube_videos) ? req.body.youtube_videos : [];
+      hospital.markModified('youtube_videos');
+    }
+    if (req.body.star_doctors !== undefined) {
+      const resolvedStarDoctors = [];
+      const inputStarDoctors = Array.isArray(req.body.star_doctors) ? req.body.star_doctors : [];
+      for (const sd of inputStarDoctors) {
+        if (/^[0-9a-fA-F]{24}$/.test(sd)) {
+          resolvedStarDoctors.push(sd);
+        } else if (typeof sd === 'string' && sd.includes('@')) {
+          const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
+          if (doc) resolvedStarDoctors.push(doc._id);
+        }
+      }
+      hospital.star_doctors = resolvedStarDoctors;
+      hospital.markModified('star_doctors');
+    }
+    if (req.body.photos !== undefined) {
+      hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+      hospital.markModified('photos');
+    }
+    if (req.body.staff_doctors !== undefined) {
+      hospital.staff_doctors = incomingStaffDoctors;
+      hospital.markModified('staff_doctors');
+    }
+    if (req.body.staff_emails !== undefined) {
+      hospital.staff_emails = incomingStaffEmails;
+      hospital.markModified('staff_emails');
+    }
+    if (req.body.cashlessInsurance !== undefined) {
+      hospital.cashlessInsurance = Boolean(req.body.cashlessInsurance);
+    }
+    if (req.body.acceptedInsurances !== undefined) {
+      hospital.acceptedInsurances = Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : [];
+      hospital.markModified('acceptedInsurances');
+    }
+    if (req.body.tpaHelpdesk !== undefined) {
+      hospital.tpaHelpdesk = req.body.tpaHelpdesk;
+      hospital.markModified('tpaHelpdesk');
+    }
+    if (req.body.insuranceHelpline !== undefined) {
+      hospital.insuranceHelpline = req.body.insuranceHelpline;
+    }
+    if (req.file) {
+      hospital.image = req.file.path;
+    } else if (req.body.image) {
+      hospital.image = req.body.image;
+    }
+    
+    const updatedHospital = await hospital.save();
+
+    const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');
+    res.json({ success: true, message: 'Hospital updated', data: populated || updatedHospital });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -516,10 +584,18 @@ export const updateHospital = async (req, res) => {
 
 export const deleteHospital = async (req, res) => {
   try {
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Administrator privileges required to delete a hospital'
+      });
+    }
+
     const hospital = await Hospital.findById(req.params.id);
     if (hospital) {
       await hospital.deleteOne();
-      res.json({ success: true, message: 'Hospital deleted' });
+      res.json({ success: true, message: 'Hospital deleted successfully' });
     } else {
       res.status(404).json({ success: false, message: 'Hospital not found' });
     }
@@ -536,6 +612,15 @@ export const updateDoctorFaqsByHospital = async (req, res) => {
   const { faqs } = req.body;
 
   try {
+    const isHospital = req.user && req.user.role === 'hospital';
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isHospital && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Access restricted to hospitals and administrators'
+      });
+    }
+
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(hospitalId)) {
       hospital = await Hospital.findById(hospitalId);
@@ -564,7 +649,7 @@ export const updateDoctorFaqsByHospital = async (req, res) => {
         sd => (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase() === doctor.email?.toLowerCase()
       );
 
-      if (!isAffiliated) {
+      if (!isAffiliated && !isAdmin) {
         return res.status(403).json({
           success: false,
           message: `Doctor ${doctor.name} is not registered under ${hospital.name}. Only their registered hospital or an admin can update their FAQs.`

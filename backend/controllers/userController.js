@@ -16,6 +16,7 @@ export const registerUser = async (req, res) => {
         const otp = generateOTP();
         userExists.otp = otp;
         userExists.otpExpires = Date.now() + 10 * 60 * 1000;
+        userExists.otpAttempts = 0;
         await userExists.save();
         
         try {
@@ -27,7 +28,6 @@ export const registerUser = async (req, res) => {
           });
         } catch (emailError) {
           console.error('Error sending OTP email:', emailError.message);
-          console.log(`[MOCK EMAIL] OTP for ${userExists.email} is: ${otp}`);
         }
         
         return res.status(200).json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
@@ -36,7 +36,15 @@ export const registerUser = async (req, res) => {
     }
     
     const otp = generateOTP();
-    const user = await User.create({ name, email, password, otp, otpExpires: Date.now() + 10 * 60 * 1000 });
+    const user = await User.create({
+      name,
+      email,
+      password,
+      role: 'user',
+      otp,
+      otpExpires: Date.now() + 10 * 60 * 1000,
+      otpAttempts: 0
+    });
     
     if (user) {
       try {
@@ -49,7 +57,6 @@ export const registerUser = async (req, res) => {
       } catch (emailError) {
         console.error('Error sending OTP email:', emailError.message);
       }
-      console.log(`[MOCK EMAIL] OTP for ${user.email} is: ${otp}`);
 
       res.status(201).json({
         success: true,
@@ -67,21 +74,38 @@ export const registerUser = async (req, res) => {
 export const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+otp +otpExpires +otpAttempts');
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    
-    if (user.otp !== otp || user.otpExpires < Date.now()) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+
+    if (user.otpAttempts && user.otpAttempts >= 5) {
+      user.otp = undefined;
+      user.otpExpires = undefined;
+      await user.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated for security. Please request a new OTP.'
+      });
+    }
+
+    if (user.otp !== String(otp).trim() || user.otpExpires < Date.now()) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      await user.save();
+      const remaining = Math.max(0, 5 - user.otpAttempts);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid or expired OTP. ${remaining} attempt(s) remaining.`
+      });
     }
     
     user.isVerified = true;
     user.otp = undefined;
     user.otpExpires = undefined;
+    user.otpAttempts = 0;
     await user.save();
     
     res.json({
       success: true,
-      token: generateToken(user._id),
+      token: generateToken(user._id, 'user'),
       user: { name: user.name, email: user.email, id: user._id }
     });
   } catch (error) {
@@ -92,12 +116,13 @@ export const verifyOtp = async (req, res) => {
 export const authUser = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+password');
     if (user && (await user.matchPassword(password))) {
       if (!user.isVerified) {
         const otp = generateOTP();
         user.otp = otp;
         user.otpExpires = Date.now() + 10 * 60 * 1000;
+        user.otpAttempts = 0;
         await user.save();
         
         try {
@@ -110,7 +135,6 @@ export const authUser = async (req, res) => {
         } catch (emailError) {
           console.error('Error sending OTP email:', emailError.message);
         }
-        console.log(`[MOCK EMAIL] OTP for ${user.email} is: ${otp}`);
         
         return res.json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
       }
@@ -128,7 +152,7 @@ export const authUser = async (req, res) => {
 
       res.json({
         success: true,
-        token: generateToken(user._id),
+        token: generateToken(user._id, 'user'),
         user: { name: user.name, email: user.email, id: user._id }
       });
     } else {
@@ -158,7 +182,13 @@ export const updateProfile = async (req, res) => {
     if (user) {
       user.name = req.body.name || user.name;
       user.phone = req.body.phone || user.phone;
-      user.address = req.body.address ? JSON.parse(req.body.address) : user.address;
+      if (req.body.address) {
+        try {
+          user.address = typeof req.body.address === 'string' ? JSON.parse(req.body.address) : req.body.address;
+        } catch {
+          user.address = req.body.address;
+        }
+      }
       user.dob = req.body.dob || user.dob;
       user.gender = req.body.gender || user.gender;
       
@@ -167,7 +197,12 @@ export const updateProfile = async (req, res) => {
       }
       
       const updatedUser = await user.save();
-      res.json({ success: true, data: updatedUser });
+      const userObj = updatedUser.toObject();
+      delete userObj.password;
+      delete userObj.otp;
+      delete userObj.otpExpires;
+      delete userObj.otpAttempts;
+      res.json({ success: true, data: userObj });
     } else {
       res.status(404).json({ success: false, message: 'User not found' });
     }
@@ -304,7 +339,7 @@ export const googleLogin = async (req, res) => {
 
     res.json({
       success: true,
-      token: generateToken(user._id),
+      token: generateToken(user._id, 'user'),
       data: {
         id: user._id,
         name: user.name,

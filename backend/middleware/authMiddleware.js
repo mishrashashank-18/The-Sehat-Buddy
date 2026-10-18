@@ -13,18 +13,92 @@ export const protect = async (req, res, next) => {
   ) {
     try {
       token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      // We don't know the role, so we just attach the decoded id
-      req.user = { id: decoded.id };
-      next();
+      const secret = process.env.JWT_SECRET || 'sehatbuddy_super_secure_jwt_secret_dev_fallback_2026';
+      const decoded = jwt.verify(token, secret);
+
+      let user = null;
+      let role = decoded.role;
+
+      // 1. If role is explicitly encoded in token
+      if (role === 'admin') {
+        user = await Admin.findById(decoded.id);
+      } else if (role === 'doctor') {
+        user = await Doctor.findById(decoded.id);
+      } else if (role === 'hospital') {
+        user = await Hospital.findById(decoded.id);
+      } else if (role === 'user') {
+        user = await User.findById(decoded.id);
+      }
+
+      // 2. Fallback lookup across collections if role was missing from legacy token
+      if (!user) {
+        user = await Admin.findById(decoded.id);
+        if (user) {
+          role = 'admin';
+        } else {
+          user = await Doctor.findById(decoded.id);
+          if (user) {
+            role = 'doctor';
+          } else {
+            user = await Hospital.findById(decoded.id);
+            if (user) {
+              role = 'hospital';
+            } else {
+              user = await User.findById(decoded.id);
+              if (user) {
+                role = 'user';
+              }
+            }
+          }
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Not authorized: User account no longer exists'
+        });
+      }
+
+      req.user = {
+        id: user._id.toString(),
+        role: role || user.role || 'user',
+        email: user.email,
+        name: user.name,
+        doc: user
+      };
+
+      return next();
     } catch (error) {
-      console.error(error);
-      res.status(401).json({ success: false, message: 'Not authorized, token failed' });
+      console.error('Auth verification error:', error.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized: Token verification failed or expired'
+      });
     }
   }
 
-  if (!token) {
-    res.status(401).json({ success: false, message: 'Not authorized, no token' });
-  }
+  return res.status(401).json({
+    success: false,
+    message: 'Not authorized: No Bearer token provided'
+  });
 };
+
+/**
+ * Role-Based Access Control (RBAC) middleware
+ * Usage: router.get('/admin-only', protect, requireRole('admin'), handler)
+ * Usage: router.put('/doctor-or-admin', protect, requireRole('doctor', 'admin'), handler)
+ */
+export const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: `Forbidden: Access requires one of [${roles.join(', ')}] permissions`
+      });
+    }
+    next();
+  };
+};
+
+export const requireAdmin = requireRole('admin');

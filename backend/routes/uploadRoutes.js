@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { protect } from '../middleware/authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +33,7 @@ const videoStorage = multer.diskStorage({
 
 const uploadVideo = multer({
   storage: videoStorage,
-  limits: { fileSize: 250 * 1024 * 1024 }, // 250MB limit
+  limits: { fileSize: 60 * 1024 * 1024 }, // 60MB limit
   fileFilter: (req, file, cb) => {
     if (
       (file.mimetype && file.mimetype.startsWith('video/')) ||
@@ -59,7 +60,7 @@ const getCloudinary = () => {
  * Upload single image (file or base64) to Cloudinary
  * Returns { success: true, url, public_id }
  */
-router.post('/image', upload.single('image'), async (req, res) => {
+router.post('/image', protect, upload.single('image'), async (req, res) => {
   try {
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -148,11 +149,11 @@ router.post('/image', upload.single('image'), async (req, res) => {
  * Upload single video to Cloudinary
  * Returns { success: true, url, public_id, format, duration }
  */
-router.post('/video', (req, res, next) => {
+router.post('/video', protect, (req, res, next) => {
   uploadVideo.single('video')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ success: false, message: 'Video file size exceeds maximum limit of 250MB' });
+        return res.status(400).json({ success: false, message: 'Video file size exceeds maximum limit of 60MB' });
       }
       return res.status(400).json({ success: false, message: err.message });
     } else if (err) {

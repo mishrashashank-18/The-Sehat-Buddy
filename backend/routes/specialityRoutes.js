@@ -5,12 +5,13 @@ import {
   updateSpecialityProcedure,
   deleteSpecialityProcedure
 } from '../controllers/specialityController.js';
+import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.get('/', getSpecialitiesProcedures);
-router.post('/', createSpecialityProcedure);
-router.put('/:id', updateSpecialityProcedure);
-router.delete('/:id', deleteSpecialityProcedure);
+router.post('/', protect, requireAdmin, createSpecialityProcedure);
+router.put('/:id', protect, requireAdmin, updateSpecialityProcedure);
+router.delete('/:id', protect, requireAdmin, deleteSpecialityProcedure);
 
 export default router;

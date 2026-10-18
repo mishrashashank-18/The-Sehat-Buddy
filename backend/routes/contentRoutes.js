@@ -1,5 +1,6 @@
 import express from 'express';
 import Content from '../models/Content.js';
+import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -33,7 +34,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.put('/:type', async (req, res) => {
+router.put('/:type', protect, requireAdmin, async (req, res) => {
   try {
     const { type } = req.params;
     let bodyData = req.body;
