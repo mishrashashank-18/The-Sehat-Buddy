@@ -18,7 +18,7 @@ import upload from '../config/cloudinary.js';
 
 const router = express.Router();
 
-// Public routes
+// Public read routes
 router.get('/list', getDoctors);
 router.get('/:id', getDoctorById);
 
@@ -29,13 +29,15 @@ router.post('/set-initial-password', setInitialPassword);
 router.post('/forgot-password', forgotDoctorPassword);
 router.post('/verify-reset-otp', verifyDoctorResetOtp);
 router.post('/reset-password', resetDoctorPassword);
-router.post('/add-by-hospital', addDoctorByHospital);
 
-// Doctor profile update & delete
-router.put('/:id', upload.single('image'), updateDoctorProfile);
-router.delete('/:id', deleteDoctorProfile);
+// Hospital roster addition (authenticated)
+router.post('/add-by-hospital', protect, addDoctorByHospital);
 
-// Dashboard
+// Doctor profile update & delete (authenticated & role-checked)
+router.put('/:id', protect, upload.single('image'), updateDoctorProfile);
+router.delete('/:id', protect, deleteDoctorProfile);
+
+// Dashboard (authenticated)
 router.get('/dashboard', protect, doctorDashboard);
 
 export default router;

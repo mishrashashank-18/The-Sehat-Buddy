@@ -8,12 +8,18 @@ import { sendEmail } from '../utils/email.js';
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() }).select('+password');
     if (doctor && (await doctor.matchPassword(password))) {
+      const docObj = doctor.toObject();
+      delete docObj.password;
+      delete docObj.otp;
+      delete docObj.otpExpires;
+      delete docObj.otpAttempts;
+
       res.json({
         success: true,
-        token: generateToken(doctor._id),
-        user: doctor
+        token: generateToken(doctor._id, 'doctor'),
+        user: docObj
       });
     } else {
       res.status(401).json({ success: false, message: 'Invalid email or password' });
@@ -80,11 +86,17 @@ export const setInitialPassword = async (req, res) => {
     doctor.passwordSet = true;
     await doctor.save();
 
+    const docObj = doctor.toObject();
+    delete docObj.password;
+    delete docObj.otp;
+    delete docObj.otpExpires;
+    delete docObj.otpAttempts;
+
     return res.json({
       success: true,
       message: 'Password set successfully! Logging in...',
-      token: generateToken(doctor._id),
-      user: doctor
+      token: generateToken(doctor._id, 'doctor'),
+      user: docObj
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -112,6 +124,7 @@ export const forgotDoctorPassword = async (req, res) => {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     doctor.otp = otp;
     doctor.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    doctor.otpAttempts = 0;
     await doctor.save();
 
     try {
@@ -139,8 +152,6 @@ export const forgotDoctorPassword = async (req, res) => {
       console.error('Error sending doctor password reset OTP email:', emailErr.message);
     }
 
-    console.log(`[DOCTOR RESET OTP] OTP for ${doctor.email} is: ${otp}`);
-
     return res.json({
       success: true,
       message: `A 6-digit OTP has been sent to ${doctor.email}.`
@@ -151,7 +162,7 @@ export const forgotDoctorPassword = async (req, res) => {
 };
 
 /**
- * Verify doctor reset OTP
+ * Verify doctor reset OTP with attempt rate limiting
  */
 export const verifyDoctorResetOtp = async (req, res) => {
   try {
@@ -160,17 +171,33 @@ export const verifyDoctorResetOtp = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and OTP are required' });
     }
 
-    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpires +otpAttempts');
     if (!doctor) {
       return res.status(404).json({ success: false, message: 'Doctor account not found' });
     }
 
-    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    if (doctor.otpAttempts && doctor.otpAttempts >= 5) {
+      doctor.otp = undefined;
+      doctor.otpExpires = undefined;
+      await doctor.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated for security. Please request a new OTP.'
+      });
     }
 
     if (doctor.otpExpires && new Date(doctor.otpExpires) < new Date()) {
       return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
+      doctor.otpAttempts = (doctor.otpAttempts || 0) + 1;
+      await doctor.save();
+      const remaining = Math.max(0, 5 - doctor.otpAttempts);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. ${remaining} attempt(s) remaining.`
+      });
     }
 
     return res.json({
@@ -196,17 +223,29 @@ export const resetDoctorPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
     }
 
-    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
+    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() }).select('+otp +otpExpires +otpAttempts');
     if (!doctor) {
       return res.status(404).json({ success: false, message: 'Doctor account not found' });
     }
 
-    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
-      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    if (doctor.otpAttempts && doctor.otpAttempts >= 5) {
+      doctor.otp = undefined;
+      doctor.otpExpires = undefined;
+      await doctor.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated. Please request a new OTP.'
+      });
     }
 
     if (doctor.otpExpires && new Date(doctor.otpExpires) < new Date()) {
       return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!doctor.otp || doctor.otp !== String(otp).trim()) {
+      doctor.otpAttempts = (doctor.otpAttempts || 0) + 1;
+      await doctor.save();
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
     }
 
     doctor.password = password;
@@ -214,13 +253,20 @@ export const resetDoctorPassword = async (req, res) => {
     doctor.passwordSet = true;
     doctor.otp = undefined;
     doctor.otpExpires = undefined;
+    doctor.otpAttempts = 0;
     await doctor.save();
+
+    const docObj = doctor.toObject();
+    delete docObj.password;
+    delete docObj.otp;
+    delete docObj.otpExpires;
+    delete docObj.otpAttempts;
 
     return res.json({
       success: true,
       message: 'Password reset successfully! Logging in...',
-      token: generateToken(doctor._id),
-      user: doctor
+      token: generateToken(doctor._id, 'doctor'),
+      user: docObj
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -336,11 +382,42 @@ export const updateDoctorProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
 
-    // FAQs on doctor page can only be updated by the hospital or admin, not by the doctor
-    const updateData = { ...req.body };
-    delete updateData.faqs;
+    // Authorization verification
+    const isSelf = req.user && req.user.id === doctor._id.toString();
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isHospital = req.user && req.user.role === 'hospital';
 
-    Object.assign(doctor, updateData);
+    if (!isSelf && !isAdmin && !isHospital) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to update this doctor profile'
+      });
+    }
+
+    // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
+    const allowedFields = [
+      'name', 'specialization', 'experience', 'jobTitle', 'about', 'fees',
+      'address', 'hospital', 'qualifications', 'contact_number', 'instagram',
+      'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus',
+      'licenseNumber', 'awards', 'certifications', 'memberships',
+      'careerExperience', 'reels', 'youtube_videos', 'rating', 'reviews', 'isStarDoctor'
+    ];
+
+    allowedFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        if (field === 'address') {
+          try {
+            doctor.address = typeof req.body.address === 'string' ? JSON.parse(req.body.address) : req.body.address;
+          } catch {
+            doctor.address = req.body.address;
+          }
+        } else {
+          doctor[field] = req.body[field];
+        }
+        doctor.markModified(field);
+      }
+    });
+
     if (req.body.awards !== undefined) {
       doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];
       doctor.markModified('awards');
@@ -357,14 +434,6 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience : [];
       doctor.markModified('careerExperience');
     }
-    if (req.body.licenseNumber !== undefined) {
-      doctor.licenseNumber = req.body.licenseNumber;
-    }
-    if (req.file) {
-      doctor.image = req.file.path;
-    } else if (req.body.image) {
-      doctor.image = req.body.image;
-    }
     if (req.body.reels !== undefined) {
       doctor.reels = Array.isArray(req.body.reels) ? req.body.reels : [];
       doctor.markModified('reels');
@@ -374,8 +443,20 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('youtube_videos');
     }
 
+    if (req.file) {
+      doctor.image = req.file.path;
+    } else if (req.body.image) {
+      doctor.image = req.body.image;
+    }
+
     const updated = await doctor.save();
-    return res.json({ success: true, message: 'Doctor profile updated', data: updated });
+    const docObj = updated.toObject();
+    delete docObj.password;
+    delete docObj.otp;
+    delete docObj.otpExpires;
+    delete docObj.otpAttempts;
+
+    return res.json({ success: true, message: 'Doctor profile updated', data: docObj });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -383,6 +464,16 @@ export const updateDoctorProfile = async (req, res) => {
 
 export const deleteDoctorProfile = async (req, res) => {
   try {
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isHospital = req.user && req.user.role === 'hospital';
+
+    if (!isAdmin && !isHospital) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only an administrator or affiliated hospital can delete a doctor profile'
+      });
+    }
+
     let doctor = null;
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
       doctor = await Doctor.findById(req.params.id);

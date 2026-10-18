@@ -4,7 +4,8 @@ import bcrypt from 'bcrypt';
 const doctorSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, default: 'CHANGEME_PENDING_SETUP' },
+  password: { type: String, default: 'CHANGEME_PENDING_SETUP', select: false },
+  role: { type: String, default: 'doctor' },
   specialization: { type: String, default: 'General Medicine' },
   experience: { type: Number, default: 5 },
   jobTitle: { type: String, default: 'Senior consultant' },
@@ -44,8 +45,9 @@ const doctorSchema = new mongoose.Schema({
     steps: [{ type: String }],
     note: { type: String }
   }],
-  otp: { type: String },
-  otpExpires: { type: Date },
+  otp: { type: String, select: false },
+  otpExpires: { type: Date, select: false },
+  otpAttempts: { type: Number, default: 0, select: false },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });

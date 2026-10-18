@@ -4,7 +4,8 @@ import bcrypt from 'bcrypt';
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: false },
+  password: { type: String, required: false, select: false },
+  role: { type: String, default: 'user' },
   googleId: { type: String, required: false, unique: true, sparse: true },
   image: { type: String, default: "https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg" },
   address: {
@@ -15,8 +16,9 @@ const userSchema = new mongoose.Schema({
   dob: { type: String, default: 'Not Selected' },
   phone: { type: String, default: '0000000000' },
   isVerified: { type: Boolean, default: false },
-  otp: { type: String },
-  otpExpires: { type: Date }
+  otp: { type: String, select: false },
+  otpExpires: { type: Date, select: false },
+  otpAttempts: { type: Number, default: 0, select: false }
 }, { timestamps: true });
 
 userSchema.pre('save', async function() {
@@ -28,6 +30,7 @@ userSchema.pre('save', async function() {
 });
 
 userSchema.methods.matchPassword = async function(enteredPassword) {
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
