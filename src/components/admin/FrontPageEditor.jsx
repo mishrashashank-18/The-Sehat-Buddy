@@ -262,10 +262,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check size limit: 250MB
-    const maxSizeBytes = 250 * 1024 * 1024;
+    // Check size limit: 100MB (Cloudinary Free Plan max video file size)
+    const maxSizeBytes = 100 * 1024 * 1024;
     if (file.size > maxSizeBytes) {
-      showToast('Video file exceeds maximum limit of 250MB. Please choose a smaller video.');
+      showToast('Video file exceeds maximum limit of 100MB (Cloudinary Free Plan quota). Please choose a smaller video.');
       return;
     }
 
@@ -1048,7 +1048,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <div>
                     <div className={styles.videoUploadTitle}>Upload Custom Video to Cloudinary</div>
                     <p className={styles.videoUploadDesc}>
-                      Upload direct video (.mp4, .webm, .mov up to 250MB). Streamed securely to Cloudinary CDN and automatically saved to the website.
+                      Upload direct video (.mp4, .webm, .mov up to 100MB). Streamed securely to Cloudinary CDN and automatically saved to the website.
                     </p>
                   </div>
                 </div>
@@ -1057,7 +1057,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     ref={videoFileInputRef}
                     type="file"
-                    accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*"
+                    accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv,.avi"
                     onChange={handleVideoUpload}
                     style={{ display: 'none' }}
                   />

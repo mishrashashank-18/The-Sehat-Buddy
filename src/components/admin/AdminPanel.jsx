@@ -204,7 +204,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     } catch (err) {
       if (!isSilent) {
         console.error('Failed to load storage stats:', err);
-        setStorageError(err.message || 'Failed to load cloud storage stats');
+        const message = err.message === 'Failed to fetch'
+          ? 'Backend server is offline or unreachable at http://localhost:5000. Please ensure the backend is running.'
+          : (err.message || 'Failed to load cloud storage stats');
+        setStorageError(message);
       }
     } finally {
       if (!isSilent) setLoadingStorage(false);
@@ -290,27 +293,29 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   }, [activeTab, fetchStorageStats]);
 
   // Filtered Doctors
-  const filteredDoctors = doctors.filter(doc => {
-    const matchesSearch =
-      doc.name?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
-      doc.specialty?.toLowerCase().includes(doctorSearch.toLowerCase()) ||
-      doc.hospital?.toLowerCase().includes(doctorSearch.toLowerCase());
+  const filteredDoctors = (doctors || []).filter(doc => {
+    const q = doctorSearch.toLowerCase().trim();
+    const matchesSearch = !q ||
+      (doc.name || '').toLowerCase().includes(q) ||
+      (doc.specialty || '').toLowerCase().includes(q) ||
+      (doc.hospital || '').toLowerCase().includes(q);
     const matchesSpecialty =
-      doctorSpecialtyFilter === 'all' || doc.specialty?.toLowerCase() === doctorSpecialtyFilter.toLowerCase();
+      doctorSpecialtyFilter === 'all' || (doc.specialty || '').toLowerCase() === doctorSpecialtyFilter.toLowerCase();
     return matchesSearch && matchesSpecialty;
   });
 
   // Unique specialties for filter dropdown
-  const uniqueSpecialties = Array.from(new Set(doctors.map(d => d.specialty).filter(Boolean)));
+  const uniqueSpecialties = Array.from(new Set((doctors || []).map(d => d.specialty).filter(Boolean)));
 
   // Filtered Hospitals
-  const filteredHospitals = hospitals.filter(hosp => {
-    const matchesSearch =
-      hosp.name?.toLowerCase().includes(hospitalSearch.toLowerCase()) ||
-      hosp.city?.toLowerCase().includes(hospitalSearch.toLowerCase()) ||
-      (hosp.specialties && hosp.specialties.some(s => s.toLowerCase().includes(hospitalSearch.toLowerCase())));
+  const filteredHospitals = (hospitals || []).filter(hosp => {
+    const q = hospitalSearch.toLowerCase().trim();
+    const matchesSearch = !q ||
+      (hosp.name || '').toLowerCase().includes(q) ||
+      (hosp.city || '').toLowerCase().includes(q) ||
+      (Array.isArray(hosp.specialties) && hosp.specialties.some(s => (s || '').toLowerCase().includes(q)));
     const matchesCity =
-      hospitalCityFilter === 'all' || hosp.city?.toLowerCase() === hospitalCityFilter.toLowerCase();
+      hospitalCityFilter === 'all' || (hosp.city || '').toLowerCase() === hospitalCityFilter.toLowerCase();
     const matchesEmergency = !emergencyOnly || hosp.emergency24x7;
     return matchesSearch && matchesCity && matchesEmergency;
   });
@@ -358,10 +363,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   const handleConfirmDelete = () => {
     if (deleteModalState.type === 'doctor' && deleteModalState.item) {
-      deleteDoctor(deleteModalState.item.id);
+      deleteDoctor(deleteModalState.item.id || deleteModalState.item._id);
       showToast(`Doctor "${deleteModalState.item.name}" deleted successfully.`);
     } else if (deleteModalState.type === 'hospital' && deleteModalState.item) {
-      deleteHospital(deleteModalState.item.id);
+      deleteHospital(deleteModalState.item.id || deleteModalState.item._id);
       showToast(`Hospital "${deleteModalState.item.name}" deleted successfully.`);
     } else if (deleteModalState.type === 'faq' && deleteModalState.item) {
       deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
@@ -1446,12 +1451,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* FAQ Cards */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
-                {faqs
+                {(faqs || [])
                   .filter(f => {
                     const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
-                    const matchSearch =
-                      f.question.toLowerCase().includes(faqSearch.toLowerCase()) ||
-                      f.answer.toLowerCase().includes(faqSearch.toLowerCase());
+                    const q = faqSearch.toLowerCase().trim();
+                    const matchSearch = !q ||
+                      (f.question || '').toLowerCase().includes(q) ||
+                      (f.answer || '').toLowerCase().includes(q);
                     return matchCat && matchSearch;
                   })
                   .map((faq) => (
@@ -1600,13 +1606,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Reviews List */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {reviews
+                {(reviews || [])
                   .filter(r => {
                     const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
-                    const matchSearch =
-                      r.patientName.toLowerCase().includes(reviewSearch.toLowerCase()) ||
-                      r.targetName.toLowerCase().includes(reviewSearch.toLowerCase()) ||
-                      r.comment.toLowerCase().includes(reviewSearch.toLowerCase());
+                    const q = reviewSearch.toLowerCase().trim();
+                    const matchSearch = !q ||
+                      (r.patientName || '').toLowerCase().includes(q) ||
+                      (r.targetName || '').toLowerCase().includes(q) ||
+                      (r.comment || '').toLowerCase().includes(q);
                     return matchStatus && matchSearch;
                   })
                   .map((rev) => (
@@ -1754,12 +1761,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Cards Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {specialitiesProcedures
+                {(specialitiesProcedures || [])
                   .filter(sp => {
                     const matchType = specTypeFilter === 'all' || sp.type === specTypeFilter;
-                    const matchSearch =
-                      sp.name.toLowerCase().includes(specSearch.toLowerCase()) ||
-                      (sp.description || '').toLowerCase().includes(specSearch.toLowerCase());
+                    const q = specSearch.toLowerCase().trim();
+                    const matchSearch = !q ||
+                      (sp.name || '').toLowerCase().includes(q) ||
+                      (sp.description || '').toLowerCase().includes(q);
                     return matchType && matchSearch;
                   })
                   .map((sp) => (
