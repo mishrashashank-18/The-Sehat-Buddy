@@ -1130,7 +1130,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         <th>Consultation Fee</th>
                         <th>Rating</th>
                         <th>Availability</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
+                        <th style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1147,14 +1147,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                 }}
                               />
                               <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span className={styles.tableDocName}>{doc.name}</span>
-                                  {doc.isStarDoctor && (
-                                    <span className={styles.starDoctorBadge} title="Featured on Homepage Popular Doctors">
-                                      <Star size={11} fill="#F59E0B" color="#D97706" /> Star Doctor
-                                    </span>
-                                  )}
-                                </div>
+                                <span className={styles.tableDocName}>{doc.name}</span>
                                 {doc.degree && <span className={styles.tableDocDegree}>{doc.degree}</span>}
                               </div>
                             </div>
@@ -1184,7 +1177,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               {doc.availableDays || 'Mon - Sat'}
                             </span>
                           </td>
-                          <td>
+                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
                               <button
                                 className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}

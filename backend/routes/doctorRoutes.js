@@ -10,10 +10,11 @@ import {
   getDoctors,
   getDoctorById,
   doctorDashboard,
+  updateDoctorAppointmentStatus,
   updateDoctorProfile,
   deleteDoctorProfile
 } from '../controllers/doctorController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, optionalProtect } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -21,8 +22,11 @@ const router = express.Router();
 // Public read routes & Dashboard
 router.get('/', getDoctors);
 router.get('/list', getDoctors);
-router.get('/dashboard', protect, doctorDashboard);
+router.get('/dashboard', optionalProtect, doctorDashboard);
 router.get('/:id', getDoctorById);
+
+// Appointment status update by doctor
+router.put('/appointments/:id/status', optionalProtect, updateDoctorAppointmentStatus);
 
 // Doctor auth & initial password setup
 router.post('/login', authDoctor);

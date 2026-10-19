@@ -235,6 +235,13 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [editingReel, setEditingReel] = useState({ index: null, text: '' });
   const [editingYoutube, setEditingYoutube] = useState({ index: null, text: '' });
 
+  // Schedule & Time Slots Management state
+  const [newSlotTime, setNewSlotTime] = useState('');
+  const [slotHour, setSlotHour] = useState('04');
+  const [slotMin, setSlotMin] = useState('00');
+  const [slotPeriod, setSlotPeriod] = useState('PM');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
   // Career Experience Reorder & Drag/Drop State
   const [draggedCareerIdx, setDraggedCareerIdx] = useState(null);
   const [dragOverCareerIdx, setDragOverCareerIdx] = useState(null);
@@ -252,8 +259,9 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Fetch remote appointments if doctor is authenticated
   const fetchRemoteAppointments = React.useCallback(() => {
     if (!activeDocId || activeDocId === 'default') return;
-    api.getDoctorDashboard().then(data => {
-      if (Array.isArray(data) && data.length > 0) {
+    const lookupId = activeDoctor._id || activeDoctor.id || activeDocId;
+    api.getDoctorDashboard(lookupId).then(data => {
+      if (Array.isArray(data)) {
         setAppointments(prev => {
           const remoteMapped = data.map(apt => ({
             id: apt._id || apt.id,
@@ -262,33 +270,35 @@ const DoctorDashboard = ({ onNavigate }) => {
             gender: apt.userData?.gender || 'Male',
             time: apt.slotTime || '02:00 PM',
             date: apt.slotDate || 'Today',
-            type: 'In-Clinic',
-            symptoms: 'Clinical Consultation Booking',
-            status: apt.isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : 'Confirmed'),
-            phone: apt.userData?.phone || '+91 98000 00000'
+            type: apt.consultationType || 'In-Clinic',
+            symptoms: apt.symptoms || apt.userData?.symptoms || 'Clinical Consultation Booking',
+            status: apt.isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : (apt.status || 'Confirmed')),
+            phone: apt.userData?.phone || apt.phone || '+91 98000 00000',
+            isRealtime: true,
+            createdAt: apt.createdAt || apt.date
           }));
-          const existingIds = new Set(prev.map(p => String(p.id)));
-          const fresh = remoteMapped.filter(r => !existingIds.has(String(r.id)));
-          if (fresh.length === 0) {
-            // Also update any changed status (e.g., cancelled or completed)
-            const updated = prev.map(p => {
-              const matched = remoteMapped.find(r => String(r.id) === String(p.id));
-              return matched ? { ...p, status: matched.status } : p;
-            });
+
+          if (remoteMapped.length > 0) {
+            // Check for new incoming appointments to trigger notification toast
+            const existingIds = new Set(prev.map(p => String(p.id)));
+            const newIncoming = remoteMapped.filter(r => !existingIds.has(String(r.id)));
+            if (newIncoming.length > 0 && prev.length > 0) {
+              showToast(`🔔 New patient booking: ${newIncoming[0].patientName} (${newIncoming[0].time})`);
+            }
+
+            // Real appointments always take top priority
+            const nonRemoteExisting = prev.filter(p => !p.isRealtime && !remoteMapped.some(r => String(r.id) === String(p.id)));
+            const merged = [...remoteMapped, ...nonRemoteExisting];
             try {
-              localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(updated));
+              localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(merged));
             } catch {}
-            return updated;
+            return merged;
           }
-          const merged = [...fresh, ...prev];
-          try {
-            localStorage.setItem(`sehatbuddy_doc_appointments_${activeDocId}`, JSON.stringify(merged));
-          } catch {}
-          return merged;
+          return prev;
         });
       }
     }).catch(() => {});
-  }, [activeDocId]);
+  }, [activeDocId, activeDoctor?._id, activeDoctor?.id]);
 
   // Load appointments & prescriptions whenever active doctor switches, and sync with backend
   React.useEffect(() => {
@@ -308,7 +318,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Real-time synchronization listener for appointments
   React.useEffect(() => {
-    const handleAppointmentsSync = () => {
+    const handleAppointmentsSync = (e) => {
       fetchRemoteAppointments();
     };
 
@@ -325,12 +335,21 @@ const DoctorDashboard = ({ onNavigate }) => {
           setAppointments(JSON.parse(e.newValue));
         } catch {}
       }
+      if (e.key === 'sehat_buddy_appointments') {
+        fetchRemoteAppointments();
+      }
     };
     window.addEventListener('storage', handleStorageChange);
+
+    // Fallback polling every 5 seconds to ensure real-time queue freshness
+    const pollInterval = setInterval(() => {
+      fetchRemoteAppointments();
+    }, 5000);
 
     return () => {
       window.removeEventListener('sehat_appointments_changed', handleAppointmentsSync);
       window.removeEventListener('storage', handleStorageChange);
+      clearInterval(pollInterval);
     };
   }, [activeDocId, fetchRemoteAppointments]);
 
@@ -350,10 +369,18 @@ const DoctorDashboard = ({ onNavigate }) => {
         memberships: Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : [],
         careerExperience: Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : [],
         reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : [],
-        youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []
+        youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : [],
+        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
+        scheduleDays: Array.isArray(activeDoctor.scheduleDays) && activeDoctor.scheduleDays.length > 0 
+          ? activeDoctor.scheduleDays 
+          : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+        availableSlots: Array.isArray(activeDoctor.availableSlots) && activeDoctor.availableSlots.length > 0 
+          ? activeDoctor.availableSlots 
+          : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'],
+        slotDuration: activeDoctor.slotDuration || 20
       });
     }
-  }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.name]);
+  }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.name, activeDoctor?.availableSlots, activeDoctor?.scheduleDays]);
 
   // Awards handlers
   const handleAddAward = (e) => {
@@ -752,11 +779,15 @@ const DoctorDashboard = ({ onNavigate }) => {
       memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
       careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
       reels: Array.isArray(profileForm.reels) ? profileForm.reels : [],
-      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []
+      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : [],
+      availableDays: profileForm.availableDays || 'Mon - Sat (10am - 4pm)',
+      scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+      availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'],
+      slotDuration: Number(profileForm.slotDuration) || 20
     };
 
     await updateDoctor(docId, payload);
-    showToast('All profile details, credentials, media & fees saved successfully!');
+    showToast('All profile details, credentials, schedule & fees saved successfully!');
   };
 
   // Save About Section directly
@@ -858,7 +889,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   // Appointment status actions
-  const updateAppointmentStatus = (id, newStatus) => {
+  const updateAppointmentStatus = async (id, newStatus) => {
     setAppointments(prev => {
       const updated = prev.map(apt => (apt.id === id ? { ...apt, status: newStatus } : apt));
       try {
@@ -867,6 +898,15 @@ const DoctorDashboard = ({ onNavigate }) => {
       } catch {}
       return updated;
     });
+
+    try {
+      await api.updateAppointmentStatus(id, {
+        status: newStatus,
+        isCompleted: newStatus === 'Completed',
+        cancelled: newStatus === 'Cancelled'
+      });
+    } catch {}
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('sehat_appointments_changed', { detail: { id, status: newStatus } }));
     }
@@ -1283,7 +1323,14 @@ const DoctorDashboard = ({ onNavigate }) => {
 
                   <div className={styles.aptDetailsCol}>
                     <div className={styles.aptPatientHeader}>
-                      <h4>{apt.patientName}</h4>
+                      <h4>
+                        {apt.patientName}
+                        {apt.isRealtime && (
+                          <span style={{ marginLeft: '8px', fontSize: '0.7rem', background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: '6px', fontWeight: '700', letterSpacing: '0.02em', border: '1px solid #bbf7d0', verticalAlign: 'middle' }}>
+                            ● Online Patient
+                          </span>
+                        )}
+                      </h4>
                       <span className={styles.aptPatientDemog}>
                         {apt.gender}, {apt.age} yrs • {apt.phone}
                       </span>

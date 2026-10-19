@@ -2,6 +2,7 @@ import React from 'react';
 import Container from '../layout/Container';
 import HeroStats from './HeroStats';
 import { useData } from '../../context/useData';
+import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './Hero.module.css';
 
 const Hero = () => {
@@ -33,11 +34,11 @@ const Hero = () => {
             <div className={styles.dotsPattern}></div>
             <div className={styles.imageShape}>
               <img
-                src={heroContent?.heroImage}
+                src={heroContent?.heroImage || heroFamily}
                 alt="Happy Indian family at hospital reception"
                 className={styles.heroImg}
                 onError={(e) => {
-                  e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
+                  e.target.src = heroFamily;
                 }}
               />
             </div>

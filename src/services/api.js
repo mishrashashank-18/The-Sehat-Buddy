@@ -58,12 +58,21 @@ export const api = {
       role = user.role;
     } catch {}
 
-    if (role === 'doctor') {
+    const payload = { ...doctorData };
+    if (payload.experience !== undefined) {
+      const parsedExp = parseInt(payload.experience, 10);
+      payload.experience = !isNaN(parsedExp) ? parsedExp : 5;
+    }
+    if (payload.price !== undefined && payload.fees === undefined) {
+      payload.fees = Number(payload.price) || 500;
+    }
+
+    if (role === 'admin') {
       try {
-        const res = await fetch(`${API_BASE}/doctors/${id}`, {
+        const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
           method: 'PUT',
           headers: getAuthHeaders(),
-          body: JSON.stringify(doctorData)
+          body: JSON.stringify(payload)
         });
         if (res.ok) {
           const data = await res.json();
@@ -73,10 +82,10 @@ export const api = {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
+      const res = await fetch(`${API_BASE}/doctors/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(doctorData)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
         const data = await res.json();
@@ -85,10 +94,10 @@ export const api = {
     } catch {}
 
     try {
-      const res2 = await fetch(`${API_BASE}/doctors/${id}`, {
+      const res2 = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
-        body: JSON.stringify(doctorData)
+        body: JSON.stringify(payload)
       });
       if (res2.ok) {
         const data = await res2.json();
@@ -96,12 +105,13 @@ export const api = {
       }
     } catch {}
 
-    return doctorData;
+    return payload;
   },
 
-  async getDoctorDashboard() {
+  async getDoctorDashboard(docId = null) {
     try {
-      const res = await fetch(`${API_BASE}/doctors/dashboard`, {
+      const url = docId ? `${API_BASE}/doctors/dashboard?docId=${encodeURIComponent(docId)}` : `${API_BASE}/doctors/dashboard`;
+      const res = await fetch(url, {
         headers: getAuthHeaders()
       });
       if (res.ok) {
@@ -110,6 +120,31 @@ export const api = {
       }
     } catch {}
     return [];
+  },
+
+  async updateAppointmentStatus(id, statusData) {
+    try {
+      const res = await fetch(`${API_BASE}/doctors/appointments/${id}/status`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(statusData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+    return null;
+  },
+
+  async bookAppointment(bookingData) {
+    const res = await fetch(`${API_BASE}/user/book-appointment`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(bookingData)
+    });
+    const data = await handleResponse(res);
+    return data.data || data;
   },
 
   async updateDoctorFaqsByHospital(hospitalId, doctorId, faqs) {
@@ -354,6 +389,24 @@ export const api = {
     });
     const data = await handleResponse(res);
     return data.url;
+  },
+
+  // Delete Media / Image completely from Cloudinary
+  async deleteImage(urlOrPublicId, resourceType = 'image') {
+    const token = localStorage.getItem('token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/upload/delete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        url: urlOrPublicId && urlOrPublicId.startsWith('http') ? urlOrPublicId : undefined,
+        public_id: urlOrPublicId && !urlOrPublicId.startsWith('http') ? urlOrPublicId : undefined,
+        resource_type: resourceType
+      })
+    });
+    return handleResponse(res);
   },
 
   // Video Upload (Cloudinary)

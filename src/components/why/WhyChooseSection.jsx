@@ -53,7 +53,8 @@ const WhyChooseSection = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  const videoUrl = (heroContent?.whyChooseVideoUrl || '').trim();
+  const rawVideoUrl = (heroContent?.whyChooseVideoUrl || '').trim();
+  const videoUrl = rawVideoUrl === 'https://www.youtube.com/watch?v=zCCD52Pty4A' ? '' : rawVideoUrl;
   const isYouTube = Boolean(videoUrl && (videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be')));
 
   const inlineEmbedUrl = isYouTube ? getInlineEmbedUrl(videoUrl) : videoUrl;

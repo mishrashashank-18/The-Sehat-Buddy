@@ -8,6 +8,7 @@ import validatePassword from '../utils/validatePassword.js';
 import { cloudinary } from '../config/cloudinary.js';
 import EmailLog from '../models/EmailLog.js';
 import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '../services/storageMonitor.js';
+import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
@@ -176,25 +177,37 @@ export const updateDoctor = async (req, res) => {
     if (doctor) {
       Object.assign(doctor, req.body);
 
+      if (req.body.experience !== undefined) {
+        const expNum = parseInt(req.body.experience, 10);
+        doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
+        doctor.markModified('experience');
+      }
+
+      if (req.body.fees !== undefined || req.body.price !== undefined) {
+        const feesNum = Number(req.body.fees ?? req.body.price);
+        doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
+        doctor.markModified('fees');
+      }
+
       if (req.body.isStarDoctor !== undefined) {
         doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
         doctor.markModified('isStarDoctor');
       }
 
       if (req.body.awards !== undefined) {
-        doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];
+        doctor.awards = Array.isArray(req.body.awards) ? req.body.awards.filter(Boolean) : [];
         doctor.markModified('awards');
       }
       if (req.body.certifications !== undefined) {
-        doctor.certifications = Array.isArray(req.body.certifications) ? req.body.certifications : [];
+        doctor.certifications = Array.isArray(req.body.certifications) ? req.body.certifications.filter(Boolean) : [];
         doctor.markModified('certifications');
       }
       if (req.body.memberships !== undefined) {
-        doctor.memberships = Array.isArray(req.body.memberships) ? req.body.memberships : [];
+        doctor.memberships = Array.isArray(req.body.memberships) ? req.body.memberships.filter(Boolean) : [];
         doctor.markModified('memberships');
       }
       if (req.body.careerExperience !== undefined) {
-        doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience : [];
+        doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience.filter(Boolean) : [];
         doctor.markModified('careerExperience');
       }
       if (req.body.licenseNumber !== undefined) {
@@ -202,11 +215,15 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.reels !== undefined) {
-        doctor.reels = req.body.reels;
+        doctor.reels = Array.isArray(req.body.reels)
+          ? req.body.reels.map(r => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
+          : [];
         doctor.markModified('reels');
       }
       if (req.body.youtube_videos !== undefined) {
-        doctor.youtube_videos = req.body.youtube_videos;
+        doctor.youtube_videos = Array.isArray(req.body.youtube_videos)
+          ? req.body.youtube_videos.map(v => (typeof v === 'string' ? v.trim() : '')).filter(Boolean)
+          : [];
         doctor.markModified('youtube_videos');
       }
       if (req.body.instagram !== undefined) doctor.instagram = req.body.instagram;
@@ -216,10 +233,20 @@ export const updateDoctor = async (req, res) => {
         doctor.markModified('faqs');
       }
       
-      if (req.file) {
-        doctor.image = req.file.path;
-      } else if (req.body.image) {
-        doctor.image = req.body.image;
+      const incomingImage = req.file ? req.file.path : req.body.image;
+      if (incomingImage && incomingImage !== doctor.image) {
+        if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+          const oldPublicId = extractCloudinaryPublicId(doctor.image);
+          if (oldPublicId) {
+            try {
+              const cld = getCloudinary();
+              await cld.uploader.destroy(oldPublicId, { resource_type: 'image', invalidate: true });
+            } catch (cldErr) {
+              console.warn('Failed to delete old doctor photo from Cloudinary:', cldErr.message);
+            }
+          }
+        }
+        doctor.image = incomingImage;
       }
       const updatedDoctor = await doctor.save();
       broadcastDbChange('doctors', 'update', updatedDoctor._id, updatedDoctor);
@@ -237,9 +264,21 @@ export const deleteDoctor = async (req, res) => {
     const doctor = await Doctor.findById(req.params.id);
     if (doctor) {
       const docId = doctor._id;
+      // Permanently remove doctor image from Cloudinary
+      if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+        const publicId = extractCloudinaryPublicId(doctor.image);
+        if (publicId) {
+          try {
+            const cld = getCloudinary();
+            await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+          } catch (cldErr) {
+            console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
+          }
+        }
+      }
       await doctor.deleteOne();
       broadcastDbChange('doctors', 'delete', docId);
-      res.json({ success: true, message: 'Doctor deleted' });
+      res.json({ success: true, message: 'Doctor deleted permanently' });
     } else {
       res.status(404).json({ success: false, message: 'Doctor not found' });
     }

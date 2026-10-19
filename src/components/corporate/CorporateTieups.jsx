@@ -2,15 +2,13 @@ import React from 'react';
 import { Building2, ShieldCheck, Users } from 'lucide-react';
 import Container from '../layout/Container';
 import { useData } from '../../context/useData';
-import { initialCorporateTieups } from '../../data/corporateTieups';
 import styles from './CorporateTieups.module.css';
 
 const CorporateTieups = () => {
   const { corporateTieups, heroContent } = useData();
 
-  const tieups = Array.isArray(corporateTieups) && corporateTieups.length > 0
-    ? corporateTieups
-    : initialCorporateTieups;
+  const tieups = Array.isArray(corporateTieups) ? corporateTieups : [];
+  if (tieups.length === 0) return null;
 
   // Ensure enough elements for a continuous smooth scroll even with few items
   let baseList = [...tieups];

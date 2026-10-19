@@ -24,11 +24,7 @@ import { api } from '../../services/api';
 import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './FrontPageEditor.module.css';
 
-const DEFAULT_HERO_PRESETS = [
-  { id: 'preset_1', name: 'Happy Family at Hospital', url: heroFamily },
-  { id: 'preset_2', name: 'Doctor Consultation', url: 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80' },
-  { id: 'preset_3', name: 'Medical Team', url: 'https://images.unsplash.com/photo-1582750433449-648ed127bb54?auto=format&fit=crop&w=800&q=80' }
-];
+const DEFAULT_HERO_PRESETS = [];
 
 const AVAILABLE_ICONS = [
   'ShieldCheck',
@@ -124,7 +120,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     stat3Label: heroContent?.stats?.[2]?.label ?? 'Quick',
     stat3Value: heroContent?.stats?.[2]?.value ?? 'Appointments',
     whyChooseTitle: heroContent?.whyChooseTitle ?? 'Why Choose The Sehat Buddy?',
-    whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+    whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? '',
     whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
     whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
     newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
@@ -166,7 +162,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
         stat3Label: heroContent?.stats?.[2]?.label ?? 'Quick',
         stat3Value: heroContent?.stats?.[2]?.value ?? 'Appointments',
         whyChooseTitle: heroContent?.whyChooseTitle ?? 'Why Choose The Sehat Buddy?',
-        whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? 'https://www.youtube.com/watch?v=zCCD52Pty4A',
+        whyChooseVideoUrl: heroContent?.whyChooseVideoUrl ?? '',
         whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
         whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
         newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
@@ -238,16 +234,37 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [isHeroPhotoUploading, setIsHeroPhotoUploading] = useState(false);
   const [customPhotoUrlInput, setCustomPhotoUrlInput] = useState('');
+  const sanitizePresets = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const id = String(p.id || '');
+      const url = String(p.url || '');
+      if (name.includes('consultation') || id === 'preset_2') return false;
+      if (name.includes('medical team') || id === 'preset_3' || url.includes('1582750433449')) return false;
+      if (name.includes('happy family') || id === 'preset_1') return false;
+      return true;
+    });
+  };
+
   const [heroPresets, setHeroPresets] = useState(() => {
     try {
-      const saved = localStorage.getItem('sehat_hero_presets_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
+      localStorage.removeItem('sehat_hero_presets_v2');
+      localStorage.removeItem('sehat_hero_presets_v1');
     } catch {}
-    return DEFAULT_HERO_PRESETS;
+    if (Array.isArray(heroContent?.heroPresets)) {
+      return sanitizePresets(heroContent.heroPresets);
+    }
+    return [];
   });
+
+  // Sync heroPresets when heroContent loads from MongoDB Atlas
+  React.useEffect(() => {
+    if (Array.isArray(heroContent?.heroPresets)) {
+      const sanitized = sanitizePresets(heroContent.heroPresets);
+      setHeroPresets(sanitized);
+    }
+  }, [heroContent?.heroPresets]);
   const [customHeroImage, setCustomHeroImage] = useState(() => {
     return localStorage.getItem('sehat_custom_hero_image') || '';
   });
@@ -446,11 +463,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     setCustomPhotoUrlInput('');
   };
 
-  const handleDeleteCustomHeroPhoto = (e) => {
+  const handleDeleteCustomHeroPhoto = async (e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
+    const photoToDelete = customHeroImage || (heroForm.heroImage && !heroPresets.some(p => isPresetActive(p.url, heroForm.heroImage)) ? heroForm.heroImage : null);
+
     const defaultImage = heroPresets[0]?.url || heroFamily || '';
     setHeroForm(prev => ({ ...prev, heroImage: defaultImage }));
     setCustomHeroImage('');
@@ -459,10 +478,22 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       localStorage.removeItem('sehat_custom_hero_image');
     } catch {}
     updateHeroContent({ heroImage: defaultImage });
-    showToast('Photo removed. Reset to default preset photo.');
+
+    if (photoToDelete && photoToDelete.includes('cloudinary.com')) {
+      showToast('Deleting photo from Cloudinary...');
+      try {
+        await api.deleteImage(photoToDelete);
+        showToast('Photo permanently deleted from Cloudinary & reset to default preset.');
+      } catch (err) {
+        console.warn('Failed to delete photo from Cloudinary:', err);
+        showToast('Photo removed from homepage. (Cloudinary cleanup error: ' + (err.message || 'unknown') + ')');
+      }
+    } else {
+      showToast('Photo removed. Reset to default preset photo.');
+    }
   };
 
-  const handleDeletePresetPhoto = (imgToDelete, e) => {
+  const handleDeletePresetPhoto = async (imgToDelete, e) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -473,12 +504,27 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       localStorage.setItem('sehat_hero_presets_v2', JSON.stringify(updated));
     } catch {}
 
+    // Persist deleted preset permanently to MongoDB Atlas
+    const updates = { heroPresets: updated };
     if (isPresetActive(imgToDelete.url, heroForm.heroImage)) {
       const nextPhoto = updated[0]?.url || heroFamily || '';
       setHeroForm(prev => ({ ...prev, heroImage: nextPhoto }));
-      updateHeroContent({ heroImage: nextPhoto });
+      updates.heroImage = nextPhoto;
     }
-    showToast(`Photo "${imgToDelete.name}" deleted.`);
+    updateHeroContent(updates);
+
+    if (imgToDelete?.url && imgToDelete.url.includes('cloudinary.com')) {
+      showToast(`Deleting "${imgToDelete.name}" from Cloudinary...`);
+      try {
+        await api.deleteImage(imgToDelete.url);
+        showToast(`Photo "${imgToDelete.name}" permanently deleted from Cloudinary.`);
+      } catch (err) {
+        console.warn('Cloudinary delete error:', err);
+        showToast(`Photo "${imgToDelete.name}" deleted.`);
+      }
+    } else {
+      showToast(`Photo "${imgToDelete.name}" deleted.`);
+    }
   };
 
   const handleResetDefaultPresets = () => {
@@ -486,6 +532,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     try {
       localStorage.setItem('sehat_hero_presets_v2', JSON.stringify(DEFAULT_HERO_PRESETS));
     } catch {}
+    updateHeroContent({ heroPresets: DEFAULT_HERO_PRESETS });
     showToast('Default preset photos restored.');
   };
 
@@ -874,29 +921,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               </label>
             </div>
 
-            {/* Restore presets link if any preset was removed */}
-            {heroPresets.length < DEFAULT_HERO_PRESETS.length && (
-              <div style={{ marginTop: '8px', marginBottom: '4px' }}>
-                <button
-                  type="button"
-                  onClick={handleResetDefaultPresets}
-                  style={{
-                    background: 'transparent',
-                    border: 'none',
-                    color: '#64748B',
-                    fontSize: '0.78rem',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px'
-                  }}
-                >
-                  <RotateCcw size={12} />
-                  <span>Restore Original Preset Photos</span>
-                </button>
-              </div>
-            )}
+
 
             {/* Direct Image Link Input */}
             <div className={styles.heroUrlRow}>
@@ -935,7 +960,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   alt="Live Hero Preview"
                   className={styles.heroPreviewThumb}
                   onError={(e) => {
-                    e.target.src = 'https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80';
+                    e.target.src = heroFamily;
                   }}
                 />
                 <div className={styles.heroPreviewInfo}>
@@ -1188,7 +1213,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     ) : (
                       <>
                         <UploadCloud size={16} />
-                        <span>Upload Video to Database</span>
+                        <span>Upload Video to Cloudinary</span>
                       </>
                     )}
                   </button>
@@ -1199,7 +1224,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               {isVideoUploading && (
                 <div style={{ marginTop: '8px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748B', marginBottom: '4px' }}>
-                    <span>Uploading and processing video for database storage...</span>
+                    <span>Uploading video directly to Cloudinary...</span>
                     <span style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{videoUploadProgress}%</span>
                   </div>
                   <div className={styles.videoProgressBar}>
@@ -1221,13 +1246,23 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
+                      const vidToDelete = heroForm.whyChooseVideoUrl;
                       setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: '' }));
                       updateHeroContent({ whyChooseVideoUrl: '' });
-                      showToast('Explainer video removed from front page.');
+                      if (vidToDelete && vidToDelete.includes('cloudinary.com')) {
+                        try {
+                          await api.deleteImage(vidToDelete, 'video');
+                          showToast('Explainer video permanently deleted from Cloudinary.');
+                        } catch (err) {
+                          showToast('Explainer video removed from front page.');
+                        }
+                      } else {
+                        showToast('Explainer video removed from front page.');
+                      }
                     }}
                     style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.75rem', fontWeight: 600, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    title="Remove this video from front page"
+                    title="Remove this video and delete from Cloudinary"
                   >
                     <Trash2 size={13} />
                     <span>Remove Video</span>
@@ -1238,21 +1273,22 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
             <div className={styles.formGrid}>
               <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                <label>Video URL (Database, Cloudinary, YouTube, or Direct MP4 link)</label>
+                <label>Video URL (Cloudinary, YouTube, or Direct MP4 link)</label>
                 <input
                   type="text"
                   value={heroForm.whyChooseVideoUrl}
                   onChange={(e) => handleHeroFieldChange('whyChooseVideoUrl', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('whyChooseVideoUrl', e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleSaveWhyVideo();
                     }
                   }}
-                  placeholder="Paste video link or leave empty to hide video player"
+                  placeholder="Paste Cloudinary video link or leave empty to hide video player"
                 />
                 <span style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '4px', display: 'block' }}>
-                  Upload a video to database using the button above, or paste any video URL / YouTube link. Press Enter to save.
+                  Upload a video to Cloudinary using the button above, or paste any video URL / YouTube link. Auto-saved on blur or press Enter.
                 </span>
               </div>
 
@@ -1262,6 +1298,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   rows={2}
                   value={heroForm.whyChooseVideoText}
                   onChange={(e) => handleHeroFieldChange('whyChooseVideoText', e.target.value)}
+                  onBlur={(e) => handleHeroFieldBlur('whyChooseVideoText', e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
@@ -1278,7 +1315,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <input
                     type="checkbox"
                     checked={Boolean(heroForm.whyChooseVideoAutoplay)}
-                    onChange={(e) => handleHeroFieldChange('whyChooseVideoAutoplay', e.target.checked)}
+                    onChange={(e) => {
+                      handleHeroFieldChange('whyChooseVideoAutoplay', e.target.checked);
+                      updateHeroContent({ whyChooseVideoAutoplay: e.target.checked });
+                    }}
                     style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--color-primary)' }}
                   />
                   <span style={{ fontSize: '0.88rem', color: '#1E293B', fontWeight: 500 }}>

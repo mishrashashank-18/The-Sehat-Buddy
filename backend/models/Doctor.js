@@ -51,6 +51,10 @@ const doctorSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0 },
   failedLoginAttempts: { type: Number, default: 0, select: false },
   lockUntil: { type: Date, select: false },
+  availableDays: { type: String, default: 'Mon - Sat (10am - 4pm)' },
+  scheduleDays: [{ type: String }],
+  availableSlots: [{ type: String }],
+  slotDuration: { type: Number, default: 20 },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });

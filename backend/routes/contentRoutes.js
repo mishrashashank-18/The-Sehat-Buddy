@@ -7,30 +7,16 @@ import { v2 as cloudinary } from 'cloudinary';
 
 const router = express.Router();
 
-let cachedContent = null;
-let lastFetchTime = 0;
-const CACHE_TTL = 60000; // 60s cache to avoid repetitive MongoDB Atlas latency
-
 router.get('/', async (req, res) => {
   try {
-    const now = Date.now();
-    if (cachedContent && (now - lastFetchTime < CACHE_TTL)) {
-      return res.json({ success: true, data: cachedContent });
-    }
-
     const contents = await Content.find({});
     const data = contents.reduce((acc, curr) => {
       acc[curr.type] = curr.data;
       return acc;
     }, {});
 
-    cachedContent = data;
-    lastFetchTime = now;
     res.json({ success: true, data });
   } catch (err) {
-    if (cachedContent) {
-      return res.json({ success: true, data: cachedContent });
-    }
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -70,15 +56,20 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
       }
     }
 
+    let finalData = bodyData;
+    if (bodyData && typeof bodyData === 'object' && !Array.isArray(bodyData)) {
+      const existing = await Content.findOne({ type });
+      if (existing && existing.data && typeof existing.data === 'object' && !Array.isArray(existing.data)) {
+        finalData = { ...existing.data, ...bodyData };
+      }
+    }
+
     const content = await Content.findOneAndUpdate(
       { type }, 
-      { data: bodyData }, 
+      { data: finalData }, 
       { new: true, upsert: true }
     );
-    if (!cachedContent) cachedContent = {};
-    cachedContent[type] = bodyData;
-    lastFetchTime = Date.now();
-    broadcastDbChange('contents', 'update', content._id, { type, data: bodyData });
+    broadcastDbChange('contents', 'update', content._id, { type, data: finalData });
     res.json({ success: true, data: content, message: `${type} updated` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

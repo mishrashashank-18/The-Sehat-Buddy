@@ -6,6 +6,7 @@ import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -417,8 +418,63 @@ export const getDoctorById = async (req, res) => {
 
 export const doctorDashboard = async (req, res) => {
   try {
-    const appointments = await Appointment.find({ docId: req.user.id });
+    const docId = String(req.query.docId || req.user?.id || '').trim();
+    const docEmail = String(req.query.email || req.user?.email || '').toLowerCase().trim();
+
+    if (!docId && !docEmail) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const conditions = [];
+    if (docId) {
+      conditions.push(
+        { docId: docId },
+        { 'docData._id': docId },
+        { 'docData.id': docId }
+      );
+    }
+    if (docEmail) {
+      conditions.push(
+        { docId: docEmail },
+        { 'docData.email': docEmail }
+      );
+    }
+
+    const appointments = await Appointment.find({ $or: conditions }).sort({ createdAt: -1, date: -1 });
     res.json({ success: true, data: appointments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateDoctorAppointmentStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, isCompleted, cancelled } = req.body;
+    let apt = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      apt = await Appointment.findById(id);
+    }
+    if (!apt) {
+      apt = await Appointment.findOne({ id: id });
+    }
+    if (!apt) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    if (status !== undefined) apt.status = status;
+    if (isCompleted !== undefined) apt.isCompleted = Boolean(isCompleted);
+    if (cancelled !== undefined) apt.cancelled = Boolean(cancelled);
+    if (status === 'Completed') apt.isCompleted = true;
+    if (status === 'Cancelled') apt.cancelled = true;
+    if (status === 'Confirmed' || status === 'In-Progress') {
+      apt.isCompleted = false;
+      apt.cancelled = false;
+    }
+
+    await apt.save();
+    broadcastDbChange('appointments', 'update', apt._id.toString(), apt);
+    res.json({ success: true, message: 'Appointment updated', data: apt });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -455,7 +511,8 @@ export const updateDoctorProfile = async (req, res) => {
       'address', 'hospital', 'qualifications', 'contact_number', 'instagram',
       'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus',
       'licenseNumber', 'awards', 'certifications', 'memberships',
-      'careerExperience', 'reels', 'youtube_videos', 'rating', 'reviews', 'isStarDoctor'
+      'careerExperience', 'reels', 'youtube_videos', 'rating', 'reviews', 'isStarDoctor',
+      'availableDays', 'scheduleDays', 'availableSlots', 'slotDuration'
     ];
 
     allowedFields.forEach((field) => {
@@ -466,7 +523,25 @@ export const updateDoctorProfile = async (req, res) => {
           } catch {
             doctor.address = req.body.address;
           }
-        } else {
+        } else if (field === 'experience') {
+          const expNum = parseInt(req.body.experience, 10);
+          doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
+        } else if (field === 'fees' || field === 'price') {
+          const feesNum = Number(req.body.fees ?? req.body.price);
+          doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
+        } else if (field === 'slotDuration') {
+          const durNum = Number(req.body.slotDuration);
+          doctor.slotDuration = !isNaN(durNum) ? durNum : (doctor.slotDuration || 20);
+        } else if (
+          field !== 'awards' &&
+          field !== 'certifications' &&
+          field !== 'memberships' &&
+          field !== 'careerExperience' &&
+          field !== 'reels' &&
+          field !== 'youtube_videos' &&
+          field !== 'availableSlots' &&
+          field !== 'scheduleDays'
+        ) {
           doctor[field] = req.body[field];
         }
         doctor.markModified(field);
@@ -474,34 +549,60 @@ export const updateDoctorProfile = async (req, res) => {
     });
 
     if (req.body.awards !== undefined) {
-      doctor.awards = Array.isArray(req.body.awards) ? req.body.awards : [];
+      doctor.awards = Array.isArray(req.body.awards) ? req.body.awards.filter(Boolean) : [];
       doctor.markModified('awards');
     }
     if (req.body.certifications !== undefined) {
-      doctor.certifications = Array.isArray(req.body.certifications) ? req.body.certifications : [];
+      doctor.certifications = Array.isArray(req.body.certifications) ? req.body.certifications.filter(Boolean) : [];
       doctor.markModified('certifications');
     }
     if (req.body.memberships !== undefined) {
-      doctor.memberships = Array.isArray(req.body.memberships) ? req.body.memberships : [];
+      doctor.memberships = Array.isArray(req.body.memberships) ? req.body.memberships.filter(Boolean) : [];
       doctor.markModified('memberships');
     }
     if (req.body.careerExperience !== undefined) {
-      doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience : [];
+      doctor.careerExperience = Array.isArray(req.body.careerExperience) ? req.body.careerExperience.filter(Boolean) : [];
       doctor.markModified('careerExperience');
     }
     if (req.body.reels !== undefined) {
-      doctor.reels = Array.isArray(req.body.reels) ? req.body.reels : [];
+      doctor.reels = Array.isArray(req.body.reels)
+        ? req.body.reels.map(r => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
+        : [];
       doctor.markModified('reels');
     }
     if (req.body.youtube_videos !== undefined) {
-      doctor.youtube_videos = Array.isArray(req.body.youtube_videos) ? req.body.youtube_videos : [];
+      doctor.youtube_videos = Array.isArray(req.body.youtube_videos)
+        ? req.body.youtube_videos.map(v => (typeof v === 'string' ? v.trim() : '')).filter(Boolean)
+        : [];
       doctor.markModified('youtube_videos');
     }
+    if (req.body.availableSlots !== undefined) {
+      doctor.availableSlots = Array.isArray(req.body.availableSlots)
+        ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
+        : [];
+      doctor.markModified('availableSlots');
+    }
+    if (req.body.scheduleDays !== undefined) {
+      doctor.scheduleDays = Array.isArray(req.body.scheduleDays)
+        ? req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
+        : [];
+      doctor.markModified('scheduleDays');
+    }
 
-    if (req.file) {
-      doctor.image = req.file.path;
-    } else if (req.body.image) {
-      doctor.image = req.body.image;
+    const incomingImage = req.file ? req.file.path : req.body.image;
+    if (incomingImage && incomingImage !== doctor.image) {
+      if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+        const oldPublicId = extractCloudinaryPublicId(doctor.image);
+        if (oldPublicId) {
+          try {
+            const cld = getCloudinary();
+            await cld.uploader.destroy(oldPublicId, { resource_type: 'image', invalidate: true });
+          } catch (cldErr) {
+            console.warn('Failed to delete old doctor photo from Cloudinary:', cldErr.message);
+          }
+        }
+      }
+      doctor.image = incomingImage;
     }
 
     const updated = await doctor.save();
@@ -543,9 +644,23 @@ export const deleteDoctorProfile = async (req, res) => {
     }
 
     const docId = doctor._id;
+
+    // Permanently remove doctor image from Cloudinary
+    if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+      const publicId = extractCloudinaryPublicId(doctor.image);
+      if (publicId) {
+        try {
+          const cld = getCloudinary();
+          await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+        } catch (cldErr) {
+          console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
+        }
+      }
+    }
+
     await doctor.deleteOne();
     broadcastDbChange('doctors', 'delete', docId);
-    return res.json({ success: true, message: 'Doctor profile deleted successfully' });
+    return res.json({ success: true, message: 'Doctor profile and associated assets deleted permanently' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

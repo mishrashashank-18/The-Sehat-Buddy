@@ -35,22 +35,6 @@ import WriteReviewModal from '../reviews/WriteReviewModal';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
 import styles from './HospitalProfile.module.css';
 
-const DEFAULT_REELS = [
-  'https://www.instagram.com/reel/DeArmJdSQa6/?stkn=MWhjZGczNGhyandlbA==',
-  'https://www.instagram.com/reel/DeAA8evMsBS/?stkn=cDQ0YXFpOG5kaDc1',
-  'https://www.instagram.com/reel/DdrR6vApDBK/?stkn=MXV6Yzg4NzM3cDdlbw==',
-  'https://www.instagram.com/reel/DdmEKEvTVC5/?utm_source=ig_web_copy_link&stkn=NTc4MTIwNjQ2YQ==',
-  'https://www.instagram.com/reel/DdeXVmDohij/?stkn=b2RzcXFveTY2azZv'
-];
-
-const DEFAULT_VIDEOS = [
-  'https://www.youtube.com/watch?v=zCCD52Pty4A',
-  'https://www.youtube.com/watch?v=FN3MFhYPWWo',
-  'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-  'https://www.youtube.com/watch?v=kJQP7kiw5Fk',
-  'https://www.youtube.com/watch?v=JGwWNGJdvx8'
-];
-
 // Hospital FAQ Illustration & Category Icons matching design reference
 const HospitalFaqIllustration = () => (
   <svg width="130" height="100" viewBox="0 0 130 100" fill="none" xmlns="http://www.w3.org/2000/svg">

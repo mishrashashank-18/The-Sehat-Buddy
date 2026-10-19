@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   Building2,
-  Bed,
   Phone,
   MapPin,
   Clock,
@@ -35,15 +34,6 @@ import HospitalLocationPicker from './HospitalLocationPicker';
 import SpecialityFormModal from '../admin/SpecialityFormModal';
 import logoImg from '../../assets/images/logo.png';
 import styles from './HospitalDashboard.module.css';
-
-const INITIAL_WARDS = [
-  { id: 'icu', name: 'Intensive Care Unit (ICU)', total: 40, occupied: 36, head: 'Dr. Rahul Verma' },
-  { id: 'cardiac', name: 'Cardiac Care Wing (CCU)', total: 60, occupied: 52, head: 'Dr. Rahul Verma' },
-  { id: 'ortho', name: 'Orthopedics & Joint Care', total: 50, occupied: 38, head: 'Dr. Amit Singh' },
-  { id: 'pediatric', name: 'Pediatric & Neonatal Ward', total: 45, occupied: 29, head: 'Dr. Pooja Malhotra' },
-  { id: 'gynae', name: 'Maternity & Women Health', total: 55, occupied: 46, head: 'Dr. Neha Sharma' },
-  { id: 'general', name: 'General Inpatient Ward', total: 200, occupied: 154, head: 'Chief Medical Officer' }
-];
 
 const INITIAL_ER_CASES = [
   { id: 1, patient: 'Sanjay Rawat', triage: 'Red (Critical)', condition: 'Acute MI (Heart Attack)', time: '12 mins ago', doctor: 'Dr. Rahul Verma', bed: 'ER-01' },
@@ -98,8 +88,8 @@ const HospitalDashboard = ({ onNavigate }) => {
     return hospitals[0] || {};
   }, [hospitals, loggedInUser]);
 
-  // Tabs: 'beds' | 'doctors' | 'media' | 'emergency' | 'settings'
-  const [activeTab, setActiveTab] = useState('beds');
+  // Tabs: 'doctors' | 'media' | 'gallery' | 'emergency' | 'settings' | 'specialities'
+  const [activeTab, setActiveTab] = useState('doctors');
 
   // 5 Instagram Reels & 5 YouTube Videos state
   const [reels, setReels] = useState(['', '', '', '', '']);
@@ -133,18 +123,9 @@ const HospitalDashboard = ({ onNavigate }) => {
     }
   }, [activeHospital?.id, activeHospital?._id]);
 
-  // Wards & Bed state
-  const [wards, setWards] = useState(INITIAL_WARDS);
+  // Operational State
   const [erCases] = useState(INITIAL_ER_CASES);
   const [ambulances, setAmbulances] = useState(INITIAL_AMBULANCES);
-
-  // Modals
-  const [isAdmitModalOpen, setIsAdmitModalOpen] = useState(false);
-  const [admitData, setAdmitData] = useState({
-    patientName: '',
-    wardId: 'icu',
-    diagnosis: ''
-  });
 
   // Add Doctor to Hospital modal
   const [isAddDoctorModalOpen, setIsAddDoctorModalOpen] = useState(false);
@@ -346,43 +327,6 @@ const HospitalDashboard = ({ onNavigate }) => {
     d => d.hospital?.toLowerCase() === activeHospital.name?.toLowerCase() || !d.hospital
   );
 
-  // Total occupied beds in active hospital
-  const totalOccupiedBeds = wards.reduce((sum, w) => sum + w.occupied, 0);
-  const totalWardCapacity = wards.reduce((sum, w) => sum + w.total, 0);
-  const totalCapacityBeds = Math.max(totalWardCapacity, Number(activeHospital.totalBeds) || 0);
-  const occupancyPercent = totalCapacityBeds > 0 ? Math.min(100, Math.round((totalOccupiedBeds / totalCapacityBeds) * 100)) : 0;
-
-  // Quick actions
-  const handleAdmitPatient = (e) => {
-    e.preventDefault();
-    if (!admitData.patientName.trim()) return;
-
-    setWards(prev =>
-      prev.map(w => {
-        if (w.id === admitData.wardId && w.occupied < w.total) {
-          return { ...w, occupied: w.occupied + 1 };
-        }
-        return w;
-      })
-    );
-
-    showToast(`Patient ${admitData.patientName} admitted to ${wards.find(w => w.id === admitData.wardId)?.name}`);
-    setIsAdmitModalOpen(false);
-    setAdmitData({ patientName: '', wardId: 'icu', diagnosis: '' });
-  };
-
-  const handleDischargePatient = (wardId) => {
-    setWards(prev =>
-      prev.map(w => {
-        if (w.id === wardId && w.occupied > 0) {
-          return { ...w, occupied: w.occupied - 1 };
-        }
-        return w;
-      })
-    );
-    showToast('Bed vacated and marked ready for sanitized re-allocation.');
-  };
-
   const handleDispatchAmbulance = (ambId) => {
     setAmbulances(prev =>
       prev.map(a => (a.id === ambId ? { ...a, status: 'Dispatched', location: 'Dispatched to Emergency Call' } : a))
@@ -473,12 +417,26 @@ const HospitalDashboard = ({ onNavigate }) => {
     }
   };
 
-  // Delete a gallery photo
+  // Delete a gallery photo permanently from Cloudinary & database
   const handleDeletePhoto = async (photoIndex) => {
+    const photoToDelete = photos[photoIndex];
+    const imgUrl = typeof photoToDelete === 'string' ? photoToDelete : photoToDelete?.url;
+
     const updatedPhotos = photos.filter((_, idx) => idx !== photoIndex);
     setPhotos(updatedPhotos);
     await updateHospital(activeHospital.id || activeHospital._id, { photos: updatedPhotos });
-    showToast('Photo removed successfully!');
+
+    if (imgUrl && typeof imgUrl === 'string' && imgUrl.includes('cloudinary.com')) {
+      try {
+        await api.deleteImage(imgUrl);
+        showToast('Photo permanently deleted from Cloudinary & facility gallery!');
+      } catch (err) {
+        console.warn('Cloudinary delete warning:', err);
+        showToast('Photo removed from facility gallery.');
+      }
+    } else {
+      showToast('Photo removed successfully!');
+    }
   };
 
   const toggleStarDoctor = async (docId) => {
@@ -525,7 +483,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                 <Building2 size={13} /> Hospital Center
               </span>
             </div>
-            <p className={styles.brandSub}>Hospital Operations, Inpatient Wards & ER Triage</p>
+            <p className={styles.brandSub}>Hospital Operations, Clinical Staff & ER Triage</p>
           </div>
         </div>
 
@@ -622,36 +580,33 @@ const HospitalDashboard = ({ onNavigate }) => {
               </div>
             </div>
           </div>
-
-          {/* Quick Stats on Banner */}
-          <div className={styles.occupancyGaugeCard}>
-            <div className={styles.gaugeHeader}>
-              <span className={styles.gaugeLabel}>Bed Occupancy</span>
-              <span className={styles.gaugePercent}>{occupancyPercent}%</span>
-            </div>
-            <div className={styles.progressBar}>
-              <div
-                className={styles.progressFill}
-                style={{ width: `${occupancyPercent}%` }}
-              ></div>
-            </div>
-            <div className={styles.gaugeDetails}>
-              <span>{totalOccupiedBeds} Beds Occupied</span>
-              <span>{Math.max(0, totalCapacityBeds - totalOccupiedBeds)} Available</span>
-            </div>
-          </div>
         </div>
 
         {/* Operational Metrics Cards */}
         <div className={styles.kpiGrid}>
           <div className={styles.kpiCard}>
-            <div className={`${styles.kpiIconWrap} ${styles.kpiBlue}`}>
-              <Bed size={22} />
+            <div className={`${styles.kpiIconWrap} ${styles.kpiGreen}`}>
+              <Stethoscope size={22} />
             </div>
             <div className={styles.kpiContent}>
-              <span className={styles.kpiLabel}>Total Bed Capacity</span>
-              <div className={styles.kpiValue}>{totalCapacityBeds} Beds</div>
-              <span className={styles.kpiSub}>Across {wards.length} major wards</span>
+              <span className={styles.kpiLabel}>Affiliated Doctors</span>
+              <div className={styles.kpiValue}>
+                {affiliatedDoctors.length} {affiliatedDoctors.length === 1 ? 'Specialist' : 'Specialists'}
+              </div>
+              <span className={styles.kpiSub}>Active on clinical roster</span>
+            </div>
+          </div>
+
+          <div className={styles.kpiCard}>
+            <div className={`${styles.kpiIconWrap} ${styles.kpiBlue}`}>
+              <Sparkles size={22} />
+            </div>
+            <div className={styles.kpiContent}>
+              <span className={styles.kpiLabel}>Specialities & Procedures</span>
+              <div className={styles.kpiValue}>
+                {(activeHospital.specialities?.length || specialitiesProcedures?.length || 0)} Services
+              </div>
+              <span className={styles.kpiSub}>Clinical catalog active</span>
             </div>
           </div>
 
@@ -663,19 +618,6 @@ const HospitalDashboard = ({ onNavigate }) => {
               <span className={styles.kpiLabel}>Active Emergency Triage</span>
               <div className={styles.kpiValue}>{erCases.length} Cases</div>
               <span className={styles.kpiSub}>1 Critical (Code Red)</span>
-            </div>
-          </div>
-
-          <div className={styles.kpiCard}>
-            <div className={`${styles.kpiIconWrap} ${styles.kpiGreen}`}>
-              <Stethoscope size={22} />
-            </div>
-            <div className={styles.kpiContent}>
-              <span className={styles.kpiLabel}>Affiliated Doctors</span>
-              <div className={styles.kpiValue}>
-                {affiliatedDoctors.length} {affiliatedDoctors.length === 1 ? 'Specialist' : 'Specialists'}
-              </div>
-              <span className={styles.kpiSub}>Active on clinical roster</span>
             </div>
           </div>
 
@@ -696,13 +638,6 @@ const HospitalDashboard = ({ onNavigate }) => {
         {/* Tabs Bar */}
         <div className={styles.tabsBar}>
           <div className={styles.tabsList}>
-            <button
-              className={`${styles.tabBtn} ${activeTab === 'beds' ? styles.tabBtnActive : ''}`}
-              onClick={() => setActiveTab('beds')}
-            >
-              <Bed size={16} />
-              <span>Wards & Beds</span>
-            </button>
 
             <button
               className={`${styles.tabBtn} ${activeTab === 'doctors' ? styles.tabBtnActive : ''}`}
@@ -757,15 +692,6 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
 
           <div className={styles.tabsActionWrap}>
-            {activeTab === 'beds' && (
-              <button
-                className={styles.addPrimaryBtn}
-                onClick={() => setIsAdmitModalOpen(true)}
-              >
-                <Plus size={16} /> Admit Patient
-              </button>
-            )}
-
             {activeTab === 'doctors' && (
               <button
                 className={styles.addPrimaryBtn}
@@ -789,79 +715,7 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* TAB 1: BED & WARD MANAGEMENT */}
-        {activeTab === 'beds' && (
-          <div className={styles.tabContentArea}>
-            <div className={styles.wardsGrid}>
-              {wards.map((ward) => {
-                const percent = Math.round((ward.occupied / ward.total) * 100);
-                const isNearCapacity = percent >= 90;
-                const isModerate = percent >= 80 && percent < 90;
-
-                return (
-                  <div key={ward.id} className={styles.wardCard}>
-                    <div className={styles.wardHeader}>
-                      <div>
-                        <h4>{ward.name}</h4>
-                        <span className={styles.wardHeadDoctor}>In-charge: {ward.head}</span>
-                      </div>
-                      <span className={isNearCapacity ? styles.wardAlertBadge : styles.wardNormalBadge}>
-                        <span className={isNearCapacity ? styles.wardAlertDot : styles.wardNormalDot}></span>
-                        {isNearCapacity ? 'High Occupancy' : 'Available'}
-                      </span>
-                    </div>
-
-                    <div className={styles.wardNumbersRow}>
-                      <div>
-                        <span className={styles.occupiedCount}>{ward.occupied}</span>
-                        <span className={styles.totalCount}> / {ward.total} Beds Occupied</span>
-                      </div>
-                      <span className={`${styles.wardPercent} ${isNearCapacity ? styles.percentRed : (isModerate ? styles.percentOrange : styles.percentBlue)}`}>
-                        {percent}%
-                      </span>
-                    </div>
-
-                    <div className={styles.wardProgressBar}>
-                      <div
-                        className={`${styles.wardProgressFill} ${isNearCapacity ? styles.fillRed : (isModerate ? styles.fillOrange : styles.fillBlue)}`}
-                        style={{ width: `${percent}%` }}
-                      ></div>
-                    </div>
-
-                    <div className={styles.wardCardFooter}>
-                      <span className={styles.vacantCount}>
-                        <span className={styles.vacantDot}></span>
-                        {ward.total - ward.occupied} beds vacant
-                      </span>
-                      <div className={styles.wardActions}>
-                        <button
-                          className={styles.dischargeBtn}
-                          onClick={() => handleDischargePatient(ward.id)}
-                          title="Discharge patient and vacate bed"
-                          disabled={ward.occupied === 0}
-                        >
-                          Discharge 1
-                        </button>
-                        <button
-                          className={styles.quickAdmitBtn}
-                          onClick={() => {
-                            setAdmitData(prev => ({ ...prev, wardId: ward.id }));
-                            setIsAdmitModalOpen(true);
-                          }}
-                          disabled={ward.occupied >= ward.total}
-                        >
-                          <Plus size={14} /> Admit
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: DOCTORS ON ROSTER */}
+        {/* TAB 1: DOCTORS ON ROSTER */}
         {activeTab === 'doctors' && (
           <div className={styles.tabContentArea}>
             <div className={styles.doctorsTableCard}>
@@ -2087,69 +1941,6 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
         )}
       </div>
-
-      {/* Admit Patient Modal */}
-      {isAdmitModalOpen && (
-        <div className={styles.modalOverlay} onClick={() => setIsAdmitModalOpen(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <h3>Admit Patient & Allocate Inpatient Bed</h3>
-              <button onClick={() => setIsAdmitModalOpen(false)} className={styles.closeBtn}>
-                <X size={18} />
-              </button>
-            </div>
-            <form onSubmit={handleAdmitPatient} className={styles.modalForm}>
-              <div className={styles.formGroup}>
-                <label>Patient Full Name *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Ramesh Chandra"
-                  value={admitData.patientName}
-                  onChange={(e) => setAdmitData({ ...admitData, patientName: e.target.value })}
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Target Ward / Department *</label>
-                <select
-                  value={admitData.wardId}
-                  onChange={(e) => setAdmitData({ ...admitData, wardId: e.target.value })}
-                >
-                  {wards.map(w => (
-                    <option key={w.id} value={w.id} disabled={w.occupied >= w.total}>
-                      {w.name} ({w.total - w.occupied} beds available)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Admission Diagnosis</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Post-operative recovery, Severe Pneumonia"
-                  value={admitData.diagnosis}
-                  onChange={(e) => setAdmitData({ ...admitData, diagnosis: e.target.value })}
-                />
-              </div>
-
-              <div className={styles.modalFooter}>
-                <button
-                  type="button"
-                  className={styles.cancelBtn}
-                  onClick={() => setIsAdmitModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className={styles.saveBtn}>
-                  Confirm Admission
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Add Doctor to Hospital Modal */}
       {isAddDoctorModalOpen && (

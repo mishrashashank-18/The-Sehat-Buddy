@@ -237,38 +237,84 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
   const [expandedFaq, setExpandedFaq] = useState(null);
 
-  // Dynamic 3 upcoming appointment days
+  // Doctor's available slots & schedule from database
+  const configuredSlots = React.useMemo(() => {
+    if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
+      return doctor.availableSlots;
+    }
+    return ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'];
+  }, [doctor?.availableSlots]);
+
+  const configuredDays = React.useMemo(() => {
+    if (Array.isArray(doctor?.scheduleDays) && doctor.scheduleDays.length > 0) {
+      return doctor.scheduleDays;
+    }
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  }, [doctor?.scheduleDays]);
+
+  // Dynamic 3 upcoming appointment days with real live available slot count
   const dateOptions = React.useMemo(() => {
-    const d0 = new Date();
-    const d1 = new Date(Date.now() + 86400000);
-    const d2 = new Date(Date.now() + 172800000);
-    return [
-      {
-        day: 'Today',
-        date: `${d0.getDate()} ${d0.toLocaleDateString('en-US', { month: 'short' })}`,
-        label: `Today, ${d0.getDate()} ${d0.toLocaleDateString('en-US', { month: 'short' })}`,
-        dateStr: d0.toISOString().split('T')[0],
-        slots: '3 Slots',
-        slotsCount: '3 slots available'
-      },
-      {
-        day: 'Tomorrow',
-        date: `${d1.getDate()} ${d1.toLocaleDateString('en-US', { month: 'short' })}`,
-        label: `Tomorrow, ${d1.getDate()} ${d1.toLocaleDateString('en-US', { month: 'short' })}`,
-        dateStr: d1.toISOString().split('T')[0],
-        slots: '4 Slots',
-        slotsCount: '4 slots available'
-      },
-      {
-        day: d2.toLocaleDateString('en-US', { weekday: 'short' }),
-        date: `${d2.getDate()} ${d2.toLocaleDateString('en-US', { month: 'short' })}`,
-        label: `${d2.toLocaleDateString('en-US', { weekday: 'short' })}, ${d2.getDate()} ${d2.toLocaleDateString('en-US', { month: 'short' })}`,
-        dateStr: d2.toISOString().split('T')[0],
-        slots: '8 Slots',
-        slotsCount: '8 slots available'
-      }
+    const dates = [
+      new Date(),
+      new Date(Date.now() + 86400000),
+      new Date(Date.now() + 172800000)
     ];
-  }, []);
+
+    return dates.map((d, index) => {
+      const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayLabel = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameShort);
+      const dateStr = d.toISOString().split('T')[0];
+      
+      const isWorkingDay = configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
+      const booked = (doctor?.slots_booked && doctor.slots_booked[dateStr]) || [];
+      const freeSlots = isWorkingDay ? configuredSlots.filter(s => !booked.includes(s)) : [];
+
+      let slotsLabel = 'No Slots';
+      if (!isWorkingDay) {
+        slotsLabel = 'Off';
+      } else if (freeSlots.length > 0) {
+        slotsLabel = `${freeSlots.length} Slots`;
+      } else {
+        slotsLabel = 'Booked';
+      }
+
+      return {
+        day: dayLabel,
+        date: `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
+        label: `${dayLabel}, ${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
+        dateStr,
+        isWorkingDay,
+        freeSlots,
+        slots: slotsLabel,
+        slotsCount: `${freeSlots.length} slots available`
+      };
+    });
+  }, [configuredSlots, configuredDays, doctor?.slots_booked]);
+
+  // Current day's slots with booked status
+  const currentDaySlots = React.useMemo(() => {
+    const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    if (!activeDateObj) return [];
+    const booked = (doctor?.slots_booked && doctor.slots_booked[activeDateObj.dateStr]) || [];
+    
+    return configuredSlots.map(slot => ({
+      time: slot,
+      isBooked: booked.includes(slot),
+      isOff: !activeDateObj.isWorkingDay
+    }));
+  }, [dateOptions, selectedDateIdx, configuredSlots, doctor?.slots_booked]);
+
+  // Automatically keep selectedTimeSlot valid
+  React.useEffect(() => {
+    const validSlots = currentDaySlots.filter(s => !s.isBooked && !s.isOff);
+    if (validSlots.length > 0) {
+      if (!selectedTimeSlot || !validSlots.some(s => s.time === selectedTimeSlot)) {
+        setSelectedTimeSlot(validSlots[0].time);
+      }
+    } else {
+      setSelectedTimeSlot('');
+    }
+  }, [currentDaySlots, selectedDateIdx]);
 
   React.useEffect(() => {
     // Check if there's a pending booking after login
@@ -309,13 +355,17 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         },
         body: JSON.stringify({
           docId: doctor?.id || doctor?._id,
           slotDate: slotDate || dateOptions[selectedDateIdx].dateStr,
           slotTime: slotTime || selectedTimeSlot,
-          consultationType: type
+          consultationType: type,
+          patientName: patientName.trim() || 'Patient',
+          patientPhone: patientPhone.trim(),
+          patientEmail: patientEmail.trim(),
+          symptoms: symptoms.trim() || 'General Consultation'
         })
       });
       
@@ -334,9 +384,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     }
   };
 
-
-
-  const submitBooking = (e) => {
+  const submitBooking = async (e) => {
     e.preventDefault();
     const chosenDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
     const chosenDate = chosenDateObj.dateStr;
@@ -347,34 +395,68 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       return;
     }
 
-    const aptId = `SB-${Math.floor(10000 + Math.random() * 90000)}`;
-    const newBooking = {
-      id: aptId,
-      appointmentId: aptId,
-      docId: doctor.id || doctor._id,
-      doctorName: doctor.name,
-      doctorSpecialty: doctor.specialty || doctor.specialization,
-      doctorHospital: doctor.hospital || 'Apollo Hospital & Heart Center',
-      patientName: patientName.trim() || 'Guest Patient',
-      patientPhone: patientPhone.trim() || '',
-      patientEmail: patientEmail.trim() || '',
-      symptoms: symptoms.trim() || 'General Consultation',
-      slotDate: chosenDate,
-      dateLabel: chosenDateObj.label,
-      slotTime: chosenTime,
-      consultationType: consultationType,
-      fee: doctor.price || doctor.fees || 800,
-      status: 'Confirmed',
-      bookedAt: new Date().toISOString()
-    };
+    setBookingStatus('loading');
+    const token = localStorage.getItem('token');
 
     try {
-      const existing = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
-      existing.unshift(newBooking);
-      localStorage.setItem('sehat_buddy_appointments', JSON.stringify(existing));
-    } catch {}
+      const response = await fetch(`${API_BASE}/user/book-appointment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          docId: doctor?.id || doctor?._id,
+          slotDate: chosenDate,
+          slotTime: chosenTime,
+          consultationType: consultationType,
+          patientName: patientName.trim() || 'Guest Patient',
+          patientPhone: patientPhone.trim() || '',
+          patientEmail: patientEmail.trim() || '',
+          symptoms: symptoms.trim() || 'General Consultation'
+        })
+      });
 
-    setBookingStatus('success');
+      const data = await response.json();
+      if (response.ok && data.success) {
+        const createdApt = data.data;
+        const aptId = createdApt?._id || `SB-${Math.floor(10000 + Math.random() * 90000)}`;
+        const newBooking = {
+          id: aptId,
+          appointmentId: aptId,
+          docId: doctor.id || doctor._id,
+          doctorName: doctor.name,
+          doctorSpecialty: doctor.specialty || doctor.specialization,
+          doctorHospital: doctor.hospital || 'Apollo Hospital & Heart Center',
+          patientName: patientName.trim() || 'Guest Patient',
+          patientPhone: patientPhone.trim() || '',
+          patientEmail: patientEmail.trim() || '',
+          symptoms: symptoms.trim() || 'General Consultation',
+          slotDate: chosenDate,
+          dateLabel: chosenDateObj.label,
+          slotTime: chosenTime,
+          consultationType: consultationType,
+          fee: doctor.price || doctor.fees || 800,
+          status: 'Confirmed',
+          bookedAt: new Date().toISOString()
+        };
+
+        try {
+          const existing = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
+          existing.unshift(newBooking);
+          localStorage.setItem('sehat_buddy_appointments', JSON.stringify(existing));
+        } catch {}
+
+        setBookingStatus('success');
+      } else {
+        alert(data.message || 'Failed to book appointment');
+        setBookingStatus(null);
+      }
+    } catch (err) {
+      console.error('Booking failed:', err);
+      alert('An error occurred while booking. Please try again.');
+      setBookingStatus(null);
+    }
   };
 
   if (!doctor) {
@@ -862,16 +944,33 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                 <span>Available Slots for {dateOptions[selectedDateIdx]?.day || 'Today'}</span>
               </div>
               <div className={styles.timeSlotsGrid}>
-                {['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'].map((slot, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={`${styles.timeSlotPill} ${selectedTimeSlot === slot ? styles.timeSlotPillActive : ''}`}
-                    onClick={() => setSelectedTimeSlot(slot)}
-                  >
-                    {slot}
-                  </button>
-                ))}
+                {dateOptions[selectedDateIdx]?.isWorkingDay === false ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.82rem', textAlign: 'center' }}>
+                    Doctor is off duty on this day. Please choose another date.
+                  </div>
+                ) : currentDaySlots.length === 0 ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.82rem', textAlign: 'center' }}>
+                    No slots configured for this day.
+                  </div>
+                ) : currentDaySlots.filter(s => !s.isBooked).length === 0 ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#fff1f2', borderRadius: '8px', border: '1px dashed #fecdd3', color: '#e11d48', fontSize: '0.82rem', textAlign: 'center' }}>
+                    All slots are fully booked for this day. Please select another date.
+                  </div>
+                ) : (
+                  currentDaySlots.map((item, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      disabled={item.isBooked}
+                      className={`${styles.timeSlotPill} ${selectedTimeSlot === item.time ? styles.timeSlotPillActive : ''}`}
+                      onClick={() => !item.isBooked && setSelectedTimeSlot(item.time)}
+                      title={item.isBooked ? 'Slot already booked' : `Select ${item.time}`}
+                      style={item.isBooked ? { opacity: 0.45, textDecoration: 'line-through', cursor: 'not-allowed', background: '#f1f5f9' } : {}}
+                    >
+                      {item.time}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 
@@ -1172,25 +1271,31 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
             })()}
 
             {/* Instagram Reels Section */}
-            {doctor.reels && Array.isArray(doctor.reels) && doctor.reels.length > 0 && (
-              <div className={styles.mediaSection}>
-                <h3>Instagram Reels</h3>
-                <div className={styles.reelsGrid}>
-                  {doctor.reels.slice(0, 5).map((reel, idx) => {
-                    if (!reel) return null;
-                    const embedUrl = getEmbedUrl(reel);
-                    return (
-                      <div key={idx} className={styles.reelCard} onClick={() => setActiveReel(embedUrl)}>
-                        <iframe src={embedUrl} title={`Reel ${idx + 1}`} scrolling="no" allowTransparency="true"></iframe>
-                        <div className={styles.reelOverlay}>
-                          <Play size={40} color="white" opacity={0.8} />
+            {(() => {
+              const displayReels = (Array.isArray(doctor.reels)
+                ? doctor.reels.filter(r => typeof r === 'string' && r.trim().length > 0)
+                : []
+              ).slice(0, 5);
+              if (displayReels.length === 0) return null;
+              return (
+                <div className={styles.mediaSection}>
+                  <h3>Instagram Reels</h3>
+                  <div className={styles.reelsGrid}>
+                    {displayReels.map((reel, idx) => {
+                      const embedUrl = getEmbedUrl(reel);
+                      return (
+                        <div key={idx} className={styles.reelCard} onClick={() => setActiveReel(embedUrl)}>
+                          <iframe src={embedUrl} title={`Reel ${idx + 1}`} scrolling="no" allowTransparency="true"></iframe>
+                          <div className={styles.reelOverlay}>
+                            <Play size={40} color="white" opacity={0.8} />
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* YouTube Videos Section */}
             {doctor.youtube_videos && Array.isArray(doctor.youtube_videos) && doctor.youtube_videos.length > 0 && (

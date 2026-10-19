@@ -123,3 +123,59 @@ export const requireRole = (...roles) => {
 };
 
 export const requireAdmin = requireRole('admin');
+
+/**
+ * Optional Authentication middleware: sets req.user if a valid token is present,
+ * but allows the request to continue with req.user = null if no token is provided.
+ */
+export const optionalProtect = async (req, res, next) => {
+  let token = null;
+
+  if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith('Bearer')
+  ) {
+    token = req.headers.authorization.split(' ')[1];
+  } else if (req.query && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET || 'sehatbuddy_super_secure_jwt_secret_dev_fallback_2026';
+    const decoded = jwt.verify(token, secret);
+
+    let user = null;
+    let role = decoded.role;
+
+    if (role === 'admin') {
+      user = await Admin.findById(decoded.id);
+    } else if (role === 'doctor') {
+      user = await Doctor.findById(decoded.id);
+    } else if (role === 'hospital') {
+      user = await Hospital.findById(decoded.id);
+    } else {
+      user = await User.findById(decoded.id);
+    }
+
+    if (user) {
+      req.user = {
+        id: user._id.toString(),
+        role: role || user.role || 'user',
+        email: user.email,
+        name: user.name,
+        doc: user
+      };
+    } else {
+      req.user = null;
+    }
+  } catch {
+    req.user = null;
+  }
+
+  return next();
+};

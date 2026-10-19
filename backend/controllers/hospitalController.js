@@ -5,6 +5,7 @@ import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -624,10 +625,20 @@ export const updateHospital = async (req, res) => {
     if (req.body.insuranceHelpline !== undefined) {
       hospital.insuranceHelpline = req.body.insuranceHelpline;
     }
-    if (req.file) {
-      hospital.image = req.file.path;
-    } else if (req.body.image) {
-      hospital.image = req.body.image;
+    const incomingImage = req.file ? req.file.path : req.body.image;
+    if (incomingImage && incomingImage !== hospital.image) {
+      if (hospital.image && typeof hospital.image === 'string' && hospital.image.includes('cloudinary.com')) {
+        const oldPublicId = extractCloudinaryPublicId(hospital.image);
+        if (oldPublicId) {
+          try {
+            const cld = getCloudinary();
+            await cld.uploader.destroy(oldPublicId, { resource_type: 'image', invalidate: true });
+          } catch (cldErr) {
+            console.warn('Failed to delete old hospital photo from Cloudinary:', cldErr.message);
+          }
+        }
+      }
+      hospital.image = incomingImage;
     }
     
     const updatedHospital = await hospital.save();
@@ -659,9 +670,34 @@ export const deleteHospital = async (req, res) => {
     }
     if (hospital) {
       const hospId = hospital._id;
+
+      // Permanently remove all hospital photos from Cloudinary
+      const imagesToDelete = [
+        hospital.image,
+        ...(Array.isArray(hospital.interior_photos) ? hospital.interior_photos : []),
+        ...(Array.isArray(hospital.exterior_photos) ? hospital.exterior_photos : []),
+        ...(Array.isArray(hospital.photos) ? hospital.photos : [])
+      ].filter(Boolean);
+
+      if (imagesToDelete.length > 0) {
+        try {
+          const cld = getCloudinary();
+          for (const imgUrl of imagesToDelete) {
+            if (typeof imgUrl === 'string' && imgUrl.includes('cloudinary.com')) {
+              const publicId = extractCloudinaryPublicId(imgUrl);
+              if (publicId) {
+                await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true }).catch(() => {});
+              }
+            }
+          }
+        } catch (cldErr) {
+          console.warn('Failed to clean up hospital photos from Cloudinary:', cldErr.message);
+        }
+      }
+
       await hospital.deleteOne();
       broadcastDbChange('hospitals', 'delete', hospId);
-      res.json({ success: true, message: 'Hospital deleted successfully' });
+      res.json({ success: true, message: 'Hospital and associated assets deleted permanently' });
     } else {
       res.status(404).json({ success: false, message: 'Hospital not found' });
     }

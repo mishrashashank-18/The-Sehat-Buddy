@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
 import Appointment from '../models/Appointment.js';
@@ -257,55 +258,108 @@ export const updateProfile = async (req, res) => {
 };
 
 export const bookAppointment = async (req, res) => {
-  const { docId, slotDate, slotTime } = req.body;
+  const {
+    docId,
+    slotDate,
+    slotTime,
+    patientName,
+    patientPhone,
+    patientEmail,
+    age,
+    gender,
+    symptoms,
+    consultationType
+  } = req.body;
+
   try {
-    const user = await User.findById(req.user.id).select('-password');
-    const doctor = await Doctor.findById(docId).select('-password');
-    
-    if (!doctor || !user) {
-      return res.status(404).json({ success: false, message: 'Doctor or User not found' });
+    if (!docId || !slotDate || !slotTime) {
+      return res.status(400).json({ success: false, message: 'Doctor ID, date, and time slot are required' });
+    }
+
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(docId)) {
+      doctor = await Doctor.findById(docId).select('-password');
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: docId }).select('-password');
+    }
+    if (!doctor && typeof docId === 'string' && docId.includes('@')) {
+      doctor = await Doctor.findOne({ email: docId.toLowerCase().trim() }).select('-password');
+    }
+
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    let user = null;
+    if (req.user && req.user.id) {
+      user = await User.findById(req.user.id).select('-password');
     }
 
     let slots_booked = doctor.slots_booked || {};
     if (slots_booked[slotDate] && slots_booked[slotDate].includes(slotTime)) {
-      return res.status(400).json({ success: false, message: 'Slot not available' });
+      return res.status(400).json({ success: false, message: 'This slot is already booked. Please choose another time.' });
     }
 
     if (!slots_booked[slotDate]) {
       slots_booked[slotDate] = [];
     }
     slots_booked[slotDate].push(slotTime);
-    
-    await Doctor.findByIdAndUpdate(docId, { slots_booked });
-    
+    await Doctor.findByIdAndUpdate(doctor._id, { slots_booked });
+
+    const clientName = (patientName || user?.name || 'Patient').trim();
+    const clientPhone = (patientPhone || user?.phone || '').trim();
+    const clientEmail = (patientEmail || user?.email || '').trim();
+
     const newAppointment = await Appointment.create({
-      userId: req.user.id,
-      docId,
+      userId: user ? user._id.toString() : `guest_${Date.now()}`,
+      docId: doctor._id.toString(),
       slotDate,
       slotTime,
-      userData: user,
-      docData: doctor,
-      amount: doctor.fees,
+      userData: {
+        _id: user ? user._id.toString() : null,
+        name: clientName,
+        email: clientEmail,
+        phone: clientPhone,
+        age: parseInt(age, 10) || user?.age || 30,
+        gender: gender || user?.gender || 'Not specified',
+        symptoms: (symptoms || 'General Consultation').trim()
+      },
+      docData: {
+        _id: doctor._id.toString(),
+        name: doctor.name,
+        specialty: doctor.specialization || doctor.specialty || 'General Physician',
+        hospital: doctor.hospital || 'Apollo Hospital & Heart Center',
+        image: doctor.image,
+        fees: doctor.fees || doctor.price || 500
+      },
+      amount: doctor.fees || doctor.price || 500,
+      status: 'Confirmed',
+      symptoms: (symptoms || 'General Consultation').trim(),
+      consultationType: consultationType || 'In-Clinic Visit',
       date: Date.now()
     });
 
-    // Send email via Brevo
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'Appointment Booked Successfully - Sehat Buddy',
-        message: `Your appointment with Dr. ${doctor.name} is confirmed for ${slotDate} at ${slotTime}.`,
-        html: `<h4>Hello ${user.name},</h4><p>Your appointment with Dr. ${doctor.name} is confirmed for ${slotDate} at ${slotTime}.</p>`
-      });
-    } catch (err) {
-      console.log('Error sending email:', err.message);
+    // Send confirmation email if email available
+    if (clientEmail) {
+      try {
+        await sendEmail({
+          email: clientEmail,
+          subject: 'Appointment Booked Successfully - The Sehat Buddy',
+          message: `Your appointment with Dr. ${doctor.name} is confirmed for ${slotDate} at ${slotTime}.`,
+          html: `<h4>Hello ${clientName},</h4><p>Your appointment with Dr. ${doctor.name} (${doctor.specialization || 'Specialist'}) is confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Hospital / Clinic: ${doctor.hospital || 'Apollo Hospital'}</p>`
+        });
+      } catch (err) {
+        console.log('Error sending email notification:', err.message);
+      }
     }
 
+    // Real-time notification broadcast to all dashboards (doctor, user, admin)
     try {
-      broadcastDbChange('appointments', 'insert', newAppointment._id, newAppointment);
+      broadcastDbChange('appointments', 'insert', newAppointment._id.toString(), newAppointment);
     } catch {}
 
-    res.json({ success: true, message: 'Appointment Booked', data: newAppointment });
+    res.json({ success: true, message: 'Appointment Booked Successfully', data: newAppointment });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

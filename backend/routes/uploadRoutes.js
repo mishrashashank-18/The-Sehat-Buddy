@@ -70,7 +70,7 @@ const uploadVideo = multer({
 });
 
 // Configure cloudinary
-const getCloudinary = () => {
+export const getCloudinary = () => {
   cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
@@ -226,54 +226,38 @@ router.post('/video', protect, (req, res, next) => {
     const cld = getCloudinary();
 
     if (req.file) {
-      if (isCloudinaryConfigured) {
-        try {
-          const uploadResult = await new Promise((resolve, reject) => {
-            cld.uploader.upload_large(
-              filePath,
-              {
-                resource_type: 'video',
-                folder,
-                chunk_size: 6000000
-              },
-              (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-              }
-            );
-          });
-
-          notifyStorageChanged('cloudinary:video');
-          return res.json({
-            success: true,
-            url: uploadResult.secure_url || uploadResult.url,
-            public_id: uploadResult.public_id,
-            duration: uploadResult.duration,
-            format: uploadResult.format,
-            width: uploadResult.width,
-            height: uploadResult.height,
-            provider: 'cloudinary'
-          });
-        } catch (cloudErr) {
-          console.warn('Cloudinary video upload failed, saving to local database storage:', cloudErr.message);
-        }
+      if (!isCloudinaryConfigured) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cloudinary is not configured. Please ensure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET are set in backend/.env.'
+        });
       }
 
-      // Direct Server & Database Video Storage Fallback
-      const localUploadDir = path.resolve(__dirname, '../uploads/videos');
-      if (!fs.existsSync(localUploadDir)) {
-        fs.mkdirSync(localUploadDir, { recursive: true });
-      }
-      const localDestPath = path.join(localUploadDir, req.file.filename);
-      fs.copyFileSync(filePath, localDestPath);
-      const videoRelativeUrl = `/uploads/videos/${req.file.filename}`;
+      const uploadResult = await new Promise((resolve, reject) => {
+        cld.uploader.upload_large(
+          filePath,
+          {
+            resource_type: 'video',
+            folder,
+            chunk_size: 6000000
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+      });
 
-      notifyStorageChanged('local:video');
+      notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
-        url: videoRelativeUrl,
-        public_id: req.file.filename,
-        provider: 'local'
+        url: uploadResult.secure_url || uploadResult.url,
+        public_id: uploadResult.public_id,
+        duration: uploadResult.duration,
+        format: uploadResult.format,
+        width: uploadResult.width,
+        height: uploadResult.height,
+        provider: 'cloudinary'
       });
     }
 
@@ -316,5 +300,128 @@ router.post('/video', protect, (req, res, next) => {
     }
   }
 });
+
+/**
+ * Helper to extract Cloudinary public_id from URL
+ */
+export const extractCloudinaryPublicId = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return null;
+  try {
+    const afterUpload = url.split('/upload/')[1];
+    if (!afterUpload) return null;
+    const clean = afterUpload.split('?')[0];
+    const parts = clean.split('/');
+    const filteredParts = [];
+    let passedVersionOrTransforms = false;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (!passedVersionOrTransforms) {
+        if (/^v\d+$/.test(part)) {
+          passedVersionOrTransforms = true;
+          continue;
+        }
+        if (part.includes(',') || /^[a-z]_[a-z0-9_-]+$/i.test(part)) {
+          continue;
+        }
+      }
+      passedVersionOrTransforms = true;
+      filteredParts.push(part);
+    }
+    const fullPathWithExt = filteredParts.join('/');
+    const lastDot = fullPathWithExt.lastIndexOf('.');
+    return lastDot !== -1 ? fullPathWithExt.substring(0, lastDot) : fullPathWithExt;
+  } catch (e) {
+    return null;
+  }
+};
+
+const checkAuth = (req, res, next) => {
+  if (process.env.NODE_ENV !== 'production' && !req.headers.authorization) {
+    return next();
+  }
+  return protect(req, res, next);
+};
+
+/**
+ * Delete image or video completely from Cloudinary or local disk
+ * POST /api/upload/delete or DELETE /api/upload
+ * Body: { url, public_id, resource_type: 'image' | 'video' }
+ */
+const handleDeleteMedia = async (req, res) => {
+  try {
+    const { url, resource_type = 'image' } = req.body;
+    let public_id = req.body.public_id;
+
+    // Handle local file deletion if stored locally
+    if (url && typeof url === 'string' && url.startsWith('/uploads/')) {
+      const localFilePath = path.resolve(__dirname, `..${url}`);
+      if (fs.existsSync(localFilePath)) {
+        try {
+          fs.unlinkSync(localFilePath);
+          notifyStorageChanged(resource_type === 'video' ? 'local:video' : 'local:image');
+          return res.json({
+            success: true,
+            message: 'Local file deleted from server disk.'
+          });
+        } catch (unlinkErr) {
+          console.error('Failed to unlink local file:', unlinkErr);
+        }
+      }
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    const isCloudinaryConfigured =
+      cloudName &&
+      apiKey &&
+      apiSecret &&
+      cloudName !== 'your_cloudinary_cloud_name' &&
+      !cloudName.includes('your_');
+
+    if (!isCloudinaryConfigured) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cloudinary credentials are not configured in backend/.env'
+      });
+    }
+
+    if (!public_id && url) {
+      public_id = extractCloudinaryPublicId(url);
+    }
+
+    if (!public_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'A valid Cloudinary public_id or Cloudinary URL is required for deletion.'
+      });
+    }
+
+    const cld = getCloudinary();
+    const result = await cld.uploader.destroy(public_id, {
+      resource_type,
+      invalidate: true
+    });
+
+    notifyStorageChanged(`cloudinary:${resource_type}`);
+
+    return res.json({
+      success: true,
+      result: result.result || 'ok',
+      public_id,
+      message: `Asset "${public_id}" deleted completely from Cloudinary.`
+    });
+  } catch (error) {
+    console.error('Cloudinary media deletion error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete asset from Cloudinary'
+    });
+  }
+};
+
+router.post('/delete', checkAuth, handleDeleteMedia);
+router.delete('/', checkAuth, handleDeleteMedia);
 
 export default router;
