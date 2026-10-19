@@ -513,5 +513,14 @@ export const api = {
       headers: getAuthHeaders()
     });
     return handleResponse(res);
+  },
+
+  async subscribeNewsletter(email, source = 'newsletter', featureInterest = null) {
+    const res = await fetch(`${API_BASE}/newsletter/subscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, source, featureInterest })
+    });
+    return await handleResponse(res);
   }
 };

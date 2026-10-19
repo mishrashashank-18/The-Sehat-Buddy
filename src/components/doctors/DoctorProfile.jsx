@@ -888,11 +888,6 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
               <div className={styles.bookingGuaranteesRow}>
                 <span className={styles.guaranteeItem}>
                   <CheckCircle2 size={12} color="#059669" />
-                  <span>No Booking Fees</span>
-                </span>
-                <span className={styles.guaranteeDivider}>•</span>
-                <span className={styles.guaranteeItem}>
-                  <CheckCircle2 size={12} color="#059669" />
                   <span>Instant Confirmation</span>
                 </span>
               </div>

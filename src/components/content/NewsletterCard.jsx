@@ -1,18 +1,38 @@
 import React, { useState } from 'react';
-import { Mail } from 'lucide-react';
+import { Mail, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
 import styles from './NewsletterCard.module.css';
 
 const NewsletterCard = () => {
   const { heroContent } = useData();
   const [email, setEmail] = useState('');
   const [subscribed, setSubscribed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setEmail('');
-    setSubscribed(true);
-    setTimeout(() => setSubscribed(false), 3000);
+    if (!email.trim() || loading) return;
+
+    setLoading(true);
+    setErrorMessage('');
+
+    try {
+      const response = await api.subscribeNewsletter(email.trim(), 'newsletter');
+      if (response && response.success) {
+        setSubscribed(true);
+        setEmail('');
+        setTimeout(() => setSubscribed(false), 8000);
+      } else {
+        setErrorMessage(response?.message || 'Subscription failed. Please check your email.');
+      }
+    } catch (err) {
+      console.error('Newsletter subscription error:', err);
+      setErrorMessage(err.message || 'Could not subscribe. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -29,8 +49,26 @@ const NewsletterCard = () => {
       </div>
       
       {subscribed ? (
-        <div style={{ color: '#ffffff', fontWeight: 600, fontSize: '0.9rem', textAlign: 'center', marginTop: '10px' }}>
-          ✓ Thank you for subscribing!
+        <div style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.15)',
+          backdropFilter: 'blur(4px)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          borderRadius: '10px',
+          padding: '12px 14px',
+          color: '#ffffff',
+          fontWeight: 600,
+          fontSize: '0.84rem',
+          textAlign: 'center',
+          marginTop: 'auto',
+          lineHeight: '1.4'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '4px' }}>
+            <CheckCircle2 size={16} color="#86efac" />
+            <span style={{ color: '#86efac', fontWeight: 700 }}>Subscribed!</span>
+          </div>
+          <span style={{ fontSize: '0.78rem', opacity: 0.95 }}>
+            Check your inbox for a confirmation email from Brevo.
+          </span>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className={styles.form}>
@@ -40,9 +78,34 @@ const NewsletterCard = () => {
             className={styles.input}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={loading}
             required
           />
-          <button type="submit" className={styles.button}>Subscribe</button>
+          {errorMessage && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              color: '#fca5a5',
+              fontSize: '0.75rem',
+              marginTop: '6px'
+            }}>
+              <AlertCircle size={12} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+          <button 
+            type="submit" 
+            className={styles.button}
+            disabled={loading}
+            style={{ opacity: loading ? 0.75 : 1, width: loading ? '100px' : undefined }}
+          >
+            {loading ? (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                <Loader2 size={12} className={styles.spinning} /> Sending...
+              </span>
+            ) : 'Subscribe'}
+          </button>
         </form>
       )}
     </div>

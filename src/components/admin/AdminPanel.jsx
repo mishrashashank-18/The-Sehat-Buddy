@@ -569,11 +569,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               <Plus size={16} /> Add Review
             </button>
           </div>
-
-          <div className={styles.sidebarInfo}>
-            <p>Sehat Buddy Admin v2.0</p>
-            <small>All modifications persist in browser storage.</small>
-          </div>
         </aside>
 
         {/* Content Area */}
