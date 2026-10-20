@@ -1,8 +1,22 @@
 import React from 'react';
 import { Star } from 'lucide-react';
+import { useData } from '../../context/useData';
+import { getDoctorVerifiedReviews, formatDoctorExperience } from './DoctorProfile';
 import styles from './DoctorCard.module.css';
 
 const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
+  const { reviews } = useData();
+
+  const doctorReviews = React.useMemo(() => {
+    return getDoctorVerifiedReviews(doctor, reviews);
+  }, [doctor, reviews]);
+
+  const avgRating = React.useMemo(() => {
+    if (doctorReviews.length === 0) return doctor.rating || '4.8';
+    const total = doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+    return (total / doctorReviews.length).toFixed(1);
+  }, [doctorReviews, doctor.rating]);
+
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -37,14 +51,14 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
         <h3 className={styles.name}>{doctor.name}</h3>
         <p className={styles.specialty}>{doctor.specialty || doctor.specialization}</p>
         <p className={styles.experience}>
-          {doctor.experience} {typeof doctor.experience === 'number' ? 'years' : ''}
+          {formatDoctorExperience(doctor.experience)}
           {doctor.hospital ? " • " + doctor.hospital : ""}
         </p>
         
         <div className={styles.rating}>
           <Star size={14} className={styles.starIcon} fill="#FACC15" color="#FACC15" />
-          <span className={styles.score}>{doctor.rating || '4.5'}</span>
-          <span className={styles.reviews}>({doctor.reviews || '10+'} reviews)</span>
+          <span className={styles.score}>{avgRating}</span>
+          <span className={styles.reviews}>({doctorReviews.length}+ reviews)</span>
         </div>
         
         <div className={styles.priceRow}>

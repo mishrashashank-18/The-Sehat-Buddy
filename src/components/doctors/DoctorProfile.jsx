@@ -165,29 +165,40 @@ const SocialYoutubeIcon = ({ size = 18 }) => (
   </svg>
 );
 
-// Helper for comprehensive rich biography
-const getComprehensiveBio = (doc) => {
+// Helper to format experience stably as a consistent number + string
+export const formatDoctorExperience = (exp) => {
+  if (exp === undefined || exp === null || exp === '') return '15+ Years';
+  const num = parseInt(String(exp).replace(/\D/g, ''), 10);
+  return `${!isNaN(num) && num > 0 ? num : 15}+ Years`;
+};
+
+// Helper to extract biography content (custom doctor about or fallback) for responsive display
+export const getBioItems = (doc) => {
   if (!doc) return [];
   const name = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'The Doctor';
   const spec = doc.specialty || doc.specialization || 'Consultant Specialist';
-  const exp = doc.experience ? (typeof doc.experience === 'number' ? `${doc.experience}+ Years` : doc.experience) : '15+ Years';
+  const exp = formatDoctorExperience(doc.experience);
   const hosp = doc.hospital || 'Apollo Hospital & Heart Center';
 
-  const paragraphs = [];
-  if (doc.about && doc.about.trim().length > 120) {
-    paragraphs.push(...doc.about.trim().split(/\n\s*\n/));
-  } else {
-    paragraphs.push(
-      `${name} is an esteemed Senior Consultant in ${spec} with over ${exp} of distinguished clinical practice at ${hosp}. Recognized across the medical fraternity for diagnostic precision, advanced intervention methodologies, and compassionate patient care, ${name} has managed over 10,000+ patient consultations with exceptional recovery outcomes.`
-    );
+  // 1. If doctor has custom about text from dashboard/database, preserve and use their exact paragraphs
+  if (doc.about && doc.about.trim().length > 0) {
+    const customParas = doc.about.trim().split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+    if (customParas.length > 0) {
+      return customParas;
+    }
   }
 
-  paragraphs.push(
-    `Specializing in personalized therapeutic regimens, preventative screening, and minimally invasive clinical interventions, ${name} is dedicated to empowering patients through transparent medical guidance. ${name} maintains active privileges across leading healthcare institutions with a steadfast commitment to high-standard clinical excellence.`
-  );
-
-  return paragraphs;
+  // 2. Default fallback clinical paragraphs when no custom about is set
+  return [
+    `${name} is a Senior Consultant in ${spec} with over ${exp} of clinical practice at ${hosp}, recognized for diagnostic precision and compassionate patient care.`,
+    `Specializing in personalized therapeutic regimens, preventative screening, and minimally invasive clinical interventions, ${name} is dedicated to empowering patients through transparent medical guidance.`,
+    `With extensive expertise in managing complex clinical cases, ${name} integrates evidence-based protocols with tailored treatment plans to ensure optimal long-term health outcomes.`,
+    `${name} maintains active privileges across leading healthcare institutions, participating in advanced medical forums and clinical research to bring modern treatment methodologies to everyday practice.`
+  ];
 };
+
+export const getBioSentences = (doc) => getBioItems(doc);
+export const getComprehensiveBio = (doc) => getBioItems(doc);
 
 // Dedicated Timeline Symbol Icon (Vertical connected milestone track)
 const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) => (
@@ -229,10 +240,6 @@ export const getDoctorVerifiedReviews = (doc, liveReviews) => {
     }
     return false;
   });
-
-  if (matched.length >= 5) {
-    return matched;
-  }
 
   const spec = doc.specialty || doc.specialization || 'Clinical Care';
   const hosp = doc.hospital || 'Apollo Hospitals';
@@ -316,10 +323,10 @@ export const getDoctorVerifiedReviews = (doc, liveReviews) => {
     }
   ];
 
+  // Combine all real live reviews first, then append verified baseline reviews without duplicate patient names
   const combined = [...matched];
   for (const item of default5) {
-    if (combined.length >= 5) break;
-    if (!combined.some(c => c.patientName.toLowerCase() === item.patientName.toLowerCase())) {
+    if (!combined.some(c => (c.patientName || '').toLowerCase().trim() === item.patientName.toLowerCase().trim())) {
       combined.push(item);
     }
   }
@@ -519,6 +526,106 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       setSelectedTimeSlot('');
     }
   }, [currentDaySlots, selectedDateIdx]);
+
+  // Dynamic vertical balancing between left doctor profile and right appointment booking panel
+  const [visibleSentenceCount, setVisibleSentenceCount] = useState(2);
+  const [textWidth, setTextWidth] = useState(0);
+
+  const leftColRef = React.useRef(null);
+  const bookingColRef = React.useRef(null);
+  const aboutTextRef = React.useRef(null);
+  const measureContainerRef = React.useRef(null);
+
+  const allBioSentences = React.useMemo(() => {
+    return getBioSentences(doctor);
+  }, [doctor]);
+
+  React.useEffect(() => {
+    if (!bookingColRef.current) return;
+
+    let rafId = null;
+
+    const measureAndBalance = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        if (!bookingColRef.current || !leftColRef.current || !aboutTextRef.current) return;
+
+        // Mobile / tablet: naturally stacked, keep compact
+        if (window.innerWidth <= 992) {
+          setVisibleSentenceCount(1);
+          return;
+        }
+
+        const currentTextWidth = aboutTextRef.current.clientWidth;
+        if (currentTextWidth && currentTextWidth !== textWidth) {
+          setTextWidth(currentTextWidth);
+        }
+
+        const bookingHeight = bookingColRef.current.offsetHeight;
+        const leftColHeight = leftColRef.current.offsetHeight;
+        const currentTextHeight = aboutTextRef.current.offsetHeight;
+
+        // Calculate height of all left column content other than the bio text
+        const nonTextHeight = leftColHeight - currentTextHeight;
+        const availableBioHeight = bookingHeight - nonTextHeight;
+
+        const measureEl = measureContainerRef.current;
+        if (!measureEl || !measureEl.children || measureEl.children.length === 0) return;
+
+        const totalSentences = allBioSentences.length;
+        if (totalSentences === 0) return;
+
+        const buttonReserve = 32; // height + gap for More/Less toggle button
+        let optimalCount = 1;
+
+        for (let k = 1; k <= totalSentences; k++) {
+          const child = measureEl.children[k - 1];
+          if (!child) continue;
+
+          // Rendered height of first k sentences
+          const renderedHeight = child.offsetTop + child.offsetHeight;
+          const isAll = k === totalSentences;
+          const neededHeight = isAll ? renderedHeight : renderedHeight + buttonReserve;
+
+          const diff = availableBioHeight - neededHeight;
+
+          // If it fits or is within acceptable threshold (within 12px), accept this sentence count
+          if (diff >= -12) {
+            optimalCount = k;
+          } else {
+            if (k > 1) break;
+          }
+        }
+
+        setVisibleSentenceCount(prev => (prev !== optimalCount ? optimalCount : prev));
+      });
+    };
+
+    // Initial measurement
+    measureAndBalance();
+
+    // Observe booking column for slot count changes, date changes, etc.
+    let lastReportedBookingHeight = 0;
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newHeight = Math.round(entry.contentRect.height);
+        if (Math.abs(newHeight - lastReportedBookingHeight) > 2) {
+          lastReportedBookingHeight = newHeight;
+          measureAndBalance();
+        }
+      }
+    });
+
+    resizeObserver.observe(bookingColRef.current);
+
+    window.addEventListener('resize', measureAndBalance);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', measureAndBalance);
+    };
+  }, [allBioSentences, selectedDateIdx, currentDaySlots, consultationType, textWidth]);
 
   React.useEffect(() => {
     // Check if there's a pending booking after login
@@ -803,7 +910,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         {/* UNIFIED DOCTOR MASTER CARD: Merges Doctor Profile, Highlights, About & Booking into One Cohesive Card */}
         <div className={styles.unifiedDoctorCard}>
           {/* LEFT: Main Profile, Highlights & About */}
-          <div className={styles.unifiedMainCol}>
+          <div className={styles.unifiedMainCol} ref={leftColRef}>
             <div className={styles.heroTopRow}>
               <div className={styles.heroAvatarCol}>
                 <div className={styles.heroAvatarWrap}>
@@ -929,7 +1036,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 <div>
                   <span className={styles.heroHighlightLabel}>Experience</span>
                   <strong className={styles.heroHighlightVal}>
-                    {doctor.experience ? (typeof doctor.experience === 'number' ? `${doctor.experience}+ Years` : doctor.experience) : '15+ Years'}
+                    {formatDoctorExperience(doctor.experience)}
                   </strong>
                 </div>
               </div>
@@ -962,45 +1069,118 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               </div>
             </div>
 
-            {/* Integrated About Section with Rich Clinical Bio (Single Paragraph by Default + More Option) */}
+            {/* Integrated About Section with Rich Clinical Bio & Credentials Footer */}
             <div className={styles.unifiedAboutSection}>
-              <h3 className={styles.sectionHeading}>
-                About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
-              </h3>
-              <div className={styles.aboutTextContent}>
-                {(() => {
-                  const bioParas = getComprehensiveBio(doctor);
-                  if (bioParas.length === 0) return null;
+              <div className={styles.aboutTopBlock} style={{ position: 'relative' }}>
+                <h3 className={styles.sectionHeading}>
+                  About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
+                </h3>
+                <div className={styles.aboutTextContent} ref={aboutTextRef}>
+                  {(() => {
+                    if (allBioSentences.length === 0) return null;
 
-                  return (
-                    <>
-                      <p>{bioParas[0]}</p>
-                      {isAboutExpanded && bioParas.slice(1).map((para, pIdx) => (
-                        <p key={pIdx + 1}>{para}</p>
-                      ))}
-                      {bioParas.length > 1 && (
-                        <button
-                          type="button"
-                          className={styles.readMoreBtn}
-                          onClick={() => setIsAboutExpanded(!isAboutExpanded)}
-                          aria-expanded={isAboutExpanded}
-                        >
-                          <span>{isAboutExpanded ? 'Show Less' : 'More'}</span>
-                          <ChevronDown
-                            size={14}
-                            className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
-                          />
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
+                    const countToShow = isAboutExpanded
+                      ? allBioSentences.length
+                      : Math.min(allBioSentences.length, Math.max(1, visibleSentenceCount || 1));
+
+                    const displayedSentences = allBioSentences.slice(0, countToShow);
+                    const hasMore = allBioSentences.length > countToShow;
+
+                    return (
+                      <>
+                        <div className={styles.aboutParasWrap}>
+                          {displayedSentences.map((sentence, sIdx) => (
+                            <p key={sIdx}>{sentence}</p>
+                          ))}
+                        </div>
+                        {(hasMore || isAboutExpanded) && allBioSentences.length > 1 && (
+                          <button
+                            type="button"
+                            className={styles.readMoreBtn}
+                            onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+                            aria-expanded={isAboutExpanded}
+                          >
+                            <span>{isAboutExpanded ? 'Less' : 'More'}</span>
+                            <ChevronDown
+                              size={14}
+                              className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
+                            />
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+
+                {/* Hidden off-screen measurement element to calculate pixel-perfect sentence heights */}
+                <div
+                  ref={measureContainerRef}
+                  aria-hidden="true"
+                  style={{
+                    position: 'absolute',
+                    visibility: 'hidden',
+                    pointerEvents: 'none',
+                    top: -9999,
+                    left: 0,
+                    width: textWidth ? `${textWidth}px` : '100%',
+                    fontFamily: 'inherit',
+                    fontSize: '0.92rem',
+                    lineHeight: 1.68,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  {allBioSentences.map((s, idx) => (
+                    <p key={idx} style={{ margin: 0, color: '#334155' }}>{s}</p>
+                  ))}
+                </div>
+              </div>
+
+              {/* Verified Clinical Credentials & Practice Standard (Anchored dynamically to balance column height) */}
+              <div className={styles.aboutMetaFooter}>
+                <div className={styles.aboutMetaItem}>
+                  <div className={styles.aboutMetaIcon}>
+                    <GraduationCap size={15} />
+                  </div>
+                  <div className={styles.aboutMetaContent}>
+                    <span className={styles.aboutMetaLabel}>Qualifications</span>
+                    <span className={styles.aboutMetaValue} title={doctor.degree || doctor.qualifications || 'MBBS, MD'}>
+                      {doctor.degree || doctor.qualifications || 'MBBS, MD'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className={styles.aboutMetaItem}>
+                  <div className={styles.aboutMetaIcon}>
+                    <Stethoscope size={15} />
+                  </div>
+                  <div className={styles.aboutMetaContent}>
+                    <span className={styles.aboutMetaLabel}>Specialization</span>
+                    <span className={styles.aboutMetaValue} title={doctor.specialty || doctor.specialization || 'Consultant Specialist'}>
+                      {doctor.specialty || doctor.specialization || 'Consultant Specialist'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className={styles.aboutMetaItem}>
+                  <div className={styles.aboutMetaIcon}>
+                    <CalendarClock size={15} />
+                  </div>
+                  <div className={styles.aboutMetaContent}>
+                    <span className={styles.aboutMetaLabel}>OPD Schedule</span>
+                    <span className={styles.aboutMetaValue} title={doctor.availableDays || 'Mon – Sat (Scheduled Slots)'}>
+                      {doctor.availableDays || 'Mon – Sat (Scheduled Slots)'}
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {/* RIGHT: Consultation & Booking Panel */}
-          <div className={styles.unifiedBookingCol}>
+          <div className={styles.unifiedBookingCol} ref={bookingColRef}>
             {/* Consultation Fee Card */}
             <div className={styles.feeCard}>
               <div className={styles.feeCardLeft}>

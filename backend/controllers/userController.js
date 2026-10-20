@@ -27,16 +27,15 @@ export const registerUser = async (req, res) => {
         userExists.otpAttempts = 0;
         await userExists.save();
         
-        try {
-          await sendEmail({
-            email: userExists.email,
-            subject: 'Verify your email - Sehat Buddy',
-            message: `Your OTP for registration is ${otp}. It is valid for 10 minutes.`,
-            html: `<h4>Hello ${userExists.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
-          });
-        } catch (emailError) {
+        // Dispatch OTP email asynchronously in background so signup responds in milliseconds
+        sendEmail({
+          email: userExists.email,
+          subject: 'Verify your email - Sehat Buddy',
+          message: `Your OTP for registration is ${otp}. It is valid for 10 minutes.`,
+          html: `<h4>Hello ${userExists.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+        }).catch(emailError => {
           console.error('Error sending OTP email:', emailError.message);
-        }
+        });
         
         return res.status(200).json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
       }
@@ -55,16 +54,15 @@ export const registerUser = async (req, res) => {
     });
     
     if (user) {
-      try {
-        await sendEmail({
-          email: user.email,
-          subject: 'Verify your email - Sehat Buddy',
-          message: `Hello ${user.name},\n\nYour OTP for registration is ${otp}. It is valid for 10 minutes.`,
-          html: `<h4>Hello ${user.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
-        });
-      } catch (emailError) {
+      // Dispatch OTP email asynchronously in background so signup responds in milliseconds
+      sendEmail({
+        email: user.email,
+        subject: 'Verify your email - Sehat Buddy',
+        message: `Hello ${user.name},\n\nYour OTP for registration is ${otp}. It is valid for 10 minutes.`,
+        html: `<h4>Hello ${user.name},</h4><p>Your OTP for registration is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+      }).catch(emailError => {
         console.error('Error sending OTP email:', emailError.message);
-      }
+      });
 
       res.status(201).json({
         success: true,
@@ -144,9 +142,7 @@ export const authUser = async (req, res) => {
 
     if (await user.matchPassword(password)) {
       if (user.failedLoginAttempts > 0 || user.lockUntil) {
-        user.failedLoginAttempts = 0;
-        user.lockUntil = undefined;
-        await user.save();
+        User.updateOne({ _id: user._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
       }
 
       if (!user.isVerified) {
@@ -156,30 +152,28 @@ export const authUser = async (req, res) => {
         user.otpAttempts = 0;
         await user.save();
         
-        try {
-          await sendEmail({
-            email: user.email,
-            subject: 'Verify your email - Sehat Buddy',
-            message: `Hello ${user.name},\n\nYour OTP for login is ${otp}. It is valid for 10 minutes.`,
-            html: `<h4>Hello ${user.name},</h4><p>Your OTP for login is <b>${otp}</b>. It is valid for 10 minutes.</p>`
-          });
-        } catch (emailError) {
+        // Dispatch OTP email asynchronously in background
+        sendEmail({
+          email: user.email,
+          subject: 'Verify your email - Sehat Buddy',
+          message: `Hello ${user.name},\n\nYour OTP for login is ${otp}. It is valid for 10 minutes.`,
+          html: `<h4>Hello ${user.name},</h4><p>Your OTP for login is <b>${otp}</b>. It is valid for 10 minutes.</p>`
+        }).catch(emailError => {
           console.error('Error sending OTP email:', emailError.message);
-        }
+        });
         
         return res.json({ success: true, requires_verification: true, message: 'OTP sent to email.' });
       }
 
-      try {
-        await sendEmail({
-          email: user.email,
-          subject: 'Login Alert - Sehat Buddy',
-          message: `Hello ${user.name},\n\nA new login was detected on your Sehat Buddy account.`,
-          html: `<h4>Hello ${user.name},</h4><p>A new login was detected on your Sehat Buddy account.</p>`
-        });
-      } catch (emailError) {
+      // Dispatch login alert asynchronously in background so response is instant
+      sendEmail({
+        email: user.email,
+        subject: 'Login Alert - Sehat Buddy',
+        message: `Hello ${user.name},\n\nA new login was detected on your Sehat Buddy account.`,
+        html: `<h4>Hello ${user.name},</h4><p>A new login was detected on your Sehat Buddy account.</p>`
+      }).catch(emailError => {
         console.error('Error sending login alert email:', emailError);
-      }
+      });
 
       res.json({
         success: true,
@@ -440,16 +434,15 @@ export const googleLogin = async (req, res) => {
       });
     }
 
-    try {
-      await sendEmail({
-        email: user.email,
-        subject: 'Login Alert - Sehat Buddy',
-        message: `Hello ${user.name},\n\nA new Google login was detected on your Sehat Buddy account.`,
-        html: `<h4>Hello ${user.name},</h4><p>A new Google login was detected on your Sehat Buddy account.</p>`
-      });
-    } catch (emailError) {
+    // Dispatch Google login alert in background asynchronously
+    sendEmail({
+      email: user.email,
+      subject: 'Login Alert - Sehat Buddy',
+      message: `Hello ${user.name},\n\nA new Google login was detected on your Sehat Buddy account.`,
+      html: `<h4>Hello ${user.name},</h4><p>A new Google login was detected on your Sehat Buddy account.</p>`
+    }).catch(emailError => {
       console.error('Error sending login alert email:', emailError);
-    }
+    });
 
     res.json({
       success: true,

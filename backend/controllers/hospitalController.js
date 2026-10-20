@@ -39,9 +39,7 @@ export const authHospital = async (req, res) => {
 
     if (await hospital.matchPassword(password)) {
       if (hospital.failedLoginAttempts > 0 || hospital.lockUntil) {
-        hospital.failedLoginAttempts = 0;
-        hospital.lockUntil = undefined;
-        await hospital.save();
+        Hospital.updateOne({ _id: hospital._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
       }
 
       const hospObj = hospital.toObject();
@@ -58,15 +56,13 @@ export const authHospital = async (req, res) => {
     } else {
       hospital.failedLoginAttempts = (hospital.failedLoginAttempts || 0) + 1;
       if (hospital.failedLoginAttempts >= 5) {
-        hospital.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-        hospital.failedLoginAttempts = 0;
-        await hospital.save();
+        Hospital.updateOne({ _id: hospital._id }, { $set: { lockUntil: new Date(Date.now() + 15 * 60 * 1000), failedLoginAttempts: 0 } }).catch(() => {});
         return res.status(423).json({
           success: false,
           message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
         });
       }
-      await hospital.save();
+      Hospital.updateOne({ _id: hospital._id }, { $set: { failedLoginAttempts: hospital.failedLoginAttempts } }).catch(() => {});
       const remainingAttempts = Math.max(0, 5 - hospital.failedLoginAttempts);
       return res.status(401).json({
         success: false,

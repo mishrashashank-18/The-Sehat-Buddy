@@ -310,7 +310,7 @@ export const DataProvider = ({ children }) => {
         specialization: resolvedSpecialty,
         price: resolvedPrice,
         fees: resolvedPrice,
-        experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || existing?.experience || '5+ Years Experience'),
+        experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
         licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
         awards: (Array.isArray(d.awards) && d.awards.length > 0) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
         certifications: (Array.isArray(d.certifications) && d.certifications.length > 0) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
@@ -514,7 +514,28 @@ export const DataProvider = ({ children }) => {
             } else if (collection === 'faqs') {
               refreshFaqs();
             } else if (collection === 'reviews') {
-              refreshReviews();
+              if (payload.docId && payload.fullDocument) {
+                setReviews(prev => {
+                  const exists = prev.some(r => matchesId(r, payload.docId));
+                  const updated = exists
+                    ? prev.map(r => matchesId(r, payload.docId) ? { ...r, ...payload.fullDocument } : r)
+                    : [{ ...payload.fullDocument, id: payload.docId }, ...prev];
+                  try {
+                    localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                  } catch {}
+                  return updated;
+                });
+              } else if (payload.action === 'delete' && payload.docId) {
+                setReviews(prev => {
+                  const updated = prev.filter(r => !matchesId(r, payload.docId));
+                  try {
+                    localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                  } catch {}
+                  return updated;
+                });
+              } else {
+                refreshReviews();
+              }
             } else if (collection === 'specialityprocedures') {
               refreshSpecialities();
             } else if (collection === 'appointments') {
@@ -691,6 +712,7 @@ export const DataProvider = ({ children }) => {
             specialization: resolvedSpecialty,
             price: resolvedPrice,
             fees: resolvedPrice,
+            experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
             awards: updatedData.awards !== undefined ? updatedData.awards : doc.awards,
             certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
@@ -739,6 +761,7 @@ export const DataProvider = ({ children }) => {
                 specialization: resSpecialty,
                 price: resPrice,
                 fees: resPrice,
+                experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (parseInt(String(res.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
                 awards: Array.isArray(res.awards) ? res.awards : doc.awards,
                 certifications: Array.isArray(res.certifications) ? res.certifications : doc.certifications,
                 memberships: Array.isArray(res.memberships) ? res.memberships : doc.memberships,
@@ -1093,28 +1116,56 @@ export const DataProvider = ({ children }) => {
       isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
       status: reviewData.status || 'approved'
     };
-    setReviews(prev => [newReview, ...prev]);
+    setReviews(prev => {
+      const updated = [newReview, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_REVIEWS, updated);
+      } catch {}
+      return updated;
+    });
     api.addReview(newReview).then(saved => {
       if (saved && saved._id) {
-        setReviews(prev => prev.map(r => r.id === newReview.id ? { ...saved, id: saved._id } : r));
+        setReviews(prev => {
+          const updated = prev.map(r => r.id === newReview.id ? { ...saved, id: saved._id } : r);
+          try {
+            localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+            broadcastSync(STORAGE_KEY_REVIEWS, updated);
+          } catch {}
+          return updated;
+        });
       }
     }).catch(() => {});
     return newReview;
   };
 
   const updateReview = (id, updatedData) => {
-    setReviews(prev => prev.map(r => {
-      if (matchesId(r, id)) {
-        const merged = { ...r, ...updatedData };
-        api.updateReview(id, merged).catch(() => {});
-        return merged;
-      }
-      return r;
-    }));
+    setReviews(prev => {
+      const updated = prev.map(r => {
+        if (matchesId(r, id)) {
+          const merged = { ...r, ...updatedData };
+          api.updateReview(id, merged).catch(() => {});
+          return merged;
+        }
+        return r;
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_REVIEWS, updated);
+      } catch {}
+      return updated;
+    });
   };
 
   const deleteReview = (id) => {
-    setReviews(prev => prev.filter(r => !matchesId(r, id)));
+    setReviews(prev => {
+      const updated = prev.filter(r => !matchesId(r, id));
+      try {
+        localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_REVIEWS, updated);
+      } catch {}
+      return updated;
+    });
     api.deleteReview(id).catch(() => {});
   };
 

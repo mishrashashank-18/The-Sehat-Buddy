@@ -31,25 +31,26 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
   display: grid;
   grid-template-columns: 1fr 380px;
+  align-items: start;
   overflow: hidden;
   margin-bottom: 28px;
 }
 
 .unifiedMainCol {
-  padding: 28px 32px;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
   min-width: 0;
 }
 
 .unifiedAboutSection {
   border-top: 1px solid #f1f5f9;
-  padding-top: 20px;
-  margin-top: 4px;
+  padding-top: 14px;
+  margin-top: 2px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .unifiedBookingCol {
@@ -58,7 +59,6 @@
   padding: 24px 22px;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
   gap: 16px;
   box-sizing: border-box;
 }
@@ -400,21 +400,90 @@
   font-size: 1.25rem;
   font-weight: 700;
   color: #0f172a;
-  margin: 0 0 12px 0;
+  margin: 0 0 4px 0;
+}
+
+.aboutTopBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .aboutTextContent {
   color: #334155;
   font-size: 0.92rem;
-  line-height: 1.65;
+  line-height: 1.68;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
+  gap: 8px;
 }
 
+.aboutParasWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aboutParasWrap p,
 .aboutTextContent p {
   margin: 0;
+  color: #334155;
+}
+
+.aboutMetaFooter {
+  margin-top: 0;
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.aboutMetaItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  min-width: 0;
+}
+
+.aboutMetaIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.aboutMetaContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.aboutMetaLabel {
+  font-size: 0.70rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.aboutMetaValue {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .readMoreBtn {
@@ -2004,6 +2073,10 @@
 }
 
 @media (max-width: 768px) {
+  .aboutMetaFooter {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
   .heroTopRow {
     flex-direction: column;
     align-items: center;

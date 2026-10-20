@@ -31,9 +31,7 @@ export const authDoctor = async (req, res) => {
 
     if (await doctor.matchPassword(password)) {
       if (doctor.failedLoginAttempts > 0 || doctor.lockUntil) {
-        doctor.failedLoginAttempts = 0;
-        doctor.lockUntil = undefined;
-        await doctor.save();
+        Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
       }
 
       const docObj = doctor.toObject();
@@ -50,15 +48,13 @@ export const authDoctor = async (req, res) => {
     } else {
       doctor.failedLoginAttempts = (doctor.failedLoginAttempts || 0) + 1;
       if (doctor.failedLoginAttempts >= 5) {
-        doctor.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-        doctor.failedLoginAttempts = 0;
-        await doctor.save();
+        Doctor.updateOne({ _id: doctor._id }, { $set: { lockUntil: new Date(Date.now() + 15 * 60 * 1000), failedLoginAttempts: 0 } }).catch(() => {});
         return res.status(423).json({
           success: false,
           message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
         });
       }
-      await doctor.save();
+      Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: doctor.failedLoginAttempts } }).catch(() => {});
       const remainingAttempts = Math.max(0, 5 - doctor.failedLoginAttempts);
       return res.status(401).json({
         success: false,

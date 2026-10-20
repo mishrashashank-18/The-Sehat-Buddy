@@ -6,11 +6,14 @@ import {
   User,
   CheckCircle,
   FileText,
+  IndianRupee,
   DollarSign,
   Star,
   Plus,
   Building2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Activity,
   X,
   Check,
@@ -406,6 +409,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Local state for profile form to prevent API spam and CastErrors
   const [profileForm, setProfileForm] = useState(activeDoctor);
+  const [isSavingAbout, setIsSavingAbout] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
   const [newAwardInput, setNewAwardInput] = useState('');
   const [newAwardYear, setNewAwardYear] = useState('');
@@ -436,7 +440,8 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Real-time Earnings Heatmap state
-  const [heatmapView, setHeatmapView] = useState('weeks'); // 'weeks' | 'month'
+  const [heatmapView, setHeatmapView] = useState('year'); // 'year' | 'weeks' | 'month'
+  const [selectedHeatmapYear, setSelectedHeatmapYear] = useState(() => currentPcDate.getFullYear());
   const [selectedHeatmapCell, setSelectedHeatmapCell] = useState(null);
   const [isHeatmapExpanded, setIsHeatmapExpanded] = useState(true);
 
@@ -451,6 +456,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [deleteConfirmationWord, setDeleteConfirmationWord] = useState('');
+  const [isEarningsBreakdownOpen, setIsEarningsBreakdownOpen] = useState(false);
 
   const initialDoctorIdRef = React.useRef(null);
 
@@ -706,6 +712,17 @@ const DoctorDashboard = ({ onNavigate }) => {
       });
     }
   }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.name]);
+
+  // Synchronize profileForm.about whenever activeDoctor.about updates from DB, SSE, or DataContext
+  React.useEffect(() => {
+    if (!activeDoctor) return;
+    setProfileForm(prev => {
+      if (activeDoctor.about !== undefined && prev?.about !== activeDoctor.about && !isSavingAbout) {
+        return { ...prev, about: activeDoctor.about };
+      }
+      return prev;
+    });
+  }, [activeDoctor?.about, isSavingAbout]);
 
   // Tags / Badges handlers (reflects instantly in real time)
   const handleAddTag = (e) => {
@@ -1377,11 +1394,14 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Save All Profile Settings
   const handleSaveAllProfileSettings = async (e) => {
     e?.preventDefault?.();
-    const docId = activeDoctor.id || activeDoctor._id;
+    const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
 
     const payload = {
       ...profileForm,
+      _id: activeDoctor._id,
+      id: activeDoctor.id,
+      email: activeDoctor.email,
       name: profileForm.name || activeDoctor.name || 'Doctor',
       specialization: profileForm.specialty || profileForm.specialization || 'General Medicine',
       specialty: profileForm.specialty || profileForm.specialization || 'General Medicine',
@@ -1390,6 +1410,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       experience: parseInt(profileForm.experience, 10) || 0,
       jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant',
       licenseNumber: profileForm.licenseNumber || '',
+      about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
       awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
       certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
       memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
@@ -1404,18 +1425,40 @@ const DoctorDashboard = ({ onNavigate }) => {
     };
 
     await updateDoctor(docId, payload);
+    // Update localStorage user object so about (and other fields) survive refresh
+    try {
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
+        stored.about = payload.about;
+        stored.name = payload.name;
+        stored.specialization = payload.specialization;
+        stored.specialty = payload.specialty;
+        localStorage.setItem('user', JSON.stringify(stored));
+      }
+    } catch {}
     showToast('All profile details, credentials, schedule & fees saved successfully!');
   };
 
   // Save About Section directly
-  const [isSavingAbout, setIsSavingAbout] = useState(false);
   const handleSaveAbout = async () => {
     setIsSavingAbout(true);
     try {
-      const docId = activeDoctor.id || activeDoctor._id;
+      const docId = activeDoctor._id || activeDoctor.id;
+      const aboutText = profileForm.about || '';
       await updateDoctor(docId, {
-        about: profileForm.about || ''
+        _id: activeDoctor._id,
+        id: activeDoctor.id,
+        email: activeDoctor.email,
+        about: aboutText
       });
+      // Update localStorage user object so it survives refresh
+      try {
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
+          stored.about = aboutText;
+          localStorage.setItem('user', JSON.stringify(stored));
+        }
+      } catch {}
       showToast('About section updated and saved successfully!');
     } catch (err) {
       console.error('Failed to save about section:', err);
@@ -1804,15 +1847,19 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Consultation fee for active doctor
   const consultationFee = Number(activeDoctor.price ?? activeDoctor.fees) || 800;
 
-  // Amount made today = sum of actual consultation amounts for today's completed visits
-  const amountMadeToday = React.useMemo(() => {
-    const todayCompleted = appointments.filter(a => {
+  // Today's completed appointments with patient details
+  const todayCompletedAppointments = React.useMemo(() => {
+    return appointments.filter(a => {
       const isCompleted = a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed';
       return isCompleted && isTodayAppointment(a);
     });
-    if (todayCompleted.length === 0) return 0;
-    return todayCompleted.reduce((sum, a) => sum + (Number(a.amount) || consultationFee), 0);
-  }, [appointments, consultationFee, isTodayAppointment]);
+  }, [appointments, isTodayAppointment]);
+
+  // Amount made today = sum of actual consultation amounts for today's completed visits
+  const amountMadeToday = React.useMemo(() => {
+    if (todayCompletedAppointments.length === 0) return 0;
+    return todayCompletedAppointments.reduce((sum, a) => sum + (Number(a.amount) || consultationFee), 0);
+  }, [todayCompletedAppointments, consultationFee]);
 
   // Real-time map of earnings and completed appointments per day
   const dailyEarningsMap = React.useMemo(() => {
@@ -1959,6 +2006,80 @@ const DoctorDashboard = ({ onNavigate }) => {
       days
     };
   }, [dailyEarningsMap, currentPcDate]);
+
+  // Entire Year Timeline data grouped by distinct month blocks (Heat.js style)
+  // Each month starts cleanly on its own column with its month label directly above it!
+  const heatmapYearData = React.useMemo(() => {
+    const now = currentPcDate;
+    const year = selectedHeatmapYear;
+    const todayNormalized = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const monthBlocks = [];
+
+    for (let m = 0; m < 12; m++) {
+      const monthDate = new Date(year, m, 1);
+      const monthName = monthDate.toLocaleDateString('en-US', { month: 'short' });
+      const firstDay = new Date(year, m, 1);
+      const lastDay = new Date(year, m + 1, 0);
+      const startDayOfWeek = (firstDay.getDay() + 6) % 7; // 0 = Mon, 6 = Sun
+      const daysInMonth = lastDay.getDate();
+      const numWeeks = Math.ceil((startDayOfWeek + daysInMonth) / 7);
+
+      const weeks = [];
+      let monthTotalEarnings = 0;
+      let monthTotalVisits = 0;
+
+      for (let w = 0; w < numWeeks; w++) {
+        const weekDays = [];
+        for (let d = 0; d < 7; d++) {
+          const dayNum = (w * 7) + d - startDayOfWeek + 1;
+          if (dayNum < 1 || dayNum > daysInMonth) {
+            weekDays.push(null);
+          } else {
+            const cellDate = new Date(year, m, dayNum);
+            cellDate.setHours(0, 0, 0, 0);
+            const cellTime = cellDate.getTime();
+            const dateStr = getLocalDateString(cellDate);
+            const isFuture = cellTime > todayNormalized;
+            const isToday = cellTime === todayNormalized;
+            const dataForDay = isFuture
+              ? { count: 0, earnings: 0, patients: [] }
+              : (dailyEarningsMap[dateStr] || { count: 0, earnings: 0, patients: [] });
+
+            if (!isFuture) {
+              monthTotalEarnings += dataForDay.earnings;
+              monthTotalVisits += dataForDay.count;
+            }
+
+            weekDays.push({
+              date: cellDate,
+              dateStr,
+              dayNum,
+              monthName,
+              dayName: cellDate.toLocaleDateString('en-US', { weekday: 'short' }),
+              formattedDate: cellDate.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }),
+              isFuture,
+              isToday,
+              count: isFuture ? 0 : dataForDay.count,
+              earnings: isFuture ? 0 : dataForDay.earnings,
+              patients: isFuture ? [] : dataForDay.patients
+            });
+          }
+        }
+        weeks.push(weekDays);
+      }
+
+      monthBlocks.push({
+        monthIndex: m,
+        monthName,
+        weeks,
+        totalEarnings: monthTotalEarnings,
+        totalVisits: monthTotalVisits
+      });
+    }
+
+    return { monthBlocks, year };
+  }, [dailyEarningsMap, currentPcDate, selectedHeatmapYear]);
 
   // Overall heatmap metrics
   const heatmapMetrics = React.useMemo(() => {
@@ -2161,7 +2282,18 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className={styles.kpiCard} style={{ background: '#f0fdf4', border: '1.5px solid #86efac' }}>
+          <div
+            className={styles.kpiCard}
+            onClick={() => setIsEarningsBreakdownOpen(true)}
+            style={{
+              background: '#f0fdf4',
+              border: '1.5px solid #86efac',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              position: 'relative'
+            }}
+            title="Click to view patient consultation fees breakdown"
+          >
             <div className={`${styles.kpiIconWrap} ${styles.kpiEmerald}`}>
               <TrendingUp size={22} />
             </div>
@@ -2170,15 +2302,12 @@ const DoctorDashboard = ({ onNavigate }) => {
               <div className={styles.kpiValue} style={{ color: '#14532d', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
                 ₹{amountMadeToday.toLocaleString('en-IN')}
               </div>
-              <span className={styles.kpiSub} style={{ color: '#166534', fontWeight: 600 }}>
-                {completedTodayCount} completed × ₹{consultationFee}
-              </span>
             </div>
           </div>
 
           <div className={styles.kpiCard}>
             <div className={`${styles.kpiIconWrap} ${styles.kpiBlue}`}>
-              <DollarSign size={22} />
+              <IndianRupee size={22} />
             </div>
             <div>
               <span className={styles.kpiLabel}>Consultation Fee</span>
@@ -2229,7 +2358,67 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Year Selector Control (Heat.js style) */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#0f172a', borderRadius: '8px', padding: '2px', border: '1px solid #1e293b' }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHeatmapYear(y => y - 1)}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#94a3b8',
+                    cursor: 'pointer',
+                    padding: '4px 6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: '4px'
+                  }}
+                  title="Previous Year"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <span style={{ color: '#ffffff', fontWeight: 800, fontSize: '0.80rem', padding: '0 8px', letterSpacing: '0.02em' }}>
+                  {heatmapYearData.year}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedHeatmapYear(y => y + 1)}
+                  disabled={heatmapYearData.year >= currentPcDate.getFullYear()}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: heatmapYearData.year >= currentPcDate.getFullYear() ? '#475569' : '#94a3b8',
+                    cursor: heatmapYearData.year >= currentPcDate.getFullYear() ? 'not-allowed' : 'pointer',
+                    padding: '4px 6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    borderRadius: '4px'
+                  }}
+                  title="Next Year"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+
               <div style={{ display: 'inline-flex', background: '#f1f5f9', padding: '3px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <button
+                  type="button"
+                  onClick={() => setHeatmapView('year')}
+                  style={{
+                    border: 'none',
+                    padding: '5px 12px',
+                    borderRadius: '6px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: heatmapView === 'year' ? '#ffffff' : 'transparent',
+                    color: heatmapView === 'year' ? '#0f172a' : '#64748b',
+                    boxShadow: heatmapView === 'year' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Full Year ({heatmapYearData.year})
+                </button>
                 <button
                   type="button"
                   onClick={() => setHeatmapView('weeks')}
@@ -2246,7 +2435,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     transition: 'all 0.15s ease'
                   }}
                 >
-                  12-Week Timeline
+                  12 Weeks
                 </button>
                 <button
                   type="button"
@@ -2318,6 +2507,86 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <span style={{ fontSize: '0.70rem', color: '#166534' }}>({completedTodayCount} completed)</span>
                 </div>
               </div>
+
+              {/* VIEW 0: FULL YEAR MATRIX (JAN - DEC) WITH HEAT.JS DISTINCT MONTH BLOCKS */}
+              {heatmapView === 'year' && (
+                <div className={styles.heatmapGridScroll}>
+                  <div className={styles.heatmapMonthGroupContainer}>
+                    {/* Sticky / Leading Day Labels (Mon to Sun) */}
+                    <div className={styles.heatmapDayLabels}>
+                      <span className={styles.heatmapDayLabel}>Mon</span>
+                      <span className={styles.heatmapDayLabel}>Tue</span>
+                      <span className={styles.heatmapDayLabel}>Wed</span>
+                      <span className={styles.heatmapDayLabel}>Thu</span>
+                      <span className={styles.heatmapDayLabel}>Fri</span>
+                      <span className={styles.heatmapDayLabel}>Sat</span>
+                      <span className={styles.heatmapDayLabel}>Sun</span>
+                    </div>
+
+                    {/* Months Rendered Side-by-Side as Distinct Blocks (Heat.js style) */}
+                    <div className={styles.heatmapMonthsTrack}>
+                      {heatmapYearData.monthBlocks.map((monthBlock) => (
+                        <div key={monthBlock.monthIndex} className={styles.heatmapMonthBlock}>
+                          {/* Distinct Month Header */}
+                          <div className={styles.heatmapMonthHeaderLabel}>
+                            <span className={styles.heatmapMonthNameText}>{monthBlock.monthName}</span>
+                            {monthBlock.totalEarnings > 0 && (
+                              <span className={styles.heatmapMonthEarningsBadge}>
+                                ₹{monthBlock.totalEarnings.toLocaleString('en-IN')}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Columns of weeks for this specific month */}
+                          <div className={styles.heatmapMonthWeeksGrid}>
+                            {monthBlock.weeks.map((week, wIdx) => (
+                              <div key={wIdx} className={styles.heatmapMonthWeekCol}>
+                                {week.map((cell, dIdx) => {
+                                  // Days outside this month are blank spaces
+                                  if (!cell) {
+                                    return (
+                                      <div
+                                        key={dIdx}
+                                        className={styles.heatmapCellPlaceholder}
+                                        aria-hidden="true"
+                                      />
+                                    );
+                                  }
+
+                                  if (cell.isFuture) {
+                                    return (
+                                      <div
+                                        key={dIdx}
+                                        className={styles.heatmapCellFuture}
+                                        title={`${cell.formattedDate} (Upcoming)`}
+                                      />
+                                    );
+                                  }
+
+                                  const isSelected = selectedHeatmapCell?.dateStr === cell.dateStr;
+                                  const bgColor = getHeatmapColor(cell.earnings, cell.count, false);
+                                  return (
+                                    <div
+                                      key={dIdx}
+                                      className={`${styles.heatmapCell} ${cell.isToday ? styles.heatmapCellToday : ''} ${isSelected ? styles.heatmapCellActive : ''}`}
+                                      style={{
+                                        background: bgColor,
+                                        cursor: 'pointer'
+                                      }}
+                                      onClick={() => setSelectedHeatmapCell(cell)}
+                                      title={`${cell.formattedDate}\n₹${cell.earnings.toLocaleString('en-IN')} Earned\n${cell.count} Completed Consultation${cell.count === 1 ? '' : 's'}${cell.isToday ? ' (Today)' : ''}`}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* VIEW 1: 12-WEEK MATRIX (GITHUB STYLE) */}
               {heatmapView === 'weeks' && (
@@ -4192,7 +4461,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       About Doctor / Professional Summary
                     </h4>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.82rem', color: '#64748b' }}>
-                      This text appears in the "About Dr. {activeDoctor.name || 'Doctor'}" card on your public doctor profile page. You can write multiple paragraphs by pressing Enter twice.
+                      This text appears in the "About {activeDoctor.name?.startsWith('Dr.') ? activeDoctor.name : `Dr. ${activeDoctor.name || 'Doctor'}`}" card on your public doctor profile page. You can write multiple paragraphs by pressing Enter twice.
                     </p>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -4254,7 +4523,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                     placeholder="Write your professional summary, clinical background, specializations, patient care approach, and institutional privileges here..."
                     value={profileForm.about || ''}
                     onChange={(e) => setProfileForm({ ...profileForm, about: e.target.value })}
-                    onBlur={handleSaveAbout}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
@@ -4282,6 +4550,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     onBlur={(e) => {
                       e.target.style.borderColor = '#cbd5e1';
                       e.target.style.background = '#f8fafc';
+                      handleSaveAbout();
                     }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.78rem', color: '#64748b' }}>
@@ -5861,6 +6130,153 @@ const DoctorDashboard = ({ onNavigate }) => {
               >
                 <Trash2 size={16} />
                 Permanently Delete Doctor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Today's Amount Made Breakdown Modal */}
+      {isEarningsBreakdownOpen && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setIsEarningsBreakdownOpen(false)}
+          style={{
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '18px',
+              width: '92%',
+              maxWidth: '540px',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1.5px solid #e2e8f0',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a' }}>
+                  <TrendingUp size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Amount Made Breakdown</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                    Today ({todayDateStr}) • {todayCompletedAppointments.length} completed consultation{todayCompletedAppointments.length === 1 ? '' : 's'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEarningsBreakdownOpen(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Total Highlight Bar */}
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 16px', margin: '16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#166534' }}>Total Earned Today</span>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#15803d' }}>₹{amountMadeToday.toLocaleString('en-IN')}</span>
+            </div>
+
+            {/* Patients List */}
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {todayCompletedAppointments.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
+                  <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500 }}>No completed consultations recorded today yet.</p>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>When an appointment is marked "Completed", it will appear here with the fee paid.</p>
+                </div>
+              ) : (
+                todayCompletedAppointments.map((apt, idx) => {
+                  const patientName = apt.patientName || apt.userData?.name || 'Patient';
+                  const timeSlot = apt.slotTime || apt.time || 'Today';
+                  const consultType = apt.consultationType || apt.type || 'In-Clinic Consultation';
+                  const feePaid = Number(apt.amount) || consultationFee;
+
+                  return (
+                    <div
+                      key={apt.id || apt._id || idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        transition: 'background 0.15s ease'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#e0f2fe', color: '#0369a1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.85rem' }}>
+                          {patientName.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.92rem', color: '#0f172a' }}>{patientName}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748b', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                            <span>🕒 {timeSlot}</span>
+                            <span>•</span>
+                            <span>{consultType}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.98rem', fontWeight: 700, color: '#15803d' }}>
+                          ₹{feePaid.toLocaleString('en-IN')}
+                        </div>
+                        <span style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 600, background: '#dcfce7', padding: '1px 6px', borderRadius: '4px' }}>
+                          Paid
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e2e8f0', marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setIsEarningsBreakdownOpen(false)}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  color: '#334155',
+                  fontWeight: 600,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
               </button>
             </div>
           </div>
