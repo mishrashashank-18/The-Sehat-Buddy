@@ -174,6 +174,35 @@ const FAQ_ICON_MAP = {
   'shield': FaqShieldCheckIcon
 };
 
+const SocialInstagramIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
+
+const SocialFacebookIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+  </svg>
+);
+
+const formatSocialUrl = (url, platform) => {
+  if (!url) return '#';
+  const trimmed = String(url).trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('@')) {
+    const handle = trimmed.slice(1);
+    return platform === 'instagram'
+      ? `https://www.instagram.com/${handle}`
+      : `https://www.facebook.com/${handle}`;
+  }
+  return `https://${trimmed}`;
+};
+
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const { hospitals, doctors, reviews, faqs } = useData();
   const [activeReel, setActiveReel] = useState(null);
@@ -352,18 +381,38 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
   // Collect YouTube videos: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
   const displayVideos = (Array.isArray(hospital.youtube_videos)
-    ? hospital.youtube_videos.filter(v => typeof v === 'string' && v.trim().length > 0)
+    ? hospital.youtube_videos.map(v => {
+        if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+        if (v && typeof v === 'object') {
+          const url = (v.url || '').trim();
+          const coverPhoto = (v.coverPhoto || '').trim();
+          return url ? { url, coverPhoto } : null;
+        }
+        return null;
+      }).filter(Boolean)
     : []
   ).slice(0, 5);
 
   // Alias for nav tab usage
   const displayReels = parsedReels;
 
-  // Resolve star doctors
+  // Resolve star doctors for this hospital center (only genuinely affiliated doctors)
+  const hospName = (hospital?.name || '').toLowerCase().trim();
+  const staffEmails = new Set([
+    ...(hospital?.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
+    ...(hospital?.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
+  ].filter(Boolean));
+
   let starDoctorsList = [];
-  if (Array.isArray(hospital.star_doctors) && hospital.star_doctors.length > 0) {
+  if (Array.isArray(hospital?.star_doctors) && hospital.star_doctors.length > 0) {
     starDoctorsList = hospital.star_doctors.map(sd => {
       if (typeof sd === 'object' && sd !== null && (sd._id || sd.id || sd.name)) {
+        const docHosp = (sd.hospital || '').toLowerCase().trim();
+        const docEmail = (sd.email || '').toLowerCase().trim();
+        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
+          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
+        if (!isAffiliated) return null;
+
         return {
           ...sd,
           id: sd._id || sd.id,
@@ -375,6 +424,15 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       
       const sdString = String(sd).toLowerCase().trim();
       let matched = doctors.find(d => String(d.id || d._id || d.email).toLowerCase().trim() === sdString);
+      
+      // If matched from global doctors, ensure doctor actually belongs to this hospital center
+      if (matched) {
+        const docHosp = (matched.hospital || '').toLowerCase().trim();
+        const docEmail = (matched.email || '').toLowerCase().trim();
+        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
+          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
+        if (!isAffiliated) return null;
+      }
       
       // If not in global doctors, check if it's a hospital staff doctor
       if (!matched && hospital.staff_doctors) {
@@ -429,6 +487,36 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             </div>
 
+            {/* Official Social Media Links Below Hospital Image */}
+            {(hospital.instagram || hospital.facebook) && (
+              <div className={styles.heroSocialLinks}>
+                {hospital.instagram && (
+                  <a
+                    href={formatSocialUrl(hospital.instagram, 'instagram')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialInstagram}`}
+                    title="Visit Official Instagram Profile"
+                    aria-label="Instagram Profile"
+                  >
+                    <SocialInstagramIcon size={19} />
+                  </a>
+                )}
+                {hospital.facebook && (
+                  <a
+                    href={formatSocialUrl(hospital.facebook, 'facebook')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialFacebook}`}
+                    title="Visit Official Facebook Page"
+                    aria-label="Facebook Page"
+                  >
+                    <SocialFacebookIcon size={19} />
+                  </a>
+                )}
+              </div>
+            )}
+
             <div className={styles.contactBox}>
               <a href={`tel:${hospital.phone || '+9118001023222'}`} className={styles.contactItem}>
                 <Phone size={17} className={styles.contactIcon} />
@@ -451,7 +539,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <div className={styles.titleSection}>
                 <h1 className={styles.hospitalTitle}>{hospital.name}</h1>
                 <div className={styles.verifiedPill}>
-                  <ShieldCheck size={15} /> Verified Healthcare Partner
+                  <ShieldCheck size={15} /> {hospital.isVerified !== false ? 'Verified Healthcare Partner' : 'Standard Healthcare Listing'}
                 </div>
               </div>
               <div className={styles.rating}>
@@ -513,7 +601,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
               <div className={styles.statPillEmergency}>
                 <Clock size={16} />
-                <span>24x7 Trauma & ER Ready</span>
+                <span>{hospital.emergency24x7 !== false ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
               </div>
               <div className={styles.statPillEst}>
                 <Calendar size={16} />
@@ -526,7 +614,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <div className={styles.specialtiesWrap}>
                 {(hospital.specialties && hospital.specialties.length > 0
                   ? hospital.specialties
-                  : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery']
+                  : (hospital.specialities && hospital.specialities.length > 0
+                      ? hospital.specialities
+                      : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery'])
                 ).map((spec, i) => {
                   const paletteClasses = [
                     styles.specLavender,
@@ -622,75 +712,77 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         </div>
 
         {/* SECTION 1: STAR DOCTORS */}
-        <section className={styles.sectionBlock} id="hospital-doctors">
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitleGroup}>
-              <h2>
-                <Sparkles size={24} color="#f59e0b" />
-                Star Doctors & Clinical Leaders
-              </h2>
-              <p>Top-rated medical consultants, department heads, and board-certified surgeons.</p>
-            </div>
-            <span className={styles.countTag}>{starDoctorsList.length} Doctors</span>
-          </div>
-
-          <div className={styles.doctorsGrid}>
-            {starDoctorsList.map((doc, idx) => (
-              <div key={doc.id || doc._id || idx} className={styles.doctorCard}>
-                <div className={styles.docImageWrapper}>
-                  <img
-                    src={doc.image}
-                    alt={doc.name}
-                    className={styles.docImage}
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
-                    }}
-                  />
-                  <div className={styles.starBadge}>
-                    <Star size={12} fill="white" color="white" /> Star Doctor
-                  </div>
-                </div>
-
-                <div className={styles.docCardBody}>
-                  <div className={styles.docNameRow}>
-                    <h3 className={styles.docName}>{doc.name}</h3>
-                    <div className={styles.docRating}>
-                      <Star size={12} fill="#EAB308" color="#EAB308" />
-                      <span>{doc.rating || 4.8}</span>
-                    </div>
-                  </div>
-
-                  <span className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Medical Specialist'}</span>
-
-                  <div className={styles.docDegree} title={doc.qualifications || doc.degree || 'MBBS'}>
-                    <GraduationCap size={13} style={{ flexShrink: 0, marginRight: 4 }} />
-                    <span className={styles.docDegreeText}>
-                      {doc.qualifications || doc.degree || 'MBBS'}
-                    </span>
-                  </div>
-
-                  <div className={styles.docExperience}>
-                    <Briefcase size={14} color="#2563eb" style={{ flexShrink: 0 }} />
-                    <span className={styles.docExperienceText}>{doc.experience || '8+ Years Experience'}</span>
-                  </div>
-
-                  <div className={styles.docFooter}>
-                    <div className={styles.docFee}>
-                      ₹{doc.price || doc.fees || 700}
-                      <span> / consult</span>
-                    </div>
-                    <button
-                      className={styles.viewDocBtn}
-                      onClick={() => onNavigate && onNavigate('doctor-profile', doc.id || doc._id)}
-                    >
-                      View Profile
-                    </button>
-                  </div>
-                </div>
+        {starDoctorsList.length > 0 && (
+          <section className={styles.sectionBlock} id="hospital-doctors">
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitleGroup}>
+                <h2>
+                  <Sparkles size={24} color="#f59e0b" />
+                  Star Doctors & Clinical Leaders
+                </h2>
+                <p>Top-rated medical consultants, department heads, and board-certified surgeons.</p>
               </div>
-            ))}
-          </div>
-        </section>
+              <span className={styles.countTag}>{starDoctorsList.length} Doctors</span>
+            </div>
+
+            <div className={styles.doctorsGrid}>
+              {starDoctorsList.map((doc, idx) => (
+                <div key={doc.id || doc._id || idx} className={styles.doctorCard}>
+                  <div className={styles.docImageWrapper}>
+                    <img
+                      src={doc.image}
+                      alt={doc.name}
+                      className={styles.docImage}
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                      }}
+                    />
+                    <div className={styles.starBadge}>
+                      <Star size={12} fill="white" color="white" /> Star Doctor
+                    </div>
+                  </div>
+
+                  <div className={styles.docCardBody}>
+                    <div className={styles.docNameRow}>
+                      <h3 className={styles.docName}>{doc.name}</h3>
+                      <div className={styles.docRating}>
+                        <Star size={12} fill="#EAB308" color="#EAB308" />
+                        <span>{doc.rating || 4.8}</span>
+                      </div>
+                    </div>
+
+                    <span className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Medical Specialist'}</span>
+
+                    <div className={styles.docDegree} title={doc.qualifications || doc.degree || 'MBBS'}>
+                      <GraduationCap size={13} style={{ flexShrink: 0, marginRight: 4 }} />
+                      <span className={styles.docDegreeText}>
+                        {doc.qualifications || doc.degree || 'MBBS'}
+                      </span>
+                    </div>
+
+                    <div className={styles.docExperience}>
+                      <Briefcase size={14} color="#2563eb" style={{ flexShrink: 0 }} />
+                      <span className={styles.docExperienceText}>{doc.experience || '8+ Years Experience'}</span>
+                    </div>
+
+                    <div className={styles.docFooter}>
+                      <div className={styles.docFee}>
+                        ₹{doc.price || doc.fees || 700}
+                        <span> / consult</span>
+                      </div>
+                      <button
+                        className={styles.viewDocBtn}
+                        onClick={() => onNavigate && onNavigate('doctor-profile', doc.id || doc._id)}
+                      >
+                        View Profile
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* SECTION 2: SPECIALITIES & CLINICAL PROCEDURES */}
         <div id="hospital-specialities" style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.04)', border: '1px solid #e2e8f0' }}>
@@ -828,7 +920,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </div>
 
             <div className={styles.youtubeGrid} data-count={displayVideos.length}>
-              {displayVideos.map((videoUrl, idx) => {
+              {displayVideos.map((videoItem, idx) => {
+                const videoUrl = typeof videoItem === 'string' ? videoItem : videoItem.url;
+                const coverPhoto = typeof videoItem === 'object' ? videoItem.coverPhoto : '';
                 const embedUrl = getEmbedUrl(videoUrl);
                 return (
                   <div
@@ -837,11 +931,19 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     onClick={() => setActiveVideo(embedUrl)}
                     title="Click to watch full video"
                   >
-                    <iframe
-                      src={embedUrl}
-                      title={`YouTube Video ${idx + 1}`}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    />
+                    {coverPhoto ? (
+                      <img
+                        src={coverPhoto}
+                        alt={`YouTube Video ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <iframe
+                        src={embedUrl}
+                        title={`YouTube Video ${idx + 1}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      />
+                    )}
                     <div className={styles.reelOverlay}>
                       <div className={styles.ytPlayCircle}>
                         <Play size={28} fill="white" />

@@ -11,9 +11,11 @@ import {
   getHospitalById,
   updateHospital,
   deleteHospital,
-  updateDoctorFaqsByHospital
+  updateDoctorFaqsByHospital,
+  getHospitalBeds,
+  updateHospitalBeds
 } from '../controllers/hospitalController.js';
-import { protect, requireAdmin } from '../middleware/authMiddleware.js';
+import { protect, optionalProtect, requireAdmin } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -22,6 +24,7 @@ const router = express.Router();
 router.get('/', getHospitals);
 router.get('/list', getHospitals);
 router.get('/:id', getHospitalById);
+router.get('/:id/beds', getHospitalBeds);
 
 // Auth & initial password setup
 router.post('/login', authHospital);
@@ -34,8 +37,11 @@ router.post('/reset-password', resetHospitalPassword);
 // Hospital registration (Admin only)
 router.post('/register', protect, requireAdmin, upload.single('image'), registerHospital);
 
+// Hospital live bed capacity
+router.put('/:id/beds', optionalProtect, updateHospitalBeds);
+
 // Hospital profile management (Hospital or Admin)
-router.put('/:id', protect, upload.single('image'), updateHospital);
+router.put('/:id', optionalProtect, upload.single('image'), updateHospital);
 router.delete('/:id', protect, requireAdmin, deleteHospital);
 
 // Hospital updating registered doctor FAQs (Hospital or Admin)

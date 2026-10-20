@@ -32,7 +32,7 @@ export const initialHospitals = [
     description: 'Renowned multi-specialty tertiary care hospital known for world-class cardiac and transplant procedures.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 28.5355,
     longitude: 77.2882
   },
@@ -53,7 +53,7 @@ export const initialHospitals = [
     description: 'State-of-the-art super-specialty hospital with leading international robotic surgeons and diagnostic tech.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 28.4595,
     longitude: 77.0725
   },
@@ -74,7 +74,7 @@ export const initialHospitals = [
     description: 'NABH and NABL accredited hospital offering comprehensive clinical programs and emergency critical care.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 28.5273,
     longitude: 77.2120
   },
@@ -95,7 +95,7 @@ export const initialHospitals = [
     description: 'Flagship healthcare facility with quaternary care, intensive care units and patient-first care ethos.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 12.9592,
     longitude: 77.6534
   },
@@ -116,7 +116,7 @@ export const initialHospitals = [
     description: 'Aster CMI Hospital is a premier quaternary care hospital equipped with cutting-edge medical infrastructure, robotic surgical systems, and centers of excellence in cardiology, neurology, and organ transplants.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 13.0617,
     longitude: 77.5925
   },
@@ -137,7 +137,7 @@ export const initialHospitals = [
     description: "India's leading maternal and child healthcare facility offering comprehensive women's health, maternity suites, level-III NICU care, and pediatric medicine.",
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 12.9288,
     longitude: 77.5833
   },
@@ -158,7 +158,7 @@ export const initialHospitals = [
     description: 'Indo-Japanese collaborative hospital pioneering Japanese medical technologies, precision neurosurgery, and patient-centric healthcare standards.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 12.9298,
     longitude: 77.6841
   },
@@ -179,7 +179,7 @@ export const initialHospitals = [
     description: 'Leading multi-specialty healthcare provider delivering international standard treatments with state-of-the-art diagnostic labs and 24x7 emergency response.',
     reels: sampleReels,
     youtube_videos: sampleVideos,
-    star_doctors: [1, 2, 3, 4],
+    star_doctors: [],
     latitude: 12.9698,
     longitude: 77.7499
   }

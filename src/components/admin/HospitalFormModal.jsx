@@ -1,9 +1,33 @@
 import React, { useState } from 'react';
-import { X, Building2, Upload, AlertCircle, Plus, Check, Video, Sparkles, Star, Loader2, ShieldCheck } from 'lucide-react';
+import {
+  X,
+  Building2,
+  Upload,
+  AlertCircle,
+  Plus,
+  Check,
+  Video,
+  Sparkles,
+  Star,
+  Loader2,
+  ShieldCheck,
+  Camera,
+  Trash2,
+  Image as ImageIcon
+} from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import styles from './HospitalFormModal.module.css';
+
+const getYouTubeThumbnail = (url) => {
+  if (!url || typeof url !== 'string') return null;
+  let videoId = '';
+  if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+  else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
+  else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
+  return videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null;
+};
 
 const DEFAULT_SPECIALTIES = [
   'Cardiology',
@@ -44,11 +68,21 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
   const [formData, setFormData] = useState(() => {
     if (hospitalToEdit) {
-      const initReels = Array.isArray(hospitalToEdit.reels) ? [...hospitalToEdit.reels] : [];
-      while (initReels.length < 5) initReels.push('');
+      const initReels = (Array.isArray(hospitalToEdit.reels) ? hospitalToEdit.reels : [])
+        .map(r => {
+          if (typeof r === 'string') return { url: r, coverPhoto: '' };
+          if (r && typeof r === 'object') return { url: r.url || '', coverPhoto: r.coverPhoto || '' };
+          return { url: '', coverPhoto: '' };
+        });
+      while (initReels.length < 5) initReels.push({ url: '', coverPhoto: '' });
 
-      const initVideos = Array.isArray(hospitalToEdit.youtube_videos) ? [...hospitalToEdit.youtube_videos] : [];
-      while (initVideos.length < 5) initVideos.push('');
+      const initVideos = (Array.isArray(hospitalToEdit.youtube_videos) ? hospitalToEdit.youtube_videos : [])
+        .map(v => {
+          if (typeof v === 'string') return { url: v, coverPhoto: '' };
+          if (v && typeof v === 'object') return { url: v.url || '', coverPhoto: v.coverPhoto || '' };
+          return { url: '', coverPhoto: '' };
+        });
+      while (initVideos.length < 5) initVideos.push({ url: '', coverPhoto: '' });
 
       const initStarDocs = Array.isArray(hospitalToEdit.star_doctors)
         ? hospitalToEdit.star_doctors.map(d => typeof d === 'object' ? (d._id || d.id) : d).filter(Boolean)
@@ -149,8 +183,20 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       description: '',
       image: PRESET_HOSPITAL_IMAGES[0].url,
       specialties: ['Cardiology', 'Neurology', 'Orthopedics'],
-      reels: ['', '', '', '', ''],
-      youtube_videos: ['', '', '', '', ''],
+      reels: [
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' }
+      ],
+      youtube_videos: [
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' },
+        { url: '', coverPhoto: '' }
+      ],
       star_doctors: [],
       latitude: '',
       longitude: '',
@@ -260,6 +306,63 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     }
   };
 
+  const [uploadingMediaIdx, setUploadingMediaIdx] = useState(null);
+
+  const handleMediaCoverUpload = async (e, type, index) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const key = `${type}-${index}`;
+    setUploadingMediaIdx(key);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/covers');
+      if (type === 'reel') {
+        const nextReels = [...formData.reels];
+        const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
+        nextReels[index] = { ...cur, coverPhoto: url };
+        setFormData(prev => ({ ...prev, reels: nextReels }));
+      } else {
+        const nextVideos = [...formData.youtube_videos];
+        const cur = (typeof nextVideos[index] === 'object' && nextVideos[index]) ? nextVideos[index] : {};
+        nextVideos[index] = { ...cur, coverPhoto: url };
+        setFormData(prev => ({ ...prev, youtube_videos: nextVideos }));
+      }
+    } catch (err) {
+      console.error('Failed to upload cover photo:', err);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (type === 'reel') {
+          const nextReels = [...formData.reels];
+          const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
+          nextReels[index] = { ...cur, coverPhoto: reader.result };
+          setFormData(prev => ({ ...prev, reels: nextReels }));
+        } else {
+          const nextVideos = [...formData.youtube_videos];
+          const cur = (typeof nextVideos[index] === 'object' && nextVideos[index]) ? nextVideos[index] : {};
+          nextVideos[index] = { ...cur, coverPhoto: reader.result };
+          setFormData(prev => ({ ...prev, youtube_videos: nextVideos }));
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingMediaIdx(null);
+    }
+  };
+
+  const updateReelItem = (index, field, value) => {
+    const nextReels = [...formData.reels];
+    const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
+    nextReels[index] = { ...cur, [field]: value };
+    setFormData(prev => ({ ...prev, reels: nextReels }));
+  };
+
+  const updateVideoItem = (index, field, value) => {
+    const nextVideos = [...formData.youtube_videos];
+    const cur = (typeof nextVideos[index] === 'object' && nextVideos[index]) ? nextVideos[index] : {};
+    nextVideos[index] = { ...cur, [field]: value };
+    setFormData(prev => ({ ...prev, youtube_videos: nextVideos }));
+  };
+
   const toggleSpecialty = (spec) => {
     setFormData(prev => {
       const exists = prev.specialties.includes(spec);
@@ -304,18 +407,28 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       image: finalImage,
       reels: formData.reels
         .map(r => {
-          if (typeof r === 'string') return r.trim();
+          if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
           if (r && typeof r === 'object') {
             const url = (r.url || '').trim();
             const coverPhoto = (r.coverPhoto || '').trim();
             if (!url && !coverPhoto) return null;
-            if (coverPhoto) return { url, coverPhoto };
-            return url;
+            return { url, coverPhoto };
           }
           return null;
         })
         .filter(Boolean),
-      youtube_videos: formData.youtube_videos.map(v => v.trim()).filter(Boolean),
+      youtube_videos: formData.youtube_videos
+        .map(v => {
+          if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+          if (v && typeof v === 'object') {
+            const url = (v.url || '').trim();
+            const coverPhoto = (v.coverPhoto || '').trim();
+            if (!url && !coverPhoto) return null;
+            return { url, coverPhoto };
+          }
+          return null;
+        })
+        .filter(Boolean),
       star_doctors: formData.star_doctors,
       staff_emails: formData.staff_emails,
       staff_doctors: formData.staff_doctors,
@@ -740,21 +853,81 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           </div>
           <div className={styles.mediaInputList}>
             {formData.reels.map((reel, index) => {
-              const reelVal = typeof reel === 'string' ? reel : (reel?.url || reel?.link || '');
+              const reelUrl = typeof reel === 'string' ? reel : (reel?.url || reel?.link || '');
+              const reelCover = typeof reel === 'object' ? (reel?.coverPhoto || '') : '';
+              const hasUrl = Boolean(reelUrl.trim());
+
               return (
-                <div key={index} className={styles.mediaRow}>
-                  <span className={styles.mediaIndex}>#{index + 1}</span>
-                  <input
-                    type="url"
-                    placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
-                    value={reelVal}
-                    onChange={(e) => {
-                      const newReels = [...formData.reels];
-                      const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-                      newReels[index] = { ...cur, url: e.target.value };
-                      setFormData({ ...formData, reels: newReels });
-                    }}
-                  />
+                <div key={index} className={styles.mediaItemCard}>
+                  <div className={styles.mediaRow}>
+                    <span className={styles.mediaIndex}>#{index + 1}</span>
+                    <input
+                      type="url"
+                      placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
+                      value={reelUrl}
+                      onChange={(e) => updateReelItem(index, 'url', e.target.value)}
+                    />
+                  </div>
+
+                  {/* Cover Image option when reel URL is entered or cover exists */}
+                  {(hasUrl || reelCover) && (
+                    <div className={styles.coverImageRow}>
+                      {reelCover ? (
+                        <div className={styles.coverPreviewGroup}>
+                          <img
+                            src={reelCover}
+                            alt={`Reel ${index + 1} Cover`}
+                            className={styles.coverThumbnail}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div className={styles.coverInfo}>
+                            <span className={styles.coverBadge}>Reel Cover Active</span>
+                            <input
+                              type="url"
+                              placeholder="Cover image URL..."
+                              value={reelCover}
+                              onChange={(e) => updateReelItem(index, 'coverPhoto', e.target.value)}
+                              className={styles.coverUrlInput}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.removeCoverBtn}
+                            onClick={() => updateReelItem(index, 'coverPhoto', '')}
+                            title="Remove cover image"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className={styles.addCoverOptions}>
+                          <label className={styles.uploadCoverBtn}>
+                            {uploadingMediaIdx === `reel-${index}` ? (
+                              <Loader2 size={13} className={styles.spinIcon} />
+                            ) : (
+                              <Camera size={13} />
+                            )}
+                            <span>{uploadingMediaIdx === `reel-${index}` ? 'Uploading...' : 'Upload Cover Image'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={uploadingMediaIdx === `reel-${index}`}
+                              onChange={(e) => handleMediaCoverUpload(e, 'reel', index)}
+                            />
+                          </label>
+                          <span className={styles.coverDivider}>or</span>
+                          <input
+                            type="url"
+                            placeholder="Paste cover image URL..."
+                            value={reelCover}
+                            onChange={(e) => updateReelItem(index, 'coverPhoto', e.target.value)}
+                            className={styles.coverUrlQuickInput}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -765,23 +938,100 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             YouTube Videos (Max 5 - Walkthroughs & Sessions)
           </div>
           <div className={styles.mediaInputList}>
-            {formData.youtube_videos.map((video, index) => (
-              <div key={index} className={styles.mediaRow}>
-                <span className={styles.mediaIndex} style={{ background: '#fef2f2', color: '#ef4444' }}>
-                  #{index + 1}
-                </span>
-                <input
-                  type="url"
-                  placeholder={`https://www.youtube.com/watch?v=... (Video ${index + 1})`}
-                  value={video}
-                  onChange={(e) => {
-                    const newVideos = [...formData.youtube_videos];
-                    newVideos[index] = e.target.value;
-                    setFormData({ ...formData, youtube_videos: newVideos });
-                  }}
-                />
-              </div>
-            ))}
+            {formData.youtube_videos.map((video, index) => {
+              const videoUrl = typeof video === 'string' ? video : (video?.url || '');
+              const videoCover = typeof video === 'object' ? (video?.coverPhoto || '') : '';
+              const hasUrl = Boolean(videoUrl.trim());
+              const autoThumbnail = getYouTubeThumbnail(videoUrl);
+
+              return (
+                <div key={index} className={styles.mediaItemCard}>
+                  <div className={styles.mediaRow}>
+                    <span className={styles.mediaIndex} style={{ background: '#fef2f2', color: '#ef4444' }}>
+                      #{index + 1}
+                    </span>
+                    <input
+                      type="url"
+                      placeholder={`https://www.youtube.com/watch?v=... (Video ${index + 1})`}
+                      value={videoUrl}
+                      onChange={(e) => updateVideoItem(index, 'url', e.target.value)}
+                    />
+                  </div>
+
+                  {/* Cover Image option when video URL is entered or cover exists */}
+                  {(hasUrl || videoCover) && (
+                    <div className={styles.coverImageRow}>
+                      {videoCover ? (
+                        <div className={styles.coverPreviewGroup}>
+                          <img
+                            src={videoCover}
+                            alt={`Video ${index + 1} Cover`}
+                            className={styles.coverThumbnail}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                          />
+                          <div className={styles.coverInfo}>
+                            <span className={styles.coverBadge} style={{ background: '#fef2f2', color: '#dc2626' }}>
+                              Video Cover Active
+                            </span>
+                            <input
+                              type="url"
+                              placeholder="Cover image URL..."
+                              value={videoCover}
+                              onChange={(e) => updateVideoItem(index, 'coverPhoto', e.target.value)}
+                              className={styles.coverUrlInput}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.removeCoverBtn}
+                            onClick={() => updateVideoItem(index, 'coverPhoto', '')}
+                            title="Remove cover image"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className={styles.addCoverOptions}>
+                          <label className={styles.uploadCoverBtn}>
+                            {uploadingMediaIdx === `video-${index}` ? (
+                              <Loader2 size={13} className={styles.spinIcon} />
+                            ) : (
+                              <Camera size={13} />
+                            )}
+                            <span>{uploadingMediaIdx === `video-${index}` ? 'Uploading...' : 'Upload Cover Image'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={uploadingMediaIdx === `video-${index}`}
+                              onChange={(e) => handleMediaCoverUpload(e, 'video', index)}
+                            />
+                          </label>
+                          {autoThumbnail && (
+                            <button
+                              type="button"
+                              className={styles.autoCoverBtn}
+                              onClick={() => updateVideoItem(index, 'coverPhoto', autoThumbnail)}
+                              title="Use YouTube video default thumbnail as cover"
+                            >
+                              <ImageIcon size={13} /> Auto YouTube Cover
+                            </button>
+                          )}
+                          <span className={styles.coverDivider}>or</span>
+                          <input
+                            type="url"
+                            placeholder="Paste cover image URL..."
+                            value={videoCover}
+                            onChange={(e) => updateVideoItem(index, 'coverPhoto', e.target.value)}
+                            className={styles.coverUrlQuickInput}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Star Doctors Selection */}
@@ -983,101 +1233,101 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               })}
             </div>
           )}
-        </div>
 
-        {/* Section: Insurance & Cashless Mediclaim Desk */}
-        <div style={{ marginTop: '24px', background: '#f8fafc', border: '1.5px solid #d1fae5', borderRadius: '14px', padding: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <ShieldCheck size={20} color="#059669" />
-              <strong style={{ fontSize: '1rem', color: '#065f46' }}>Insurance & Cashless Facility Desk</strong>
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 700, color: '#065f46', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={formData.cashlessInsurance}
-                onChange={(e) => setFormData({ ...formData, cashlessInsurance: e.target.checked })}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              Accepts 100% Cashless Insurance
-            </label>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-            <div className={styles.formGroup}>
-              <label>TPA Desk Phone</label>
-              <input
-                type="text"
-                placeholder="e.g. 080-45678900"
-                value={formData.tpaPhone}
-                onChange={(e) => setFormData({ ...formData, tpaPhone: e.target.value })}
-              />
+          {/* Section: Insurance & Cashless Mediclaim Desk */}
+          <div style={{ marginTop: '24px', marginBottom: '20px', background: '#f8fafc', border: '1.5px solid #d1fae5', borderRadius: '14px', padding: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck size={20} color="#059669" />
+                <strong style={{ fontSize: '1rem', color: '#065f46' }}>Insurance & Cashless Facility Desk</strong>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 700, color: '#065f46', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={formData.cashlessInsurance}
+                  onChange={(e) => setFormData({ ...formData, cashlessInsurance: e.target.checked })}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                />
+                Accepts 100% Cashless Insurance
+              </label>
             </div>
 
-            <div className={styles.formGroup}>
-              <label>TPA Desk Email</label>
-              <input
-                type="email"
-                placeholder="e.g. tpa@hospital.com"
-                value={formData.tpaEmail}
-                onChange={(e) => setFormData({ ...formData, tpaEmail: e.target.value })}
-              />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '16px' }}>
+              <div className={styles.formGroup}>
+                <label>TPA Desk Phone</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 080-45678900"
+                  value={formData.tpaPhone}
+                  onChange={(e) => setFormData({ ...formData, tpaPhone: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>TPA Desk Email</label>
+                <input
+                  type="email"
+                  placeholder="e.g. tpa@hospital.com"
+                  value={formData.tpaEmail}
+                  onChange={(e) => setFormData({ ...formData, tpaEmail: e.target.value })}
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Pre-Auth Turnaround Time</label>
+                <input
+                  type="text"
+                  placeholder="e.g. 30 Mins Cashless Pre-Approval"
+                  value={formData.tpaPreAuthTime}
+                  onChange={(e) => setFormData({ ...formData, tpaPreAuthTime: e.target.value })}
+                />
+              </div>
             </div>
 
-            <div className={styles.formGroup}>
-              <label>Pre-Auth Turnaround Time</label>
-              <input
-                type="text"
-                placeholder="e.g. 30 Mins Cashless Pre-Approval"
-                value={formData.tpaPreAuthTime}
-                onChange={(e) => setFormData({ ...formData, tpaPreAuthTime: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-              Select Accepted Insurance Companies & TPAs:
-            </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {insurancePartners.map((partner) => {
-                const isSelected = formData.acceptedInsurances.includes(partner.name);
-                return (
-                  <button
-                    key={partner.id}
-                    type="button"
-                    onClick={() => {
-                      if (isSelected) {
-                        setFormData({
-                          ...formData,
-                          acceptedInsurances: formData.acceptedInsurances.filter(n => n !== partner.name)
-                        });
-                      } else {
-                        setFormData({
-                          ...formData,
-                          acceptedInsurances: [...formData.acceptedInsurances, partner.name]
-                        });
-                      }
-                    }}
-                    style={{
-                      background: isSelected ? '#ecfdf5' : '#ffffff',
-                      border: `1.5px solid ${isSelected ? '#059669' : '#cbd5e1'}`,
-                      color: isSelected ? '#065f46' : '#475569',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      fontSize: '0.8rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    {isSelected ? '✓ ' : '+ '} {partner.name}
-                  </button>
-                );
-              })}
+            <div>
+              <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
+                Select Accepted Insurance Companies & TPAs:
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {insurancePartners.map((partner) => {
+                  const isSelected = formData.acceptedInsurances.includes(partner.name);
+                  return (
+                    <button
+                      key={partner.id}
+                      type="button"
+                      onClick={() => {
+                        if (isSelected) {
+                          setFormData({
+                            ...formData,
+                            acceptedInsurances: formData.acceptedInsurances.filter(n => n !== partner.name)
+                          });
+                        } else {
+                          setFormData({
+                            ...formData,
+                            acceptedInsurances: [...formData.acceptedInsurances, partner.name]
+                          });
+                        }
+                      }}
+                      style={{
+                        background: isSelected ? '#ecfdf5' : '#ffffff',
+                        border: `1.5px solid ${isSelected ? '#059669' : '#cbd5e1'}`,
+                        color: isSelected ? '#065f46' : '#475569',
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '0.8rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {isSelected ? '✓ ' : '+ '} {partner.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>

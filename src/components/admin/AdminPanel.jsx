@@ -1345,7 +1345,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                             ▶️ {(hosp.youtube_videos || []).filter(Boolean).length || 5} Videos
                           </span>
                           <span style={{ fontSize: '0.75rem', background: '#fffbeb', color: '#d97706', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                            ⭐ {(hosp.star_doctors || []).length || 4} Star Doctors
+                            ⭐ {(hosp.star_doctors || []).length} Star Doctors
                           </span>
                         </div>
 

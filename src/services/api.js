@@ -252,6 +252,24 @@ export const api = {
     return data.data;
   },
 
+  async getHospitalBeds(id) {
+    const res = await fetch(`${API_BASE}/hospitals/${id}/beds`, {
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateHospitalBeds(id, bedData) {
+    const res = await fetch(`${API_BASE}/hospitals/${id}/beds`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(bedData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
   async deleteHospital(id) {
     const res = await fetch(`${API_BASE}/hospitals/${id}`, { 
       method: 'DELETE',
