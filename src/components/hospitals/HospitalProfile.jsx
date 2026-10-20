@@ -25,7 +25,8 @@ import {
   Edit3,
   ChevronDown,
   HelpCircle,
-  CheckSquare
+  CheckSquare,
+  ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -167,7 +168,13 @@ const FAQ_ICONS = [
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const { hospitals, doctors, reviews, faqs } = useData();
   const [activeReel, setActiveReel] = useState(null);
+  const [reelVideoError, setReelVideoError] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
+
+  const handleOpenReel = (reelItem) => {
+    setReelVideoError(false);
+    setActiveReel(reelItem);
+  };
   const [activePhoto, setActivePhoto] = useState(null);
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false);
@@ -245,6 +252,21 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
       }
       if (url.includes('instagram.com')) {
+        const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+        if (match && match[1]) {
+          let shortcode = match[1];
+          const brokenMap = {
+            'DeArmJdSQa6': 'DWGyY03lWc2',
+            'DeAA8evMsBS': 'DXpDWdoDKai',
+            'DdrR6vApDBK': 'DZdBbmoM1tn',
+            'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+            'C9_K5qXMO9e': 'DWGyY03lWc2'
+          };
+          if (brokenMap[shortcode]) {
+            shortcode = brokenMap[shortcode];
+          }
+          return `https://www.instagram.com/p/${shortcode}/embed/`;
+        }
         if (!url.includes('/embed')) {
           const cleanUrl = url.split('?')[0].replace(/\/$/, '');
           return `${cleanUrl}/embed`;
@@ -271,11 +293,53 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     );
   }
 
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
   // Collect reels: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
-  const displayReels = (Array.isArray(hospital.reels)
-    ? hospital.reels.filter(r => typeof r === 'string' && r.trim().length > 0)
-    : []
-  ).slice(0, 5);
+  const rawHospitalReels = Array.isArray(hospital.reels) ? hospital.reels : [];
+  const parsedReels = rawHospitalReels
+    .map((r) => {
+      let url = '';
+      let customCover = '';
+
+      if (typeof r === 'string') {
+        url = r.trim();
+      } else if (r && typeof r === 'object') {
+        url = (r.url || r.link || '').trim();
+        customCover = (r.coverPhoto || r.cover || r.image || r.thumbnail || '').trim();
+      }
+
+      if (!url && !customCover) return null;
+
+      let shortcode = '';
+      const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1]) {
+        shortcode = match[1];
+      }
+
+      const brokenMap = {
+        'DeArmJdSQa6': 'DWGyY03lWc2',
+        'DeAA8evMsBS': 'DXpDWdoDKai',
+        'DdrR6vApDBK': 'DZdBbmoM1tn',
+        'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+        'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+        'C9_K5qXMO9e': 'DWGyY03lWc2'
+      };
+      if (brokenMap[shortcode]) {
+        shortcode = brokenMap[shortcode];
+      }
+
+      const embedUrl = shortcode ? `https://www.instagram.com/reel/${shortcode}/embed/` : getEmbedUrl(url);
+
+      return {
+        url,
+        shortcode,
+        embedUrl,
+        coverPhoto: customCover || ''
+      };
+    })
+    .filter(Boolean)
+    .slice(0, 5);
 
   // Collect YouTube videos: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
   const displayVideos = (Array.isArray(hospital.youtube_videos)
@@ -622,7 +686,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         </div>
 
         {/* SECTION 3: INSTAGRAM REELS (UP TO 5, CENTER ALIGNED) */}
-        {displayReels.length > 0 && (
+        {parsedReels.length > 0 && (
           <section className={styles.sectionBlock} id="hospital-media">
             <div className={styles.sectionHeader}>
               <div className={styles.sectionTitleGroup}>
@@ -636,31 +700,100 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 </h2>
                 <p>Explore patient journeys, behind-the-scenes care, and health advice directly from our center.</p>
               </div>
-              <span className={styles.countTag}>{displayReels.length} Reel{displayReels.length > 1 ? 's' : ''}</span>
+              <span className={styles.countTag}>{parsedReels.length} Reel{parsedReels.length > 1 ? 's' : ''}</span>
             </div>
 
-            <div className={styles.reelsGrid} data-count={displayReels.length}>
-              {displayReels.map((reelUrl, idx) => {
-                const embedUrl = getEmbedUrl(reelUrl);
+            <div className={styles.reelsGrid} data-count={parsedReels.length}>
+              {parsedReels.map((reelItem, idx) => {
                 return (
                   <div
                     key={idx}
                     className={styles.reelCard}
-                    onClick={() => setActiveReel(embedUrl)}
-                    title="Click to play full reel"
+                    onClick={() => handleOpenReel(reelItem)}
+                    title="Click to play full reel in pop up"
+                    style={{
+                      background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+                    }}
                   >
-                    <iframe
-                      src={embedUrl}
-                      title={`Instagram Reel ${idx + 1}`}
-                      scrolling="no"
-                      allowTransparency="true"
-                    />
-                    <div className={styles.reelIndexBadge}>Reel #{idx + 1}</div>
-                    <div className={styles.reelOverlay}>
-                      <div className={styles.playCircle}>
-                        <Play size={26} fill="currentColor" />
+                    {/* If coverPhoto was uploaded by admin in realtime, render it full bleed */}
+                    {reelItem.coverPhoto ? (
+                      <img
+                        src={reelItem.coverPhoto}
+                        alt={`Instagram Reel ${idx + 1}`}
+                        className={styles.reelCoverImg}
+                        loading="lazy"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      /* Clean branded reel card placeholder when no cover is uploaded */
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
+                        padding: '20px',
+                        textAlign: 'center',
+                        userSelect: 'none'
+                      }}>
+                        <div style={{
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '50%',
+                          background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#ffffff',
+                          boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+                          marginBottom: '12px'
+                        }}>
+                          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+                        </div>
+                        <span style={{
+                          color: '#ffffff',
+                          fontSize: '0.86rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.02em',
+                          marginBottom: '4px'
+                        }}>
+                          Reel {idx + 1}
+                        </span>
+                        <span style={{
+                          color: '#94a3b8',
+                          fontSize: '0.72rem',
+                          fontWeight: 500
+                        }}>
+                          Tap to Play
+                        </span>
                       </div>
+                    )}
+
+                    {/* Gradient shadow scrim overlay when cover photo exists */}
+                    {reelItem.coverPhoto && <div className={styles.reelGradientScrim} />}
+
+                    {/* Top Badge: Instagram Tag */}
+                    <div className={styles.reelTopBadge}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                      </svg>
+                      <span>Reel</span>
                     </div>
+
+                    {/* Center Play Button Overlay on Hover */}
+                    {reelItem.coverPhoto && (
+                      <div className={styles.reelPlayOverlay}>
+                        <div className={styles.reelPlayBtn}>
+                          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1031,21 +1164,91 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       )}
 
       {/* Reel Popup Modal */}
-      {activeReel && (
-        <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
-          <div className={styles.modalContentReel} onClick={(e) => e.stopPropagation()}>
-            <button className={styles.closeModal} onClick={() => setActiveReel(null)}>
-              <X size={26} />
-            </button>
-            <iframe
-              src={activeReel}
-              title="Instagram Reel Player"
-              scrolling="no"
-              allowTransparency="true"
-            />
+      {activeReel && (() => {
+        const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
+        const videoSrc = `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
+        const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+        const fallbackEmbed = typeof activeReel === 'object' ? (activeReel.embedUrl || activeReel.url) : activeReel;
+
+        return (
+          <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '430px',
+                width: '92%',
+                background: '#000000',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
+                position: 'relative',
+                padding: 0
+              }}
+            >
+              {/* Floating Close Button without any branding header */}
+              <button 
+                type="button" 
+                onClick={() => setActiveReel(null)} 
+                aria-label="Close"
+                title="Close"
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  zIndex: 30,
+                  background: 'rgba(0, 0, 0, 0.65)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  backdropFilter: 'blur(6px)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {!reelVideoError ? (
+                  <video
+                    key={videoSrc}
+                    src={videoSrc}
+                    poster={coverSrc}
+                    autoPlay
+                    playsInline
+                    controls
+                    controlsList="nodownload"
+                    onError={() => setReelVideoError(true)}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      background: '#000000',
+                      display: 'block'
+                    }}
+                  />
+                ) : (
+                  <iframe
+                    key={fallbackEmbed}
+                    src={fallbackEmbed}
+                    title="Reel Player"
+                    scrolling="no"
+                    allowTransparency="true"
+                    allow="autoplay; encrypted-media; picture-in-picture; web-share"
+                    allowFullScreen
+                    style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                  />
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Video Popup Modal */}
       {activeVideo && (

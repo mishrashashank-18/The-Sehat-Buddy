@@ -47,8 +47,11 @@ export const initialDoctors = [
     instagram: 'https://www.instagram.com/thesehatbuddy/',
     facebook: 'https://www.facebook.com/profile.php?id=61594704587784',
     reels: [
+      'https://www.instagram.com/reel/DWGyY03lWc2/',
+      'https://www.instagram.com/reel/DXpDWdoDKai/',
+      'https://www.instagram.com/reel/DZdBbmoM1tn/',
       'https://www.instagram.com/reel/C-U4Xo9MvjQ/',
-      'https://www.instagram.com/reel/C9_K5qXMO9e/'
+      'https://www.instagram.com/reel/DdeXVmDohij/'
     ],
     youtube_videos: [
       'https://www.youtube.com/watch?v=zCCD52Pty4A',

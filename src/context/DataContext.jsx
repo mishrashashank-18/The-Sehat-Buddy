@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { DataContext } from './context';
 import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
+import { initialDoctors } from '../data/doctors';
+import { initialHospitals } from '../data/hospitals';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
@@ -42,13 +44,59 @@ export const broadcastSync = (key, data) => {
 // Robust ID matching helper that safely handles MongoDB _id, numeric id, and email
 export const matchesId = (item, id) => {
   if (!item || id === undefined || id === null) return false;
-  const sId = String(id).trim();
-  if (!sId) return false;
-  return (
-    (item.id !== undefined && item.id !== null && String(item.id).trim() === sId) ||
-    (item._id !== undefined && item._id !== null && String(item._id).trim() === sId) ||
-    (item.email && sId.includes('@') && item.email.toLowerCase().trim() === sId.toLowerCase())
+
+  // If id is an object (e.g. doctor, user, or hospital object)
+  if (typeof id === 'object') {
+    // 1. Direct email match
+    if (id.email && item.email && String(id.email).toLowerCase().trim() === String(item.email).toLowerCase().trim()) {
+      return true;
+    }
+    // 2. Cross-check numeric and MongoDB string IDs
+    if (id.id !== undefined && item.id !== undefined && String(id.id).trim() === String(item.id).trim()) {
+      return true;
+    }
+    if (id._id !== undefined && item._id !== undefined && String(id._id).trim() === String(item._id).trim()) {
+      return true;
+    }
+    if (id.id !== undefined && item._id !== undefined && String(id.id).trim() === String(item._id).trim()) {
+      return true;
+    }
+    if (id._id !== undefined && item.id !== undefined && String(id._id).trim() === String(item.id).trim()) {
+      return true;
+    }
+  }
+
+  // If id is a string, number, or fallback
+  const candidateIds = [];
+  if (typeof id === 'object') {
+    if (id.id !== undefined && id.id !== null) candidateIds.push(String(id.id).trim());
+    if (id._id !== undefined && id._id !== null) candidateIds.push(String(id._id).trim());
+    if (id.email) candidateIds.push(String(id.email).toLowerCase().trim());
+  } else {
+    candidateIds.push(String(id).trim());
+  }
+
+  for (const cid of candidateIds) {
+    if (!cid) continue;
+    if (item.id !== undefined && item.id !== null && String(item.id).trim() === cid) return true;
+    if (item._id !== undefined && item._id !== null && String(item._id).trim() === cid) return true;
+    if (item.email && cid.includes('@') && item.email.toLowerCase().trim() === cid.toLowerCase()) return true;
+  }
+
+  // Alias handling for Dr. Rahul Verma (id: 1, '1', 'default', 'rahul')
+  const itemIsRahul = (
+    item.id === 1 ||
+    String(item.id) === '1' ||
+    (item.email && item.email.toLowerCase().includes('rahul')) ||
+    (item.name && item.name.toLowerCase().includes('rahul verma'))
   );
+  if (itemIsRahul) {
+    for (const cid of candidateIds) {
+      if (cid === '1' || cid === 'default' || cid.toLowerCase().includes('rahul')) return true;
+    }
+  }
+
+  return false;
 };
 
 export const DataProvider = ({ children }) => {
@@ -58,10 +106,10 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_DOCTORS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    return [];
+    return initialDoctors;
   });
 
   // 2. Hospitals State (Fetched directly from DB / cached)
@@ -70,10 +118,10 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_HOSPITALS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {}
-    return [];
+    return initialHospitals;
   });
 
   // 3. Hero & Front Page General Content State
@@ -219,49 +267,100 @@ export const DataProvider = ({ children }) => {
     return initialBranding;
   });
 
-  // Helper mapping functions - strictly database-driven
-  const mapDoctorList = (docList, prevDoctors = []) => {
-    return docList.map(d => {
-      const existing = prevDoctors.find(p => matchesId(p, d._id || d.id));
-      return {
-        ...d,
-        id: d._id || d.id,
-        specialty: d.specialization || d.specialty || 'General Physician',
-        price: d.fees || d.price || 500,
-        experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || '5+ Years Experience'),
-        licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
-        awards: Array.isArray(d.awards) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
-        certifications: Array.isArray(d.certifications) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
-        memberships: Array.isArray(d.memberships) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
-        careerExperience: Array.isArray(d.careerExperience) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
-        reels: Array.isArray(d.reels) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : []),
-        youtube_videos: Array.isArray(d.youtube_videos) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
-        availableDays: d.availableDays || existing?.availableDays || 'Mon - Sat (10am - 4pm)',
-        scheduleDays: Array.isArray(d.scheduleDays) ? d.scheduleDays : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
-        availableSlots: Array.isArray(d.availableSlots) ? d.availableSlots : (Array.isArray(existing?.availableSlots) ? existing.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM']),
-        slotDuration: d.slotDuration || existing?.slotDuration || 20
-      };
-    });
+  // Sanitizer for reels to ensure only healthy, active Instagram reels are served
+  const sanitizeReels = (reelsList) => {
+    if (!Array.isArray(reelsList)) return [];
+    const brokenMap = {
+      'DeArmJdSQa6': 'DWGyY03lWc2',
+      'DeAA8evMsBS': 'DXpDWdoDKai',
+      'DdrR6vApDBK': 'DZdBbmoM1tn',
+      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+      'C9_K5qXMO9e': 'DWGyY03lWc2'
+    };
+    return reelsList.map(r => {
+      if (!r) return null;
+      let url = typeof r === 'string' ? r.trim() : (r.url || r.link || '').trim();
+      if (!url && typeof r === 'object' && (r.coverPhoto || r.cover)) return r;
+      if (!url) return null;
+      for (const [brokenCode, goodCode] of Object.entries(brokenMap)) {
+        if (url.includes(brokenCode)) {
+          url = `https://www.instagram.com/reel/${goodCode}/`;
+        }
+      }
+      if (typeof r === 'object') {
+        return { ...r, url };
+      }
+      return url;
+    }).filter(Boolean);
   };
 
-  const mapHospitalList = (hospList) => {
-    return hospList.map(h => ({
-      ...h,
-      id: h._id || h.id,
-      specialties: h.specialities || h.specialties || [],
-      reels: Array.isArray(h.reels) ? h.reels : [],
-      youtube_videos: Array.isArray(h.youtube_videos) ? h.youtube_videos : [],
-      photos: Array.isArray(h.photos) ? h.photos : [],
-      star_doctors: Array.isArray(h.star_doctors) ? h.star_doctors : [],
-      cashlessInsurance: h.cashlessInsurance !== undefined ? Boolean(h.cashlessInsurance) : true,
-      acceptedInsurances: Array.isArray(h.acceptedInsurances) ? h.acceptedInsurances : [],
-      tpaHelpdesk: h.tpaHelpdesk || {
-        phone: h.phone || '080-45678900',
-        email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
-        preAuthTime: '30 Mins Cashless Pre-Approval'
-      },
-      insuranceHelpline: h.insuranceHelpline || '1800-SEHAT-CARE'
-    }));
+  // Helper mapping functions - strictly database-driven with safe merge
+  const mapDoctorList = (docList, prevDoctors = []) => {
+    const mapped = docList.map(d => {
+      const existing = prevDoctors.find(p => matchesId(p, d));
+      const resolvedSpecialty = d.specialization || d.specialty || existing?.specialty || existing?.specialization || 'General Physician';
+      const resolvedPrice = d.fees ?? d.price ?? existing?.price ?? existing?.fees ?? 500;
+      return {
+        ...existing,
+        ...d,
+        id: existing?.id || d.id || d._id,
+        _id: d._id || existing?._id || d.id,
+        specialty: resolvedSpecialty,
+        specialization: resolvedSpecialty,
+        price: resolvedPrice,
+        fees: resolvedPrice,
+        experience: typeof d.experience === 'number' ? `${d.experience}+ Years Experience` : (d.experience || d.experienceText || existing?.experience || '5+ Years Experience'),
+        licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
+        awards: (Array.isArray(d.awards) && d.awards.length > 0) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
+        certifications: (Array.isArray(d.certifications) && d.certifications.length > 0) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
+        memberships: (Array.isArray(d.memberships) && d.memberships.length > 0) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
+        careerExperience: (Array.isArray(d.careerExperience) && d.careerExperience.length > 0) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
+        tags: (Array.isArray(d.tags) && d.tags.length > 0) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
+        reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
+        youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
+        availableDays: d.availableDays || existing?.availableDays || 'Mon - Sat (10am - 4pm)',
+        scheduleDays: (Array.isArray(d.scheduleDays) && d.scheduleDays.length > 0) ? d.scheduleDays : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
+        availableSlots: (Array.isArray(d.availableSlots) && d.availableSlots.length > 0) ? d.availableSlots : (Array.isArray(existing?.availableSlots) ? existing.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM']),
+        slotDuration: d.slotDuration || existing?.slotDuration || 20,
+        dayWiseSlots: (d.dayWiseSlots && typeof d.dayWiseSlots === 'object') ? d.dayWiseSlots : (existing?.dayWiseSlots || {}),
+        dateWiseSlots: (d.dateWiseSlots && typeof d.dateWiseSlots === 'object') ? d.dateWiseSlots : (existing?.dateWiseSlots || {}),
+        slots_booked: { ...(existing?.slots_booked || {}), ...(d.slots_booked || {}) }
+      };
+    });
+
+    // Retain any locally modified or newly created doctors not in docList
+    const notInApi = prevDoctors.filter(prevDoc => !docList.some(d => matchesId(prevDoc, d)));
+    return [...mapped, ...notInApi];
+  };
+
+  const mapHospitalList = (hospList, prevHospitals = []) => {
+    const mapped = hospList.map(h => {
+      const existing = prevHospitals.find(p => matchesId(p, h));
+      return {
+        ...existing,
+        ...h,
+        id: existing?.id || h.id || h._id,
+        _id: h._id || existing?._id || h.id,
+        specialties: (Array.isArray(h.specialities || h.specialties) && (h.specialities || h.specialties).length > 0)
+          ? (h.specialities || h.specialties)
+          : (existing?.specialties || existing?.specialities || []),
+        reels: sanitizeReels((Array.isArray(h.reels) && h.reels.length > 0) ? h.reels : (existing?.reels || [])),
+        youtube_videos: (Array.isArray(h.youtube_videos) && h.youtube_videos.length > 0) ? h.youtube_videos : (existing?.youtube_videos || []),
+        photos: (Array.isArray(h.photos) && h.photos.length > 0) ? h.photos : (existing?.photos || []),
+        star_doctors: (Array.isArray(h.star_doctors) && h.star_doctors.length > 0) ? h.star_doctors : (existing?.star_doctors || []),
+        cashlessInsurance: h.cashlessInsurance !== undefined ? Boolean(h.cashlessInsurance) : (existing?.cashlessInsurance ?? true),
+        acceptedInsurances: (Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0) ? h.acceptedInsurances : (existing?.acceptedInsurances || []),
+        tpaHelpdesk: h.tpaHelpdesk || existing?.tpaHelpdesk || {
+          phone: h.phone || '080-45678900',
+          email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
+          preAuthTime: '30 Mins Cashless Pre-Approval'
+        },
+        insuranceHelpline: h.insuranceHelpline || existing?.insuranceHelpline || '1800-SEHAT-CARE'
+      };
+    });
+    const notInApi = prevHospitals.filter(prevH => !hospList.some(h => matchesId(prevH, h)));
+    return [...mapped, ...notInApi];
   };
 
   // Modular real-time refresh operations directly from MongoDB Atlas
@@ -269,7 +368,14 @@ export const DataProvider = ({ children }) => {
     try {
       const data = await api.getDoctors();
       if (Array.isArray(data)) {
-        setDoctors(prev => mapDoctorList(data, prev));
+        setDoctors(prev => {
+          const mapped = mapDoctorList(data, prev);
+          try {
+            localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(mapped));
+            broadcastSync(STORAGE_KEY_DOCTORS, mapped);
+          } catch {}
+          return mapped;
+        });
       }
     } catch {}
   };
@@ -278,7 +384,14 @@ export const DataProvider = ({ children }) => {
     try {
       const data = await api.getHospitals();
       if (Array.isArray(data)) {
-        setHospitals(mapHospitalList(data));
+        setHospitals(prev => {
+          const mapped = mapHospitalList(data, prev);
+          try {
+            localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(mapped));
+            broadcastSync(STORAGE_KEY_HOSPITALS, mapped);
+          } catch {}
+          return mapped;
+        });
       }
     } catch {}
   };
@@ -381,9 +494,19 @@ export const DataProvider = ({ children }) => {
               }
             }
 
-            // Instant sub-second targeted refresh based on modified collection
+            // Instant targeted update based on modified collection
             if (collection === 'doctors') {
-              refreshDoctors();
+              if (payload.docId && payload.fullDocument) {
+                setDoctors(prev => {
+                  const updated = prev.map(d => matchesId(d, payload.docId) ? { ...d, ...payload.fullDocument } : d);
+                  try {
+                    localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+                  } catch {}
+                  return updated;
+                });
+              } else {
+                refreshDoctors();
+              }
             } else if (collection === 'hospitals') {
               refreshHospitals();
             } else if (collection === 'contents') {
@@ -557,11 +680,18 @@ export const DataProvider = ({ children }) => {
     setDoctors(prev => {
       const updated = prev.map(doc => {
         if (matchesId(doc, id)) {
+          const resolvedSpecialty = updatedData.specialty || updatedData.specialization || doc.specialty || doc.specialization;
+          const resolvedPrice = updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : (updatedData.fees !== undefined ? parseInt(updatedData.fees, 10) || doc.fees : doc.price);
           mergedDoctor = {
             ...doc,
             ...updatedData,
+            id: doc.id || updatedData.id || doc._id,
+            _id: doc._id || updatedData._id || doc.id,
+            specialty: resolvedSpecialty,
+            specialization: resolvedSpecialty,
+            price: resolvedPrice,
+            fees: resolvedPrice,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
-            price: updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : doc.price,
             awards: updatedData.awards !== undefined ? updatedData.awards : doc.awards,
             certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
             memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
@@ -573,17 +703,68 @@ export const DataProvider = ({ children }) => {
             availableDays: updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays,
             scheduleDays: updatedData.scheduleDays !== undefined ? updatedData.scheduleDays : doc.scheduleDays,
             availableSlots: updatedData.availableSlots !== undefined ? updatedData.availableSlots : doc.availableSlots,
-            slotDuration: updatedData.slotDuration !== undefined ? updatedData.slotDuration : doc.slotDuration
+            slotDuration: updatedData.slotDuration !== undefined ? updatedData.slotDuration : doc.slotDuration,
+            dayWiseSlots: updatedData.dayWiseSlots !== undefined ? updatedData.dayWiseSlots : (doc.dayWiseSlots || {}),
+            dateWiseSlots: updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {}),
+            tags: updatedData.tags !== undefined ? updatedData.tags : doc.tags,
+            slots_booked: updatedData.slots_booked !== undefined ? updatedData.slots_booked : doc.slots_booked,
+            image: updatedData.image !== undefined ? updatedData.image : doc.image,
+            about: updatedData.about !== undefined ? updatedData.about : doc.about
           };
           return mergedDoctor;
         }
         return doc;
       });
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_DOCTORS, updated);
+      } catch {}
       return updated;
     });
 
     try {
-      await api.updateDoctor(id, mergedDoctor || updatedData);
+      const res = await api.updateDoctor(id, mergedDoctor || updatedData);
+      if (res && (res._id || res.id)) {
+        setDoctors(prev => {
+          const updated = prev.map(doc => {
+            if (matchesId(doc, id)) {
+              const resSpecialty = res.specialization ?? res.specialty ?? doc.specialty;
+              const resPrice = res.fees ?? res.price ?? doc.price;
+              return {
+                ...doc,
+                ...res,
+                id: doc.id || res.id || res._id,
+                _id: res._id || doc._id || res.id,
+                specialty: resSpecialty,
+                specialization: resSpecialty,
+                price: resPrice,
+                fees: resPrice,
+                awards: Array.isArray(res.awards) ? res.awards : doc.awards,
+                certifications: Array.isArray(res.certifications) ? res.certifications : doc.certifications,
+                memberships: Array.isArray(res.memberships) ? res.memberships : doc.memberships,
+                careerExperience: Array.isArray(res.careerExperience) ? res.careerExperience : doc.careerExperience,
+                tags: Array.isArray(res.tags) ? res.tags : (updatedData.tags !== undefined ? updatedData.tags : doc.tags),
+                reels: Array.isArray(res.reels) ? res.reels : doc.reels,
+                youtube_videos: Array.isArray(res.youtube_videos) ? res.youtube_videos : doc.youtube_videos,
+                availableSlots: Array.isArray(res.availableSlots) ? res.availableSlots : doc.availableSlots,
+                scheduleDays: Array.isArray(res.scheduleDays) ? res.scheduleDays : doc.scheduleDays,
+                slotDuration: res.slotDuration ?? doc.slotDuration,
+                dayWiseSlots: (res.dayWiseSlots && typeof res.dayWiseSlots === 'object') ? res.dayWiseSlots : (updatedData.dayWiseSlots !== undefined ? updatedData.dayWiseSlots : (doc.dayWiseSlots || {})),
+                dateWiseSlots: (res.dateWiseSlots && typeof res.dateWiseSlots === 'object') ? res.dateWiseSlots : (updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {})),
+                availableDays: res.availableDays ?? doc.availableDays,
+                image: res.image || doc.image,
+                about: res.about !== undefined ? res.about : doc.about
+              };
+            }
+            return doc;
+          });
+          try {
+            localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+            broadcastSync(STORAGE_KEY_DOCTORS, updated);
+          } catch {}
+          return updated;
+        });
+      }
     } catch (err) {
       console.warn('Backend updateDoctor failed, local state retained:', err);
     }

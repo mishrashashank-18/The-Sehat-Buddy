@@ -302,7 +302,19 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       specialties: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'],
       specialities: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'], // DB mapping
       image: finalImage,
-      reels: formData.reels.map(r => r.trim()).filter(Boolean),
+      reels: formData.reels
+        .map(r => {
+          if (typeof r === 'string') return r.trim();
+          if (r && typeof r === 'object') {
+            const url = (r.url || '').trim();
+            const coverPhoto = (r.coverPhoto || '').trim();
+            if (!url && !coverPhoto) return null;
+            if (coverPhoto) return { url, coverPhoto };
+            return url;
+          }
+          return null;
+        })
+        .filter(Boolean),
       youtube_videos: formData.youtube_videos.map(v => v.trim()).filter(Boolean),
       star_doctors: formData.star_doctors,
       staff_emails: formData.staff_emails,
@@ -727,21 +739,25 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             Instagram Reels (Max 5 - Public Page)
           </div>
           <div className={styles.mediaInputList}>
-            {formData.reels.map((reel, index) => (
-              <div key={index} className={styles.mediaRow}>
-                <span className={styles.mediaIndex}>#{index + 1}</span>
-                <input
-                  type="url"
-                  placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
-                  value={reel}
-                  onChange={(e) => {
-                    const newReels = [...formData.reels];
-                    newReels[index] = e.target.value;
-                    setFormData({ ...formData, reels: newReels });
-                  }}
-                />
-              </div>
-            ))}
+            {formData.reels.map((reel, index) => {
+              const reelVal = typeof reel === 'string' ? reel : (reel?.url || reel?.link || '');
+              return (
+                <div key={index} className={styles.mediaRow}>
+                  <span className={styles.mediaIndex}>#{index + 1}</span>
+                  <input
+                    type="url"
+                    placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
+                    value={reelVal}
+                    onChange={(e) => {
+                      const newReels = [...formData.reels];
+                      const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+                      newReels[index] = { ...cur, url: e.target.value };
+                      setFormData({ ...formData, reels: newReels });
+                    }}
+                  />
+                </div>
+              );
+            })}
           </div>
 
           {/* YouTube Videos */}

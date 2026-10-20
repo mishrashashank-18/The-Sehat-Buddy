@@ -901,11 +901,25 @@
   gap: 10px;
 }
 
-/* Shared Card Item Structure */
 .awardItemPill,
 .certItemPill,
-.membershipItemPill,
+.membershipItemPill {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-height: 62px;
+  box-sizing: border-box;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+}
+
 .timelineCard {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 14px;
@@ -927,6 +941,122 @@
   border-color: #cbd5e1;
   transform: translateY(-2px);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+/* Career Experience Vertical Timeline Layout */
+.timelineListContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.timelineRow {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.timelineRow:hover .timelineCard {
+  border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
+}
+
+.timelineRow:hover .timelineDoubleCircle {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.24);
+}
+
+.timelineRow:hover .timelineSingleCircle {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+.timelineTrackCol {
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.timelineLineTop {
+  width: 0;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.timelineLineHidden {
+  visibility: hidden;
+  height: 20px;
+}
+
+.timelineLineSolid {
+  width: 2px;
+  background: #3b82f6;
+  flex: 1;
+  min-height: 12px;
+}
+
+.timelineLineDotted {
+  width: 0;
+  border-left: 2px dotted #94a3b8;
+  flex: 1;
+  min-height: 12px;
+}
+
+.timelineTailDotted {
+  width: 0;
+  border-left: 2px dotted #94a3b8;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.timelineNodeWrap {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+/* Double Circle for Present */
+.timelineDoubleCircle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid #2563eb;
+  background: #eff6ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.16);
+  flex-shrink: 0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.timelineDoubleCircleInner {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+/* Single Circle for Past Roles */
+.timelineSingleCircle {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px #60a5fa;
+  flex-shrink: 0;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Text hierarchy inside every card */
@@ -1105,36 +1235,136 @@
   width: 100%;
   max-width: 260px;
   aspect-ratio: 9/16;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   position: relative;
-  background: transparent;
+  background: #0f172a;
   cursor: pointer;
   display: flex;
   justify-content: center;
   align-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease;
+  user-select: none;
 }
 
-.reelCard iframe {
+.reelCard:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
+}
+
+.reelCoverImg {
   width: 100%;
   height: 100%;
-  border: none;
-  pointer-events: none;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
 }
 
-.reelOverlay {
+.reelCard:hover .reelCoverImg {
+  transform: scale(1.05);
+}
+
+.reelGradientScrim {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.4) 0%,
+    rgba(0, 0, 0, 0) 30%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.reelTopBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.reelPlayOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0,0,0,0.15);
-  transition: opacity 0.2s;
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  z-index: 2;
 }
 
-.reelCard:hover .reelOverlay {
-  background: rgba(0,0,0,0.3);
+.reelCard:hover .reelPlayOverlay {
+  opacity: 1;
+}
+
+.reelPlayBtn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e1306c;
+  transform: scale(0.9);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reelCard:hover .reelPlayBtn {
+  transform: scale(1);
+}
+
+.reelBottomBar {
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.reelViewsTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+
+.reelViewsCount {
+  line-height: 1;
 }
 
 .youtubeGrid {

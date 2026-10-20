@@ -108,9 +108,13 @@ export const api = {
     return payload;
   },
 
-  async getDoctorDashboard(docId = null) {
+  async getDoctorDashboard(docId = null, docEmail = null) {
     try {
-      const url = docId ? `${API_BASE}/doctors/dashboard?docId=${encodeURIComponent(docId)}` : `${API_BASE}/doctors/dashboard`;
+      const params = new URLSearchParams();
+      if (docId) params.append('docId', docId);
+      if (docEmail) params.append('email', docEmail);
+      const query = params.toString();
+      const url = query ? `${API_BASE}/doctors/dashboard?${query}` : `${API_BASE}/doctors/dashboard`;
       const res = await fetch(url, {
         headers: getAuthHeaders()
       });
@@ -128,6 +132,35 @@ export const api = {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify(statusData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+    return null;
+  },
+
+  async createDoctorAppointment(appointmentData) {
+    try {
+      const res = await fetch(`${API_BASE}/doctors/appointments`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(appointmentData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+    return null;
+  },
+
+  async deleteDoctorAppointment(id) {
+    try {
+      const res = await fetch(`${API_BASE}/doctors/appointments/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
       });
       if (res.ok) {
         const data = await res.json();

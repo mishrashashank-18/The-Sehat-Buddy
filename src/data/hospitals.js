@@ -1,9 +1,9 @@
 const sampleReels = [
-  'https://www.instagram.com/reel/DeArmJdSQa6/?stkn=MWhjZGczNGhyandlbA==',
-  'https://www.instagram.com/reel/DeAA8evMsBS/?stkn=cDQ0YXFpOG5kaDc1',
-  'https://www.instagram.com/reel/DdrR6vApDBK/?stkn=MXV6Yzg4NzM3cDdlbw==',
-  'https://www.instagram.com/reel/DdmEKEvTVC5/?utm_source=ig_web_copy_link&stkn=NTc4MTIwNjQ2YQ==',
-  'https://www.instagram.com/reel/DdeXVmDohij/?stkn=b2RzcXFveTY2azZv'
+  'https://www.instagram.com/reel/DWGyY03lWc2/',
+  'https://www.instagram.com/reel/DXpDWdoDKai/',
+  'https://www.instagram.com/reel/DZdBbmoM1tn/',
+  'https://www.instagram.com/reel/C-U4Xo9MvjQ/',
+  'https://www.instagram.com/reel/DdeXVmDohij/'
 ];
 
 const sampleVideos = [

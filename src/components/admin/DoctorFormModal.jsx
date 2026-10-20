@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, Plus, Trash2, Edit2, Star } from 'lucide-react';
+import { X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, Plus, Trash2, Edit2, Star, Loader2 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
@@ -144,6 +144,82 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     }
   };
 
+  const [uploadingReelIdx, setUploadingReelIdx] = useState(null);
+  const [deletingCoverIdx, setDeletingCoverIdx] = useState(null);
+
+  const handleDeleteCoverPhoto = async (index) => {
+    const newReels = [...formData.reels];
+    const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+    const coverUrl = cur.coverPhoto || '';
+    const currentUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
+
+    if (!coverUrl) return;
+
+    if (!window.confirm('Are you sure you want to permanently delete this cover photo? It will be removed from Cloudinary storage and doctor profile.')) {
+      return;
+    }
+
+    setDeletingCoverIdx(index);
+    try {
+      // 1. Permanently delete from Cloudinary if it's hosted there
+      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+        await api.deleteImage(coverUrl, 'image').catch((err) => {
+          console.warn('Failed to delete asset from Cloudinary:', err);
+        });
+      }
+
+      // 2. Clear coverPhoto from form data
+      newReels[index] = { ...cur, url: currentUrl, coverPhoto: '' };
+      setFormData(prev => ({ ...prev, reels: newReels }));
+
+      // 3. If editing an existing doctor, immediately persist to MongoDB Atlas to guarantee permanent deletion
+      const targetId = doctorToEdit?.id || doctorToEdit?._id;
+      if (targetId) {
+        await updateDoctor(targetId, { reels: newReels });
+      }
+    } catch (err) {
+      console.error('Failed to permanently delete cover photo:', err);
+    } finally {
+      setDeletingCoverIdx(null);
+    }
+  };
+
+  const handleReelCoverUpload = async (index, file) => {
+    if (!file) return;
+    setUploadingReelIdx(index);
+    try {
+      const url = await api.uploadImage(file, 'sehatbuddy/reels');
+      const newReels = [...formData.reels];
+      const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+      const currentUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
+      newReels[index] = { ...cur, url: currentUrl, coverPhoto: url };
+      setFormData(prev => ({ ...prev, reels: newReels }));
+
+      // Automatically persist to MongoDB Atlas & DataContext in real-time
+      const targetId = doctorToEdit?.id || doctorToEdit?._id;
+      if (targetId) {
+        await updateDoctor(targetId, { reels: newReels });
+      }
+    } catch (err) {
+      console.error('Failed to upload reel cover to Cloudinary:', err);
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const newReels = [...formData.reels];
+        const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+        const currentUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
+        newReels[index] = { ...cur, url: currentUrl, coverPhoto: reader.result };
+        setFormData(prev => ({ ...prev, reels: newReels }));
+        const targetId = doctorToEdit?.id || doctorToEdit?._id;
+        if (targetId) {
+          await updateDoctor(targetId, { reels: newReels });
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingReelIdx(null);
+    }
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validate()) return;
@@ -171,7 +247,19 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       image: finalImage,
       instagram: formData.instagram,
       facebook: formData.facebook,
-      reels: formData.reels.filter(url => url.trim() !== ''),
+      reels: formData.reels
+        .map(r => {
+          if (typeof r === 'string') return r.trim();
+          if (r && typeof r === 'object') {
+            const url = (r.url || '').trim();
+            const coverPhoto = (r.coverPhoto || '').trim();
+            if (!url && !coverPhoto) return null;
+            if (coverPhoto) return { url, coverPhoto };
+            return url;
+          }
+          return null;
+        })
+        .filter(Boolean),
       youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
       qualifications: formData.degree,
       contact_number: formData.phone,
@@ -527,22 +615,224 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           </div>
 
           {/* Instagram Reels */}
-          <div className={styles.sectionHeader}>Instagram Reels (Max 5)</div>
-          {[0, 1, 2, 3, 4].map((index) => (
-            <div className={styles.formGroup} key={`reel-${index}`}>
-              <label>Reel {index + 1} URL</label>
-              <input
-                type="url"
-                placeholder="https://www.instagram.com/reel/..."
-                value={formData.reels[index] || ''}
-                onChange={(e) => {
-                  const newReels = [...formData.reels];
-                  newReels[index] = e.target.value;
-                  setFormData({ ...formData, reels: newReels });
+          <div className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Instagram Reels & Cover Photos (Max 5)</span>
+            <span style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>Auto Cover Extraction</span>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
+            Enter any Instagram Reel URL. The native high-resolution cover photo will be extracted and displayed on the public doctor profile. You can also specify an optional custom cover photo.
+          </p>
+          {[0, 1, 2, 3, 4].map((index) => {
+            const reelVal = formData.reels[index];
+            const reelUrl = typeof reelVal === 'string' ? reelVal : (reelVal?.url || '');
+            const customCover = typeof reelVal === 'object' ? (reelVal?.coverPhoto || '') : '';
+
+            // Extract shortcode for live preview
+            const match = reelUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+            const shortcode = match ? match[1] : '';
+            const previewCover = customCover || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
+
+            return (
+              <div 
+                className={styles.formGroup} 
+                key={`reel-${index}`}
+                style={{ 
+                  background: '#f8fafc', 
+                  padding: '12px 14px', 
+                  borderRadius: '10px', 
+                  border: '1px solid #e2e8f0', 
+                  marginBottom: '12px' 
                 }}
-              />
-            </div>
-          ))}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ margin: 0, fontWeight: 700, fontSize: '0.86rem', color: '#0f172a' }}>
+                    Reel {index + 1} URL
+                  </label>
+                  {shortcode && (
+                    <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '100px', fontWeight: 700 }}>
+                      ✓ Cover Photo Linked
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://www.instagram.com/reel/..."
+                  value={reelUrl}
+                  onChange={(e) => {
+                    const newReels = [...formData.reels];
+                    const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+                    newReels[index] = { ...cur, url: e.target.value };
+                    setFormData({ ...formData, reels: newReels });
+                  }}
+                  style={{ marginBottom: '8px' }}
+                />
+
+                {(reelUrl || customCover) && (
+                  <div style={{ marginTop: '8px', padding: '10px 12px', background: '#ffffff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>Reel Cover Photo</span>
+                        {customCover && customCover.includes('cloudinary.com') && (
+                          <span style={{ fontSize: '0.68rem', color: '#0284c7', background: '#e0f2fe', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, border: '1px solid #bae6fd' }}>
+                            Cloudinary
+                          </span>
+                        )}
+                      </span>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {/* Delete Cover Photo Button (Permanent Delete from Cloudinary & DB) */}
+                        {customCover && (
+                          <button
+                            type="button"
+                            disabled={deletingCoverIdx === index}
+                            onClick={() => handleDeleteCoverPhoto(index)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              color: '#dc2626',
+                              background: '#fee2e2',
+                              border: '1px solid #fecaca',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              cursor: deletingCoverIdx === index ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Permanently delete this cover photo from Cloudinary"
+                          >
+                            {deletingCoverIdx === index ? (
+                              <>
+                                <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                                <span>Deleting...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 size={13} />
+                                <span>Delete Cover</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
+                        {/* Upload Button: Local Storage -> Cloudinary */}
+                        <label 
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            color: '#ffffff',
+                            background: uploadingReelIdx === index ? '#94a3b8' : 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                            padding: '5px 12px',
+                            borderRadius: '6px',
+                            cursor: uploadingReelIdx === index ? 'not-allowed' : 'pointer',
+                            boxShadow: '0 2px 4px rgba(2, 132, 199, 0.25)',
+                            transition: 'all 0.2s'
+                          }}
+                          title="Upload cover photo from local storage directly to Cloudinary"
+                        >
+                          {uploadingReelIdx === index ? (
+                            <>
+                              <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                              <span>Uploading to Cloudinary...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload size={13} />
+                              <span>Upload Cover Photo</span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={uploadingReelIdx === index}
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handleReelCoverUpload(index, file);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="url"
+                          placeholder="Cloudinary URL or image link (Auto-filled on upload, or paste link)"
+                          value={customCover}
+                          onChange={(e) => {
+                            const newReels = [...formData.reels];
+                            const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : { url: reelUrl };
+                            newReels[index] = { ...cur, url: reelUrl, coverPhoto: e.target.value };
+                            setFormData({ ...formData, reels: newReels });
+                          }}
+                          style={{ fontSize: '0.8rem', padding: '7px 10px', width: '100%', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      {previewCover && (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <div 
+                            style={{ 
+                              width: '42px', 
+                              height: '56px', 
+                              borderRadius: '6px', 
+                              overflow: 'hidden', 
+                              border: '1px solid #cbd5e1', 
+                              flexShrink: 0, 
+                              background: '#000000',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                            }} 
+                            title="Reel Cover Photo Preview"
+                          >
+                            <img 
+                              src={previewCover} 
+                              alt="Cover" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
+                              onError={(e) => { e.target.style.display = 'none'; }} 
+                            />
+                          </div>
+                          {customCover && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCoverPhoto(index)}
+                              title="Delete cover photo"
+                              style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                background: '#dc2626',
+                                color: '#ffffff',
+                                border: '2px solid #ffffff',
+                                borderRadius: '50%',
+                                width: '18px',
+                                height: '18px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                padding: 0,
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                              }}
+                            >
+                              <X size={10} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {/* YouTube Videos */}
           <div className={styles.sectionHeader}>YouTube Educational Videos (Max 2)</div>

@@ -4,13 +4,24 @@ import {
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
-  History, Milestone, CalendarClock
+  History, Milestone, CalendarClock, ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import { API_BASE } from '../../services/api';
 import styles from './DoctorProfile.module.css';
+
+// Local date string helper matching clinic calendar time (YYYY-MM-DD)
+export const getLocalDateString = (d = new Date()) => {
+  const dateObj = typeof d === 'string' || typeof d === 'number' ? new Date(d) : d;
+  if (isNaN(dateObj.getTime())) return '';
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 // FAQ Illustration & Icons matching design reference
 const DoctorFaqIllustration = () => (
@@ -199,337 +210,8 @@ const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) =>
   </svg>
 );
 
-const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, reviews, faqs } = useData();
-  const [activeReel, setActiveReel] = useState(null);
-  const [activeVideo, setActiveVideo] = useState(null);
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
-  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
-
-  // Booking interaction states
-  const [consultationType, setConsultationType] = useState('In-Clinic Visit');
-  const [selectedDateIdx, setSelectedDateIdx] = useState(0);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState('04:00 PM');
-
-
-
-  // Modal patient inputs
-  const [patientName, setPatientName] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.name || '' : '';
-    } catch { return ''; }
-  });
-  const [patientEmail, setPatientEmail] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.email || '' : '';
-    } catch { return ''; }
-  });
-  const [patientPhone, setPatientPhone] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.phone || '' : '';
-    } catch { return ''; }
-  });
-  const [symptoms, setSymptoms] = useState('');
-  const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
-  const [expandedFaq, setExpandedFaq] = useState(null);
-
-  // Doctor's available slots & schedule from database
-  const configuredSlots = React.useMemo(() => {
-    if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
-      return doctor.availableSlots;
-    }
-    return ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'];
-  }, [doctor?.availableSlots]);
-
-  const configuredDays = React.useMemo(() => {
-    if (Array.isArray(doctor?.scheduleDays) && doctor.scheduleDays.length > 0) {
-      return doctor.scheduleDays;
-    }
-    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  }, [doctor?.scheduleDays]);
-
-  // Dynamic 3 upcoming appointment days with real live available slot count
-  const dateOptions = React.useMemo(() => {
-    const dates = [
-      new Date(),
-      new Date(Date.now() + 86400000),
-      new Date(Date.now() + 172800000)
-    ];
-
-    return dates.map((d, index) => {
-      const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayLabel = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameShort);
-      const dateStr = d.toISOString().split('T')[0];
-      
-      const isWorkingDay = configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
-      const booked = (doctor?.slots_booked && doctor.slots_booked[dateStr]) || [];
-      const freeSlots = isWorkingDay ? configuredSlots.filter(s => !booked.includes(s)) : [];
-
-      let slotsLabel = 'No Slots';
-      if (!isWorkingDay) {
-        slotsLabel = 'Off';
-      } else if (freeSlots.length > 0) {
-        slotsLabel = `${freeSlots.length} Slots`;
-      } else {
-        slotsLabel = 'Booked';
-      }
-
-      return {
-        day: dayLabel,
-        date: `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
-        label: `${dayLabel}, ${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
-        dateStr,
-        isWorkingDay,
-        freeSlots,
-        slots: slotsLabel,
-        slotsCount: `${freeSlots.length} slots available`
-      };
-    });
-  }, [configuredSlots, configuredDays, doctor?.slots_booked]);
-
-  // Current day's slots with booked status
-  const currentDaySlots = React.useMemo(() => {
-    const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    if (!activeDateObj) return [];
-    const booked = (doctor?.slots_booked && doctor.slots_booked[activeDateObj.dateStr]) || [];
-    
-    return configuredSlots.map(slot => ({
-      time: slot,
-      isBooked: booked.includes(slot),
-      isOff: !activeDateObj.isWorkingDay
-    }));
-  }, [dateOptions, selectedDateIdx, configuredSlots, doctor?.slots_booked]);
-
-  // Automatically keep selectedTimeSlot valid
-  React.useEffect(() => {
-    const validSlots = currentDaySlots.filter(s => !s.isBooked && !s.isOff);
-    if (validSlots.length > 0) {
-      if (!selectedTimeSlot || !validSlots.some(s => s.time === selectedTimeSlot)) {
-        setSelectedTimeSlot(validSlots[0].time);
-      }
-    } else {
-      setSelectedTimeSlot('');
-    }
-  }, [currentDaySlots, selectedDateIdx]);
-
-  React.useEffect(() => {
-    // Check if there's a pending booking after login
-    const pending = localStorage.getItem('pendingBooking');
-    const token = localStorage.getItem('token');
-    
-    if (pending && token) {
-      const parsed = JSON.parse(pending);
-      if (String(parsed.docId) === String(doctorId)) {
-        processBooking(parsed.slotDate, parsed.slotTime, parsed.consultationType);
-      }
-      localStorage.removeItem('pendingBooking');
-    }
-
-    // Auto-open booking modal if arriving from "Book Now"
-    if (localStorage.getItem('autoOpenBooking') === 'true') {
-      setShowBookingModal(true);
-      localStorage.removeItem('autoOpenBooking');
-    }
-  }, [doctorId]);
-
-  const doctor = doctors.find(d => 
-    String(d.id) === String(doctorId) || 
-    String(d._id) === String(doctorId) ||
-    (d.email && String(doctorId).includes('@') && d.email.toLowerCase() === String(doctorId).toLowerCase())
-  );
-
-  const handleBookNow = () => {
-    setShowBookingModal(true);
-  };
-
-  const processBooking = async (slotDate, slotTime, type = consultationType) => {
-    setBookingStatus('loading');
-    const token = localStorage.getItem('token');
-    
-    try {
-      const response = await fetch(`${API_BASE}/user/book-appointment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          docId: doctor?.id || doctor?._id,
-          slotDate: slotDate || dateOptions[selectedDateIdx].dateStr,
-          slotTime: slotTime || selectedTimeSlot,
-          consultationType: type,
-          patientName: patientName.trim() || 'Patient',
-          patientPhone: patientPhone.trim(),
-          patientEmail: patientEmail.trim(),
-          symptoms: symptoms.trim() || 'General Consultation'
-        })
-      });
-      
-      const data = await response.json();
-      if (response.ok && data.success) {
-        setBookingStatus('success');
-      } else {
-        alert(data.message || 'Failed to book appointment');
-        setBookingStatus(null);
-        setShowBookingModal(false);
-      }
-    } catch {
-      alert('An error occurred while booking. Please try again.');
-      setBookingStatus(null);
-      setShowBookingModal(false);
-    }
-  };
-
-  const submitBooking = async (e) => {
-    e.preventDefault();
-    const chosenDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    const chosenDate = chosenDateObj.dateStr;
-    const chosenTime = selectedTimeSlot;
-
-    if (!chosenDate || !chosenTime) {
-      alert('Please select date and time');
-      return;
-    }
-
-    setBookingStatus('loading');
-    const token = localStorage.getItem('token');
-
-    try {
-      const response = await fetch(`${API_BASE}/user/book-appointment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          docId: doctor?.id || doctor?._id,
-          slotDate: chosenDate,
-          slotTime: chosenTime,
-          consultationType: consultationType,
-          patientName: patientName.trim() || 'Guest Patient',
-          patientPhone: patientPhone.trim() || '',
-          patientEmail: patientEmail.trim() || '',
-          symptoms: symptoms.trim() || 'General Consultation'
-        })
-      });
-
-      const data = await response.json();
-      if (response.ok && data.success) {
-        const createdApt = data.data;
-        const aptId = createdApt?._id || `SB-${Math.floor(10000 + Math.random() * 90000)}`;
-        const newBooking = {
-          id: aptId,
-          appointmentId: aptId,
-          docId: doctor.id || doctor._id,
-          doctorName: doctor.name,
-          doctorSpecialty: doctor.specialty || doctor.specialization,
-          doctorHospital: doctor.hospital || 'Apollo Hospital & Heart Center',
-          patientName: patientName.trim() || 'Guest Patient',
-          patientPhone: patientPhone.trim() || '',
-          patientEmail: patientEmail.trim() || '',
-          symptoms: symptoms.trim() || 'General Consultation',
-          slotDate: chosenDate,
-          dateLabel: chosenDateObj.label,
-          slotTime: chosenTime,
-          consultationType: consultationType,
-          fee: doctor.price || doctor.fees || 800,
-          status: 'Confirmed',
-          bookedAt: new Date().toISOString()
-        };
-
-        try {
-          const existing = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
-          existing.unshift(newBooking);
-          localStorage.setItem('sehat_buddy_appointments', JSON.stringify(existing));
-        } catch {}
-
-        setBookingStatus('success');
-      } else {
-        alert(data.message || 'Failed to book appointment');
-        setBookingStatus(null);
-      }
-    } catch (err) {
-      console.error('Booking failed:', err);
-      alert('An error occurred while booking. Please try again.');
-      setBookingStatus(null);
-    }
-  };
-
-  if (!doctor) {
-    return (
-      <div className={styles.pageWrapper}>
-        <Container>
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <h2>Doctor Not Found</h2>
-            <button onClick={() => onNavigate('find-doctors')} className={styles.backBtn}>
-              Back to Doctors
-            </button>
-          </div>
-        </Container>
-      </div>
-    );
-  }
-
-  // Generate procedure / qualification tags matching the design
-  const getDoctorTags = (doc) => {
-    const list = [];
-    if (doc.degree || doc.qualifications) {
-      const parts = (doc.degree || doc.qualifications).split(/[,/]+/).map(s => s.trim()).filter(Boolean);
-      list.push(...parts);
-    }
-    const spec = (doc.specialty || doc.specialization || '').toLowerCase();
-    if (spec.includes('dent') || spec.includes('paedo')) {
-      list.push('BDS', 'MDS - Paedodontics', 'Implantologist', 'Pediatric Dentist', 'Cosmetic/Aesthetic Dentist', 'Preventive Dentistry', 'Dental Surgeon');
-    } else if (spec.includes('cardio')) {
-      list.push('Interventional Cardiologist', 'Angioplasty Specialist', 'Echocardiography', 'Heart Failure Care', 'Preventive Cardiology', 'Chest Pain Specialist');
-    } else if (spec.includes('derma')) {
-      list.push('Clinical Dermatology', 'Cosmetic/Aesthetic Specialist', 'Laser Therapeutics', 'Trichology', 'Cutaneous Surgeon', 'Acne & Skin Care');
-    } else if (spec.includes('ortho')) {
-      list.push('Joint Replacement', 'Arthroscopy Specialist', 'Robotic Knee Surgery', 'Sports Medicine', 'Trauma Surgeon', 'Spine Rehabilitation');
-    } else if (spec.includes('pedia')) {
-      list.push('Pediatric Intensive Care', 'Neonatology', 'Child Growth & Development', 'Vaccination Specialist', 'Pediatric Allergy Care');
-    } else if (spec.includes('gyne') || spec.includes('obs')) {
-      list.push('High-Risk Obstetrics', 'Laparoscopic Surgeon', 'Infertility Specialist', 'Women Hormonal Health', 'Maternal Fetal Care');
-    } else if (spec.includes('neuro')) {
-      list.push('Stroke Rehabilitation', 'Neurocritical Care', 'Electrophysiology', 'Headache & Migraine Specialist', 'Epilepsy Care');
-    } else if (spec.includes('uro')) {
-      list.push('Robotic Urological Surgery', 'Kidney Stone Specialist', 'Endourology', 'Renal Transplant', 'Prostate Care');
-    } else {
-      list.push('Consultant Physician', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Health Wellness');
-    }
-    return Array.from(new Set(list)).slice(0, 7);
-  };
-
-  const doctorTags = getDoctorTags(doctor);
-
-  const getEmbedUrl = (url) => {
-    if (!url) return '';
-    try {
-      if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
-        let videoId = '';
-        if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-        else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
-        else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-      }
-      if (url.includes('instagram.com')) {
-        if (!url.includes('/embed')) {
-          const cleanUrl = url.split('?')[0].replace(/\/$/, '');
-          return `${cleanUrl}/embed`;
-        }
-      }
-      return url;
-    } catch {
-      return url;
-    }
-  };
-
-// Helper for 5 authentic, verified patient reviews
-const getDoctorVerifiedReviews = (doc, liveReviews) => {
+// Helper for authentic, verified patient reviews (shared in real-time with Doctor Dashboard)
+export const getDoctorVerifiedReviews = (doc, liveReviews) => {
   if (!doc) return [];
   const docDisplayName = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'the doctor';
   const cleanDocName = (doc.name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
@@ -644,6 +326,448 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
   return combined;
 };
 
+const DoctorProfile = ({ doctorId, onNavigate }) => {
+  const { doctors, updateDoctor, reviews, faqs } = useData();
+
+  const doctor = doctors.find(d => 
+    matchesId(d, doctorId) ||
+    String(d.id) === String(doctorId) || 
+    String(d._id) === String(doctorId) ||
+    (d.email && String(doctorId).includes('@') && d.email.toLowerCase() === String(doctorId).toLowerCase())
+  ) || ((String(doctorId) === '1' || doctorId === 'default' || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul')) || doctors[0]) : null);
+
+  const [activeReel, setActiveReel] = useState(null);
+  const [reelVideoError, setReelVideoError] = useState(false);
+  const [activeVideo, setActiveVideo] = useState(null);
+
+  const handleOpenReel = (reelItem) => {
+    setReelVideoError(false);
+    setActiveReel(reelItem);
+  };
+
+  // Trigger official Instagram Embed SDK on pop up open to ensure interactive reel playback
+  React.useEffect(() => {
+    if (activeReel) {
+      if (!window.instgrm) {
+        const script = document.createElement('script');
+        script.src = 'https://www.instagram.com/embed.js';
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          if (window.instgrm?.Embeds) {
+            window.instgrm.Embeds.process();
+          }
+        };
+        document.body.appendChild(script);
+      } else if (window.instgrm?.Embeds) {
+        window.instgrm.Embeds.process();
+      }
+    }
+  }, [activeReel]);
+
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+
+  // Booking interaction states
+  const [consultationType, setConsultationType] = useState('In-Clinic Visit');
+  const [selectedDateIdx, setSelectedDateIdx] = useState(0);
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState('04:00 PM');
+
+
+
+  // Modal patient inputs
+  const [patientName, setPatientName] = useState(() => {
+    try {
+      const u = localStorage.getItem('user');
+      return u ? JSON.parse(u)?.name || '' : '';
+    } catch { return ''; }
+  });
+  const [patientEmail, setPatientEmail] = useState(() => {
+    try {
+      const u = localStorage.getItem('user');
+      return u ? JSON.parse(u)?.email || '' : '';
+    } catch { return ''; }
+  });
+  const [patientPhone, setPatientPhone] = useState(() => {
+    try {
+      const u = localStorage.getItem('user');
+      return u ? JSON.parse(u)?.phone || '' : '';
+    } catch { return ''; }
+  });
+  const [symptoms, setSymptoms] = useState('');
+  const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
+  const [expandedFaq, setExpandedFaq] = useState(null);
+
+  // Doctor's available slots & schedule from database
+  const configuredSlots = React.useMemo(() => {
+    if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
+      return doctor.availableSlots;
+    }
+    return ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'];
+  }, [doctor?.availableSlots]);
+
+  const configuredDays = React.useMemo(() => {
+    if (Array.isArray(doctor?.scheduleDays) && doctor.scheduleDays.length > 0) {
+      return doctor.scheduleDays;
+    }
+    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  }, [doctor?.scheduleDays]);
+
+  // Helper to resolve specific slots for any date (Date-wise > Day-wise > Default Standard)
+  const resolveSlotsForDate = React.useCallback((dateObj) => {
+    const dayNameShort = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+    const dateStr = getLocalDateString(dateObj);
+    
+    // 1. Date-wise check (highest priority override)
+    const dateCustom = doctor?.dateWiseSlots?.[dateStr];
+    if (dateCustom !== undefined && dateCustom !== null) {
+      if (dateCustom === 'off' || dateCustom?.isOff === true || (Array.isArray(dateCustom) && dateCustom.length === 0)) {
+        return { isWorkingDay: false, slots: [], statusText: 'Off / Leave', isCustom: true };
+      }
+      const customList = Array.isArray(dateCustom) ? dateCustom : (Array.isArray(dateCustom?.slots) ? dateCustom.slots : []);
+      if (customList.length > 0) {
+        return { isWorkingDay: true, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
+      }
+    }
+
+    // 2. Day-wise check (Mon, Tue, etc.)
+    const dayCustom = doctor?.dayWiseSlots?.[dayNameShort];
+    if (dayCustom !== undefined && dayCustom !== null) {
+      if (dayCustom === 'off' || dayCustom?.isOff === true || (Array.isArray(dayCustom) && dayCustom.length === 0)) {
+        return { isWorkingDay: false, slots: [], statusText: 'Off', isCustom: true };
+      }
+      const customList = Array.isArray(dayCustom) ? dayCustom : (Array.isArray(dayCustom?.slots) ? dayCustom.slots : []);
+      if (customList.length > 0) {
+        return { isWorkingDay: true, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
+      }
+    }
+
+    // 3. Fallback to standard scheduleDays and availableSlots
+    const isWorkingDay = configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
+    return {
+      isWorkingDay,
+      slots: isWorkingDay ? configuredSlots : [],
+      statusText: isWorkingDay ? `${configuredSlots.length} Slots` : 'Off',
+      isCustom: false
+    };
+  }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
+
+  // Dynamic 3 upcoming appointment days with real live available slot count
+  const dateOptions = React.useMemo(() => {
+    const dates = [
+      new Date(),
+      new Date(Date.now() + 86400000),
+      new Date(Date.now() + 172800000)
+    ];
+
+    return dates.map((d, index) => {
+      const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayLabel = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameShort);
+      const dateStr = getLocalDateString(d);
+      
+      const resolved = resolveSlotsForDate(d);
+      const booked = (doctor?.slots_booked && doctor.slots_booked[dateStr]) || [];
+      const freeSlots = resolved.isWorkingDay ? resolved.slots.filter(s => !booked.includes(s)) : [];
+
+      let slotsLabel = 'No Slots';
+      if (!resolved.isWorkingDay) {
+        slotsLabel = resolved.statusText || 'Off';
+      } else if (freeSlots.length > 0) {
+        slotsLabel = `${freeSlots.length} Slots`;
+      } else {
+        slotsLabel = 'Booked';
+      }
+
+      return {
+        day: dayLabel,
+        date: `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
+        label: `${dayLabel}, ${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
+        dateStr,
+        fullDate: d,
+        isWorkingDay: resolved.isWorkingDay,
+        freeSlots,
+        allSlots: resolved.slots,
+        slots: slotsLabel,
+        slotsCount: `${freeSlots.length} slots available`
+      };
+    });
+  }, [resolveSlotsForDate, doctor?.slots_booked]);
+
+  // Current day's slots with booked status
+  const currentDaySlots = React.useMemo(() => {
+    const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    if (!activeDateObj) return [];
+    const booked = (doctor?.slots_booked && doctor.slots_booked[activeDateObj.dateStr]) || [];
+    const dayConfiguredSlots = activeDateObj.allSlots || configuredSlots;
+    
+    return dayConfiguredSlots.map(slot => ({
+      time: slot,
+      isBooked: booked.includes(slot),
+      isOff: !activeDateObj.isWorkingDay
+    }));
+  }, [dateOptions, selectedDateIdx, configuredSlots, doctor?.slots_booked]);
+
+  // Automatically keep selectedTimeSlot valid
+  React.useEffect(() => {
+    const validSlots = currentDaySlots.filter(s => !s.isBooked && !s.isOff);
+    if (validSlots.length > 0) {
+      if (!selectedTimeSlot || !validSlots.some(s => s.time === selectedTimeSlot)) {
+        setSelectedTimeSlot(validSlots[0].time);
+      }
+    } else {
+      setSelectedTimeSlot('');
+    }
+  }, [currentDaySlots, selectedDateIdx]);
+
+  React.useEffect(() => {
+    // Check if there's a pending booking after login
+    const pending = localStorage.getItem('pendingBooking');
+    const token = localStorage.getItem('token');
+    
+    if (pending && token) {
+      const parsed = JSON.parse(pending);
+      if (String(parsed.docId) === String(doctorId)) {
+        processBooking(parsed.slotDate, parsed.slotTime, parsed.consultationType);
+      }
+      localStorage.removeItem('pendingBooking');
+    }
+
+    // Auto-open booking modal if arriving from "Book Now"
+    if (localStorage.getItem('autoOpenBooking') === 'true') {
+      setShowBookingModal(true);
+      localStorage.removeItem('autoOpenBooking');
+    }
+  }, [doctorId]);
+
+
+  const handleBookNow = () => {
+    setShowBookingModal(true);
+  };
+
+  const processBooking = async (slotDate, slotTime, type = consultationType) => {
+    setBookingStatus('loading');
+    const token = localStorage.getItem('token');
+    
+    try {
+      const response = await fetch(`${API_BASE}/user/book-appointment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          docId: doctor?.id || doctor?._id,
+          slotDate: slotDate || dateOptions[selectedDateIdx].dateStr,
+          slotTime: slotTime || selectedTimeSlot,
+          consultationType: type,
+          patientName: patientName.trim() || 'Patient',
+          patientPhone: patientPhone.trim(),
+          patientEmail: patientEmail.trim(),
+          symptoms: symptoms.trim() || 'General Consultation'
+        })
+      });
+      
+      const data = await response.json();
+      if (response.ok && data.success) {
+        const targetDate = slotDate || dateOptions[selectedDateIdx].dateStr;
+        const targetTime = slotTime || selectedTimeSlot;
+        const currentBooked = { ...(doctor?.slots_booked || {}) };
+        const dayBooked = [...(currentBooked[targetDate] || [])];
+        if (!dayBooked.includes(targetTime)) {
+          dayBooked.push(targetTime);
+        }
+        currentBooked[targetDate] = dayBooked;
+        if (doctor?.id || doctor?._id) {
+          updateDoctor(doctor.id || doctor._id, { slots_booked: currentBooked });
+        }
+        setBookingStatus('success');
+      } else {
+        alert(data.message || 'Failed to book appointment');
+        setBookingStatus(null);
+        setShowBookingModal(false);
+      }
+    } catch {
+      alert('An error occurred while booking. Please try again.');
+      setBookingStatus(null);
+      setShowBookingModal(false);
+    }
+  };
+
+  const submitBooking = async (e) => {
+    e.preventDefault();
+    const chosenDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    const chosenDate = chosenDateObj.dateStr;
+    const chosenTime = selectedTimeSlot;
+
+    if (!chosenDate || !chosenTime) {
+      alert('Please select date and time');
+      return;
+    }
+
+    setBookingStatus('loading');
+    const token = localStorage.getItem('token');
+
+    try {
+      const response = await fetch(`${API_BASE}/user/book-appointment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          docId: doctor?.id || doctor?._id,
+          slotDate: chosenDate,
+          slotTime: chosenTime,
+          consultationType: consultationType,
+          patientName: patientName.trim() || 'Guest Patient',
+          patientPhone: patientPhone.trim() || '',
+          patientEmail: patientEmail.trim() || '',
+          symptoms: symptoms.trim() || 'General Consultation'
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        const createdApt = data.data;
+        const aptId = createdApt?._id || `SB-${Math.floor(10000 + Math.random() * 90000)}`;
+        const newBooking = {
+          id: aptId,
+          appointmentId: aptId,
+          docId: doctor.id || doctor._id,
+          doctorName: doctor.name,
+          doctorSpecialty: doctor.specialty || doctor.specialization,
+          doctorHospital: doctor.hospital || 'Apollo Hospital & Heart Center',
+          patientName: patientName.trim() || 'Guest Patient',
+          patientPhone: patientPhone.trim() || '',
+          patientEmail: patientEmail.trim() || '',
+          symptoms: symptoms.trim() || 'General Consultation',
+          slotDate: chosenDate,
+          dateLabel: chosenDateObj.label,
+          slotTime: chosenTime,
+          consultationType: consultationType,
+          fee: doctor.price || doctor.fees || 800,
+          status: 'Confirmed',
+          bookedAt: new Date().toISOString()
+        };
+
+        try {
+          const existing = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
+          existing.unshift(newBooking);
+          localStorage.setItem('sehat_buddy_appointments', JSON.stringify(existing));
+        } catch {}
+
+        const currentBooked = { ...(doctor?.slots_booked || {}) };
+        const dayBooked = [...(currentBooked[chosenDate] || [])];
+        if (!dayBooked.includes(chosenTime)) {
+          dayBooked.push(chosenTime);
+        }
+        currentBooked[chosenDate] = dayBooked;
+        if (doctor?.id || doctor?._id) {
+          updateDoctor(doctor.id || doctor._id, { slots_booked: currentBooked });
+        }
+
+        setBookingStatus('success');
+      } else {
+        alert(data.message || 'Failed to book appointment');
+        setBookingStatus(null);
+      }
+    } catch (err) {
+      console.error('Booking failed:', err);
+      alert('An error occurred while booking. Please try again.');
+      setBookingStatus(null);
+    }
+  };
+
+  if (!doctor) {
+    return (
+      <div className={styles.pageWrapper}>
+        <Container>
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <h2>Doctor Not Found</h2>
+            <button onClick={() => onNavigate('find-doctors')} className={styles.backBtn}>
+              Back to Doctors
+            </button>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  // Generate procedure / qualification tags matching the design
+  const getDoctorTags = (doc) => {
+    if (Array.isArray(doc?.tags) && doc.tags.length > 0) {
+      return doc.tags.filter(Boolean);
+    }
+    const list = [];
+    if (doc?.degree || doc?.qualifications) {
+      const parts = (doc.degree || doc.qualifications).split(/[,/]+/).map(s => s.trim()).filter(Boolean);
+      list.push(...parts);
+    }
+    const spec = (doc?.specialty || doc?.specialization || '').toLowerCase();
+    if (spec.includes('dent') || spec.includes('paedo')) {
+      list.push('BDS', 'MDS - Paedodontics', 'Implantologist', 'Pediatric Dentist', 'Cosmetic/Aesthetic Dentist', 'Preventive Dentistry', 'Dental Surgeon');
+    } else if (spec.includes('cardio')) {
+      list.push('Interventional Cardiologist', 'Angioplasty Specialist', 'Echocardiography', 'Heart Failure Care', 'Preventive Cardiology', 'Chest Pain Specialist');
+    } else if (spec.includes('derma')) {
+      list.push('Clinical Dermatology', 'Cosmetic/Aesthetic Specialist', 'Laser Therapeutics', 'Trichology', 'Cutaneous Surgeon', 'Acne & Skin Care');
+    } else if (spec.includes('ortho')) {
+      list.push('Joint Replacement', 'Arthroscopy Specialist', 'Robotic Knee Surgery', 'Sports Medicine', 'Trauma Surgeon', 'Spine Rehabilitation');
+    } else if (spec.includes('pedia')) {
+      list.push('Pediatric Intensive Care', 'Neonatology', 'Child Growth & Development', 'Vaccination Specialist', 'Pediatric Allergy Care');
+    } else if (spec.includes('gyne') || spec.includes('obs')) {
+      list.push('High-Risk Obstetrics', 'Laparoscopic Surgeon', 'Infertility Specialist', 'Women Hormonal Health', 'Maternal Fetal Care');
+    } else if (spec.includes('neuro')) {
+      list.push('Stroke Rehabilitation', 'Neurocritical Care', 'Electrophysiology', 'Headache & Migraine Specialist', 'Epilepsy Care');
+    } else if (spec.includes('uro')) {
+      list.push('Robotic Urological Surgery', 'Kidney Stone Specialist', 'Endourology', 'Renal Transplant', 'Prostate Care');
+    } else {
+      list.push('Consultant Physician', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Health Wellness');
+    }
+    return Array.from(new Set(list)).slice(0, 7);
+  };
+
+  const doctorTags = getDoctorTags(doctor);
+
+  const getEmbedUrl = (url) => {
+    if (!url) return '';
+    try {
+      if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
+        let videoId = '';
+        if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+        else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
+        else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
+        return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+      }
+      if (url.includes('instagram.com')) {
+        // Extract the shortcode from /reel/SHORTCODE, /reels/SHORTCODE, /p/SHORTCODE, or /tv/SHORTCODE
+        const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+        if (match && match[1]) {
+          let shortcode = match[1];
+          // Map broken/expired legacy sample reels to verified active medical reels with full video thumbnails
+          const brokenMap = {
+            'DeArmJdSQa6': 'DWGyY03lWc2',
+            'DeAA8evMsBS': 'DXpDWdoDKai',
+            'DdrR6vApDBK': 'DZdBbmoM1tn',
+            'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+            'C9_K5qXMO9e': 'DWGyY03lWc2'
+          };
+          if (brokenMap[shortcode]) {
+            shortcode = brokenMap[shortcode];
+          }
+          return `https://www.instagram.com/reel/${shortcode}/embed/`;
+        }
+        if (!url.includes('/embed')) {
+          const cleanUrl = url.split('?')[0].replace(/\/$/, '');
+          return `${cleanUrl}/embed/`;
+        }
+      }
+      return url;
+    } catch {
+      return url;
+    }
+  };
+
   const isAdmin = React.useMemo(() => {
     try {
       const userStr = localStorage.getItem('user');
@@ -661,6 +785,12 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
   const doctorReviews = React.useMemo(() => {
     return getDoctorVerifiedReviews(doctor, reviews);
   }, [doctor, reviews]);
+
+  const avgRating = React.useMemo(() => {
+    if (doctorReviews.length === 0) return (doctor.rating || '4.8');
+    const total = doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+    return (total / doctorReviews.length).toFixed(1);
+  }, [doctorReviews, doctor.rating]);
 
   return (
     <div className={styles.pageWrapper}>
@@ -759,10 +889,10 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                   <h1 className={styles.heroDoctorName}>{doctor.name}</h1>
                   <div className={styles.heroRatingBadge}>
                     <Star size={14} fill="#eab308" color="#eab308" />
-                    <span className={styles.heroRatingVal}>{doctor.rating || '4.8'}</span>
+                    <span className={styles.heroRatingVal}>{avgRating}</span>
                     <span className={styles.heroRatingDivider}>|</span>
                     <span className={styles.heroReviewsCount}>
-                      {doctorReviews.length > 0 ? `${doctorReviews.length}+` : (doctor.reviewsCount || doctor.reviews || '120+')} patient reviews
+                      {doctorReviews.length}+ patient reviews
                     </span>
                   </div>
                 </div>
@@ -1005,31 +1135,29 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                 'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
                 'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
               ];
-              let rawAwards = Array.isArray(doctor.awards) && doctor.awards.length > 0 
-                ? [...doctor.awards] 
+              const awardsList = Array.isArray(doctor.awards) 
+                ? doctor.awards 
                 : default4Awards;
-              if (rawAwards.length === 3) {
-                rawAwards.push('Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)');
-              }
-              const awardsList = rawAwards;
 
-              const certificationsList = Array.isArray(doctor.certifications) && doctor.certifications.length > 0 
+              const defaultCerts = [
+                'Fellow of the American College of Cardiology (FACC)',
+                'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
+                'Advanced Cardiac Life Support (ACLS) Certified Provider',
+                'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
+              ];
+              const certificationsList = Array.isArray(doctor.certifications) 
                 ? doctor.certifications 
-                : [
-                    'Fellow of the American College of Cardiology (FACC)',
-                    'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
-                    'Advanced Cardiac Life Support (ACLS) Certified Provider',
-                    'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
-                  ];
+                : defaultCerts;
 
-              const membershipsList = Array.isArray(doctor.memberships) && doctor.memberships.length > 0 
+              const defaultMemberships = [
+                'Cardiological Society of India (CSI) - Life Member',
+                'Indian Medical Association (IMA) - Senior Member',
+                'European Society of Cardiology (ESC) - Fellow Member',
+                'Association of Physicians of India (API) - Registered Member'
+              ];
+              const membershipsList = Array.isArray(doctor.memberships) 
                 ? doctor.memberships 
-                : [
-                    'Cardiological Society of India (CSI) - Life Member',
-                    'Indian Medical Association (IMA) - Senior Member',
-                    'European Society of Cardiology (ESC) - Fellow Member',
-                    'Association of Physicians of India (API) - Registered Member'
-                  ];
+                : defaultMemberships;
 
               const default4Timeline = [
                 'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
@@ -1037,37 +1165,54 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                 'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
                 'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
               ];
-              let rawTimeline = Array.isArray(doctor.careerExperience) && doctor.careerExperience.length > 0 
-                ? [...doctor.careerExperience] 
+              const timelineList = Array.isArray(doctor.careerExperience) 
+                ? doctor.careerExperience 
                 : default4Timeline;
-              if (rawTimeline.length === 3) {
-                rawTimeline.push('Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)');
-              }
-              const timelineList = rawTimeline;
 
               const parseAwardItem = (text) => {
-                let title = text;
-                let subtitle = 'National Healthcare Summit';
-                let tag = '2023';
-                if (text.includes(' - ')) {
-                  const parts = text.split(' - ');
-                  title = parts[0].trim();
-                  subtitle = parts.slice(1).join(' - ').trim();
+                let title = typeof text === 'string' ? text : (text?.title || '');
+                let subtitle = '';
+                let tag = '';
+
+                if (typeof text === 'object' && text !== null) {
+                  title = text.title || text.name || '';
+                  subtitle = text.organization || text.subtitle || '';
+                  tag = text.year || text.tag || '';
                 }
-                if (subtitle.includes('(') && subtitle.includes(')')) {
-                  const match = subtitle.match(/\((.*?)\)/);
-                  if (match) {
-                    tag = match[1].trim();
-                    subtitle = subtitle.replace(/\(.*?\)/, '').trim();
+
+                if (typeof text === 'string') {
+                  if (text.includes(' - ')) {
+                    const parts = text.split(' - ');
+                    title = parts[0].trim();
+                    subtitle = parts.slice(1).join(' - ').trim();
                   }
-                } else if (title.includes('(') && title.includes(')')) {
-                  const match = title.match(/\((.*?)\)/);
-                  if (match) {
-                    tag = match[1].trim();
-                    title = title.replace(/\(.*?\)/, '').trim();
+                  if (subtitle.includes('(') && subtitle.includes(')')) {
+                    const match = subtitle.match(/\((.*?)\)/);
+                    if (match) {
+                      tag = match[1].trim();
+                      subtitle = subtitle.replace(/\(.*?\)/, '').trim();
+                    }
+                  } else if (title.includes('(') && title.includes(')')) {
+                    const match = title.match(/\((.*?)\)/);
+                    if (match) {
+                      tag = match[1].trim();
+                      title = title.replace(/\(.*?\)/, '').trim();
+                    }
+                  }
+
+                  if (!tag) {
+                    const yearMatch = title.match(/\b((?:19|20)\d{2})\b/);
+                    if (yearMatch) {
+                      tag = yearMatch[1];
+                      title = title.replace(/\b((?:19|20)\d{2})\b/, '').trim();
+                    }
                   }
                 }
-                return { title, subtitle: subtitle || 'National Healthcare Recognition', tag };
+
+                if (!subtitle) {
+                  subtitle = 'National Healthcare Recognition';
+                }
+                return { title, subtitle, tag };
               };
 
               const parseCertItem = (text) => {
@@ -1141,7 +1286,12 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                           Awards & Honors ({awardsList.length})
                         </h4>
                         <div className={styles.credList}>
-                          {awardsList.map((award, idx) => {
+                          {awardsList.length === 0 ? (
+                            <div style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                              No awards or honors listed yet.
+                            </div>
+                          ) : (
+                            awardsList.map((award, idx) => {
                             const parsed = parseAwardItem(award);
                             return (
                               <div key={idx} className={styles.awardItemPill}>
@@ -1157,7 +1307,8 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       </div>
 
@@ -1168,7 +1319,12 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                           Professional Medical Memberships ({membershipsList.length})
                         </h4>
                         <div className={styles.credList}>
-                          {membershipsList.map((mem, idx) => {
+                          {membershipsList.length === 0 ? (
+                            <div style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                              No professional memberships listed yet.
+                            </div>
+                          ) : (
+                            membershipsList.map((mem, idx) => {
                             const parsed = parseMembershipItem(mem);
                             return (
                               <div key={idx} className={styles.membershipItemPill}>
@@ -1184,7 +1340,8 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1198,7 +1355,12 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                           Certificates & Fellowships ({certificationsList.length})
                         </h4>
                         <div className={styles.credList}>
-                          {certificationsList.map((cert, idx) => {
+                          {certificationsList.length === 0 ? (
+                            <div style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                              No certificates or fellowships listed yet.
+                            </div>
+                          ) : (
+                            certificationsList.map((cert, idx) => {
                             const parsed = parseCertItem(cert);
                             const getCertIcon = (i) => {
                               if (i === 0) return <GraduationCap size={16} />;
@@ -1220,7 +1382,8 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       </div>
 
@@ -1230,38 +1393,80 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                           <TimelineSymbolIcon size={18} color="#4f46e5" />
                           Career Experience & Hospital Timeline ({timelineList.length})
                         </h4>
-                        <div className={styles.credList}>
-                          {timelineList.map((item, idx) => {
+                        <div className={styles.timelineListContainer}>
+                          {timelineList.length === 0 ? (
+                            <div style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                              No career experience entries listed yet.
+                            </div>
+                          ) : (
+                            timelineList.map((item, idx) => {
                             const parsed = parseTimelineItem(item);
-                            const getTimelineCardIcon = (i, isPresent) => {
-                              if (isPresent || i === 0) return <Clock size={16} />;
+                            const isPresent = parsed.isPresent || (idx === 0 && !timelineList.some(t => t.toLowerCase().includes('present')));
+                            const getTimelineCardIcon = (i, isPres) => {
+                              if (isPres || i === 0) return <Clock size={16} />;
                               if (i === 1) return <Milestone size={16} />;
                               if (i === 2) return <History size={16} />;
                               return <CalendarClock size={16} />;
                             };
                             return (
-                              <div key={idx} className={styles.timelineCard}>
-                                <div className={styles.timelineIconWrap}>
-                                  {getTimelineCardIcon(idx, parsed.isPresent)}
-                                </div>
-                                <div className={styles.credItemTextWrap}>
-                                  <div className={styles.credItemTitle}>{parsed.title}</div>
-                                  <div className={styles.credItemSubRow}>
-                                    <span className={styles.credItemSub}>{parsed.hospital}</span>
-                                    {parsed.isPresent ? (
-                                      <span className={styles.presentBadge}>
-                                        <Clock size={11} /> Present
-                                      </span>
+                              <div key={idx} className={styles.timelineRow}>
+                                {/* Left Vertical Timeline Track */}
+                                <div className={styles.timelineTrackCol}>
+                                  {/* Top connecting line segment */}
+                                  <div
+                                    className={`${styles.timelineLineTop} ${
+                                      idx === 0
+                                        ? styles.timelineLineHidden
+                                        : idx === 1 && timelineList[0]?.toLowerCase().includes('present')
+                                        ? styles.timelineLineSolid
+                                        : styles.timelineLineDotted
+                                    }`}
+                                  />
+
+                                  {/* Node: Double circle for present, single circle for rest */}
+                                  <div className={styles.timelineNodeWrap}>
+                                    {isPresent ? (
+                                      <div className={styles.timelineDoubleCircle} title="Current Role (Present)">
+                                        <div className={styles.timelineDoubleCircleInner} />
+                                      </div>
                                     ) : (
-                                      <span className={styles.timelineYearChip}>
-                                        <Calendar size={11} /> {parsed.years}
-                                      </span>
+                                      <div className={styles.timelineSingleCircle} title="Previous Role" />
                                     )}
+                                  </div>
+
+                                  {/* Bottom connecting line / tail */}
+                                  {idx < timelineList.length - 1 ? (
+                                    <div className={isPresent ? styles.timelineLineSolid : styles.timelineLineDotted} />
+                                  ) : (
+                                    <div className={styles.timelineTailDotted} />
+                                  )}
+                                </div>
+
+                                {/* Right Timeline Card */}
+                                <div className={styles.timelineCard}>
+                                  <div className={styles.timelineIconWrap}>
+                                    {getTimelineCardIcon(idx, isPresent)}
+                                  </div>
+                                  <div className={styles.credItemTextWrap}>
+                                    <div className={styles.credItemTitle}>{parsed.title}</div>
+                                    <div className={styles.credItemSubRow}>
+                                      <span className={styles.credItemSub}>{parsed.hospital}</span>
+                                      {isPresent ? (
+                                        <span className={styles.presentBadge}>
+                                          <Clock size={11} /> Present
+                                        </span>
+                                      ) : (
+                                        <span className={styles.timelineYearChip}>
+                                          <Calendar size={11} /> {parsed.years}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
                             );
-                          })}
+                          })
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1272,23 +1477,179 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
 
             {/* Instagram Reels Section */}
             {(() => {
-              const displayReels = (Array.isArray(doctor.reels)
-                ? doctor.reels.filter(r => typeof r === 'string' && r.trim().length > 0)
-                : []
-              ).slice(0, 5);
-              if (displayReels.length === 0) return null;
+              const rawReels = Array.isArray(doctor.reels) ? doctor.reels : [];
+              const parsedReels = rawReels
+                .map((r) => {
+                  let url = '';
+                  let customCover = '';
+
+                  if (typeof r === 'string') {
+                    url = r.trim();
+                  } else if (r && typeof r === 'object') {
+                    url = (r.url || r.link || '').trim();
+                    customCover = (r.coverPhoto || r.cover || r.image || r.thumbnail || '').trim();
+                  }
+
+                  if (!url && !customCover) return null;
+
+                  let shortcode = '';
+                  const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                  if (match && match[1]) {
+                    shortcode = match[1];
+                  }
+
+                  const brokenMap = {
+                    'DeArmJdSQa6': 'DWGyY03lWc2',
+                    'DeAA8evMsBS': 'DXpDWdoDKai',
+                    'DdrR6vApDBK': 'DZdBbmoM1tn',
+                    'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+                    'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+                    'C9_K5qXMO9e': 'DWGyY03lWc2'
+                  };
+                  if (brokenMap[shortcode]) {
+                    shortcode = brokenMap[shortcode];
+                  }
+
+                  const embedUrl = shortcode ? `https://www.instagram.com/reel/${shortcode}/embed/` : getEmbedUrl(url);
+
+                  return {
+                    url,
+                    shortcode,
+                    embedUrl,
+                    coverPhoto: customCover || ''
+                  };
+                })
+                .filter(Boolean)
+                .slice(0, 5);
+
+              if (parsedReels.length === 0) return null;
+
               return (
                 <div className={styles.mediaSection}>
-                  <h3>Instagram Reels</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '10px',
+                        background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#db2777',
+                        border: '1px solid #fbcfe8'
+                      }}>
+                        <SocialInstagramIcon size={20} />
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                          Instagram Reels
+                        </h3>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                          Clinical guidance, health reels, and treatment walkthroughs
+                        </p>
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      color: '#db2777',
+                      background: '#fdf2f8',
+                      padding: '4px 12px',
+                      borderRadius: '100px',
+                      border: '1px solid #fbcfe8'
+                    }}>
+                      {parsedReels.length} Reel{parsedReels.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+
                   <div className={styles.reelsGrid}>
-                    {displayReels.map((reel, idx) => {
-                      const embedUrl = getEmbedUrl(reel);
+                    {parsedReels.map((reelItem, idx) => {
                       return (
-                        <div key={idx} className={styles.reelCard} onClick={() => setActiveReel(embedUrl)}>
-                          <iframe src={embedUrl} title={`Reel ${idx + 1}`} scrolling="no" allowTransparency="true"></iframe>
-                          <div className={styles.reelOverlay}>
-                            <Play size={40} color="white" opacity={0.8} />
+                        <div 
+                          key={idx} 
+                          className={styles.reelCard} 
+                          onClick={() => handleOpenReel(reelItem)}
+                          title="Click to view reel in pop up"
+                          style={{
+                            background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+                          }}
+                        >
+                          {/* If coverPhoto was uploaded by admin in realtime, render it full bleed */}
+                          {reelItem.coverPhoto ? (
+                            <img 
+                              src={reelItem.coverPhoto} 
+                              alt={`Instagram Reel ${idx + 1}`} 
+                              className={styles.reelCoverImg}
+                              loading="lazy"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            /* Clean branded reel card placeholder when no cover is uploaded */
+                            <div style={{
+                              position: 'absolute',
+                              inset: 0,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
+                              padding: '20px',
+                              textAlign: 'center',
+                              userSelect: 'none'
+                            }}>
+                              <div style={{
+                                width: '56px',
+                                height: '56px',
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#ffffff',
+                                boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+                                marginBottom: '12px'
+                              }}>
+                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+                              </div>
+                              <span style={{
+                                color: '#ffffff',
+                                fontSize: '0.86rem',
+                                fontWeight: 700,
+                                letterSpacing: '0.02em',
+                                marginBottom: '4px'
+                              }}>
+                                Reel {idx + 1}
+                              </span>
+                              <span style={{
+                                color: '#94a3b8',
+                                fontSize: '0.72rem',
+                                fontWeight: 500
+                              }}>
+                                Tap to Play
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Gradient shadow scrim overlay when cover image exists */}
+                          {reelItem.coverPhoto && <div className={styles.reelGradientScrim} />}
+
+                          {/* Top Badge: Instagram Tag */}
+                          <div className={styles.reelTopBadge}>
+                            <SocialInstagramIcon size={14} />
+                            <span>Reel</span>
                           </div>
+
+                          {/* Center Play Button Overlay on Hover (for cards with cover photo) */}
+                          {reelItem.coverPhoto && (
+                            <div className={styles.reelPlayOverlay}>
+                              <div className={styles.reelPlayBtn}>
+                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -1641,17 +2002,93 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
         </div>
       </Container>
 
-      {/* Reel Modal */}
-      {activeReel && (
-        <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
-          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <button className={styles.closeModal} onClick={() => setActiveReel(null)}>
-              <X size={30} />
-            </button>
-            <iframe src={activeReel} title="Instagram Reel" scrolling="no" allowTransparency="true"></iframe>
+      {/* Reel Pop up Modal on Same Page */}
+      {activeReel && (() => {
+        const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
+        const videoSrc = `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
+        const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+        const fallbackEmbed = typeof activeReel === 'object' ? (activeReel.embedUrl || activeReel.url) : activeReel;
+
+        return (
+          <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
+            <div 
+              className={styles.modalContent} 
+              onClick={e => e.stopPropagation()} 
+              style={{ 
+                maxWidth: '430px', 
+                width: '92%', 
+                background: '#000000',
+                borderRadius: '20px', 
+                overflow: 'hidden',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
+                position: 'relative',
+                padding: 0
+              }}
+            >
+              {/* Floating Close Button without any branding header */}
+              <button 
+                type="button" 
+                onClick={() => setActiveReel(null)} 
+                aria-label="Close"
+                title="Close"
+                style={{
+                  position: 'absolute',
+                  top: '12px',
+                  right: '12px',
+                  zIndex: 30,
+                  background: 'rgba(0, 0, 0, 0.65)',
+                  border: '1px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '50%',
+                  width: '36px',
+                  height: '36px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#ffffff',
+                  backdropFilter: 'blur(6px)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {!reelVideoError ? (
+                  <video
+                    key={videoSrc}
+                    src={videoSrc}
+                    poster={coverSrc}
+                    autoPlay
+                    playsInline
+                    controls
+                    controlsList="nodownload"
+                    onError={() => setReelVideoError(true)}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      background: '#000000',
+                      display: 'block'
+                    }}
+                  />
+                ) : (
+                  <iframe 
+                    key={fallbackEmbed}
+                    src={fallbackEmbed} 
+                    title="Reel Player" 
+                    scrolling="no" 
+                    allowTransparency="true"
+                    allow="autoplay; encrypted-media; picture-in-picture; web-share"
+                    allowFullScreen
+                    style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                  />
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Video Modal */}
       {activeVideo && (
@@ -1731,10 +2168,12 @@ const getDoctorVerifiedReviews = (doc, liveReviews) => {
                     <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', color: '#374151', fontSize: '0.95rem' }}>Phone Number *</label>
                     <input 
                       type="tel" 
+                      inputMode="numeric"
                       required 
-                      placeholder="+91 9876543210"
+                      maxLength={10}
+                      placeholder="10-digit mobile number"
                       value={patientPhone}
-                      onChange={(e) => setPatientPhone(e.target.value)}
+                      onChange={(e) => setPatientPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                       style={{ width: '100%', padding: '12px', border: '1px solid #D1D5DB', borderRadius: '8px', fontSize: '1rem' }}
                     />
                   </div>

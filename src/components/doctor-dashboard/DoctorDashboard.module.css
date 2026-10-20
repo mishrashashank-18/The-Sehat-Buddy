@@ -335,7 +335,7 @@
 /* KPI Cards */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 18px;
 }
 
@@ -361,6 +361,7 @@
 }
 
 .kpiGreen { background: #e6f6f3; color: var(--color-primary); }
+.kpiEmerald { background: #dcfce7; color: #15803d; }
 .kpiBlue { background: #EAF8F1; color: #2563eb; }
 .kpiYellow { background: #fefce8; color: #ca8a04; }
 .kpiPurple { background: #f5f3ff; color: #7c3aed; }
@@ -380,6 +381,189 @@
 .kpiSub {
   font-size: 0.72rem;
   color: #94a3b8;
+}
+
+/* Real-Time Doctor Earnings Heatmap */
+.heatmapCard {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.heatmapHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.heatmapTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.heatmapTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.heatmapLivePulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.pulseDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulseGreen 1.6s infinite ease-in-out;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.9); opacity: 0.7; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+  70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  100% { transform: scale(0.9); opacity: 0.7; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+
+.heatmapStatsRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.heatmapStatBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #475569;
+}
+
+.heatmapStatBadge strong {
+  color: #0f172a;
+}
+
+.heatmapGridScroll {
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.heatmapMatrix {
+  display: flex;
+  gap: 5px;
+  align-items: flex-start;
+  min-width: 650px;
+}
+
+.heatmapDayLabels {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding-top: 22px;
+  margin-right: 6px;
+  user-select: none;
+}
+
+.heatmapDayLabel {
+  height: 16px;
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+}
+
+.heatmapWeekCol {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.heatmapMonthHeader {
+  height: 18px;
+  font-size: 0.70rem;
+  font-weight: 700;
+  color: #64748b;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.heatmapCell {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.heatmapCell:hover {
+  transform: scale(1.35);
+  z-index: 10;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.heatmapCellActive {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+  transform: scale(1.2);
+  z-index: 11;
+}
+
+.heatmapCellToday {
+  outline: none;
+}
+
+.heatmapFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.76rem;
+}
+
+.heatmapLegend {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.legendBox {
+  width: 13px;
+  height: 13px;
+  border-radius: 2px;
 }
 
 /* Tabs Bar */

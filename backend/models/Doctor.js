@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
 const doctorSchema = new mongoose.Schema({
+  id: { type: String, index: true },
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, default: 'CHANGEME_PENDING_SETUP', select: false },
@@ -25,7 +26,7 @@ const doctorSchema = new mongoose.Schema({
   facebook: { type: String },
   linkedin: { type: String },
   twitter: { type: String },
-  reels: [{ type: String }],
+  reels: [mongoose.Schema.Types.Mixed],
   youtube_videos: [{ type: String }],
   rating: { type: Number, default: 4.8 },
   reviews: { type: String, default: '50+' },
@@ -37,6 +38,7 @@ const doctorSchema = new mongoose.Schema({
   certifications: [{ type: String }],
   memberships: [{ type: String }],
   careerExperience: [{ type: String }],
+  tags: [{ type: String }],
   faqs: [{
     question: { type: String },
     answer: { type: String },
@@ -55,6 +57,8 @@ const doctorSchema = new mongoose.Schema({
   scheduleDays: [{ type: String }],
   availableSlots: [{ type: String }],
   slotDuration: { type: Number, default: 20 },
+  dayWiseSlots: { type: Object, default: {} },
+  dateWiseSlots: { type: Object, default: {} },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
 }, { timestamps: true, minimize: false });

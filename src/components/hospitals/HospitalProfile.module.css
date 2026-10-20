@@ -697,43 +697,118 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
-.reelCard iframe {
+.reelCoverImg {
   width: 100%;
   height: 100%;
-  border: none;
-  pointer-events: none;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.35s ease;
 }
 
-.reelOverlay {
+.reelCard:hover .reelCoverImg {
+  transform: scale(1.05);
+}
+
+.reelGradientScrim {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.4) 0%,
+    rgba(0, 0, 0, 0) 30%,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(0, 0, 0, 0.85) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.reelTopBadge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.reelPlayOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.25);
-  transition: background 0.2s;
+  background: rgba(0, 0, 0, 0.18);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+  z-index: 2;
 }
 
-.reelCard:hover .reelOverlay {
-  background: rgba(0, 0, 0, 0.45);
+.reelCard:hover .reelPlayOverlay {
+  opacity: 1;
 }
 
-.playCircle {
-  width: 52px;
-  height: 52px;
+.reelPlayBtn {
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #e1306c;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s ease;
+  transform: scale(0.9);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.reelCard:hover .playCircle {
-  transform: scale(1.1);
+.reelCard:hover .reelPlayBtn {
+  transform: scale(1);
+}
+
+.reelBottomBar {
+  position: absolute;
+  bottom: 12px;
+  left: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.reelViewsTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.reelViewsCount {
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
 }
 
 .reelIndexBadge {

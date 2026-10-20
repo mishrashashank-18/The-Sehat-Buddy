@@ -335,7 +335,7 @@ const HospitalDashboard = ({ onNavigate }) => {
   };
 
   const handleSaveMedia = async () => {
-    const cleanedReels = reels.map(r => r.trim()).filter(Boolean);
+    const cleanedReels = reels.map(r => (typeof r === 'string' ? r.trim() : (r && typeof r === 'object' ? r : ''))).filter(Boolean);
     const cleanedVideos = youtubeVideos.map(v => v.trim()).filter(Boolean);
     try {
       await updateHospital(activeHospital.id || activeHospital._id, {
@@ -895,37 +895,41 @@ const HospitalDashboard = ({ onNavigate }) => {
                 </div>
 
                 <div className={styles.mediaInputList}>
-                  {reels.map((reel, index) => (
-                    <div key={index} className={styles.mediaInputRow}>
-                      <span className={styles.mediaNumberBadge}>#{index + 1}</span>
-                      <input
-                        type="url"
-                        placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
-                        value={reel}
-                        onChange={(e) => {
-                          const updated = [...reels];
-                          updated[index] = e.target.value;
-                          setReels(updated);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveMedia();
-                          }
-                        }}
-                      />
-                      {reel && (
-                        <a
-                          href={reel}
-                          target="_blank"
-                          rel="noreferrer"
-                          className={styles.testLinkBtn}
-                        >
-                          <ExternalLink size={14} /> Preview
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                  {reels.map((reel, index) => {
+                    const reelVal = typeof reel === 'string' ? reel : (reel?.url || reel?.link || '');
+                    return (
+                      <div key={index} className={styles.mediaInputRow}>
+                        <span className={styles.mediaNumberBadge}>#{index + 1}</span>
+                        <input
+                          type="url"
+                          placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
+                          value={reelVal}
+                          onChange={(e) => {
+                            const updated = [...reels];
+                            const cur = (typeof updated[index] === 'object' && updated[index]) ? updated[index] : {};
+                            updated[index] = { ...cur, url: e.target.value };
+                            setReels(updated);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleSaveMedia();
+                            }
+                          }}
+                        />
+                        {reelVal && (
+                          <a
+                            href={reelVal}
+                            target="_blank"
+                            rel="noreferrer"
+                            className={styles.testLinkBtn}
+                          >
+                            <ExternalLink size={14} /> Preview
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </form>
 

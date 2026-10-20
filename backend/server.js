@@ -184,6 +184,123 @@ app.get('/api/stats', (req, res) => {
 // Realtime Server-Sent Events stream for entire website, pages, and all dashboards
 app.get('/api/realtime-stream', streamRealtimeDatabase);
 
+// Dedicated Instagram Reel Cover & Media Proxy Endpoint
+app.get('/api/reel-cover', async (req, res) => {
+  try {
+    const rawUrl = req.query.url;
+    if (!rawUrl) {
+      return res.status(404).send('URL is required');
+    }
+
+    let shortcode = rawUrl;
+    const match = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    if (match && match[1]) {
+      shortcode = match[1];
+    }
+    shortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '');
+
+    const brokenMap = {
+      'DeArmJdSQa6': 'DWGyY03lWc2',
+      'DeAA8evMsBS': 'DXpDWdoDKai',
+      'DdrR6vApDBK': 'DZdBbmoM1tn',
+      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+      'C9_K5qXMO9e': 'DWGyY03lWc2'
+    };
+    if (brokenMap[shortcode]) {
+      shortcode = brokenMap[shortcode];
+    }
+
+    const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    const location = igRes.headers.get('location');
+    if (location && (igRes.status === 301 || igRes.status === 302)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.redirect(location);
+    }
+
+    if (igRes.ok && igRes.headers.get('content-type')?.includes('image')) {
+      const buffer = await igRes.arrayBuffer();
+      res.setHeader('Content-Type', igRes.headers.get('content-type') || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(Buffer.from(buffer));
+    }
+
+    return res.status(404).send('Cover image not found');
+  } catch (err) {
+    return res.status(404).send('Error fetching reel cover');
+  }
+});
+
+// Dedicated Instagram Reel Direct Video Extractor / Stream Endpoint
+app.get('/api/reel-video', async (req, res) => {
+  try {
+    const rawUrl = req.query.url;
+    if (!rawUrl) {
+      return res.status(400).json({ success: false, message: 'URL is required' });
+    }
+
+    let shortcode = rawUrl;
+    const match = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    if (match && match[1]) {
+      shortcode = match[1];
+    }
+    shortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '');
+
+    const brokenMap = {
+      'DeArmJdSQa6': 'DWGyY03lWc2',
+      'DeAA8evMsBS': 'DXpDWdoDKai',
+      'DdrR6vApDBK': 'DZdBbmoM1tn',
+      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+      'C9_K5qXMO9e': 'DWGyY03lWc2'
+    };
+    if (brokenMap[shortcode]) {
+      shortcode = brokenMap[shortcode];
+    }
+
+    const embedRes = await fetch(`https://www.instagram.com/reel/${shortcode}/embed/`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (!embedRes.ok) {
+      return res.status(embedRes.status).json({ success: false, message: 'Could not fetch reel embed' });
+    }
+
+    const html = await embedRes.text();
+    const idx = html.indexOf('video_url');
+    if (idx !== -1) {
+      const after = html.substring(idx);
+      const startIdx = after.indexOf('https:');
+      let endIdx = after.indexOf('"', startIdx);
+      if (after.indexOf('\\"', startIdx) !== -1 && after.indexOf('\\"', startIdx) < endIdx) {
+        endIdx = after.indexOf('\\"', startIdx);
+      }
+      const raw = after.substring(startIdx, endIdx);
+      const cleanVideoUrl = raw.replace(/\\\/|\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\\\/g, '').replace(/\\"/g, '');
+      
+      if (req.query.json === 'true') {
+        return res.json({ success: true, videoUrl: cleanVideoUrl });
+      }
+
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.redirect(cleanVideoUrl);
+    }
+
+    return res.status(404).json({ success: false, message: 'No video stream found' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // API Routes
 app.use('/api/admin', adminRoutes);
 app.use('/api/doctors', doctorRoutes);

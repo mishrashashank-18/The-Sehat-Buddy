@@ -228,41 +228,52 @@ function AppContent() {
   }, []);
 
   const navigateTo = (viewName, param) => {
+    let resolvedView = viewName;
+    let resolvedParam = param;
+
+    if (typeof viewName === 'string' && viewName.includes(':')) {
+      const parts = viewName.split(':');
+      resolvedView = parts[0];
+      resolvedParam = parts.slice(1).join(':');
+    }
+
     let targetPath = '/';
-    if (viewName === 'admin') targetPath = '/admin';
-    else if (viewName === 'doctor') targetPath = '/doctor';
-    else if (viewName === 'hospital') targetPath = '/hospital';
-    else if (viewName === 'user-login') targetPath = '/login';
-    else if (viewName === 'find-doctors') {
-      const queryString = param && typeof param === 'object' 
-        ? '?' + new URLSearchParams(param).toString() 
+    if (resolvedView === 'admin') targetPath = '/admin';
+    else if (resolvedView === 'doctor') targetPath = '/doctor';
+    else if (resolvedView === 'hospital') targetPath = '/hospital';
+    else if (resolvedView === 'user-login') targetPath = '/login';
+    else if (resolvedView === 'find-doctors') {
+      const queryString = resolvedParam && typeof resolvedParam === 'object' 
+        ? '?' + new URLSearchParams(resolvedParam).toString() 
         : '';
       targetPath = '/doctors' + queryString;
     }
-    else if (viewName === 'find-hospitals') {
-      const queryString = param && typeof param === 'object' 
-        ? '?' + new URLSearchParams(param).toString() 
+    else if (resolvedView === 'find-hospitals') {
+      const queryString = resolvedParam && typeof resolvedParam === 'object' 
+        ? '?' + new URLSearchParams(resolvedParam).toString() 
         : '';
       targetPath = '/hospitals' + queryString;
     }
-    else if (viewName === 'doctor-profile') targetPath = `/doctors/${param}`;
-    else if (viewName === 'hospital-profile') targetPath = `/hospitals/${param}`;
-    else if (viewName === 'coming-soon') targetPath = `/coming-soon/${param || 'feature'}`;
+    else if (resolvedView === 'doctor-profile') targetPath = `/doctors/${resolvedParam}`;
+    else if (resolvedView === 'hospital-profile') targetPath = `/hospitals/${resolvedParam}`;
+    else if (resolvedView === 'coming-soon') targetPath = `/coming-soon/${resolvedParam || 'feature'}`;
 
-    if (viewName === 'user-login' && param) {
-      setRedirectAfterLogin(param);
+    if (resolvedView === 'user-login' && resolvedParam) {
+      setRedirectAfterLogin(resolvedParam);
     }
 
-    window.history.pushState({}, '', targetPath);
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({}, '', targetPath);
+    }
+
     setCurrentView(
-      viewName === 'doctor-profile' 
-        ? `doctor-profile:${param}` 
-        : viewName === 'hospital-profile'
-        ? `hospital-profile:${param}`
-        : viewName === 'coming-soon'
-        ? `coming-soon:${param || 'feature'}`
-        : viewName
+      resolvedView === 'doctor-profile' 
+        ? `doctor-profile:${resolvedParam}` 
+        : resolvedView === 'hospital-profile'
+        ? `hospital-profile:${resolvedParam}`
+        : resolvedView === 'coming-soon'
+        ? `coming-soon:${resolvedParam || 'feature'}`
+        : resolvedView
     );
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
