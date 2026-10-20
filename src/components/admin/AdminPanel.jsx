@@ -42,7 +42,7 @@ import DoctorFormModal from './DoctorFormModal';
 import HospitalFormModal from './HospitalFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import FrontPageEditor from './FrontPageEditor';
-import FaqFormModal from './FaqFormModal';
+import FaqFormModal, { FAQ_ICON_OPTIONS } from './FaqFormModal';
 import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
@@ -1345,7 +1345,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                             ▶️ {(hosp.youtube_videos || []).filter(Boolean).length || 5} Videos
                           </span>
                           <span style={{ fontSize: '0.75rem', background: '#fffbeb', color: '#d97706', padding: '3px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                            ⭐ {(hosp.star_doctors || []).length || 4} Star Doctors
+                            ⭐ {(hosp.star_doctors || []).length} Star Doctors
                           </span>
                         </div>
 
@@ -1461,32 +1461,82 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                        <div>
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
-                              {faq.category}
-                            </span>
-                            {faq.targetName && (
-                              <span style={{
-                                fontSize: '0.75rem',
-                                background: faq.targetType === 'doctor' ? '#f5f3ff' : '#ecfdf5',
-                                color: faq.targetType === 'doctor' ? '#7c3aed' : '#059669',
-                                border: `1px solid ${faq.targetType === 'doctor' ? '#ddd6fe' : '#a7f3d0'}`,
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontWeight: 700
-                              }}>
-                                {faq.targetType === 'doctor' ? '👨‍⚕️ Doctor: ' : '🏥 Hospital: '}
-                                {faq.targetName}
+                        <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
+                          {(() => {
+                            const isCustom = faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.'));
+                            if (isCustom) {
+                              return (
+                                <div
+                                  title="Custom Uploaded Icon"
+                                  style={{
+                                    width: '42px',
+                                    height: '42px',
+                                    borderRadius: '11px',
+                                    background: '#ffffff',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0,
+                                    border: '1px solid #cbd5e1',
+                                    marginTop: '2px',
+                                    overflow: 'hidden',
+                                    padding: '6px'
+                                  }}
+                                >
+                                  <img src={faq.icon} alt="FAQ Icon" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                </div>
+                              );
+                            }
+                            const iconOpt = FAQ_ICON_OPTIONS.find(o => o.id === faq.icon) || FAQ_ICON_OPTIONS[0];
+                            const IconComp = iconOpt.icon;
+                            return (
+                              <div
+                                title={`Icon: ${iconOpt.label}`}
+                                style={{
+                                  width: '42px',
+                                  height: '42px',
+                                  borderRadius: '11px',
+                                  background: iconOpt.bg,
+                                  color: iconOpt.color,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  flexShrink: 0,
+                                  border: '1px solid #e2e8f0',
+                                  marginTop: '2px'
+                                }}
+                              >
+                                <IconComp size={20} />
+                              </div>
+                            );
+                          })()}
+                          <div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '0.75rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                                {faq.category}
                               </span>
-                            )}
-                            <span style={{ fontSize: '0.75rem', background: faq.isActive ? '#ecfdf5' : '#f1f5f9', color: faq.isActive ? '#059669' : '#64748b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
-                              {faq.isActive ? 'Active' : 'Hidden'}
-                            </span>
+                              {faq.targetName && (
+                                <span style={{
+                                  fontSize: '0.75rem',
+                                  background: faq.targetType === 'doctor' ? '#f5f3ff' : '#ecfdf5',
+                                  color: faq.targetType === 'doctor' ? '#7c3aed' : '#059669',
+                                  border: `1px solid ${faq.targetType === 'doctor' ? '#ddd6fe' : '#a7f3d0'}`,
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontWeight: 700
+                                }}>
+                                  {faq.targetType === 'doctor' ? '👨‍⚕️ Doctor: ' : '🏥 Hospital: '}
+                                  {faq.targetName}
+                                </span>
+                              )}
+                              <span style={{ fontSize: '0.75rem', background: faq.isActive ? '#ecfdf5' : '#f1f5f9', color: faq.isActive ? '#059669' : '#64748b', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                                {faq.isActive ? 'Active' : 'Hidden'}
+                              </span>
+                            </div>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
+                              {faq.question}
+                            </h4>
                           </div>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
-                            {faq.question}
-                          </h4>
                         </div>
 
                         <div style={{ display: 'flex', gap: '8px' }}>

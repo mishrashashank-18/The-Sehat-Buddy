@@ -348,7 +348,10 @@ export const DataProvider = ({ children }) => {
         reels: sanitizeReels((Array.isArray(h.reels) && h.reels.length > 0) ? h.reels : (existing?.reels || [])),
         youtube_videos: (Array.isArray(h.youtube_videos) && h.youtube_videos.length > 0) ? h.youtube_videos : (existing?.youtube_videos || []),
         photos: (Array.isArray(h.photos) && h.photos.length > 0) ? h.photos : (existing?.photos || []),
-        star_doctors: (Array.isArray(h.star_doctors) && h.star_doctors.length > 0) ? h.star_doctors : (existing?.star_doctors || []),
+        star_doctors: Array.isArray(h.star_doctors) ? h.star_doctors : (Array.isArray(existing?.star_doctors) ? existing.star_doctors : []),
+        totalBeds: h.totalBeds !== undefined && h.totalBeds !== null ? Number(h.totalBeds) : (existing?.totalBeds !== undefined ? Number(existing.totalBeds) : 100),
+        availableBeds: h.availableBeds !== undefined && h.availableBeds !== null ? Number(h.availableBeds) : (h.emptyBeds !== undefined && h.emptyBeds !== null ? Number(h.emptyBeds) : (existing?.availableBeds !== undefined ? Number(existing.availableBeds) : 24)),
+        emptyBeds: h.availableBeds !== undefined && h.availableBeds !== null ? Number(h.availableBeds) : (h.emptyBeds !== undefined && h.emptyBeds !== null ? Number(h.emptyBeds) : (existing?.emptyBeds !== undefined ? Number(existing.emptyBeds) : 24)),
         cashlessInsurance: h.cashlessInsurance !== undefined ? Boolean(h.cashlessInsurance) : (existing?.cashlessInsurance ?? true),
         acceptedInsurances: (Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0) ? h.acceptedInsurances : (existing?.acceptedInsurances || []),
         tpaHelpdesk: h.tpaHelpdesk || existing?.tpaHelpdesk || {
@@ -815,16 +818,44 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const deleteDoctor = (id) => {
+  const deleteDoctor = async (id) => {
     setDoctors(prev => {
-      const updated = prev.filter(doc => !matchesId(doc, id));
+      const cleanId = String(id).toLowerCase();
+      const updated = prev.filter(doc => !matchesId(doc, id) && (doc.email || '').toLowerCase() !== cleanId);
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
       } catch {}
       return updated;
     });
-    api.deleteDoctor(id).catch(() => {});
+
+    setHospitals(prev => prev.map(h => {
+      const cleanId = String(id).toLowerCase();
+      const newStars = (h.star_doctors || []).filter(sd => {
+        const sdId = typeof sd === 'object' ? String(sd._id || sd.id) : String(sd);
+        return sdId.toLowerCase() !== cleanId;
+      });
+      const newStaffDocs = (h.staff_doctors || []).filter(sd => {
+        const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase();
+        return sdEmail !== cleanId;
+      });
+      const newStaffEmails = (h.staff_emails || []).filter(e => {
+        const em = (typeof e === 'string' ? e : e?.email)?.toLowerCase();
+        return em !== cleanId;
+      });
+      return {
+        ...h,
+        star_doctors: newStars,
+        staff_doctors: newStaffDocs,
+        staff_emails: newStaffEmails
+      };
+    }));
+
+    try {
+      await api.deleteDoctor(id);
+    } catch (err) {
+      console.warn('Backend deleteDoctor failed:', err);
+    }
   };
 
   // Hospital CRUD operations
@@ -878,8 +909,20 @@ export const DataProvider = ({ children }) => {
           mergedHospital = {
             ...hosp,
             ...updatedData,
+            name: updatedData.name !== undefined ? updatedData.name : hosp.name,
+            email: updatedData.email !== undefined ? updatedData.email : hosp.email,
+            phone: updatedData.phone !== undefined ? updatedData.phone : hosp.phone,
+            address: updatedData.address !== undefined ? updatedData.address : hosp.address,
+            city: updatedData.city !== undefined ? updatedData.city : hosp.city,
+            description: updatedData.description !== undefined ? updatedData.description : hosp.description,
+            establishedYear: updatedData.establishedYear !== undefined ? parseInt(updatedData.establishedYear, 10) : hosp.establishedYear,
+            reviews: updatedData.reviews !== undefined ? updatedData.reviews : hosp.reviews,
+            isVerified: updatedData.isVerified !== undefined ? Boolean(updatedData.isVerified) : hosp.isVerified,
+            image: updatedData.image !== undefined ? updatedData.image : hosp.image,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) : hosp.rating,
             totalBeds: updatedData.totalBeds !== undefined ? parseInt(updatedData.totalBeds, 10) : hosp.totalBeds,
+            availableBeds: updatedData.availableBeds !== undefined ? parseInt(updatedData.availableBeds, 10) : (updatedData.emptyBeds !== undefined ? parseInt(updatedData.emptyBeds, 10) : hosp.availableBeds),
+            emptyBeds: updatedData.availableBeds !== undefined ? parseInt(updatedData.availableBeds, 10) : (updatedData.emptyBeds !== undefined ? parseInt(updatedData.emptyBeds, 10) : (hosp.emptyBeds !== undefined ? hosp.emptyBeds : hosp.availableBeds)),
             emergency24x7: updatedData.emergency24x7 !== undefined ? Boolean(updatedData.emergency24x7) : hosp.emergency24x7,
             cashlessInsurance: updatedData.cashlessInsurance !== undefined ? Boolean(updatedData.cashlessInsurance) : hosp.cashlessInsurance,
             acceptedInsurances: updatedData.acceptedInsurances !== undefined ? updatedData.acceptedInsurances : hosp.acceptedInsurances,
@@ -887,9 +930,18 @@ export const DataProvider = ({ children }) => {
             insuranceHelpline: updatedData.insuranceHelpline !== undefined ? updatedData.insuranceHelpline : hosp.insuranceHelpline,
             specialties: Array.isArray(updatedData.specialties)
               ? updatedData.specialties
-              : (typeof updatedData.specialties === 'string'
-                  ? updatedData.specialties.split(',').map(s => s.trim()).filter(Boolean)
-                  : hosp.specialties),
+              : (Array.isArray(updatedData.specialities)
+                  ? updatedData.specialities
+                  : (typeof updatedData.specialties === 'string'
+                      ? updatedData.specialties.split(',').map(s => s.trim()).filter(Boolean)
+                      : (hosp.specialties || hosp.specialities || []))),
+            specialities: Array.isArray(updatedData.specialties)
+              ? updatedData.specialties
+              : (Array.isArray(updatedData.specialities)
+                  ? updatedData.specialities
+                  : (typeof updatedData.specialties === 'string'
+                      ? updatedData.specialties.split(',').map(s => s.trim()).filter(Boolean)
+                      : (hosp.specialties || hosp.specialities || []))),
             reels: updatedData.reels !== undefined ? updatedData.reels : (hosp.reels || []),
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : (hosp.youtube_videos || []),
             photos: updatedData.photos !== undefined ? updatedData.photos : (hosp.photos || []),
@@ -897,7 +949,9 @@ export const DataProvider = ({ children }) => {
             staff_emails: updatedData.staff_emails !== undefined ? updatedData.staff_emails : (hosp.staff_emails || []),
             staff_doctors: updatedData.staff_doctors !== undefined ? updatedData.staff_doctors : (hosp.staff_doctors || []),
             latitude: updatedData.latitude !== undefined ? (updatedData.latitude === '' || updatedData.latitude === null ? undefined : Number(updatedData.latitude)) : hosp.latitude,
-            longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude
+            longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude,
+            instagram: updatedData.instagram !== undefined ? updatedData.instagram : (hosp.instagram || ''),
+            facebook: updatedData.facebook !== undefined ? updatedData.facebook : (hosp.facebook || '')
           };
           return mergedHospital;
         }
@@ -910,6 +964,38 @@ export const DataProvider = ({ children }) => {
       await api.updateHospital(id, mergedHospital || updatedData);
     } catch (err) {
       console.warn('Backend updateHospital failed, local state retained:', err);
+    }
+  };
+
+  const updateHospitalBeds = async (id, bedData) => {
+    const totalBeds = bedData.totalBeds !== undefined ? parseInt(bedData.totalBeds, 10) : undefined;
+    const availableBeds = bedData.availableBeds !== undefined ? parseInt(bedData.availableBeds, 10) : (bedData.emptyBeds !== undefined ? parseInt(bedData.emptyBeds, 10) : undefined);
+
+    setHospitals(prev => prev.map(h => {
+      if (matchesId(h, id)) {
+        return {
+          ...h,
+          totalBeds: totalBeds !== undefined ? totalBeds : h.totalBeds,
+          availableBeds: availableBeds !== undefined ? availableBeds : h.availableBeds,
+          emptyBeds: availableBeds !== undefined ? availableBeds : (h.emptyBeds !== undefined ? h.emptyBeds : h.availableBeds)
+        };
+      }
+      return h;
+    }));
+
+    try {
+      await api.updateHospitalBeds(id, {
+        totalBeds,
+        availableBeds,
+        emptyBeds: availableBeds
+      });
+    } catch (err) {
+      console.warn('Backend updateHospitalBeds failed, falling back to updateHospital:', err);
+      await api.updateHospital(id, {
+        totalBeds,
+        availableBeds,
+        emptyBeds: availableBeds
+      });
     }
   };
 
@@ -1283,6 +1369,7 @@ export const DataProvider = ({ children }) => {
         deleteDoctor,
         addHospital,
         updateHospital,
+        updateHospitalBeds,
         deleteHospital,
         // Branding & Site Identity
         branding,

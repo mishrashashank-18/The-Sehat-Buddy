@@ -14,6 +14,10 @@ const faqSchema = new mongoose.Schema({
   },
   targetId: { type: String, default: '' },
   targetName: { type: String, default: '' },
+  icon: { 
+    type: String, 
+    default: 'credit-card' 
+  },
   order: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });

@@ -26,12 +26,14 @@ import {
   Search,
   Filter,
   HelpCircle,
-  LogOut
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api, API_BASE } from '../../services/api';
 import HospitalLocationPicker from './HospitalLocationPicker';
 import SpecialityFormModal from '../admin/SpecialityFormModal';
+import HospitalProfileEditModal from '../hospitals/HospitalProfileEditModal';
 import logoImg from '../../assets/images/logo.png';
 import styles from './HospitalDashboard.module.css';
 
@@ -53,6 +55,10 @@ const HospitalDashboard = ({ onNavigate }) => {
     hospitals,
     doctors,
     updateHospital,
+    updateDoctor,
+    deleteDoctor,
+    refreshDoctors,
+    refreshHospitals,
     updateDoctorFaqs,
     addDoctor,
     specialitiesProcedures,
@@ -139,6 +145,13 @@ const HospitalDashboard = ({ onNavigate }) => {
     isStarDoctor: false
   });
   const [isAddingDoc, setIsAddingDoc] = useState(false);
+
+  // Delete doctor state
+  const [doctorToDelete, setDoctorToDelete] = useState(null);
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false);
+
+  // Edit hospital facility profile state
+  const [isEditFacilityModalOpen, setIsEditFacilityModalOpen] = useState(false);
 
   // Doctor FAQs management modal (managed by registered hospital)
   const [isDoctorFaqModalOpen, setIsDoctorFaqModalOpen] = useState(false);
@@ -322,10 +335,119 @@ const HospitalDashboard = ({ onNavigate }) => {
     }
   };
 
-  // Doctors affiliated with this hospital
-  const affiliatedDoctors = doctors.filter(
-    d => d.hospital?.toLowerCase() === activeHospital.name?.toLowerCase() || !d.hospital
-  );
+  const handleConfirmDeleteDoctor = async () => {
+    if (!doctorToDelete) return;
+    setIsDeletingDoc(true);
+    try {
+      const docId = doctorToDelete._id || doctorToDelete.id || doctorToDelete.email;
+      const docEmail = (doctorToDelete.email || '').toLowerCase().trim();
+      const docIdStr = String(docId);
+
+      if (deleteDoctor) {
+        await deleteDoctor(docId);
+      } else {
+        await api.deleteDoctor(docId);
+      }
+
+      const updatedStaffDocs = (activeHospital.staff_doctors || []).filter(d => {
+        const dEmail = (typeof d === 'string' ? d : d?.email || '')?.toLowerCase().trim();
+        const dId = String(typeof d === 'object' ? (d?._id || d?.id || '') : '');
+        if (docEmail && dEmail === docEmail) return false;
+        if (docIdStr && (dId === docIdStr || dEmail === docIdStr.toLowerCase())) return false;
+        return true;
+      });
+
+      const updatedStaffEmails = (activeHospital.staff_emails || []).filter(e => {
+        const eStr = (typeof e === 'string' ? e : e?.email || '')?.toLowerCase().trim();
+        if (docEmail && eStr === docEmail) return false;
+        if (docIdStr && eStr === docIdStr.toLowerCase()) return false;
+        return true;
+      });
+
+      const updatedStarDocs = (activeHospital.star_doctors || []).filter(sId => {
+        const sIdStr = String(sId || '');
+        if (docIdStr && sIdStr === docIdStr) return false;
+        if (docEmail && sIdStr.toLowerCase() === docEmail) return false;
+        return true;
+      });
+
+      const targetHospitalId = activeHospital.id || activeHospital._id;
+      if (targetHospitalId) {
+        await updateHospital(targetHospitalId, {
+          staff_doctors: updatedStaffDocs,
+          staff_emails: updatedStaffEmails,
+          star_doctors: updatedStarDocs
+        });
+      }
+
+      setStarDoctorIds(prev => prev.filter(id => String(id) !== docIdStr && String(id).toLowerCase() !== docEmail));
+
+      if (refreshDoctors) await refreshDoctors();
+      if (refreshHospitals) await refreshHospitals();
+
+      showToast(`Doctor ${doctorToDelete.name || ''} deleted from roster and database.`);
+      setDoctorToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete doctor:', err);
+      showToast('Failed to delete doctor. Please try again.');
+    } finally {
+      setIsDeletingDoc(false);
+    }
+  };
+
+  // Doctors affiliated with this hospital (only real doctors registered to this hospital center)
+  const affiliatedDoctors = useMemo(() => {
+    const hospName = (activeHospital.name || '').toLowerCase().trim();
+    const staffEmails = new Set([
+      ...(activeHospital.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
+      ...(activeHospital.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
+    ].filter(Boolean));
+
+    const staffNameMap = new Map();
+    (activeHospital.staff_doctors || []).forEach(d => {
+      if (d && typeof d === 'object' && d.email && d.name) {
+        staffNameMap.set(d.email.toLowerCase().trim(), d.name.trim());
+      }
+    });
+
+    const list = [];
+    const addedEmails = new Set();
+
+    (doctors || []).forEach(doc => {
+      const docEmail = (doc.email || '').toLowerCase().trim();
+      const docHosp = (doc.hospital || '').toLowerCase().trim();
+      const isStaff = staffEmails.has(docEmail);
+      const isMatch = hospName && docHosp && (
+        docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)
+      );
+
+      if (isStaff || isMatch) {
+        list.push({
+          ...doc,
+          name: staffNameMap.get(docEmail) || doc.name
+        });
+        if (docEmail) addedEmails.add(docEmail);
+      }
+    });
+
+    (activeHospital.staff_doctors || []).forEach(sd => {
+      const sEmail = (sd?.email || sd || '').toLowerCase().trim();
+      if (sEmail && !addedEmails.has(sEmail)) {
+        addedEmails.add(sEmail);
+        list.push({
+          id: sEmail,
+          _id: sEmail,
+          name: sd?.name || ('Dr. ' + sEmail.split('@')[0]),
+          email: sEmail,
+          specialty: 'Specialist',
+          price: 500,
+          available: true
+        });
+      }
+    });
+
+    return list;
+  }, [doctors, activeHospital.name, activeHospital.staff_emails, activeHospital.staff_doctors]);
 
   const handleDispatchAmbulance = (ambId) => {
     setAmbulances(prev =>
@@ -561,6 +683,15 @@ const HospitalDashboard = ({ onNavigate }) => {
                 <div className={styles.ratingBadge}>
                   ★ {activeHospital.rating || 4.8}
                 </div>
+                <button
+                  type="button"
+                  className={styles.editFacilityHeaderBtn}
+                  onClick={() => setIsEditFacilityModalOpen(true)}
+                  title="Modify hospital facility details in database"
+                >
+                  <Edit2 size={13} />
+                  <span>Edit Facility</span>
+                </button>
               </div>
               <p className={styles.facilityAddress}>
                 <MapPin size={14} /> {activeHospital.address || 'Medical Enclave, City Central'}
@@ -692,6 +823,15 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
 
           <div className={styles.tabsActionWrap}>
+            <button
+              type="button"
+              className={styles.editFacilityPrimaryBtn}
+              onClick={() => setIsEditFacilityModalOpen(true)}
+              title="Edit hospital details and facility profile"
+            >
+              <Edit2 size={15} /> Edit Facility
+            </button>
+
             {activeTab === 'doctors' && (
               <button
                 className={styles.addPrimaryBtn}
@@ -784,27 +924,57 @@ const HospitalDashboard = ({ onNavigate }) => {
                           <td>
                             {(() => {
                               const status = doc.availabilityStatus || (doc.available === false ? 'On Leave' : 'Available');
-                              if (status === 'Busy') {
-                                return (
-                                  <span className={styles.statusBadgeBusy}>
-                                    <span className={`${styles.statusDot} ${styles.dotBusy}`}></span>
-                                    In Surgery / Busy
-                                  </span>
-                                );
-                              }
-                              if (status === 'On Leave') {
-                                return (
-                                  <span className={styles.statusBadgeLeave}>
-                                    <span className={`${styles.statusDot} ${styles.dotLeave}`}></span>
-                                    On Leave
-                                  </span>
-                                );
-                              }
+                              const badgeClass = status === 'Busy'
+                                ? styles.statusBadgeBusy
+                                : status === 'On Leave'
+                                  ? styles.statusBadgeLeave
+                                  : styles.statusBadgeAvailable;
+                              const dotClass = status === 'Busy'
+                                ? styles.dotBusy
+                                : status === 'On Leave'
+                                  ? styles.dotLeave
+                                  : styles.dotAvailable;
+
                               return (
-                                <span className={styles.statusBadgeAvailable}>
-                                  <span className={`${styles.statusDot} ${styles.dotAvailable}`}></span>
-                                  Available
-                                </span>
+                                <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+                                  <span
+                                    className={badgeClass}
+                                    style={{ cursor: 'pointer', paddingRight: '22px', position: 'relative', userSelect: 'none' }}
+                                    title="Click to toggle or change doctor availability status"
+                                  >
+                                    <span className={`${styles.statusDot} ${dotClass}`}></span>
+                                    {status === 'Busy' ? 'In Surgery / Busy' : status}
+                                    <ChevronDown size={11} style={{ position: 'absolute', right: '7px', top: '50%', transform: 'translateY(-50%)' }} />
+                                  </span>
+                                  <select
+                                    value={status}
+                                    onChange={async (e) => {
+                                      const newStatus = e.target.value;
+                                      const docTargetId = doc._id || doc.id || doc.email;
+                                      if (updateDoctor) {
+                                        await updateDoctor(docTargetId, {
+                                          availabilityStatus: newStatus,
+                                          available: newStatus === 'Available'
+                                        });
+                                      }
+                                      if (refreshDoctors) await refreshDoctors();
+                                      showToast(`${doc.name} status updated to ${newStatus}`);
+                                    }}
+                                    style={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      opacity: 0,
+                                      cursor: 'pointer',
+                                      width: '100%',
+                                      height: '100%'
+                                    }}
+                                    title="Click to change doctor availability status"
+                                  >
+                                    <option value="Available">Available</option>
+                                    <option value="Busy">In Surgery / Busy</option>
+                                    <option value="On Leave">On Leave</option>
+                                  </select>
+                                </div>
                               );
                             })()}
                           </td>
@@ -845,7 +1015,16 @@ const HospitalDashboard = ({ onNavigate }) => {
                                 title={`Manage public FAQs for ${doc.name}`}
                               >
                                 <HelpCircle size={13} />
-                                Doctor FAQs
+                                FAQs
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.deleteDoctorBtn}
+                                onClick={() => setDoctorToDelete(doc)}
+                                title={`Delete ${doc.name} from hospital roster and database`}
+                              >
+                                <Trash2 size={13} />
+                                Delete
                               </button>
                               <button
                                 className={styles.pageDoctorBtn}
@@ -2382,6 +2561,117 @@ const HospitalDashboard = ({ onNavigate }) => {
           </div>
         </div>
       )}
+
+      {/* Delete Doctor Confirmation Modal */}
+      {doctorToDelete && (
+        <div className={styles.modalOverlay} onClick={() => !isDeletingDoc && setDoctorToDelete(null)}>
+          <div
+            className={styles.modal}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '450px', borderTop: '4px solid #ef4444' }}
+          >
+            <div className={styles.modalHeader}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#dc2626'
+                }}>
+                  <Trash2 size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#111827' }}>Delete Doctor</h3>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Remove from roster & database</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isDeletingDoc && setDoctorToDelete(null)}
+                className={styles.closeBtn}
+                disabled={isDeletingDoc}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 0', fontSize: '0.9rem', color: '#374151' }}>
+              <p style={{ margin: '0 0 12px', lineHeight: '1.5' }}>
+                Are you sure you want to delete <strong>{doctorToDelete.name}</strong> ({doctorToDelete.specialty || doctorToDelete.specialization || 'Specialist'}) from <strong>{activeHospital.name}</strong>?
+              </p>
+              <div style={{
+                background: '#fff1f2',
+                border: '1px solid #fecdd3',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                fontSize: '0.82rem',
+                color: '#9f1239',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px'
+              }}>
+                <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+                <span>
+                  This action permanently removes the doctor record from MongoDB database and active roster.
+                </span>
+              </div>
+            </div>
+
+            <div className={styles.modalFooter}>
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                disabled={isDeletingDoc}
+                onClick={() => setDoctorToDelete(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDoctor}
+                disabled={isDeletingDoc}
+                style={{
+                  background: '#dc2626',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.85rem',
+                  cursor: isDeletingDoc ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                {isDeletingDoc ? (
+                  <>
+                    <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={15} />
+                    Delete Doctor
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Hospital Facility Profile Modal */}
+      <HospitalProfileEditModal
+        isOpen={isEditFacilityModalOpen}
+        onClose={() => setIsEditFacilityModalOpen(false)}
+        hospital={activeHospital}
+        onSuccess={(msg) => showToast(msg)}
+      />
     </div>
   );
 };

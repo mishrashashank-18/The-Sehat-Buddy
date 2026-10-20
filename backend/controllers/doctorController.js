@@ -821,7 +821,28 @@ export const deleteDoctorProfile = async (req, res) => {
     if (!doctor) {
       doctor = await Doctor.findOne({ id: req.params.id });
     }
+    if (!doctor && req.params.id) {
+      const decoded = decodeURIComponent(req.params.id).toLowerCase().trim();
+      doctor = await Doctor.findOne({ email: decoded });
+    }
+
     if (!doctor) {
+      // Check if this is a staff doctor email referenced in hospitals
+      const cleanEmail = decodeURIComponent(req.params.id || '').toLowerCase().trim();
+      if (cleanEmail && cleanEmail.includes('@')) {
+        const Hospital = mongoose.model('Hospital');
+        await Hospital.updateMany(
+          {},
+          {
+            $pull: {
+              staff_doctors: { email: cleanEmail },
+              staff_emails: cleanEmail
+            }
+          }
+        );
+        broadcastDbChange('hospitals', 'update', null);
+        return res.json({ success: true, message: 'Hospital staff doctor removed successfully' });
+      }
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
 
@@ -841,6 +862,7 @@ export const deleteDoctorProfile = async (req, res) => {
     }
 
     const docId = doctor._id;
+    const docEmail = (doctor.email || '').toLowerCase().trim();
 
     // Permanently remove doctor image from Cloudinary
     if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
@@ -856,8 +878,27 @@ export const deleteDoctorProfile = async (req, res) => {
     }
 
     await doctor.deleteOne();
+
+    // Also remove from any hospitals' star_doctors, staff_doctors, staff_emails in MongoDB
+    try {
+      const Hospital = mongoose.model('Hospital');
+      await Hospital.updateMany(
+        {},
+        {
+          $pull: {
+            star_doctors: docId,
+            staff_doctors: { email: docEmail },
+            staff_emails: docEmail
+          }
+        }
+      );
+      broadcastDbChange('hospitals', 'update', null);
+    } catch (hospErr) {
+      console.warn('Could not clean up doctor from hospital references:', hospErr.message);
+    }
+
     broadcastDbChange('doctors', 'delete', docId);
-    return res.json({ success: true, message: 'Doctor profile and associated assets deleted permanently' });
+    return res.json({ success: true, message: 'Doctor profile and associated assets deleted permanently from database' });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

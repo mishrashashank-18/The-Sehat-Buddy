@@ -26,7 +26,8 @@ import {
   ChevronDown,
   HelpCircle,
   CheckSquare,
-  ExternalLink
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -164,6 +165,43 @@ const FAQ_ICONS = [
   FaqShieldCheckIcon,
   FaqMapPinIcon
 ];
+
+const FAQ_ICON_MAP = {
+  'credit-card': FaqCreditCardIcon,
+  'document': FaqDocumentIcon,
+  'emergency': FaqEmergencySirenIcon,
+  'doctor': FaqDoctorAvatarIcon,
+  'shield': FaqShieldCheckIcon
+};
+
+const SocialInstagramIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+  </svg>
+);
+
+const SocialFacebookIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+  </svg>
+);
+
+const formatSocialUrl = (url, platform) => {
+  if (!url) return '#';
+  const trimmed = String(url).trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('@')) {
+    const handle = trimmed.slice(1);
+    return platform === 'instagram'
+      ? `https://www.instagram.com/${handle}`
+      : `https://www.facebook.com/${handle}`;
+  }
+  return `https://${trimmed}`;
+};
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const { hospitals, doctors, reviews, faqs } = useData();
@@ -343,15 +381,38 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
   // Collect YouTube videos: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
   const displayVideos = (Array.isArray(hospital.youtube_videos)
-    ? hospital.youtube_videos.filter(v => typeof v === 'string' && v.trim().length > 0)
+    ? hospital.youtube_videos.map(v => {
+        if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+        if (v && typeof v === 'object') {
+          const url = (v.url || '').trim();
+          const coverPhoto = (v.coverPhoto || '').trim();
+          return url ? { url, coverPhoto } : null;
+        }
+        return null;
+      }).filter(Boolean)
     : []
   ).slice(0, 5);
 
-  // Resolve star doctors
+  // Alias for nav tab usage
+  const displayReels = parsedReels;
+
+  // Resolve star doctors for this hospital center (only genuinely affiliated doctors)
+  const hospName = (hospital?.name || '').toLowerCase().trim();
+  const staffEmails = new Set([
+    ...(hospital?.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
+    ...(hospital?.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
+  ].filter(Boolean));
+
   let starDoctorsList = [];
-  if (Array.isArray(hospital.star_doctors) && hospital.star_doctors.length > 0) {
+  if (Array.isArray(hospital?.star_doctors) && hospital.star_doctors.length > 0) {
     starDoctorsList = hospital.star_doctors.map(sd => {
       if (typeof sd === 'object' && sd !== null && (sd._id || sd.id || sd.name)) {
+        const docHosp = (sd.hospital || '').toLowerCase().trim();
+        const docEmail = (sd.email || '').toLowerCase().trim();
+        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
+          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
+        if (!isAffiliated) return null;
+
         return {
           ...sd,
           id: sd._id || sd.id,
@@ -363,6 +424,15 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       
       const sdString = String(sd).toLowerCase().trim();
       let matched = doctors.find(d => String(d.id || d._id || d.email).toLowerCase().trim() === sdString);
+      
+      // If matched from global doctors, ensure doctor actually belongs to this hospital center
+      if (matched) {
+        const docHosp = (matched.hospital || '').toLowerCase().trim();
+        const docEmail = (matched.email || '').toLowerCase().trim();
+        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
+          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
+        if (!isAffiliated) return null;
+      }
       
       // If not in global doctors, check if it's a hospital staff doctor
       if (!matched && hospital.staff_doctors) {
@@ -417,6 +487,36 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             </div>
 
+            {/* Official Social Media Links Below Hospital Image */}
+            {(hospital.instagram || hospital.facebook) && (
+              <div className={styles.heroSocialLinks}>
+                {hospital.instagram && (
+                  <a
+                    href={formatSocialUrl(hospital.instagram, 'instagram')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialInstagram}`}
+                    title="Visit Official Instagram Profile"
+                    aria-label="Instagram Profile"
+                  >
+                    <SocialInstagramIcon size={19} />
+                  </a>
+                )}
+                {hospital.facebook && (
+                  <a
+                    href={formatSocialUrl(hospital.facebook, 'facebook')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialFacebook}`}
+                    title="Visit Official Facebook Page"
+                    aria-label="Facebook Page"
+                  >
+                    <SocialFacebookIcon size={19} />
+                  </a>
+                )}
+              </div>
+            )}
+
             <div className={styles.contactBox}>
               <a href={`tel:${hospital.phone || '+9118001023222'}`} className={styles.contactItem}>
                 <Phone size={17} className={styles.contactIcon} />
@@ -439,7 +539,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <div className={styles.titleSection}>
                 <h1 className={styles.hospitalTitle}>{hospital.name}</h1>
                 <div className={styles.verifiedPill}>
-                  <ShieldCheck size={15} /> Verified Healthcare Partner
+                  <ShieldCheck size={15} /> {hospital.isVerified !== false ? 'Verified Healthcare Partner' : 'Standard Healthcare Listing'}
                 </div>
               </div>
               <div className={styles.rating}>
@@ -501,7 +601,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
               <div className={styles.statPillEmergency}>
                 <Clock size={16} />
-                <span>24x7 Trauma & ER Ready</span>
+                <span>{hospital.emergency24x7 !== false ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
               </div>
               <div className={styles.statPillEst}>
                 <Calendar size={16} />
@@ -514,7 +614,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <div className={styles.specialtiesWrap}>
                 {(hospital.specialties && hospital.specialties.length > 0
                   ? hospital.specialties
-                  : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery']
+                  : (hospital.specialities && hospital.specialities.length > 0
+                      ? hospital.specialities
+                      : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery'])
                 ).map((spec, i) => {
                   const paletteClasses = [
                     styles.specLavender,
@@ -610,75 +712,77 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         </div>
 
         {/* SECTION 1: STAR DOCTORS */}
-        <section className={styles.sectionBlock} id="hospital-doctors">
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitleGroup}>
-              <h2>
-                <Sparkles size={24} color="#f59e0b" />
-                Star Doctors & Clinical Leaders
-              </h2>
-              <p>Top-rated medical consultants, department heads, and board-certified surgeons.</p>
-            </div>
-            <span className={styles.countTag}>{starDoctorsList.length} Doctors</span>
-          </div>
-
-          <div className={styles.doctorsGrid}>
-            {starDoctorsList.map((doc, idx) => (
-              <div key={doc.id || doc._id || idx} className={styles.doctorCard}>
-                <div className={styles.docImageWrapper}>
-                  <img
-                    src={doc.image}
-                    alt={doc.name}
-                    className={styles.docImage}
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
-                    }}
-                  />
-                  <div className={styles.starBadge}>
-                    <Star size={12} fill="white" color="white" /> Star Doctor
-                  </div>
-                </div>
-
-                <div className={styles.docCardBody}>
-                  <div className={styles.docNameRow}>
-                    <h3 className={styles.docName}>{doc.name}</h3>
-                    <div className={styles.docRating}>
-                      <Star size={12} fill="#EAB308" color="#EAB308" />
-                      <span>{doc.rating || 4.8}</span>
-                    </div>
-                  </div>
-
-                  <span className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Medical Specialist'}</span>
-
-                  <div className={styles.docDegree} title={doc.qualifications || doc.degree || 'MBBS'}>
-                    <GraduationCap size={13} style={{ flexShrink: 0, marginRight: 4 }} />
-                    <span className={styles.docDegreeText}>
-                      {doc.qualifications || doc.degree || 'MBBS'}
-                    </span>
-                  </div>
-
-                  <div className={styles.docExperience}>
-                    <Briefcase size={14} color="#2563eb" style={{ flexShrink: 0 }} />
-                    <span className={styles.docExperienceText}>{doc.experience || '8+ Years Experience'}</span>
-                  </div>
-
-                  <div className={styles.docFooter}>
-                    <div className={styles.docFee}>
-                      ₹{doc.price || doc.fees || 700}
-                      <span> / consult</span>
-                    </div>
-                    <button
-                      className={styles.viewDocBtn}
-                      onClick={() => onNavigate && onNavigate('doctor-profile', doc.id || doc._id)}
-                    >
-                      View Profile
-                    </button>
-                  </div>
-                </div>
+        {starDoctorsList.length > 0 && (
+          <section className={styles.sectionBlock} id="hospital-doctors">
+            <div className={styles.sectionHeader}>
+              <div className={styles.sectionTitleGroup}>
+                <h2>
+                  <Sparkles size={24} color="#f59e0b" />
+                  Star Doctors & Clinical Leaders
+                </h2>
+                <p>Top-rated medical consultants, department heads, and board-certified surgeons.</p>
               </div>
-            ))}
-          </div>
-        </section>
+              <span className={styles.countTag}>{starDoctorsList.length} Doctors</span>
+            </div>
+
+            <div className={styles.doctorsGrid}>
+              {starDoctorsList.map((doc, idx) => (
+                <div key={doc.id || doc._id || idx} className={styles.doctorCard}>
+                  <div className={styles.docImageWrapper}>
+                    <img
+                      src={doc.image}
+                      alt={doc.name}
+                      className={styles.docImage}
+                      onError={(e) => {
+                        e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                      }}
+                    />
+                    <div className={styles.starBadge}>
+                      <Star size={12} fill="white" color="white" /> Star Doctor
+                    </div>
+                  </div>
+
+                  <div className={styles.docCardBody}>
+                    <div className={styles.docNameRow}>
+                      <h3 className={styles.docName}>{doc.name}</h3>
+                      <div className={styles.docRating}>
+                        <Star size={12} fill="#EAB308" color="#EAB308" />
+                        <span>{doc.rating || 4.8}</span>
+                      </div>
+                    </div>
+
+                    <span className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Medical Specialist'}</span>
+
+                    <div className={styles.docDegree} title={doc.qualifications || doc.degree || 'MBBS'}>
+                      <GraduationCap size={13} style={{ flexShrink: 0, marginRight: 4 }} />
+                      <span className={styles.docDegreeText}>
+                        {doc.qualifications || doc.degree || 'MBBS'}
+                      </span>
+                    </div>
+
+                    <div className={styles.docExperience}>
+                      <Briefcase size={14} color="#2563eb" style={{ flexShrink: 0 }} />
+                      <span className={styles.docExperienceText}>{doc.experience || '8+ Years Experience'}</span>
+                    </div>
+
+                    <div className={styles.docFooter}>
+                      <div className={styles.docFee}>
+                        ₹{doc.price || doc.fees || 700}
+                        <span> / consult</span>
+                      </div>
+                      <button
+                        className={styles.viewDocBtn}
+                        onClick={() => onNavigate && onNavigate('doctor-profile', doc.id || doc._id)}
+                      >
+                        View Profile
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* SECTION 2: SPECIALITIES & CLINICAL PROCEDURES */}
         <div id="hospital-specialities" style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.04)', border: '1px solid #e2e8f0' }}>
@@ -816,7 +920,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </div>
 
             <div className={styles.youtubeGrid} data-count={displayVideos.length}>
-              {displayVideos.map((videoUrl, idx) => {
+              {displayVideos.map((videoItem, idx) => {
+                const videoUrl = typeof videoItem === 'string' ? videoItem : videoItem.url;
+                const coverPhoto = typeof videoItem === 'object' ? videoItem.coverPhoto : '';
                 const embedUrl = getEmbedUrl(videoUrl);
                 return (
                   <div
@@ -825,11 +931,19 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     onClick={() => setActiveVideo(embedUrl)}
                     title="Click to watch full video"
                   >
-                    <iframe
-                      src={embedUrl}
-                      title={`YouTube Video ${idx + 1}`}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    />
+                    {coverPhoto ? (
+                      <img
+                        src={coverPhoto}
+                        alt={`YouTube Video ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <iframe
+                        src={embedUrl}
+                        title={`YouTube Video ${idx + 1}`}
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      />
+                    )}
                     <div className={styles.reelOverlay}>
                       <div className={styles.ytPlayCircle}>
                         <Play size={28} fill="white" />
@@ -934,104 +1048,143 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS (FAQS) */}
         <section className={styles.sectionBlock} id="hospital-faqs">
           <div className={styles.faqCard}>
-            <div className={styles.faqHeader}>
-              <div className={styles.faqIllustrationWrap}>
-                <HospitalFaqIllustration />
-              </div>
-              <div className={styles.faqHeaderTextWrap}>
-                <h3 className={styles.faqTitle}>
-                  <HelpCircle size={28} className={styles.faqTitleIcon} />
-                  Frequently asked questions (FAQs)
-                </h3>
-                <p className={styles.faqSubtitle}>
-                  Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
-                </p>
-              </div>
-            </div>
+            <div className={styles.faqLayoutGrid}>
+              {/* Left Column: Context, Illustration & Hospital Support */}
+              <div className={styles.faqSidebarCol}>
+                <div className={styles.faqIllustrationWrap}>
+                  <HospitalFaqIllustration />
+                </div>
 
-            <div className={styles.faqList}>
-              {[
-                ...((faqs || [])
-                  .filter(f => f.isActive && f.targetType === 'hospital' && (
-                    (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
-                    (f.targetName && hospital.name && (
-                      f.targetName.toLowerCase().includes(hospital.name.toLowerCase()) ||
-                      hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
-                    ))
-                  ))
-                  .map(f => ({
-                    q: f.question,
-                    a: f.answer
-                  }))
-                ),
-                {
-                  q: `How does 100% cashless insurance pre-authorization work at ${hospital.name}?`,
-                  steps: [
-                    `Visit the Cashless Insurance Helpdesk at ${hospital.name} or start cashless verification on The Sehat Buddy`,
-                    'Present your valid health insurance policy copy / digital card and patient government photo ID',
-                    'Our hospital TPA coordinator submits your electronic pre-authorization within 30 minutes',
-                    'Once approved by your insurer, your treatment begins with zero upfront cash deposit'
-                  ],
-                  note: 'Our hospital TPA desk coordinates directly with all leading insurance providers for paperless, cashless settlement.'
-                },
-                {
-                  q: `What documents are required for patient admission at ${hospital.name}?`,
-                  a: "Please carry the patient's valid photo ID (Aadhar Card, Passport, or Voter ID), health insurance e-card / policy document, doctor's admission recommendation note, and all relevant diagnostic reports, blood tests, or imaging scans."
-                },
-                {
-                  q: `Is 24x7 emergency and trauma care available at ${hospital.name}?`,
-                  a: `Yes, ${hospital.name} is fully equipped with 24x7 emergency triage, ICU, emergency trauma surgical teams, diagnostic imaging, and dedicated ambulance services. Call ${hospital.phone || 'our helpline'} for immediate emergency assistance.`
-                },
-                {
-                  q: `Can I consult star doctors and board-certified surgeons at ${hospital.name}?`,
-                  a: `Yes, ${hospital.name} features eminent medical consultants, heads of surgery, and specialists. You can view their profiles, consultation fees, and schedule direct appointments right on this page.`
-                },
-                {
-                  q: `Which health insurance companies and TPAs are accepted at ${hospital.name}?`,
-                  a: `${hospital.name} is empaneled with all major public and private health insurance providers and TPAs including Star Health, Care Health, HDFC ERGO, ICICI Lombard, Niva Bupa, Bajaj Allianz, Medi Assist, Paramount TPA, and more.`
-                },
-                {
-                  q: `How do I get directions to ${hospital.name}?`,
-                  a: "Click the 'Get Directions' button in the location section above to open GPS navigation and view turn-by-turn routes from your current location."
-                }
-              ].map((faq, idx) => {
-                const isOpen = expandedHospitalFaq === idx;
-                const FaqIcon = FAQ_ICONS[idx % FAQ_ICONS.length];
-                return (
-                  <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
-                    <button
-                      type="button"
-                      className={styles.faqQuestionBtn}
-                      onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
-                      aria-expanded={isOpen}
-                    >
-                      <div className={styles.faqQuestionLeft}>
-                        <div className={styles.faqIconWrap}>
-                          <FaqIcon />
-                        </div>
-                        <span className={styles.faqQuestionText}>{faq.q}</span>
-                      </div>
-                      <ChevronDown
-                        size={20}
-                        className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className={styles.faqAnswer}>
-                        {Array.isArray(faq.steps) && (
-                          <ol className={styles.faqStepsList}>
-                            {faq.steps.map((step, sIdx) => (
-                              <li key={sIdx}>{step}</li>
-                            ))}
-                          </ol>
-                        )}
-                        {faq.a && <p>{faq.a}</p>}
-                        {faq.note && <p className={styles.faqNote}>{faq.note}</p>}
-                      </div>
-                    )}
+                <div className={styles.faqHeaderTextWrap}>
+                  <div className={styles.faqSectionBadge}>
+                    <HelpCircle size={14} color="#0284c7" />
+                    <span>PATIENT HELP & FAQS</span>
                   </div>
-                );
-              })}
+                  <h3 className={styles.faqMainTitle}>
+                    Frequently Asked Questions
+                  </h3>
+                  <p className={styles.faqSubtitle}>
+                    Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
+                  </p>
+                  <div className={styles.faqVerifiedPill}>
+                    <ShieldCheck size={14} color="#15803d" />
+                    <span>Verified by {hospital.name}</span>
+                  </div>
+                </div>
+
+                {/* Dedicated Support Card */}
+                <div className={styles.faqSupportCard}>
+                  <div className={styles.faqSupportHeader}>
+                    <div className={styles.faqSupportIconWrap}>
+                      <MessageSquare size={18} color="#2563eb" />
+                    </div>
+                    <div>
+                      <h4 className={styles.faqSupportTitle}>Have a Specific Question?</h4>
+                      <p className={styles.faqSupportSub}>Our hospital care desk can assist with admissions, insurance or appointments.</p>
+                    </div>
+                  </div>
+                  <div className={styles.faqSupportActions}>
+                    <a href={`tel:${hospital.phone || '+911800123456'}`} className={styles.faqSupportPhoneBtn}>
+                      <Phone size={14} />
+                      <span>Call Hospital: {hospital.phone || '+91 1800 123 456'}</span>
+                    </a>
+                    <div className={styles.faqSupportHours}>
+                      <Clock size={12} color="#64748b" />
+                      <span>24x7 Helpline Available</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Interactive Accordions */}
+              <div className={styles.faqAccordionCol}>
+                <div className={styles.faqList}>
+                  {(() => {
+                    const defaultHospitalFaqCategories = [
+                      'Cashless Insurance',
+                      'Admission & Documents',
+                      'Emergency Care',
+                      'Star Doctors',
+                      'Insurance & TPAs',
+                      'Directions & Location'
+                    ];
+
+                    const faqsToRender = (faqs || [])
+                      .filter(f => f.isActive && f.targetType === 'hospital' && (
+                        (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
+                        (f.targetName && hospital.name && (
+                          f.targetName.toLowerCase().includes(hospital.name.toLowerCase()) ||
+                          hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
+                        ))
+                      ))
+                      .map((f, i) => ({
+                        category: f.category || defaultHospitalFaqCategories[i % defaultHospitalFaqCategories.length] || 'Hospital FAQ',
+                        q: f.question,
+                        a: f.answer,
+                        icon: f.icon,
+                        steps: f.steps,
+                        note: f.note
+                      }));
+
+                    if (faqsToRender.length === 0) return null;
+
+                    return faqsToRender.map((faq, idx) => {
+                      const isOpen = expandedHospitalFaq === idx;
+                      const isCustom = faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.'));
+                      const FaqIcon = isCustom
+                        ? () => <img src={faq.icon} alt="FAQ Icon" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                        : ((faq.icon && FAQ_ICON_MAP[faq.icon]) ? FAQ_ICON_MAP[faq.icon] : FAQ_ICONS[idx % FAQ_ICONS.length]);
+                      return (
+                        <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
+                          <button
+                            type="button"
+                            className={styles.faqQuestionBtn}
+                            onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
+                            aria-expanded={isOpen}
+                          >
+                            <div className={styles.faqItemIconWrap}>
+                              <FaqIcon />
+                            </div>
+                            <div className={styles.faqQuestionTextWrap}>
+                              {faq.category && (
+                                <span className={styles.faqCategoryBadge}>{faq.category}</span>
+                              )}
+                              <span className={styles.faqQuestionText}>{faq.q}</span>
+                            </div>
+                            <div className={styles.faqChevronWrap}>
+                              <ChevronDown
+                                size={19}
+                                className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
+                              />
+                            </div>
+                          </button>
+                          {isOpen && (
+                            <div className={styles.faqAnswer}>
+                              {Array.isArray(faq.steps) && faq.steps.length > 0 && (
+                                <div className={styles.faqStepsContainer}>
+                                  {faq.steps.map((step, sIdx) => (
+                                    <div key={sIdx} className={styles.faqStepRow}>
+                                      <span className={styles.faqStepNumBadge}>{sIdx + 1}</span>
+                                      <span className={styles.faqStepText}>{step}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {faq.a && <p className={styles.faqAnswerText}>{faq.a}</p>}
+                              {faq.note && (
+                                <div className={styles.faqNoteBox}>
+                                  <CheckCircle2 size={16} color="#059669" style={{ flexShrink: 0 }} />
+                                  <span>{faq.note}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1046,25 +1199,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </h2>
               <p>Real feedback from patients treated at {hospital.name}.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsWriteReviewModalOpen(true)}
-              style={{
-                background: '#2563eb',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '8px 18px',
-                fontSize: '0.88rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Edit3 size={15} /> Write a Review
-            </button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
