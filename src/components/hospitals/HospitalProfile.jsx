@@ -26,7 +26,8 @@ import {
   ChevronDown,
   HelpCircle,
   CheckSquare,
-  ExternalLink
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
@@ -164,6 +165,14 @@ const FAQ_ICONS = [
   FaqShieldCheckIcon,
   FaqMapPinIcon
 ];
+
+const FAQ_ICON_MAP = {
+  'credit-card': FaqCreditCardIcon,
+  'document': FaqDocumentIcon,
+  'emergency': FaqEmergencySirenIcon,
+  'doctor': FaqDoctorAvatarIcon,
+  'shield': FaqShieldCheckIcon
+};
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const { hospitals, doctors, reviews, faqs } = useData();
@@ -346,6 +355,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     ? hospital.youtube_videos.filter(v => typeof v === 'string' && v.trim().length > 0)
     : []
   ).slice(0, 5);
+
+  // Alias for nav tab usage
+  const displayReels = parsedReels;
 
   // Resolve star doctors
   let starDoctorsList = [];
@@ -934,104 +946,143 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS (FAQS) */}
         <section className={styles.sectionBlock} id="hospital-faqs">
           <div className={styles.faqCard}>
-            <div className={styles.faqHeader}>
-              <div className={styles.faqIllustrationWrap}>
-                <HospitalFaqIllustration />
-              </div>
-              <div className={styles.faqHeaderTextWrap}>
-                <h3 className={styles.faqTitle}>
-                  <HelpCircle size={28} className={styles.faqTitleIcon} />
-                  Frequently asked questions (FAQs)
-                </h3>
-                <p className={styles.faqSubtitle}>
-                  Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
-                </p>
-              </div>
-            </div>
+            <div className={styles.faqLayoutGrid}>
+              {/* Left Column: Context, Illustration & Hospital Support */}
+              <div className={styles.faqSidebarCol}>
+                <div className={styles.faqIllustrationWrap}>
+                  <HospitalFaqIllustration />
+                </div>
 
-            <div className={styles.faqList}>
-              {[
-                ...((faqs || [])
-                  .filter(f => f.isActive && f.targetType === 'hospital' && (
-                    (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
-                    (f.targetName && hospital.name && (
-                      f.targetName.toLowerCase().includes(hospital.name.toLowerCase()) ||
-                      hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
-                    ))
-                  ))
-                  .map(f => ({
-                    q: f.question,
-                    a: f.answer
-                  }))
-                ),
-                {
-                  q: `How does 100% cashless insurance pre-authorization work at ${hospital.name}?`,
-                  steps: [
-                    `Visit the Cashless Insurance Helpdesk at ${hospital.name} or start cashless verification on The Sehat Buddy`,
-                    'Present your valid health insurance policy copy / digital card and patient government photo ID',
-                    'Our hospital TPA coordinator submits your electronic pre-authorization within 30 minutes',
-                    'Once approved by your insurer, your treatment begins with zero upfront cash deposit'
-                  ],
-                  note: 'Our hospital TPA desk coordinates directly with all leading insurance providers for paperless, cashless settlement.'
-                },
-                {
-                  q: `What documents are required for patient admission at ${hospital.name}?`,
-                  a: "Please carry the patient's valid photo ID (Aadhar Card, Passport, or Voter ID), health insurance e-card / policy document, doctor's admission recommendation note, and all relevant diagnostic reports, blood tests, or imaging scans."
-                },
-                {
-                  q: `Is 24x7 emergency and trauma care available at ${hospital.name}?`,
-                  a: `Yes, ${hospital.name} is fully equipped with 24x7 emergency triage, ICU, emergency trauma surgical teams, diagnostic imaging, and dedicated ambulance services. Call ${hospital.phone || 'our helpline'} for immediate emergency assistance.`
-                },
-                {
-                  q: `Can I consult star doctors and board-certified surgeons at ${hospital.name}?`,
-                  a: `Yes, ${hospital.name} features eminent medical consultants, heads of surgery, and specialists. You can view their profiles, consultation fees, and schedule direct appointments right on this page.`
-                },
-                {
-                  q: `Which health insurance companies and TPAs are accepted at ${hospital.name}?`,
-                  a: `${hospital.name} is empaneled with all major public and private health insurance providers and TPAs including Star Health, Care Health, HDFC ERGO, ICICI Lombard, Niva Bupa, Bajaj Allianz, Medi Assist, Paramount TPA, and more.`
-                },
-                {
-                  q: `How do I get directions to ${hospital.name}?`,
-                  a: "Click the 'Get Directions' button in the location section above to open GPS navigation and view turn-by-turn routes from your current location."
-                }
-              ].map((faq, idx) => {
-                const isOpen = expandedHospitalFaq === idx;
-                const FaqIcon = FAQ_ICONS[idx % FAQ_ICONS.length];
-                return (
-                  <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
-                    <button
-                      type="button"
-                      className={styles.faqQuestionBtn}
-                      onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
-                      aria-expanded={isOpen}
-                    >
-                      <div className={styles.faqQuestionLeft}>
-                        <div className={styles.faqIconWrap}>
-                          <FaqIcon />
-                        </div>
-                        <span className={styles.faqQuestionText}>{faq.q}</span>
-                      </div>
-                      <ChevronDown
-                        size={20}
-                        className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className={styles.faqAnswer}>
-                        {Array.isArray(faq.steps) && (
-                          <ol className={styles.faqStepsList}>
-                            {faq.steps.map((step, sIdx) => (
-                              <li key={sIdx}>{step}</li>
-                            ))}
-                          </ol>
-                        )}
-                        {faq.a && <p>{faq.a}</p>}
-                        {faq.note && <p className={styles.faqNote}>{faq.note}</p>}
-                      </div>
-                    )}
+                <div className={styles.faqHeaderTextWrap}>
+                  <div className={styles.faqSectionBadge}>
+                    <HelpCircle size={14} color="#0284c7" />
+                    <span>PATIENT HELP & FAQS</span>
                   </div>
-                );
-              })}
+                  <h3 className={styles.faqMainTitle}>
+                    Frequently Asked Questions
+                  </h3>
+                  <p className={styles.faqSubtitle}>
+                    Essential answers regarding 100% cashless mediclaim, patient admission, specialists, and visiting policies at {hospital.name}.
+                  </p>
+                  <div className={styles.faqVerifiedPill}>
+                    <ShieldCheck size={14} color="#15803d" />
+                    <span>Verified by {hospital.name}</span>
+                  </div>
+                </div>
+
+                {/* Dedicated Support Card */}
+                <div className={styles.faqSupportCard}>
+                  <div className={styles.faqSupportHeader}>
+                    <div className={styles.faqSupportIconWrap}>
+                      <MessageSquare size={18} color="#2563eb" />
+                    </div>
+                    <div>
+                      <h4 className={styles.faqSupportTitle}>Have a Specific Question?</h4>
+                      <p className={styles.faqSupportSub}>Our hospital care desk can assist with admissions, insurance or appointments.</p>
+                    </div>
+                  </div>
+                  <div className={styles.faqSupportActions}>
+                    <a href={`tel:${hospital.phone || '+911800123456'}`} className={styles.faqSupportPhoneBtn}>
+                      <Phone size={14} />
+                      <span>Call Hospital: {hospital.phone || '+91 1800 123 456'}</span>
+                    </a>
+                    <div className={styles.faqSupportHours}>
+                      <Clock size={12} color="#64748b" />
+                      <span>24x7 Helpline Available</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Interactive Accordions */}
+              <div className={styles.faqAccordionCol}>
+                <div className={styles.faqList}>
+                  {(() => {
+                    const defaultHospitalFaqCategories = [
+                      'Cashless Insurance',
+                      'Admission & Documents',
+                      'Emergency Care',
+                      'Star Doctors',
+                      'Insurance & TPAs',
+                      'Directions & Location'
+                    ];
+
+                    const faqsToRender = (faqs || [])
+                      .filter(f => f.isActive && f.targetType === 'hospital' && (
+                        (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
+                        (f.targetName && hospital.name && (
+                          f.targetName.toLowerCase().includes(hospital.name.toLowerCase()) ||
+                          hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
+                        ))
+                      ))
+                      .map((f, i) => ({
+                        category: f.category || defaultHospitalFaqCategories[i % defaultHospitalFaqCategories.length] || 'Hospital FAQ',
+                        q: f.question,
+                        a: f.answer,
+                        icon: f.icon,
+                        steps: f.steps,
+                        note: f.note
+                      }));
+
+                    if (faqsToRender.length === 0) return null;
+
+                    return faqsToRender.map((faq, idx) => {
+                      const isOpen = expandedHospitalFaq === idx;
+                      const isCustom = faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.'));
+                      const FaqIcon = isCustom
+                        ? () => <img src={faq.icon} alt="FAQ Icon" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
+                        : ((faq.icon && FAQ_ICON_MAP[faq.icon]) ? FAQ_ICON_MAP[faq.icon] : FAQ_ICONS[idx % FAQ_ICONS.length]);
+                      return (
+                        <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
+                          <button
+                            type="button"
+                            className={styles.faqQuestionBtn}
+                            onClick={() => setExpandedHospitalFaq(isOpen ? null : idx)}
+                            aria-expanded={isOpen}
+                          >
+                            <div className={styles.faqItemIconWrap}>
+                              <FaqIcon />
+                            </div>
+                            <div className={styles.faqQuestionTextWrap}>
+                              {faq.category && (
+                                <span className={styles.faqCategoryBadge}>{faq.category}</span>
+                              )}
+                              <span className={styles.faqQuestionText}>{faq.q}</span>
+                            </div>
+                            <div className={styles.faqChevronWrap}>
+                              <ChevronDown
+                                size={19}
+                                className={`${styles.faqChevron} ${isOpen ? styles.faqChevronOpen : ''}`}
+                              />
+                            </div>
+                          </button>
+                          {isOpen && (
+                            <div className={styles.faqAnswer}>
+                              {Array.isArray(faq.steps) && faq.steps.length > 0 && (
+                                <div className={styles.faqStepsContainer}>
+                                  {faq.steps.map((step, sIdx) => (
+                                    <div key={sIdx} className={styles.faqStepRow}>
+                                      <span className={styles.faqStepNumBadge}>{sIdx + 1}</span>
+                                      <span className={styles.faqStepText}>{step}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {faq.a && <p className={styles.faqAnswerText}>{faq.a}</p>}
+                              {faq.note && (
+                                <div className={styles.faqNoteBox}>
+                                  <CheckCircle2 size={16} color="#059669" style={{ flexShrink: 0 }} />
+                                  <span>{faq.note}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -1046,25 +1097,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </h2>
               <p>Real feedback from patients treated at {hospital.name}.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsWriteReviewModalOpen(true)}
-              style={{
-                background: '#2563eb',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '8px 18px',
-                fontSize: '0.88rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
-            >
-              <Edit3 size={15} /> Write a Review
-            </button>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>

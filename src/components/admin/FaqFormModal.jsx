@@ -1,7 +1,16 @@
-import React, { useState, useMemo } from 'react';
-import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag } from 'lucide-react';
+import React, { useState, useMemo, useRef } from 'react';
+import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag, CreditCard, FileText, Siren, ShieldCheck, Upload, Loader2 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { api } from '../../services/api';
 import styles from './DoctorFormModal.module.css';
+
+export const FAQ_ICON_OPTIONS = [
+  { id: 'credit-card', label: 'Cashless / Card', icon: CreditCard, color: '#d97706', bg: '#fef3c7' },
+  { id: 'document', label: 'Admission / Info', icon: FileText, color: '#0284c7', bg: '#e0f2fe' },
+  { id: 'emergency', label: 'Emergency / 24x7', icon: Siren, color: '#ef4444', bg: '#fee2e2' },
+  { id: 'doctor', label: 'Doctor / Specialist', icon: Stethoscope, color: '#7c3aed', bg: '#ede9fe' },
+  { id: 'shield', label: 'Verified / Policy', icon: ShieldCheck, color: '#059669', bg: '#d1fae5' }
+];
 
 const FAQ_CATEGORIES = [
   'Hospitals & Admissions',
@@ -59,11 +68,56 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
     return Array.from(set);
   }, [faqs, isInitialCustom, initialCategory]);
 
+  const fileInputRef = useRef(null);
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+  const [customIconPreview, setCustomIconPreview] = useState(() => {
+    const isCustom = faqToEdit?.icon && (faqToEdit.icon.startsWith('http') || faqToEdit.icon.startsWith('data:image') || faqToEdit.icon.startsWith('/'));
+    return isCustom ? faqToEdit.icon : null;
+  });
+
+  const handleIconUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.name.endsWith('.svg')) {
+      alert('Please upload an image file (PNG, JPG, SVG, WebP).');
+      return;
+    }
+
+    setIsUploadingIcon(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = (loadEvt) => {
+        const localData = loadEvt.target.result;
+        setCustomIconPreview(localData);
+        setFormData(prev => ({ ...prev, icon: localData }));
+      };
+      reader.readAsDataURL(file);
+
+      try {
+        const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/faq_icons');
+        if (uploadedUrl) {
+          setCustomIconPreview(uploadedUrl);
+          setFormData(prev => ({ ...prev, icon: uploadedUrl }));
+        }
+      } catch (uploadErr) {
+        console.warn('Backend upload skipped, using local base64:', uploadErr);
+      }
+    } catch (err) {
+      console.error('Failed to read icon file:', err);
+      alert('Failed to read icon file. Please try another image.');
+    } finally {
+      setIsUploadingIcon(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const [formData, setFormData] = useState({
     targetType: initialTargetType,
     targetId: initialTargetId,
     targetName: initialTargetName || (initialTargetType === 'doctor' ? doctors[0]?.name : hospitals[0]?.name) || '',
     category: initialCategory,
+    icon: faqToEdit?.icon || 'credit-card',
     question: faqToEdit?.question || '',
     answer: faqToEdit?.answer || '',
     order: faqToEdit?.order !== undefined ? faqToEdit.order : 0,
@@ -130,8 +184,11 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
       return;
     }
 
+    const orderNum = (formData.order === '' || isNaN(Number(formData.order))) ? 0 : Number(formData.order);
+
     onSave({
       ...formData,
+      order: orderNum,
       category: finalCategory
     });
   };
@@ -270,6 +327,148 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
             )}
           </div>
 
+          {/* STEP 3: CHOOSE OR UPLOAD FAQ ICON */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                3. Choose or Upload FAQ Icon *
+              </label>
+              {customIconPreview && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#2563eb',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0
+                  }}
+                >
+                  + Upload another icon
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
+              {FAQ_ICON_OPTIONS.map(opt => {
+                const isSelected = formData.icon === opt.id;
+                const IconComp = opt.icon;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, icon: opt.id }))}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '10px 4px',
+                      borderRadius: '12px',
+                      border: isSelected ? '2px solid #2563eb' : '1.5px solid #e2e8f0',
+                      background: isSelected ? '#eff6ff' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '10px',
+                      background: isSelected ? '#2563eb' : opt.bg,
+                      color: isSelected ? '#ffffff' : opt.color,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.15s ease'
+                    }}>
+                      <IconComp size={18} />
+                    </div>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: isSelected ? 700 : 600,
+                      color: isSelected ? '#1d4ed8' : '#475569',
+                      textAlign: 'center',
+                      lineHeight: 1.2
+                    }}>
+                      {opt.label}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {/* 6th Option: Upload Custom Icon */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (customIconPreview && formData.icon !== customIconPreview) {
+                    setFormData(prev => ({ ...prev, icon: customIconPreview }));
+                  } else {
+                    fileInputRef.current?.click();
+                  }
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px',
+                  padding: '10px 4px',
+                  borderRadius: '12px',
+                  border: (formData.icon === customIconPreview && customIconPreview) ? '2px solid #2563eb' : '1.5px dashed #94a3b8',
+                  background: (formData.icon === customIconPreview && customIconPreview) ? '#eff6ff' : '#f8fafc',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: customIconPreview ? '#ffffff' : '#f1f5f9',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: customIconPreview ? '1px solid #bfdbfe' : 'none',
+                  overflow: 'hidden'
+                }}>
+                  {isUploadingIcon ? (
+                    <Loader2 size={18} className="animate-spin" color="#2563eb" />
+                  ) : customIconPreview ? (
+                    <img
+                      src={customIconPreview}
+                      alt="Custom icon"
+                      style={{ width: '22px', height: '22px', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <Upload size={18} color="#64748b" />
+                  )}
+                </div>
+                <span style={{
+                  fontSize: '0.68rem',
+                  fontWeight: (formData.icon === customIconPreview && customIconPreview) ? 700 : 600,
+                  color: (formData.icon === customIconPreview && customIconPreview) ? '#1d4ed8' : '#475569',
+                  textAlign: 'center',
+                  lineHeight: 1.2
+                }}>
+                  {customIconPreview ? 'Custom Icon' : 'Upload Icon'}
+                </span>
+              </button>
+            </div>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/png,image/jpeg,image/svg+xml,image/webp"
+              style={{ display: 'none' }}
+              onChange={handleIconUpload}
+            />
+          </div>
+
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -404,15 +603,31 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>Display Order</label>
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="0"
                 value={formData.order}
-                onChange={(e) => setFormData({ ...formData, order: Number(e.target.value) })}
+                onFocus={(e) => {
+                  if (String(e.target.value) === '0') {
+                    e.target.select();
+                  }
+                }}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d+$/.test(val)) {
+                    setFormData(prev => ({ ...prev, order: val }));
+                  }
+                }}
                 style={{
                   border: '1.5px solid #cbd5e1',
                   borderRadius: '10px',
                   padding: '10px 14px',
                   fontSize: '0.92rem',
-                  outline: 'none'
+                  outline: 'none',
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  background: '#ffffff'
                 }}
               />
             </div>
