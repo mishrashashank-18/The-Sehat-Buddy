@@ -475,6 +475,91 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* Distinct Month-Block Matrix (Heat.js style) */
+.heatmapMonthGroupContainer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.heatmapMonthsTrack {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.heatmapMonthBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.7);
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+
+.heatmapMonthBlock:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.heatmapMonthHeaderLabel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 2px 4px 2px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.heatmapMonthNameText {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: 0.02em;
+}
+
+.heatmapMonthEarningsBadge {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.heatmapMonthWeeksGrid {
+  display: flex;
+  gap: 5px;
+}
+
+.heatmapMonthWeekCol {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.heatmapCellPlaceholder {
+  width: 16px;
+  height: 16px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.heatmapCellFuture {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: #f8fafc;
+  border: 1px dashed #e2e8f0;
+  box-sizing: border-box;
+  opacity: 0.6;
+}
+
 .heatmapMatrix {
   display: flex;
   gap: 5px;

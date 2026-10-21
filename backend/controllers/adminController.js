@@ -33,9 +33,7 @@ export const authAdmin = async (req, res) => {
 
     if (await admin.matchPassword(password)) {
       if (admin.failedLoginAttempts > 0 || admin.lockUntil) {
-        admin.failedLoginAttempts = 0;
-        admin.lockUntil = undefined;
-        await admin.save();
+        Admin.updateOne({ _id: admin._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
       }
 
       return res.json({
@@ -51,15 +49,13 @@ export const authAdmin = async (req, res) => {
     } else {
       admin.failedLoginAttempts = (admin.failedLoginAttempts || 0) + 1;
       if (admin.failedLoginAttempts >= 5) {
-        admin.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-        admin.failedLoginAttempts = 0;
-        await admin.save();
+        Admin.updateOne({ _id: admin._id }, { $set: { lockUntil: new Date(Date.now() + 15 * 60 * 1000), failedLoginAttempts: 0 } }).catch(() => {});
         return res.status(423).json({
           success: false,
           message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
         });
       }
-      await admin.save();
+      Admin.updateOne({ _id: admin._id }, { $set: { failedLoginAttempts: admin.failedLoginAttempts } }).catch(() => {});
       const remainingAttempts = Math.max(0, 5 - admin.failedLoginAttempts);
       return res.status(401).json({
         success: false,
