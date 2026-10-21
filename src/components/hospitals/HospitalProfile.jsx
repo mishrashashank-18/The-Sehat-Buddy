@@ -35,6 +35,7 @@ import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
+import { API_BASE } from '../../services/api';
 import styles from './HospitalProfile.module.css';
 
 // Hospital FAQ Illustration & Category Icons matching design reference
@@ -213,6 +214,25 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     setReelVideoError(false);
     setActiveReel(reelItem);
   };
+
+  // Trigger official Instagram Embed SDK on pop up open to ensure interactive reel playback
+  React.useEffect(() => {
+    if (activeReel) {
+      if (!window.instgrm) {
+        const script = document.createElement('script');
+        script.src = 'https://www.instagram.com/embed.js';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+      } else {
+        try {
+          window.instgrm.Embeds.process();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [activeReel]);
   const [activePhoto, setActivePhoto] = useState(null);
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false);
@@ -298,16 +318,18 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             'DeAA8evMsBS': 'DXpDWdoDKai',
             'DdrR6vApDBK': 'DZdBbmoM1tn',
             'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-            'C9_K5qXMO9e': 'DWGyY03lWc2'
+            'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+            'C9_K5qXMO9e': 'DWGyY03lWc2',
+            'DcOgyeMvU0r': 'DerD2HwAeAU'
           };
           if (brokenMap[shortcode]) {
             shortcode = brokenMap[shortcode];
           }
-          return `https://www.instagram.com/p/${shortcode}/embed/`;
+          return `https://www.instagram.com/reel/${shortcode}/embed/`;
         }
         if (!url.includes('/embed')) {
           const cleanUrl = url.split('?')[0].replace(/\/$/, '');
-          return `${cleanUrl}/embed`;
+          return `${cleanUrl}/embed/`;
         }
       }
       return url;
@@ -330,8 +352,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       </div>
     );
   }
-
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
   // Collect reels: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
   const rawHospitalReels = Array.isArray(hospital.reels) ? hospital.reels : [];
@@ -361,7 +381,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         'DdrR6vApDBK': 'DZdBbmoM1tn',
         'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
         'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-        'C9_K5qXMO9e': 'DWGyY03lWc2'
+        'C9_K5qXMO9e': 'DWGyY03lWc2',
+        'DcOgyeMvU0r': 'DerD2HwAeAU'
       };
       if (brokenMap[shortcode]) {
         shortcode = brokenMap[shortcode];
@@ -789,32 +810,54 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           <SpecialitiesProceduresSection onNavigate={onNavigate} />
         </div>
 
-        {/* SECTION 3: INSTAGRAM REELS (UP TO 5, CENTER ALIGNED) */}
+        {/* SECTION 3: INSTAGRAM REELS */}
         {parsedReels.length > 0 && (
-          <section className={styles.sectionBlock} id="hospital-media">
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitleGroup}>
-                <h2>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#e1306c" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                  </svg>
-                  Instagram Reels & Facility Shorts
-                </h2>
-                <p>Explore patient journeys, behind-the-scenes care, and health advice directly from our center.</p>
+          <div className={styles.mediaSection} id="hospital-media">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#db2777',
+                  border: '1px solid #fbcfe8'
+                }}>
+                  <SocialInstagramIcon size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                    Instagram Reels
+                  </h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                    Clinical guidance, health reels, and treatment walkthroughs
+                  </p>
+                </div>
               </div>
-              <span className={styles.countTag}>{parsedReels.length} Reel{parsedReels.length > 1 ? 's' : ''}</span>
+              <span style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: '#db2777',
+                background: '#fdf2f8',
+                padding: '4px 12px',
+                borderRadius: '100px',
+                border: '1px solid #fbcfe8'
+              }}>
+                {parsedReels.length} Reel{parsedReels.length > 1 ? 's' : ''}
+              </span>
             </div>
 
-            <div className={styles.reelsGrid} data-count={parsedReels.length}>
+            <div className={styles.reelsGrid}>
               {parsedReels.map((reelItem, idx) => {
                 return (
                   <div
                     key={idx}
                     className={styles.reelCard}
                     onClick={() => handleOpenReel(reelItem)}
-                    title="Click to play full reel in pop up"
+                    title="Click to view reel in pop up"
                     style={{
                       background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
                     }}
@@ -882,11 +925,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
                     {/* Top Badge: Instagram Tag */}
                     <div className={styles.reelTopBadge}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-                      </svg>
+                      <SocialInstagramIcon size={14} />
                       <span>Reel</span>
                     </div>
 
@@ -902,7 +941,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 );
               })}
             </div>
-          </section>
+          </div>
         )}
 
         {/* SECTION 3: YOUTUBE VIDEOS (UP TO 5, CENTER ALIGNED) */}
@@ -1307,6 +1346,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         return (
           <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
             <div 
+              className={styles.modalContent}
               onClick={(e) => e.stopPropagation()}
               style={{
                 maxWidth: '430px',

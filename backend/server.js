@@ -205,7 +205,8 @@ app.get('/api/reel-cover', async (req, res) => {
       'DdrR6vApDBK': 'DZdBbmoM1tn',
       'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
       'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2'
+      'C9_K5qXMO9e': 'DWGyY03lWc2',
+      'DcOgyeMvU0r': 'DerD2HwAeAU'
     };
     if (brokenMap[shortcode]) {
       shortcode = brokenMap[shortcode];
@@ -258,7 +259,8 @@ app.get('/api/reel-video', async (req, res) => {
       'DdrR6vApDBK': 'DZdBbmoM1tn',
       'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
       'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2'
+      'C9_K5qXMO9e': 'DWGyY03lWc2',
+      'DcOgyeMvU0r': 'DerD2HwAeAU'
     };
     if (brokenMap[shortcode]) {
       shortcode = brokenMap[shortcode];

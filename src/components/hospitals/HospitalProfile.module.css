@@ -711,38 +711,51 @@
   background: #1d4ed8;
 }
 
+.mediaSection {
+  background: white;
+  border-radius: 16px;
+  padding: 24px 28px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.03);
+  border: 1px solid #e2e8f0;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.mediaSection h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 20px;
+  color: #0f172a;
+}
+
 /* Instagram Reels Section */
 .reelsGrid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: stretch;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 20px;
-  width: 100%;
+  justify-items: center;
 }
 
 .reelCard {
-  flex: 1 1 0;
-  min-width: 150px;
+  width: 100%;
+  max-width: 260px;
   aspect-ratio: 9 / 16;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   position: relative;
   background: #0f172a;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-/* If single reel, keep it constrained so it doesn't stretch full width */
-.reelsGrid[data-count="1"] .reelCard {
-  flex: 0 1 280px;
-  max-width: 280px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease;
+  user-select: none;
 }
 
 .reelCard:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.22);
 }
 
 .reelCoverImg {
@@ -815,8 +828,8 @@
 }
 
 .reelPlayBtn {
-  width: 54px;
-  height: 54px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -954,14 +967,28 @@
 /* Modal Popup Players */
 .modalOverlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  padding: 24px;
+  padding: 20px;
+}
+
+.modalContent {
+  background: transparent;
+  width: 100%;
+  max-width: 400px;
+  height: 80vh;
+  position: relative;
+}
+
+.modalContent iframe {
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: white;
 }
 
 .modalContentReel {
@@ -1607,4 +1634,18 @@
   font-weight: 600;
   z-index: 999999;
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 768px) {
+  .reelsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .reelsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
 }
