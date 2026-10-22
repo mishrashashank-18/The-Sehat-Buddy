@@ -859,6 +859,13 @@ export const DataProvider = ({ children }) => {
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
+        const docUserStr = localStorage.getItem('doctor_user');
+        if (docUserStr) {
+          const docUser = JSON.parse(docUserStr);
+          if (matchesId(docUser, id)) {
+            localStorage.setItem('doctor_user', JSON.stringify({ ...docUser, ...mergedDoctor }));
+          }
+        }
       } catch {}
       return updated;
     });
@@ -915,6 +922,13 @@ export const DataProvider = ({ children }) => {
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
             broadcastSync(STORAGE_KEY_DOCTORS, updated);
+            const docUserStr = localStorage.getItem('doctor_user');
+            if (docUserStr) {
+              const docUser = JSON.parse(docUserStr);
+              if (matchesId(docUser, id)) {
+                localStorage.setItem('doctor_user', JSON.stringify({ ...docUser, ...res }));
+              }
+            }
           } catch {}
           return updated;
         });
@@ -923,6 +937,34 @@ export const DataProvider = ({ children }) => {
       console.warn('Backend updateDoctor failed, local state retained:', err);
     }
   };
+
+  const syncDoctorLocally = useCallback((freshDoc) => {
+    if (!freshDoc || (!freshDoc.id && !freshDoc._id)) return;
+    setDoctors(prev => {
+      let found = false;
+      const updated = prev.map(doc => {
+        if (matchesId(doc, freshDoc)) {
+          found = true;
+          return { ...doc, ...freshDoc };
+        }
+        return doc;
+      });
+      const finalDocs = found ? updated : [...updated, freshDoc];
+      try {
+        localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(finalDocs));
+      } catch {}
+      return finalDocs;
+    });
+    try {
+      const docUserStr = localStorage.getItem('doctor_user');
+      if (docUserStr) {
+        const docUser = JSON.parse(docUserStr);
+        if (matchesId(docUser, freshDoc)) {
+          localStorage.setItem('doctor_user', JSON.stringify({ ...docUser, ...freshDoc }));
+        }
+      }
+    } catch {}
+  }, []);
 
   const updateDoctorFaqs = async (doctorId, faqs, hospitalId = null) => {
     setDoctors(prev => {
@@ -1544,6 +1586,7 @@ export const DataProvider = ({ children }) => {
         hospitals,
         addDoctor,
         updateDoctor,
+        syncDoctorLocally,
         updateDoctorFaqs,
         deleteDoctor,
         addHospital,

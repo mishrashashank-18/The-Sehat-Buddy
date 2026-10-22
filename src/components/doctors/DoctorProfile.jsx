@@ -409,26 +409,41 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, updateDoctor, refreshDoctors, reviews, faqs } = useData();
+  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, faqs } = useData();
+
+  const fallbackDoctor = React.useMemo(() => {
+    try {
+      const docUser = localStorage.getItem('doctor_user');
+      if (docUser) {
+        const parsed = JSON.parse(docUser);
+        if (matchesId(parsed, doctorId) || String(parsed._id) === String(doctorId) || String(parsed.id) === String(doctorId)) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  }, [doctorId]);
 
   const doctor = doctors.find(d => 
     matchesId(d, doctorId) ||
     String(d.id) === String(doctorId) || 
     String(d._id) === String(doctorId) ||
     (d.email && String(doctorId).includes('@') && d.email.toLowerCase() === String(doctorId).toLowerCase())
-  ) || ((String(doctorId) === '1' || doctorId === 'default' || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul')) || doctors[0]) : null);
+  ) || fallbackDoctor || ((String(doctorId) === '1' || doctorId === 'default' || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul')) || doctors[0]) : null);
 
-  // Live fetching on mount to guarantee fresh credentials even after hard reload
+  // Live fetching on mount to guarantee fresh credentials even after hard reload (safe read-only local sync)
   React.useEffect(() => {
     if (!doctorId) return;
     api.getDoctorById(doctorId).then(freshDoc => {
       if (freshDoc && (freshDoc._id || freshDoc.id)) {
-        updateDoctor(doctorId, freshDoc);
+        if (syncDoctorLocally) {
+          syncDoctorLocally(freshDoc);
+        }
       }
     }).catch(() => {
       refreshDoctors?.();
     });
-  }, [doctorId]);
+  }, [doctorId, syncDoctorLocally]);
 
   // Real-time synchronization listener for database changes & cross-tab broadcasts
   React.useEffect(() => {
@@ -441,10 +456,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         );
         if (matchesCurrent) {
           if (payload.fullDocument) {
-            updateDoctor(doctorId, payload.fullDocument);
+            syncDoctorLocally?.(payload.fullDocument);
           } else {
             api.getDoctorById(doctorId).then(freshDoc => {
-              if (freshDoc) updateDoctor(doctorId, freshDoc);
+              if (freshDoc) syncDoctorLocally?.(freshDoc);
             });
           }
         }
@@ -452,7 +467,49 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     };
     window.addEventListener('sehat_db_change', handleDbChange);
     return () => window.removeEventListener('sehat_db_change', handleDbChange);
-  }, [doctorId, updateDoctor]);
+  }, [doctorId, syncDoctorLocally]);
+
+  // Restore scroll position on refresh
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const scrollKey = `sehat_doc_profile_scroll_${doctorId || 'default'}`;
+
+    const handleBeforeUnload = () => {
+      if (window.scrollY > 0) {
+        sessionStorage.setItem(scrollKey, String(window.scrollY));
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    let scrollTimer;
+    const handleScroll = () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        if (window.scrollY > 0) {
+          sessionStorage.setItem(scrollKey, String(window.scrollY));
+        }
+      }, 100);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+
+    const saved = sessionStorage.getItem(scrollKey);
+    if (saved) {
+      const top = parseInt(saved, 10);
+      if (!isNaN(top) && top > 0) {
+        [60, 180, 400].forEach(delay => {
+          setTimeout(() => {
+            window.scrollTo({ top, behavior: 'instant' });
+          }, delay);
+        });
+      }
+    }
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimer);
+    };
+  }, [doctorId]);
 
   const [activeReel, setActiveReel] = useState(null);
   const [reelVideoError, setReelVideoError] = useState(false);

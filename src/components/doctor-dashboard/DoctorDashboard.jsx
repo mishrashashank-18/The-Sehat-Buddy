@@ -293,6 +293,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       const emailMatch = doctors.find(d => (d.email || '').toLowerCase().trim() === storedUser.email.toLowerCase().trim());
       if (emailMatch) return emailMatch;
     }
+    if (storedUser && (storedUser.name || storedUser.role === 'doctor')) return storedUser;
     return doctors[0] || {};
   }, [doctors, storedUser]);
 
@@ -325,7 +326,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleSetAvailabilityStatus = async (newStatus) => {
     setAvailabilityStatus(newStatus);
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     if (docId) {
       await updateDoctor(docId, {
         availabilityStatus: newStatus,
@@ -336,7 +337,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast(`Status set to ${label}`);
   };
 
-  const activeDocId = activeDoctor?.id || activeDoctor?._id || 'default';
+  const activeDocId = activeDoctor?._id || activeDoctor?.id || 'default';
 
   // Appointments state with persistent storage per doctor and bulletproof status overrides
   const [appointments, setAppointments] = useState(() => {
@@ -457,8 +458,11 @@ const DoctorDashboard = ({ onNavigate }) => {
     return Array.from(new Set(list));
   };
 
-  // Local state for profile form to prevent API spam and CastErrors
-  const [profileForm, setProfileForm] = useState(activeDoctor);
+  // Local state for profile form initialized safely from authenticated doctor
+  const [profileForm, setProfileForm] = useState(() => {
+    const initialDoc = (storedUser && (storedUser.name || storedUser._id || storedUser.id)) ? storedUser : activeDoctor;
+    return initialDoc || {};
+  });
   const [isSavingAbout, setIsSavingAbout] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
   const [newAwardInput, setNewAwardInput] = useState('');
@@ -520,31 +524,50 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [slotPeriod, setSlotPeriod] = useState('PM');
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
-  // Track and restore scroll position across refreshes
+  // Track and restore scroll position reliably across refreshes and tab reloads
   React.useEffect(() => {
-    const onScroll = () => {
-      try {
+    if (typeof window === 'undefined') return;
+
+    // Save scroll on page unload (before refresh)
+    const handleBeforeUnload = () => {
+      if (window.scrollY > 0) {
         sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY));
-      } catch {}
+        sessionStorage.setItem('sehat_doctor_scroll_tab', activeTab);
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Debounced scroll listener during user scrolling
+    let scrollDebounce;
+    const onScroll = () => {
+      clearTimeout(scrollDebounce);
+      scrollDebounce = setTimeout(() => {
+        if (window.scrollY > 0) {
+          sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY));
+        }
+      }, 100);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
-  React.useEffect(() => {
-    try {
-      const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
-      if (savedScroll) {
-        const top = parseInt(savedScroll, 10);
-        if (!isNaN(top) && top > 0) {
-          const timer = setTimeout(() => {
+    // Restore scroll position after mount/refresh across rendering ticks
+    const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
+    if (savedScroll) {
+      const top = parseInt(savedScroll, 10);
+      if (!isNaN(top) && top > 0) {
+        [60, 150, 350, 600].forEach(delay => {
+          setTimeout(() => {
             window.scrollTo({ top, behavior: 'instant' });
-          }, 120);
-          return () => clearTimeout(timer);
-        }
+          }, delay);
+        });
       }
-    } catch {}
-  }, [activeTab]);
+    }
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('scroll', onScroll);
+      clearTimeout(scrollDebounce);
+    };
+  }, []);
 
   // Multi-day Planned Leave state
   const [leaveStartDate, setLeaveStartDate] = useState(() => {
@@ -734,6 +757,9 @@ const DoctorDashboard = ({ onNavigate }) => {
 
           // Real database appointments are the authoritative source of truth
           const realAppointments = applyStatusOverrides(allIncoming);
+          if (JSON.stringify(realAppointments) === JSON.stringify(prev)) {
+            return prev; // Prevent unnecessary re-renders and eliminate dashboard flickering
+          }
           saveDoctorAppointments(realAppointments);
           return realAppointments;
         });
@@ -850,10 +876,10 @@ const DoctorDashboard = ({ onNavigate }) => {
     document.addEventListener('visibilitychange', handleTabSwitch);
     window.addEventListener('focus', handleTabSwitch);
 
-    // Fallback polling every 4 seconds to ensure real-time queue & heatmap freshness
+    // Fallback polling every 15 seconds to ensure queue & heatmap freshness without aggressive UI flickering
     const pollInterval = setInterval(() => {
       fetchRemoteAppointments();
-    }, 4000);
+    }, 15000);
 
     return () => {
       window.removeEventListener('sehat_appointments_changed', handleAppointmentsSync);
@@ -866,7 +892,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Load initial profile data strictly when the doctor identity changes (prevents flickering/overwriting during in-place edits)
   React.useEffect(() => {
-    const currentId = activeDoctor?.id || activeDoctor?._id;
+    const currentId = activeDoctor?._id || activeDoctor?.id;
     if (!currentId) return;
 
     if (String(currentId) !== String(initialDoctorIdRef.current) || !profileForm?.name) {
@@ -1024,7 +1050,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = [...current, tagText];
     setProfileForm(prev => ({ ...prev, tags: updated }));
     setNewTagInput('');
-    updateDoctor(activeDoctor.id || activeDoctor._id, { tags: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
     showToast(`Badge "${tagText}" added!`);
   };
 
@@ -1032,7 +1058,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.tags) ? profileForm.tags : getDefaultDoctorTags(activeDoctor);
     const updated = current.filter(t => t !== tagToRemove);
     setProfileForm(prev => ({ ...prev, tags: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { tags: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
     showToast(`Badge "${tagToRemove}" removed.`);
   };
 
@@ -1064,7 +1090,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
     const uniqueDefaults = Array.from(new Set(defaultList));
     setProfileForm(prev => ({ ...prev, tags: uniqueDefaults }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { tags: uniqueDefaults });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { tags: uniqueDefaults });
     showToast('Badges reset to default recommendations!');
   };
 
@@ -1103,7 +1129,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     setProfileForm(prev => ({ ...prev, awards: updated }));
     setNewAwardInput('');
     setNewAwardYear('');
-    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { awards: updated });
     showToast('Award added and saved!');
   };
 
@@ -1124,7 +1150,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = current.map((item, i) => (i === index ? finalAward : item));
     setProfileForm(prev => ({ ...prev, awards: updated }));
     setEditingAward({ index: null, text: '', year: '' });
-    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { awards: updated });
     showToast('Award modified successfully!');
   };
 
@@ -1132,14 +1158,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, awards: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { awards: updated });
     showToast('Award deleted!');
   };
 
   const handleClearAllAwards = () => {
     if (!window.confirm('Are you sure you want to delete all awards?')) return;
     setProfileForm(prev => ({ ...prev, awards: [] }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { awards: [] });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { awards: [] });
     showToast('All awards deleted.');
   };
 
@@ -1151,7 +1177,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = [...current, newCertInput.trim()];
     setProfileForm(prev => ({ ...prev, certifications: updated }));
     setNewCertInput('');
-    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: updated });
     showToast('Certificate added and saved!');
   };
 
@@ -1161,7 +1187,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = current.map((item, i) => (i === index ? editingCert.text.trim() : item));
     setProfileForm(prev => ({ ...prev, certifications: updated }));
     setEditingCert({ index: null, text: '' });
-    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: updated });
     showToast('Certificate modified successfully!');
   };
 
@@ -1169,14 +1195,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, certifications: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: updated });
     showToast('Certificate deleted!');
   };
 
   const handleClearAllCerts = () => {
     if (!window.confirm('Are you sure you want to delete all certificates?')) return;
     setProfileForm(prev => ({ ...prev, certifications: [] }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { certifications: [] });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: [] });
     showToast('All certificates deleted.');
   };
 
@@ -1188,7 +1214,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = [...current, newMembershipInput.trim()];
     setProfileForm(prev => ({ ...prev, memberships: updated }));
     setNewMembershipInput('');
-    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: updated });
     showToast('Membership added and saved!');
   };
 
@@ -1198,7 +1224,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = current.map((item, i) => (i === index ? editingMembership.text.trim() : item));
     setProfileForm(prev => ({ ...prev, memberships: updated }));
     setEditingMembership({ index: null, text: '' });
-    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: updated });
     showToast('Membership modified successfully!');
   };
 
@@ -1206,14 +1232,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, memberships: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: updated });
     showToast('Membership deleted!');
   };
 
   const handleClearAllMemberships = () => {
     if (!window.confirm('Are you sure you want to delete all memberships?')) return;
     setProfileForm(prev => ({ ...prev, memberships: [] }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { memberships: [] });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: [] });
     showToast('All memberships deleted.');
   };
 
@@ -1247,7 +1273,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     setNewCareerExpStartYear('');
     setNewCareerExpEndYear('');
     setNewCareerExpIsPresent(false);
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     showToast('Hospital timeline role added!');
   };
 
@@ -1306,7 +1332,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = current.map((item, i) => (i === index ? finalStr : item));
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
     setEditingCareerExp({ index: null, text: '', startYear: '', endYear: '', isPresent: false });
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     showToast('Timeline role modified successfully!');
   };
 
@@ -1314,14 +1340,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     showToast('Timeline role deleted!');
   };
 
   const handleClearAllCareerExp = () => {
     if (!window.confirm('Are you sure you want to delete all timeline roles?')) return;
     setProfileForm(prev => ({ ...prev, careerExperience: [] }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: [] });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: [] });
     showToast('All timeline roles deleted.');
   };
 
@@ -1336,7 +1362,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     updated.splice(targetIndex, 0, moved);
 
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     showToast(direction === -1 ? 'Role moved up!' : 'Role moved down!');
   };
 
@@ -1370,7 +1396,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     updated.splice(targetIndex, 0, moved);
 
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-    updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+    updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     setDraggedCareerIdx(null);
     setDragOverCareerIdx(null);
     showToast('Career experience timeline reordered!');
@@ -1433,7 +1459,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         updated.splice(dragOverCareerIdx, 0, moved);
 
         setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-        updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
+        updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
         showToast('Career experience timeline reordered!');
       }
       setIsTouchDraggingCareer(false);
@@ -1455,7 +1481,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       delete newDayWise[day];
     }
     setProfileForm(prev => ({ ...prev, scheduleDays: updated, dayWiseSlots: newDayWise }));
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     if (docId) {
       await updateDoctor(docId, { scheduleDays: updated, dayWiseSlots: newDayWise });
     }
@@ -1555,7 +1581,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
 
     const updated = [...currentSlots, slot];
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'all') {
       setProfileForm(prev => ({ ...prev, availableSlots: updated }));
@@ -1582,7 +1608,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleDeleteSlot = async (slotToRemove) => {
     const currentSlots = getCurrentModeSlots();
     const updated = currentSlots.filter(s => s !== slotToRemove);
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'all') {
       setProfileForm(prev => ({ ...prev, availableSlots: updated }));
@@ -1602,7 +1628,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleApplySlotPreset = async (presetSlots, presetTitle) => {
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'all') {
       setProfileForm(prev => ({ ...prev, availableSlots: presetSlots }));
@@ -1631,7 +1657,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       : (slotConfigMode === 'day' ? `slots for ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}` : `slots for ${selectedScheduleDate}`);
     if (!window.confirm(`Are you sure you want to clear ${targetDesc}?`)) return;
 
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     if (slotConfigMode === 'all') {
       setProfileForm(prev => ({ ...prev, availableSlots: [] }));
       if (docId) await updateDoctor(docId, { availableSlots: [] });
@@ -1652,7 +1678,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Day-wise specific helpers
   const handleToggleDayOff = async (targetDay) => {
     const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const currentDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const isCurrentlyOff = isDayOff(dayKey);
 
@@ -1684,7 +1710,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleResetDayToDefault = async (targetDay) => {
     const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
     delete newDayWise[dayKey];
     let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -1699,7 +1725,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleCopyDayToAllDays = async () => {
     const currentSlots = getCurrentModeSlots();
     if (!window.confirm(`Copy ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s slots (${currentSlots.length} slots) to all 7 days?`)) return;
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
     DAYS_LIST.forEach(d => {
       newDayWise[d] = [...currentSlots];
@@ -1712,7 +1738,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Date-wise specific helpers
   const handleToggleDateOff = async () => {
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const isCurrentlyOff = profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off';
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
     if (isCurrentlyOff) {
@@ -1728,7 +1754,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleResetDateToDaySchedule = async (dateKeyToRemove) => {
     const dateKey = dateKeyToRemove || selectedScheduleDate;
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
     delete newDateWise[dateKey];
     setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
@@ -1750,7 +1776,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       return;
     }
 
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
 
     const curr = new Date(start);
@@ -1773,7 +1799,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleApplyWeeklyDaysOffPreset = async (presetType) => {
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     let newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
 
@@ -1807,7 +1833,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveDateOff = async (dateStr) => {
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
     delete newDateWise[dateStr];
     setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
@@ -1824,7 +1850,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       return; // Already set to this duration; no-op to prevent false popups or redundant updates
     }
     setProfileForm(prev => ({ ...prev, slotDuration: durNum }));
-    const docId = activeDoctor?.id || activeDoctor?._id;
+    const docId = activeDoctor?._id || activeDoctor?.id;
     if (docId) {
       await updateDoctor(docId, {
         slotDuration: durNum,
@@ -1839,7 +1865,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleSaveSchedule = async () => {
     setIsSavingSchedule(true);
     try {
-      const docId = activeDoctor?.id || activeDoctor?._id;
+      const docId = activeDoctor?._id || activeDoctor?.id;
       if (!docId) return;
       await updateDoctor(docId, {
         availableDays: profileForm.availableDays || 'Mon - Sat (10am - 4pm)',
@@ -1870,7 +1896,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     try {
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/doctors');
       setProfileForm(prev => ({ ...prev, image: uploadedUrl }));
-      await updateDoctor(activeDoctor.id || activeDoctor._id, { image: uploadedUrl });
+      await updateDoctor(activeDoctor._id || activeDoctor.id, { image: uploadedUrl });
       showToast('Profile photo uploaded and saved successfully!');
     } catch (err) {
       console.error('Failed to upload doctor photo:', err);
@@ -1878,7 +1904,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       reader.onloadend = async () => {
         const localData = reader.result;
         setProfileForm(prev => ({ ...prev, image: localData }));
-        await updateDoctor(activeDoctor.id || activeDoctor._id, { image: localData });
+        await updateDoctor(activeDoctor._id || activeDoctor.id, { image: localData });
         showToast('Profile photo updated locally!');
       };
       reader.readAsDataURL(file);
@@ -1891,7 +1917,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleRemovePhoto = async () => {
     const defaultPlaceholder = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
     setProfileForm(prev => ({ ...prev, image: defaultPlaceholder }));
-    await updateDoctor(activeDoctor.id || activeDoctor._id, { image: defaultPlaceholder });
+    await updateDoctor(activeDoctor._id || activeDoctor.id, { image: defaultPlaceholder });
     showToast('Profile photo removed!');
   };
 
@@ -2038,7 +2064,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // View public live doctor profile
   const handleViewLiveProfile = async () => {
-    const docId = activeDoctor.id || activeDoctor._id;
+    const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
     try {
       await handleSaveAllProfileSettings();
@@ -2062,14 +2088,14 @@ const DoctorDashboard = ({ onNavigate }) => {
       facebook: ''
     };
     setProfileForm(prev => ({ ...prev, ...cleared }));
-    await updateDoctor(activeDoctor.id || activeDoctor._id, cleared);
+    await updateDoctor(activeDoctor._id || activeDoctor.id, cleared);
     setIsResetModalOpen(false);
     showToast('Optional profile details reset and cleared!');
   };
 
   // Delete doctor profile completely
   const handleDeleteDoctorProfile = async () => {
-    const docId = activeDoctor.id || activeDoctor._id;
+    const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
     try {
       await deleteDoctor(docId);
@@ -4175,7 +4201,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                         if (!current.includes(sug)) {
                           const updated = [...current, sug];
                           setProfileForm(prev => ({ ...prev, tags: updated }));
-                          updateDoctor(activeDoctor.id || activeDoctor._id, { tags: updated });
+                          updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
                           showToast(`Added badge: "${sug}"`);
                         }
                       }}
@@ -8023,3 +8049,4 @@ const DoctorDashboard = ({ onNavigate }) => {
 };
 
 export default DoctorDashboard;
+
