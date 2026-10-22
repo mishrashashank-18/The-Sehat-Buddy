@@ -159,6 +159,8 @@ export const createReview = async (req, res) => {
     const review = await Review.create({
       patientName,
       patientCity: patientCity || 'Bengaluru',
+      userId: req.user?._id || req.user?.id || '',
+      userEmail: req.user?.email || '',
       targetType: targetType || 'hospital',
       targetId: targetId || '',
       targetName,

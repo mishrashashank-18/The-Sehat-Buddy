@@ -57,6 +57,17 @@ const WriteReviewModal = ({
   const handleGoToLogin = () => {
     if (onClose) onClose();
     const returnTargetId = propTargetId || preselectedTarget?.id || preselectedTarget?._id;
+    try {
+      localStorage.setItem('open_write_review', 'true');
+      if (returnTargetId) {
+        localStorage.setItem(
+          'redirect_after_login',
+          targetType === 'doctor' ? `/doctors/${returnTargetId}` : `/hospitals/${returnTargetId}`
+        );
+      }
+    } catch (e) {
+      console.warn('Storage error:', e);
+    }
     if (onNavigate) {
       onNavigate('user-login', {
         view: targetType === 'doctor' ? 'doctor-profile' : 'hospital-profile',

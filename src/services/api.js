@@ -54,6 +54,17 @@ export const api = {
     return data.data || data;
   },
 
+  async getDoctorById(id) {
+    try {
+      const res = await fetch(`${API_BASE}/doctors/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.data || data;
+      }
+    } catch {}
+    return null;
+  },
+
   async addDoctor(doctorData) {
     const res = await fetch(`${API_BASE}/admin/add-doctor`, {
       method: 'POST',

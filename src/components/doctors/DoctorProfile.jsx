@@ -10,7 +10,7 @@ import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
-import { API_BASE } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import styles from './DoctorProfile.module.css';
 
 // Local date string helper matching clinic calendar time (YYYY-MM-DD)
@@ -409,7 +409,7 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, updateDoctor, reviews, faqs } = useData();
+  const { doctors, updateDoctor, refreshDoctors, reviews, faqs } = useData();
 
   const doctor = doctors.find(d => 
     matchesId(d, doctorId) ||
@@ -417,6 +417,42 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     String(d._id) === String(doctorId) ||
     (d.email && String(doctorId).includes('@') && d.email.toLowerCase() === String(doctorId).toLowerCase())
   ) || ((String(doctorId) === '1' || doctorId === 'default' || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul')) || doctors[0]) : null);
+
+  // Live fetching on mount to guarantee fresh credentials even after hard reload
+  React.useEffect(() => {
+    if (!doctorId) return;
+    api.getDoctorById(doctorId).then(freshDoc => {
+      if (freshDoc && (freshDoc._id || freshDoc.id)) {
+        updateDoctor(doctorId, freshDoc);
+      }
+    }).catch(() => {
+      refreshDoctors?.();
+    });
+  }, [doctorId]);
+
+  // Real-time synchronization listener for database changes & cross-tab broadcasts
+  React.useEffect(() => {
+    const handleDbChange = (e) => {
+      const payload = e.detail;
+      if (payload?.collection === 'doctors') {
+        const matchesCurrent = (
+          (payload.docId && matchesId({ _id: payload.docId, id: payload.docId }, doctorId)) ||
+          (payload.fullDocument && matchesId(payload.fullDocument, doctorId))
+        );
+        if (matchesCurrent) {
+          if (payload.fullDocument) {
+            updateDoctor(doctorId, payload.fullDocument);
+          } else {
+            api.getDoctorById(doctorId).then(freshDoc => {
+              if (freshDoc) updateDoctor(doctorId, freshDoc);
+            });
+          }
+        }
+      }
+    };
+    window.addEventListener('sehat_db_change', handleDbChange);
+    return () => window.removeEventListener('sehat_db_change', handleDbChange);
+  }, [doctorId, updateDoctor]);
 
   const [activeReel, setActiveReel] = useState(null);
   const [reelVideoError, setReelVideoError] = useState(false);
@@ -450,6 +486,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+
+  // Auto-open write review modal if arriving from login redirect
+  React.useEffect(() => {
+    if (localStorage.getItem('open_write_review') === 'true') {
+      setIsWriteReviewOpen(true);
+      localStorage.removeItem('open_write_review');
+    }
+  }, [doctorId]);
 
   // Booking interaction states
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
@@ -1272,9 +1316,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
                 'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
               ];
-              const awardsList = Array.isArray(doctor.awards) 
+              const isRahulDoc = matchesId(doctor, '1') || (doctor?.name && doctor.name.toLowerCase().includes('rahul verma'));
+              const awardsList = Array.isArray(doctor?.awards) 
                 ? doctor.awards 
-                : default4Awards;
+                : (isRahulDoc ? default4Awards : []);
 
               const defaultCerts = [
                 'Fellow of the American College of Cardiology (FACC)',
@@ -1282,9 +1327,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 'Advanced Cardiac Life Support (ACLS) Certified Provider',
                 'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
               ];
-              const certificationsList = Array.isArray(doctor.certifications) 
+              const certificationsList = Array.isArray(doctor?.certifications) 
                 ? doctor.certifications 
-                : defaultCerts;
+                : (isRahulDoc ? defaultCerts : []);
 
               const defaultMemberships = [
                 'Cardiological Society of India (CSI) - Life Member',
@@ -1292,9 +1337,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 'European Society of Cardiology (ESC) - Fellow Member',
                 'Association of Physicians of India (API) - Registered Member'
               ];
-              const membershipsList = Array.isArray(doctor.memberships) 
+              const membershipsList = Array.isArray(doctor?.memberships) 
                 ? doctor.memberships 
-                : defaultMemberships;
+                : (isRahulDoc ? defaultMemberships : []);
 
               const default4Timeline = [
                 'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
@@ -1302,9 +1347,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
                 'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
               ];
-              const timelineList = Array.isArray(doctor.careerExperience) 
+              const timelineList = Array.isArray(doctor?.careerExperience) 
                 ? doctor.careerExperience 
-                : default4Timeline;
+                : (isRahulDoc ? default4Timeline : []);
 
               const parseAwardItem = (text) => {
                 let title = typeof text === 'string' ? text : (text?.title || '');

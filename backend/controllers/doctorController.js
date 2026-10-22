@@ -829,7 +829,20 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('available');
     }
 
-    const updated = await doctor.save();
+    let updated;
+    try {
+      updated = await doctor.save();
+    } catch (saveErr) {
+      if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document')) {
+        const updateData = doctor.toObject();
+        delete updateData._id;
+        delete updateData.__v;
+        delete updateData.password;
+        updated = await Doctor.findByIdAndUpdate(doctor._id, { $set: updateData }, { new: true, runValidators: false });
+      } else {
+        throw saveErr;
+      }
+    }
     const docObj = updated.toObject();
     delete docObj.password;
     delete docObj.otp;

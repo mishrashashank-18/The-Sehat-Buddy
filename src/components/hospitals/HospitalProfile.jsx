@@ -615,11 +615,15 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
   // About facility expansion state
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
-  // Auto-open booking modal if arriving from "Book Appointment" / "Book Hospital Visit"
+  // Auto-open booking modal or write review modal if arriving with pending action
   React.useEffect(() => {
     if (localStorage.getItem('autoOpenHospitalBooking') === 'true') {
       setIsBookingModalOpen(true);
       localStorage.removeItem('autoOpenHospitalBooking');
+    }
+    if (localStorage.getItem('open_write_review') === 'true') {
+      setIsWriteReviewModalOpen(true);
+      localStorage.removeItem('open_write_review');
     }
   }, [hospitalId]);
 

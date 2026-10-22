@@ -64,7 +64,7 @@ const doctorSchema = new mongoose.Schema({
   dateWiseSlots: { type: Object, default: {} },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
-}, { timestamps: true, minimize: false });
+}, { timestamps: true, minimize: false, versionKey: false });
 
 doctorSchema.pre('save', async function() {
   if (!this.isModified('password')) {

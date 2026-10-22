@@ -339,11 +339,11 @@ export const DataProvider = ({ children }) => {
         availabilityStatus: d.availabilityStatus || existing?.availabilityStatus || 'Available',
         experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
         licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
-        awards: (Array.isArray(d.awards) && d.awards.length > 0) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
-        certifications: (Array.isArray(d.certifications) && d.certifications.length > 0) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
-        memberships: (Array.isArray(d.memberships) && d.memberships.length > 0) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
-        careerExperience: (Array.isArray(d.careerExperience) && d.careerExperience.length > 0) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
-        tags: (Array.isArray(d.tags) && d.tags.length > 0) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
+        awards: Array.isArray(d.awards) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
+        certifications: Array.isArray(d.certifications) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
+        memberships: Array.isArray(d.memberships) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
+        careerExperience: Array.isArray(d.careerExperience) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
+        tags: Array.isArray(d.tags) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
         reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
         youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
         availableDays: d.availableDays || existing?.availableDays || 'Mon - Sat (10am - 4pm)',
@@ -808,7 +808,8 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateDoctor = async (id, updatedData) => {
-    let mergedDoctor = null;
+    const existingDoc = doctors.find(doc => matchesId(doc, id));
+    let mergedDoctor = existingDoc ? { ...existingDoc, ...updatedData } : { ...updatedData };
     setDoctors(prev => {
       const updated = prev.map(doc => {
         if (matchesId(doc, id)) {
@@ -892,10 +893,10 @@ export const DataProvider = ({ children }) => {
                 availabilityStatus: res.availabilityStatus !== undefined ? res.availabilityStatus : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus),
                 available: res.available !== undefined ? res.available : (updatedData.available !== undefined ? updatedData.available : doc.available),
                 experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (parseInt(String(res.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
-                awards: Array.isArray(res.awards) ? res.awards : doc.awards,
-                certifications: Array.isArray(res.certifications) ? res.certifications : doc.certifications,
-                memberships: Array.isArray(res.memberships) ? res.memberships : doc.memberships,
-                careerExperience: Array.isArray(res.careerExperience) ? res.careerExperience : doc.careerExperience,
+                awards: Array.isArray(res.awards) ? res.awards : (updatedData.awards !== undefined ? updatedData.awards : doc.awards),
+                certifications: Array.isArray(res.certifications) ? res.certifications : (updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications),
+                memberships: Array.isArray(res.memberships) ? res.memberships : (updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships),
+                careerExperience: Array.isArray(res.careerExperience) ? res.careerExperience : (updatedData.careerExperience !== undefined ? updatedData.careerExperience : doc.careerExperience),
                 tags: Array.isArray(res.tags) ? res.tags : (updatedData.tags !== undefined ? updatedData.tags : doc.tags),
                 reels: Array.isArray(res.reels) ? res.reels : doc.reels,
                 youtube_videos: Array.isArray(res.youtube_videos) ? res.youtube_videos : doc.youtube_videos,

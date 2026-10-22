@@ -972,6 +972,45 @@ const DoctorDashboard = ({ onNavigate }) => {
     activeDoctor?.slotDuration
   ]);
 
+  // Synchronize profileForm credentials (awards, certs, memberships, timeline, tags) whenever activeDoctor updates
+  React.useEffect(() => {
+    if (!activeDoctor) return;
+    setProfileForm(prev => {
+      if (!prev) return activeDoctor;
+      let changed = false;
+      const next = { ...prev };
+
+      if (Array.isArray(activeDoctor.awards) && JSON.stringify(prev.awards || []) !== JSON.stringify(activeDoctor.awards)) {
+        next.awards = activeDoctor.awards;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.certifications) && JSON.stringify(prev.certifications || []) !== JSON.stringify(activeDoctor.certifications)) {
+        next.certifications = activeDoctor.certifications;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.memberships) && JSON.stringify(prev.memberships || []) !== JSON.stringify(activeDoctor.memberships)) {
+        next.memberships = activeDoctor.memberships;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.careerExperience) && JSON.stringify(prev.careerExperience || []) !== JSON.stringify(activeDoctor.careerExperience)) {
+        next.careerExperience = activeDoctor.careerExperience;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.tags) && JSON.stringify(prev.tags || []) !== JSON.stringify(activeDoctor.tags)) {
+        next.tags = activeDoctor.tags;
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [
+    activeDoctor?.awards,
+    activeDoctor?.certifications,
+    activeDoctor?.memberships,
+    activeDoctor?.careerExperience,
+    activeDoctor?.tags
+  ]);
+
   // Tags / Badges handlers (reflects instantly in real time)
   const handleAddTag = (e) => {
     e?.preventDefault();
@@ -1881,6 +1920,9 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (JSON.stringify(profileForm.dateWiseSlots || {}) !== JSON.stringify(activeDoctor.dateWiseSlots || {})) return true;
     if (JSON.stringify(profileForm.tags || []) !== JSON.stringify(activeDoctor.tags || [])) return true;
     if (JSON.stringify(profileForm.awards || []) !== JSON.stringify(activeDoctor.awards || [])) return true;
+    if (JSON.stringify(profileForm.certifications || []) !== JSON.stringify(activeDoctor.certifications || [])) return true;
+    if (JSON.stringify(profileForm.memberships || []) !== JSON.stringify(activeDoctor.memberships || [])) return true;
+    if (JSON.stringify(profileForm.careerExperience || []) !== JSON.stringify(activeDoctor.careerExperience || [])) return true;
 
     return false;
   };
@@ -1919,11 +1961,11 @@ const DoctorDashboard = ({ onNavigate }) => {
       jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant',
       licenseNumber: profileForm.licenseNumber || '',
       about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
-      awards: Array.isArray(profileForm.awards) ? profileForm.awards : [],
-      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : [],
-      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : [],
-      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [],
-      tags: Array.isArray(profileForm.tags) ? profileForm.tags : [],
+      awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
+      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : (Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : []),
+      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : (Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : []),
+      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : (Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []),
+      tags: Array.isArray(profileForm.tags) ? profileForm.tags : (Array.isArray(activeDoctor.tags) ? activeDoctor.tags : []),
       reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : (Array.isArray(profileForm.reels) ? profileForm.reels : []),
       youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : (Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []),
       availableDays: profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
