@@ -7,6 +7,7 @@ import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
+import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -32,6 +33,20 @@ export const authDoctor = async (req, res) => {
     if (await doctor.matchPassword(password)) {
       if (doctor.failedLoginAttempts > 0 || doctor.lockUntil) {
         Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
+      }
+
+      // If doctor hasn't set their personal password yet, require them to set it
+      if (doctor.isFirstLogin || !doctor.passwordSet) {
+        return res.json({
+          success: true,
+          requiresPasswordChange: true,
+          isFirstLogin: true,
+          message: 'Temporary password verified. Please create your permanent password.',
+          email: doctor.email,
+          name: doctor.name,
+          hospital: doctor.hospital,
+          temporaryPassword: password
+        });
       }
 
       const docObj = doctor.toObject();
@@ -100,23 +115,62 @@ export const checkDoctorEmail = async (req, res) => {
 };
 
 /**
- * Set password for first-time doctor login
+ * Set password for first-time doctor login (Verifies temporary password sent to email first)
  */
 export const setInitialPassword = async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    const { email, temporaryPassword, password } = req.body;
+    if (!email || !temporaryPassword || !password) {
+      return res.status(400).json({ success: false, message: 'Doctor email, temporary password, and new password are required' });
     }
 
+    const cleanEmail = email.toLowerCase().trim();
+    const doctor = await Doctor.findOne({ email: cleanEmail }).select('+password +failedLoginAttempts +lockUntil');
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor account not found' });
+    }
+
+    // Account lockout check
+    if (doctor.lockUntil && doctor.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((doctor.lockUntil - Date.now()) / (60 * 1000));
+      return res.status(423).json({
+        success: false,
+        message: `Account is temporarily locked. Please try again in ${remainingMinutes} minute(s).`
+      });
+    }
+
+    // Verify temporary password against doctor.password
+    const isTempValid = await doctor.matchPassword(temporaryPassword);
+    if (!isTempValid) {
+      doctor.failedLoginAttempts = (doctor.failedLoginAttempts || 0) + 1;
+      if (doctor.failedLoginAttempts >= 5) {
+        doctor.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+        doctor.failedLoginAttempts = 0;
+        await doctor.save();
+        return res.status(423).json({
+          success: false,
+          message: 'Account locked for 15 minutes due to 5 consecutive failed attempts.'
+        });
+      }
+      await doctor.save();
+      const remaining = Math.max(0, 5 - doctor.failedLoginAttempts);
+      return res.status(401).json({
+        success: false,
+        message: `Invalid temporary password. Please enter the exact temporary password sent to your email (${remaining} attempt(s) remaining).`
+      });
+    }
+
+    // Validate new password policy
     const passwordCheck = validatePassword(password);
     if (!passwordCheck.isValid) {
       return res.status(400).json({ success: false, message: passwordCheck.message });
     }
 
-    const doctor = await Doctor.findOne({ email: email.toLowerCase().trim() });
-    if (!doctor) {
-      return res.status(404).json({ success: false, message: 'Doctor account not found' });
+    if (temporaryPassword === password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your new password cannot be the same as your temporary password. Please choose a different password.'
+      });
     }
 
     doctor.password = password;
@@ -138,6 +192,46 @@ export const setInitialPassword = async (req, res) => {
       message: 'Password set successfully! Logging in...',
       token: generateToken(doctor._id, 'doctor', doctor.tokenVersion),
       user: docObj
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Resend temporary password to doctor's registered email
+ */
+export const resendDoctorTempPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an email address' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const doctor = await Doctor.findOne({ email: cleanEmail }).select('+password');
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'No registered doctor account found with this email' });
+    }
+
+    if (!doctor.isFirstLogin && doctor.passwordSet) {
+      return res.status(400).json({
+        success: false,
+        message: 'Your account has already set a permanent password. Please log in using your password or reset via Forgot Password.'
+      });
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    doctor.password = temporaryPassword;
+    doctor.isFirstLogin = true;
+    doctor.passwordSet = false;
+    await doctor.save();
+
+    await sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName: doctor.hospital });
+
+    return res.json({
+      success: true,
+      message: `A fresh temporary password has been sent to ${doctor.email}. Please check your inbox.`
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -337,19 +431,24 @@ export const addDoctorByHospital = async (req, res) => {
       await doctor.save();
     } else {
       const docName = name && name.trim() ? name.trim() : ('Dr. ' + cleanEmail.split('@')[0].replace(/[._-]/g, ' '));
+      const temporaryPassword = generateTemporaryPassword();
       doctor = await Doctor.create({
         name: docName,
         email: cleanEmail,
-        password: 'CHANGEME_PENDING_SETUP',
+        password: temporaryPassword,
         specialization: specialization || 'General Medicine',
         experience: Number(experience) || 5,
         fees: Number(fees) || 500,
+        price: Number(fees) || 500,
         hospital: hospitalName || '',
         isStarDoctor: Boolean(isStarDoctor),
         isFirstLogin: true,
         passwordSet: false,
         about: `Clinical specialist affiliated with ${hospitalName || 'hospital'}.`
       });
+
+      // Send welcome email with temporary password
+      sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName });
     }
 
     if (hospitalId) {

@@ -45,6 +45,19 @@ const LoginPage = ({ role, setView }) => {
   // Doctor specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning) OR 'reset-otp' / 'reset-new-password'
   const [docStep, setDocStep] = useState('email');
   const [docInfo, setDocInfo] = useState(null);
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [showTempPassword, setShowTempPassword] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendingTemp, setResendingTemp] = useState(false);
+
+  // Auto-decrement cooldown timer for resending temporary password
+  useEffect(() => {
+    let timer;
+    if (resendCooldown > 0) {
+      timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
 
   // Hospital specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning) OR 'reset-otp' / 'reset-new-password'
   const [hospStep, setHospStep] = useState('email');
@@ -60,7 +73,7 @@ const LoginPage = ({ role, setView }) => {
     doctor: {
       title: 'Doctor Portal',
       subtitle: docStep === 'set-password'
-        ? 'Welcome to the clinical portal. Set your new account password.'
+        ? 'Enter your temporary password and create your new personal password.'
         : (docStep === 'reset-otp'
           ? 'Enter the 6-digit OTP sent to your registered email.'
           : (docStep === 'reset-new-password'
@@ -147,18 +160,40 @@ const LoginPage = ({ role, setView }) => {
     }
   };
 
-  // DOCTOR STEP 2A: Set Initial Password on First Login
+  // DOCTOR STEP 2A: Set Initial Password on First Login (Requires Temporary Password from Email)
   const handleDoctorSetPassword = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMessage('');
+
+    if (!temporaryPassword.trim()) {
+      setError('Please enter the temporary password sent to your email.');
+      return;
+    }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters long.');
+      setError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    // Complexity verification: uppercase, lowercase, number, special character
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
+    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+      setError('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.');
       return;
     }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    if (temporaryPassword.trim() === password) {
+      setError('Your new password cannot be the same as your temporary password. Please choose a different password.');
       return;
     }
 
@@ -168,7 +203,11 @@ const LoginPage = ({ role, setView }) => {
       const response = await fetch(`${API_BASE}/doctors/set-initial-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          temporaryPassword: temporaryPassword.trim(),
+          password
+        }),
       });
 
       const data = await response.json();
@@ -177,12 +216,41 @@ const LoginPage = ({ role, setView }) => {
         saveAuthSession('doctor', data.token, data.user);
         window.location.href = '/doctor';
       } else {
-        setError(data.message || 'Failed to set password. Please try again.');
+        setError(data.message || 'Failed to set password. Please check your temporary password and try again.');
       }
     } catch (err) {
-      setError('An error occurred while saving your password.');
+      setError('An error occurred while saving your password. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // DOCTOR STEP 2A-Helper: Resend Temporary Password to Doctor Email
+  const handleResendDoctorTempPassword = async () => {
+    if (resendCooldown > 0 || resendingTemp) return;
+    setError('');
+    setSuccessMessage('');
+    setResendingTemp(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/doctors/resend-temp-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSuccessMessage(data.message || 'A fresh temporary password has been sent to your email.');
+        setResendCooldown(60);
+      } else {
+        setError(data.message || 'Failed to resend temporary password. Please try again.');
+      }
+    } catch {
+      setError('Could not connect to authentication server. Please try again.');
+    } finally {
+      setResendingTemp(false);
     }
   };
 
@@ -202,6 +270,15 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
+        if (data.requiresPasswordChange || data.isFirstLogin) {
+          setDocInfo({ ...docInfo, name: data.name, hospital: data.hospital });
+          setTemporaryPassword(password);
+          setPassword('');
+          setConfirmPassword('');
+          setDocStep('set-password');
+          setSuccessMessage('Temporary password verified! Please set your new permanent password below.');
+          return;
+        }
         saveAuthSession('doctor', data.token, data.user);
         window.location.href = '/doctor';
       } else {
@@ -695,7 +772,7 @@ const LoginPage = ({ role, setView }) => {
                 ? 'Verify OTP'
                 : (role === 'doctor'
                   ? (docStep === 'set-password'
-                    ? 'Set Your Password'
+                    ? 'Verify & Set Your Password'
                     : (docStep === 'reset-otp'
                       ? 'Verify Reset OTP'
                       : (docStep === 'reset-new-password'
@@ -760,7 +837,7 @@ const LoginPage = ({ role, setView }) => {
                   </div>
 
                   <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '4px 0 16px 0' }}>
-                    💡 Enter your registered email. If you were added by a hospital or admin, you will be able to set your password on the next step.
+                    💡 Enter your registered email. When registered by a hospital or admin, a temporary password is sent to your email to verify and set your permanent password.
                   </p>
 
                   <button type="submit" className={styles.submitButton} disabled={loading}>
@@ -795,7 +872,7 @@ const LoginPage = ({ role, setView }) => {
                 </form>
               )}
 
-              {/* STEP 2A: FIRST-TIME LOGIN: SET PASSWORD */}
+              {/* STEP 2A: FIRST-TIME LOGIN: ENTER TEMPORARY PASSWORD & SET NEW PASSWORD */}
               {docStep === 'set-password' && (
                 <form className={styles.authForm} onSubmit={handleDoctorSetPassword}>
                   <div style={{
@@ -814,10 +891,64 @@ const LoginPage = ({ role, setView }) => {
                     <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '2px' }}>
                       {email} {docInfo?.hospital ? `• ${docInfo.hospital}` : ''}
                     </div>
+                    <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#1d4ed8', background: '#dbeafe', padding: '6px 10px', borderRadius: '6px', lineHeight: 1.4 }}>
+                      📩 A temporary password was sent to your registered email by your hospital or admin. Enter it below to unlock and set your permanent password.
+                    </div>
                   </div>
 
+                  {/* TEMPORARY PASSWORD INPUT */}
                   <div className={styles.inputGroup}>
-                    <label htmlFor="newPassword">Create New Password</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <label htmlFor="tempPassword" style={{ margin: 0, fontWeight: 600, color: '#1e293b' }}>
+                        Temporary Password *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleResendDoctorTempPassword}
+                        disabled={resendCooldown > 0 || resendingTemp}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: resendCooldown > 0 ? '#94a3b8' : '#2563eb',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          cursor: resendCooldown > 0 ? 'default' : 'pointer',
+                          padding: 0,
+                          textDecoration: resendCooldown > 0 ? 'none' : 'underline'
+                        }}
+                      >
+                        {resendingTemp
+                          ? 'Sending...'
+                          : resendCooldown > 0
+                          ? `Resend in ${resendCooldown}s`
+                          : 'Resend Temporary Password'}
+                      </button>
+                    </div>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showTempPassword ? "text" : "password"}
+                        id="tempPassword"
+                        value={temporaryPassword}
+                        onChange={(e) => setTemporaryPassword(e.target.value)}
+                        required
+                        placeholder="Enter temporary password from email"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowTempPassword(!showTempPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                        title={showTempPassword ? "Hide password" : "Show password"}
+                      >
+                        {showTempPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* CREATE NEW PASSWORD */}
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="newPassword" style={{ fontWeight: 600, color: '#1e293b' }}>Create New Password *</label>
                     <div className={styles.inputWrapper}>
                       <Lock size={20} className={styles.inputIcon} />
                       <input
@@ -828,22 +959,23 @@ const LoginPage = ({ role, setView }) => {
                         required
                         minLength={6}
                         placeholder="At least 6 characters"
-                        autoFocus
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
                         style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                        title={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
                   </div>
 
+                  {/* CONFIRM NEW PASSWORD */}
                   <div className={styles.inputGroup}>
-                    <label htmlFor="confirmPassword">Confirm Password</label>
+                    <label htmlFor="confirmPassword" style={{ fontWeight: 600, color: '#1e293b' }}>Confirm New Password *</label>
                     <div className={styles.inputWrapper}>
-                      <KeyRound size={20} className={styles.inputIcon} />
+                      <Lock size={20} className={styles.inputIcon} />
                       <input
                         type={showPassword ? "text" : "password"}
                         id="confirmPassword"
@@ -851,13 +983,17 @@ const LoginPage = ({ role, setView }) => {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                         minLength={6}
-                        placeholder="Re-enter your password"
+                        placeholder="Re-enter your new password"
                       />
                     </div>
                   </div>
 
+                  <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '-4px 0 16px 0', lineHeight: 1.4 }}>
+                    🔒 Password must contain at least 6 characters, including uppercase, lowercase, numbers, and special characters.
+                  </p>
+
                   <button type="submit" className={styles.submitButton} disabled={loading}>
-                    {loading ? 'Saving Password...' : 'Set Password & Enter Dashboard'}
+                    {loading ? 'Verifying & Saving Password...' : 'Verify Temporary Password & Set Account Password'}
                   </button>
 
                   <div style={{ textAlign: 'center', marginTop: '14px' }}>
@@ -866,9 +1002,11 @@ const LoginPage = ({ role, setView }) => {
                       onClick={(e) => {
                         e.preventDefault();
                         setDocStep('email');
+                        setTemporaryPassword('');
                         setPassword('');
                         setConfirmPassword('');
                         setError('');
+                        setSuccessMessage('');
                       }}
                       style={{ fontSize: '0.85rem', color: '#2563eb', textDecoration: 'none' }}
                     >

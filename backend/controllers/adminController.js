@@ -9,6 +9,7 @@ import { cloudinary } from '../config/cloudinary.js';
 import EmailLog from '../models/EmailLog.js';
 import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
+import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
@@ -112,23 +113,65 @@ export const registerAdmin = async (req, res) => {
 
 export const addDoctor = async (req, res) => {
   try {
-    const { name, email, password, specialization, experience, about, fees, address, reels, youtube_videos, instagram, facebook, rating, reviews, hospital, qualifications, contact_number, available } = req.body;
+    const { name, email, specialization, experience, about, fees, address, reels, youtube_videos, instagram, facebook, rating, reviews, hospital, qualifications, contact_number, available, isStarDoctor } = req.body;
     let image = req.body.image || '';
     if (req.file) {
       image = req.file.path;
     }
     
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (!cleanEmail) {
+      return res.status(400).json({ success: false, message: 'Doctor email address is required' });
+    }
+
+    const existingDoctor = await Doctor.findOne({ email: cleanEmail });
+    if (existingDoctor) {
+      return res.status(400).json({ success: false, message: 'A doctor account is already registered with this email address' });
+    }
+
     let parsedAddress = {};
     if (address) {
       parsedAddress = typeof address === 'string' ? JSON.parse(address) : address;
     }
 
+    const temporaryPassword = generateTemporaryPassword();
+
     const doctor = await Doctor.create({
-      name, email, password: password || 'password123', specialization, experience, about, fees, address: parsedAddress, image, reels: reels || [], youtube_videos: youtube_videos || [], instagram, facebook,
-      rating: rating !== undefined && !isNaN(Number(rating)) ? Number(rating) : 0, reviews: reviews !== undefined ? String(reviews) : '0', hospital, qualifications, contact_number, available: available !== undefined ? available : true
+      name,
+      email: cleanEmail,
+      password: temporaryPassword,
+      isFirstLogin: true,
+      passwordSet: false,
+      specialization: specialization || 'General Medicine',
+      experience: Number(experience) || 5,
+      about: about || '',
+      fees: Number(fees) || 500,
+      price: Number(fees) || 500,
+      address: parsedAddress,
+      image,
+      reels: reels || [],
+      youtube_videos: youtube_videos || [],
+      instagram: instagram || '',
+      facebook: facebook || '',
+      rating: rating !== undefined && !isNaN(Number(rating)) ? Number(rating) : 0,
+      reviews: reviews !== undefined ? String(reviews) : '0',
+      hospital: hospital || '',
+      qualifications: qualifications || '',
+      contact_number: contact_number || '',
+      available: available !== undefined ? available : true,
+      isStarDoctor: Boolean(isStarDoctor)
     });
+
+    // Send temporary password credentials email to the doctor
+    sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName: hospital });
+
     broadcastDbChange('doctors', 'insert', doctor._id, doctor);
-    res.status(201).json({ success: true, message: 'Doctor added', data: doctor });
+    res.status(201).json({
+      success: true,
+      message: 'Doctor added successfully and temporary password sent to their email',
+      data: doctor,
+      temporaryPassword
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

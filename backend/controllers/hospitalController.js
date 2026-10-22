@@ -6,6 +6,7 @@ import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
+import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -355,18 +356,23 @@ const syncHospitalStaff = async (hospitalName, staffList, hospitalId) => {
         formattedName = 'Dr. ' + formattedName;
       }
       
-      await Doctor.create({
+      const temporaryPassword = generateTemporaryPassword();
+      const newDoc = await Doctor.create({
         name: formattedName,
         email: cleanEmail,
-        password: 'CHANGEME_PENDING_SETUP',
+        password: temporaryPassword,
         specialization: 'General Physician',
         experience: 5,
         fees: 500,
+        price: 500,
         hospital: hospitalName,
         isFirstLogin: true,
         passwordSet: false,
         about: `Clinical specialist affiliated with ${hospitalName}.`
       });
+
+      // Dispatch welcome email with temporary password to doctor
+      sendDoctorWelcomeEmail({ doctor: newDoc, temporaryPassword, hospitalName });
     } else {
       let needsSave = false;
       if (!existingDoctor.hospital) {

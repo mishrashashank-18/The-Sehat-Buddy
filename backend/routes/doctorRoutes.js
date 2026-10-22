@@ -3,6 +3,7 @@ import {
   authDoctor,
   checkDoctorEmail,
   setInitialPassword,
+  resendDoctorTempPassword,
   forgotDoctorPassword,
   verifyDoctorResetOtp,
   resetDoctorPassword,
@@ -36,6 +37,7 @@ router.delete('/appointments/:id', optionalProtect, deleteDoctorAppointment);
 router.post('/login', authDoctor);
 router.post('/check-email', checkDoctorEmail);
 router.post('/set-initial-password', setInitialPassword);
+router.post('/resend-temp-password', resendDoctorTempPassword);
 router.post('/forgot-password', forgotDoctorPassword);
 router.post('/verify-reset-otp', verifyDoctorResetOtp);
 router.post('/reset-password', resetDoctorPassword);
