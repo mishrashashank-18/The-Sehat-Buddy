@@ -9,6 +9,7 @@ import {
   registerHospital,
   getHospitals,
   getHospitalById,
+  getMyHospital,
   updateHospital,
   deleteHospital,
   updateDoctorFaqsByHospital,
@@ -20,9 +21,10 @@ import upload from '../config/cloudinary.js';
 
 const router = express.Router();
 
-// Public routes
+// Public routes & Authenticated profile
 router.get('/', getHospitals);
 router.get('/list', getHospitals);
+router.get('/me', protect, getMyHospital);
 router.get('/:id', getHospitalById);
 router.get('/:id/beds', getHospitalBeds);
 
@@ -37,11 +39,11 @@ router.post('/reset-password', resetHospitalPassword);
 // Hospital registration (Admin only)
 router.post('/register', protect, requireAdmin, upload.single('image'), registerHospital);
 
-// Hospital live bed capacity
-router.put('/:id/beds', optionalProtect, updateHospitalBeds);
+// Hospital live bed capacity (Authenticated hospital itself or Admin)
+router.put('/:id/beds', protect, updateHospitalBeds);
 
-// Hospital profile management (Hospital or Admin)
-router.put('/:id', optionalProtect, upload.single('image'), updateHospital);
+// Hospital profile management (Hospital itself or Admin)
+router.put('/:id', protect, upload.single('image'), updateHospital);
 router.delete('/:id', protect, requireAdmin, deleteHospital);
 
 // Hospital updating registered doctor FAQs (Hospital or Admin)

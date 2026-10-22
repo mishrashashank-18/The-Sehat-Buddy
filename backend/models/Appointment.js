@@ -2,12 +2,16 @@ import mongoose from 'mongoose';
 
 const appointmentSchema = new mongoose.Schema({
   userId: { type: String, default: 'guest' },
-  docId: { type: String, required: true },
+  docId: { type: String, required: false },
+  hospitalId: { type: String, required: false },
   slotDate: { type: String, required: true },
   slotTime: { type: String, required: true },
   userData: { type: Object, required: true },
-  docData: { type: Object, required: true },
-  amount: { type: Number, default: 500 },
+  docData: { type: Object, default: null },
+  hospitalData: { type: Object, default: null },
+  department: { type: String, default: 'General Medicine' },
+  appointmentType: { type: String, default: 'doctor' }, // 'doctor' | 'hospital'
+  amount: { type: Number, default: 0 },
   date: { type: Number, default: Date.now },
   status: { type: String, default: 'Confirmed' },
   symptoms: { type: String, default: 'General Consultation' },

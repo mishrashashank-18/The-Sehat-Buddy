@@ -180,6 +180,16 @@ export const api = {
     return data.data || data;
   },
 
+  async bookHospitalAppointment(bookingData) {
+    const res = await fetch(`${API_BASE}/user/book-hospital-appointment`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(bookingData)
+    });
+    const data = await handleResponse(res);
+    return data.data || data;
+  },
+
   async updateDoctorFaqsByHospital(hospitalId, doctorId, faqs) {
     try {
       const res = await fetch(`${API_BASE}/hospitals/${hospitalId}/doctor-faqs/${doctorId}`, {
@@ -239,7 +249,21 @@ export const api = {
       body: JSON.stringify(hospitalData)
     });
     const data = await handleResponse(res);
-    return data.data;
+    return data;
+  },
+
+  async getHospitalById(id) {
+    const res = await fetch(`${API_BASE}/hospitals/${id}`);
+    const data = await handleResponse(res);
+    return data.data || data;
+  },
+
+  async getMyHospital() {
+    const res = await fetch(`${API_BASE}/hospitals/me`, {
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data || data;
   },
 
   async updateHospital(id, hospitalData) {
@@ -416,6 +440,34 @@ export const api = {
     return handleResponse(res);
   },
 
+  // Admin Appointments Management
+  async getAdminAppointments() {
+    const res = await fetch(`${API_BASE}/admin/appointments`, {
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data || [];
+  },
+
+  async updateAdminAppointmentStatus(id, statusData) {
+    const res = await fetch(`${API_BASE}/admin/appointments/${id}/status`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(statusData)
+    });
+    const data = await handleResponse(res);
+    return data.data || data;
+  },
+
+  async deleteAdminAppointment(id) {
+    const res = await fetch(`${API_BASE}/admin/appointments/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data || data;
+  },
+
   // Image Upload (Cloudinary)
   async uploadImage(fileOrBase64, folder = 'sehatbuddy') {
     let body;
@@ -509,6 +561,20 @@ export const api = {
     });
     const data = await handleResponse(res);
     return data.url;
+  },
+
+  // Auto-convert Instagram Reel to Cloudinary Video
+  async uploadInstagramReel(url, folder = 'sehatbuddy/reels') {
+    const token = localStorage.getItem('token');
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/upload/instagram-reel`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, folder })
+    });
+    return await handleResponse(res);
   },
 
   // FAQs API

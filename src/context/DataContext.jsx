@@ -99,6 +99,41 @@ export const matchesId = (item, id) => {
   return false;
 };
 
+// Canonical doctor ID extractor (prefers MongoDB _id)
+export const getDoctorCanonicalId = (doc) => {
+  if (!doc) return null;
+  if (typeof doc === 'object') {
+    return doc._id ? String(doc._id) : (doc.id ? String(doc.id) : (doc.email ? String(doc.email).toLowerCase() : null));
+  }
+  return String(doc);
+};
+
+// Robust helper to check if a doctor is included in a star_doctors list
+export const isDoctorInStarList = (doctor, starList) => {
+  if (!doctor || !Array.isArray(starList) || starList.length === 0) return false;
+  return starList.some(sd => {
+    if (!sd) return false;
+    // If sd is an object
+    if (typeof sd === 'object') {
+      const sdId = sd._id || sd.id;
+      const docId = doctor._id || doctor.id;
+      if (sdId && docId && String(sdId).trim() === String(docId).trim()) return true;
+      if (sd._id && doctor._id && String(sd._id).trim() === String(doctor._id).trim()) return true;
+      if (sd.id && doctor.id && String(sd.id).trim() === String(doctor.id).trim()) return true;
+      if (sd.email && doctor.email && sd.email.toLowerCase().trim() === doctor.email.toLowerCase().trim()) return true;
+      if (sd.name && doctor.name && sd.name.toLowerCase().trim() === doctor.name.toLowerCase().trim()) return true;
+      return matchesId(doctor, sd);
+    }
+    // If sd is a string or number
+    const str = String(sd).trim().toLowerCase();
+    if (doctor._id && String(doctor._id).toLowerCase().trim() === str) return true;
+    if (doctor.id && String(doctor.id).toLowerCase().trim() === str) return true;
+    if (doctor.email && doctor.email.toLowerCase().trim() === str) return true;
+    if (doctor.name && doctor.name.toLowerCase().trim() === str) return true;
+    return matchesId(doctor, sd);
+  });
+};
+
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB / cached)
   const [doctors, setDoctors] = useState(() => {
@@ -269,30 +304,18 @@ export const DataProvider = ({ children }) => {
 
   // Sanitizer for reels to ensure only healthy, active Instagram reels are served
   const sanitizeReels = (reelsList) => {
-    if (!Array.isArray(reelsList)) return [];
-    const brokenMap = {
-      'DeArmJdSQa6': 'DWGyY03lWc2',
-      'DeAA8evMsBS': 'DXpDWdoDKai',
-      'DdrR6vApDBK': 'DZdBbmoM1tn',
-      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2',
-      'DcOgyeMvU0r': 'DerD2HwAeAU'
-    };
-    return reelsList.map(r => {
+    if (!reelsList) return [];
+    let list = reelsList;
+    if (typeof reelsList === 'string') {
+      list = reelsList.trim().split(/\s+/).filter(Boolean);
+    }
+    if (!Array.isArray(list)) return [];
+    return list.map(r => {
       if (!r) return null;
       let url = typeof r === 'string' ? r.trim() : (r.url || r.link || '').trim();
-      if (!url && typeof r === 'object' && (r.coverPhoto || r.cover)) return r;
-      if (!url) return null;
-      for (const [brokenCode, goodCode] of Object.entries(brokenMap)) {
-        if (url.includes(brokenCode)) {
-          url = `https://www.instagram.com/reel/${goodCode}/`;
-        }
-      }
-      if (typeof r === 'object') {
-        return { ...r, url };
-      }
-      return url;
+      let coverPhoto = typeof r === 'object' ? (r.coverPhoto || r.cover || r.thumbnail || '') : '';
+      if (!url && !coverPhoto) return null;
+      return { url, coverPhoto };
     }).filter(Boolean);
   };
 
@@ -305,7 +328,7 @@ export const DataProvider = ({ children }) => {
       return {
         ...existing,
         ...d,
-        id: existing?.id || d.id || d._id,
+        id: d._id || d.id || existing?._id || existing?.id,
         _id: d._id || existing?._id || d.id,
         specialty: resolvedSpecialty,
         specialization: resolvedSpecialty,
@@ -338,6 +361,18 @@ export const DataProvider = ({ children }) => {
   const mapHospitalList = (hospList, prevHospitals = []) => {
     const mapped = hospList.map(h => {
       const existing = prevHospitals.find(p => matchesId(p, h));
+      const rawReels = Array.isArray(h.reels)
+        ? h.reels
+        : (typeof h.reels === 'string' && h.reels.trim()
+            ? (h.reels.includes('http') ? h.reels.trim().split(/\s+/).filter(u => u.startsWith('http')) : h.reels.split(',').map(s => s.trim()).filter(Boolean))
+            : (existing?.reels || []));
+
+      const rawVideos = Array.isArray(h.youtube_videos)
+        ? h.youtube_videos
+        : (typeof h.youtube_videos === 'string' && h.youtube_videos.trim()
+            ? (h.youtube_videos.includes('http') ? h.youtube_videos.trim().split(/\s+/).filter(u => u.startsWith('http')) : h.youtube_videos.split(',').map(s => s.trim()).filter(Boolean))
+            : (existing?.youtube_videos || []));
+
       return {
         ...existing,
         ...h,
@@ -346,8 +381,8 @@ export const DataProvider = ({ children }) => {
         specialties: (Array.isArray(h.specialities || h.specialties) && (h.specialities || h.specialties).length > 0)
           ? (h.specialities || h.specialties)
           : (existing?.specialties || existing?.specialities || []),
-        reels: sanitizeReels((Array.isArray(h.reels) && h.reels.length > 0) ? h.reels : (existing?.reels || [])),
-        youtube_videos: (Array.isArray(h.youtube_videos) && h.youtube_videos.length > 0) ? h.youtube_videos : (existing?.youtube_videos || []),
+        reels: sanitizeReels(rawReels),
+        youtube_videos: rawVideos.map(v => typeof v === 'string' ? { url: v.trim(), coverPhoto: '' } : { url: v?.url || '', coverPhoto: v?.coverPhoto || '' }),
         photos: (Array.isArray(h.photos) && h.photos.length > 0) ? h.photos : (existing?.photos || []),
         star_doctors: Array.isArray(h.star_doctors) ? h.star_doctors : (Array.isArray(existing?.star_doctors) ? existing.star_doctors : []),
         totalBeds: h.totalBeds !== undefined && h.totalBeds !== null ? Number(h.totalBeds) : (existing?.totalBeds !== undefined ? Number(existing.totalBeds) : 100),
@@ -860,7 +895,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Hospital CRUD operations
-  const addHospital = (hospitalData) => {
+  const addHospital = async (hospitalData) => {
     const newHospital = {
       ...hospitalData,
       id: Date.now(),
@@ -890,6 +925,18 @@ export const DataProvider = ({ children }) => {
       latitude: hospitalData.latitude !== undefined ? Number(hospitalData.latitude) : undefined,
       longitude: hospitalData.longitude !== undefined ? Number(hospitalData.longitude) : undefined
     };
+
+    let serverResult = null;
+    try {
+      serverResult = await api.addHospital(newHospital);
+      if (serverResult?.data) {
+        newHospital._id = serverResult.data._id;
+        newHospital.id = serverResult.data._id || newHospital.id;
+      }
+    } catch (err) {
+      console.warn('Backend hospital registration error:', err);
+    }
+
     setHospitals(prev => {
       const updated = [newHospital, ...prev];
       try {
@@ -898,14 +945,18 @@ export const DataProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    api.addHospital(newHospital).catch(() => {});
-    return newHospital;
+
+    return {
+      hospital: newHospital,
+      temporaryPassword: serverResult?.temporaryPassword
+    };
   };
 
   const updateHospital = async (id, updatedData) => {
     let mergedHospital = null;
+    let nextList = [];
     setHospitals(prev => {
-      const updated = prev.map(hosp => {
+      nextList = prev.map(hosp => {
         if (matchesId(hosp, id)) {
           mergedHospital = {
             ...hosp,
@@ -958,13 +1009,31 @@ export const DataProvider = ({ children }) => {
         }
         return hosp;
       });
-      return updated;
+      try {
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(nextList));
+        broadcastSync(STORAGE_KEY_HOSPITALS, nextList);
+      } catch {}
+      return nextList;
     });
 
     try {
-      await api.updateHospital(id, mergedHospital || updatedData);
+      const serverId = mergedHospital?._id || (typeof id === 'string' && id.length === 24 ? id : (mergedHospital?.id || id));
+      const serverResult = await api.updateHospital(serverId, mergedHospital || updatedData);
+      if (serverResult) {
+        setHospitals(prev => {
+          const synced = prev.map(h => matchesId(h, id) ? { ...h, ...serverResult } : h);
+          try {
+            localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(synced));
+            broadcastSync(STORAGE_KEY_HOSPITALS, synced);
+          } catch {}
+          return synced;
+        });
+        return serverResult;
+      }
+      return mergedHospital;
     } catch (err) {
-      console.warn('Backend updateHospital failed, local state retained:', err);
+      console.error('Backend updateHospital failed:', err);
+      throw err;
     }
   };
 
@@ -1194,36 +1263,47 @@ export const DataProvider = ({ children }) => {
   };
 
   // Reviews CRUD
-  const addReview = (reviewData) => {
-    const newReview = {
-      ...reviewData,
-      id: reviewData.id || reviewData._id || `rev-${Date.now()}`,
-      rating: Number(reviewData.rating) || 5,
-      createdAt: new Date().toISOString(),
-      isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
-      status: reviewData.status || 'approved'
-    };
-    setReviews(prev => {
-      const updated = [newReview, ...prev];
-      try {
-        localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
-        broadcastSync(STORAGE_KEY_REVIEWS, updated);
-      } catch {}
-      return updated;
-    });
-    api.addReview(newReview).then(saved => {
-      if (saved && saved._id) {
+  const addReview = async (reviewData) => {
+    try {
+      const saved = await api.addReview(reviewData);
+      if (saved && (saved._id || saved.id)) {
+        const item = { ...saved, id: saved._id || saved.id };
         setReviews(prev => {
-          const updated = prev.map(r => r.id === newReview.id ? { ...saved, id: saved._id } : r);
+          // If already added by SSE, do not insert duplicate
+          if (prev.some(r => matchesId(r, item.id))) {
+            return prev;
+          }
+          const updated = [item, ...prev];
           try {
             localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
             broadcastSync(STORAGE_KEY_REVIEWS, updated);
           } catch {}
           return updated;
         });
+        return item;
       }
-    }).catch(() => {});
-    return newReview;
+    } catch (err) {
+      console.error('Failed to add review to server:', err);
+      // Fallback local insertion if offline
+      const fallbackItem = {
+        ...reviewData,
+        id: reviewData.id || reviewData._id || `rev-${Date.now()}`,
+        rating: Number(reviewData.rating) || 5,
+        createdAt: new Date().toISOString(),
+        isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
+        status: reviewData.status || 'approved'
+      };
+      setReviews(prev => {
+        if (prev.some(r => matchesId(r, fallbackItem.id))) return prev;
+        const updated = [fallbackItem, ...prev];
+        try {
+          localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+          broadcastSync(STORAGE_KEY_REVIEWS, updated);
+        } catch {}
+        return updated;
+      });
+      return fallbackItem;
+    }
   };
 
   const updateReview = (id, updatedData) => {
@@ -1244,7 +1324,7 @@ export const DataProvider = ({ children }) => {
     });
   };
 
-  const deleteReview = (id) => {
+  const deleteReview = async (id) => {
     setReviews(prev => {
       const updated = prev.filter(r => !matchesId(r, id));
       try {
@@ -1253,7 +1333,13 @@ export const DataProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    api.deleteReview(id).catch(() => {});
+    try {
+      await api.deleteReview(id);
+    } catch (err) {
+      console.error('Failed to delete review on server:', err);
+      // Re-fetch only if server call genuinely failed to roll back
+      refreshReviews();
+    }
   };
 
   // Specialities & Procedures CRUD

@@ -20,7 +20,9 @@ const reviewSchema = new mongoose.Schema({
     default: 'approved' 
   },
   treatment: { type: String, default: '' }, // e.g. "Total Knee Replacement", "Cardiac Consultation"
-  insuranceUsed: { type: String, default: 'None' } // e.g. "Star Health", "HDFC ERGO", "Cashless Claim"
+  insuranceUsed: { type: String, default: 'None' }, // e.g. "Star Health", "HDFC ERGO", "Cashless Claim"
+  doctorId: { type: String, default: '' },
+  doctorName: { type: String, default: '' }
 }, { timestamps: true });
 
 const Review = mongoose.model('Review', reviewSchema);

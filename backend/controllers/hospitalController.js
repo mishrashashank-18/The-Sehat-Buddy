@@ -392,11 +392,24 @@ const syncHospitalStaff = async (hospitalName, staffList, hospitalId) => {
 export const registerHospital = async (req, res) => {
   const { name, email, password, address, city, state, zip, phone, description, specialities, rating, reviews, totalBeds, emergency24x7, establishedYear, reels, youtube_videos, star_doctors, staff_emails, latitude, longitude } = req.body;
   try {
-    const hospitalExists = await Hospital.findOne({ email });
+    const cleanEmail = (email || '').toLowerCase().trim();
+    if (!cleanEmail) {
+      return res.status(400).json({ success: false, message: 'Official hospital email is required' });
+    }
+
+    const hospitalExists = await Hospital.findOne({ email: cleanEmail });
     if (hospitalExists) {
-      return res.status(400).json({ success: false, message: 'Hospital already exists' });
+      return res.status(400).json({ success: false, message: 'Hospital already exists with this email address' });
     }
     
+    // Generate secure, user-friendly temporary password if not explicitly provided
+    let temporaryPassword = password;
+    if (!temporaryPassword || temporaryPassword === 'CHANGEME_PENDING_SETUP') {
+      const randStr = Math.random().toString(36).substring(2, 6);
+      const randNum = Math.floor(100 + Math.random() * 900);
+      temporaryPassword = `Sehat@${randStr}${randNum}`;
+    }
+
     let image = req.body.image || '';
     if (req.file) {
       image = req.file.path;
@@ -431,43 +444,69 @@ export const registerHospital = async (req, res) => {
     const resolvedStarDoctors = [];
     const inputStarDoctors = Array.isArray(star_doctors) ? star_doctors : [];
     for (const sd of inputStarDoctors) {
-      if (/^[0-9a-fA-F]{24}$/.test(sd)) {
-        resolvedStarDoctors.push(sd);
-      } else if (typeof sd === 'string' && sd.includes('@')) {
-        const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
-        if (doc) resolvedStarDoctors.push(doc._id);
+      if (!sd) continue;
+      const rawId = (typeof sd === 'object' && sd !== null) ? (sd._id || sd.id) : sd;
+      const rawEmail = (typeof sd === 'object' && sd !== null) ? sd.email : (typeof sd === 'string' && sd.includes('@') ? sd : null);
+      const rawName = (typeof sd === 'object' && sd !== null) ? sd.name : null;
+
+      let foundDoctor = null;
+      if (rawId && typeof rawId === 'string' && /^[0-9a-fA-F]{24}$/.test(rawId)) {
+        foundDoctor = await Doctor.findById(rawId);
+      }
+      if (!foundDoctor && (rawId || rawEmail || rawName)) {
+        const orConditions = [];
+        if (rawId) orConditions.push({ id: rawId }, { id: String(rawId) });
+        if (rawEmail) orConditions.push({ email: String(rawEmail).trim().toLowerCase() });
+        if (rawName) orConditions.push({ name: String(rawName).trim() });
+        foundDoctor = await Doctor.findOne({ $or: orConditions });
+      }
+      if (foundDoctor) {
+        resolvedStarDoctors.push(foundDoctor._id);
+      } else if (rawId && typeof rawId === 'string' && /^[0-9a-fA-F]{24}$/.test(rawId)) {
+        resolvedStarDoctors.push(rawId);
+      }
+    }
+
+    // Deduplicate star doctors
+    const uniqueStarDoctors = [];
+    const seenStarIds = new Set();
+    for (const sid of resolvedStarDoctors) {
+      const sidStr = String(sid);
+      if (!seenStarIds.has(sidStr)) {
+        seenStarIds.add(sidStr);
+        uniqueStarDoctors.push(sid);
       }
     }
 
     const hospital = await Hospital.create({ 
       name, 
-      email: email.toLowerCase().trim(), 
-      password: password || 'CHANGEME_PENDING_SETUP', 
+      email: cleanEmail, 
+      password: temporaryPassword, 
       address: address || (city ? `${city} Central Campus` : 'Main Medical Campus'), 
       city: city || 'Delhi', 
       state: state || '', 
       zip: zip || '', 
       phone: phone || '', 
       description: description || '', 
-      specialities: parsedSpecialities, 
+      specialities: parsedSpecialities && parsedSpecialities.length > 0 ? parsedSpecialities : ['Cardiology', 'Neurology', 'Orthopedics'], 
       image: image || 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80',
       rating: rating || 4.8,
       reviews: reviews || '50+',
       totalBeds: totalBeds || 100,
       emergency24x7: emergency24x7 !== undefined ? emergency24x7 : true,
       establishedYear: establishedYear || 2005,
-      isFirstLogin: true,
-      passwordSet: false,
+      isFirstLogin: false,
+      passwordSet: true,
       reels: reels || [],
       youtube_videos: youtube_videos || [],
       star_doctors: resolvedStarDoctors,
       staff_emails: parsedStaffEmails,
       staff_doctors: parsedStaffDoctors,
       cashlessInsurance: req.body.cashlessInsurance !== undefined ? req.body.cashlessInsurance : true,
-      acceptedInsurances: Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : ['Star Health', 'HDFC ERGO', 'ICICI Lombard', 'Care Health', 'Niva Bupa'],
+      acceptedInsurances: Array.isArray(req.body.acceptedInsurances) && req.body.acceptedInsurances.length > 0 ? req.body.acceptedInsurances : ['Star Health', 'HDFC ERGO', 'ICICI Lombard', 'Care Health', 'Niva Bupa'],
       tpaHelpdesk: req.body.tpaHelpdesk || {
         phone: req.body.phone || '080-45678900',
-        email: 'tpa@' + (email ? email.split('@')[1] : 'sehatbuddy.com'),
+        email: 'tpa@' + (cleanEmail ? cleanEmail.split('@')[1] : 'sehatbuddy.com'),
         preAuthTime: '30 Mins Cashless Pre-Approval'
       },
       insuranceHelpline: req.body.insuranceHelpline || '1800-SEHAT-CARE',
@@ -477,10 +516,73 @@ export const registerHospital = async (req, res) => {
     
     if (hospital) {
       broadcastDbChange('hospitals', 'insert', hospital._id, hospital);
+
+      // Determine Hospital Portal URL
+      const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+      const portalLoginUrl = `${clientUrl}/hospital`;
+
+      // Dispatch welcome credentials email via Brevo
+      try {
+        await sendEmail({
+          email: hospital.email,
+          subject: `Welcome to Sehat Buddy — ${hospital.name} Hospital Portal Credentials`,
+          message: `Hello ${hospital.name},\n\nYour hospital facility has been successfully registered on the Sehat Buddy healthcare platform.\n\nYou can access your Hospital Management Portal using the following credentials:\n\nPortal URL: ${portalLoginUrl}\nLogin Email: ${hospital.email}\nTemporary Password: ${temporaryPassword}\n\nPlease log in and update your profile, manage doctors, and change your password for security.\n\nWarm regards,\nThe Sehat Buddy Team`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+              <div style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+                <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">The Sehat Buddy</h1>
+                <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">Hospital Partner Onboarding</p>
+              </div>
+              <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
+                <h2 style="margin: 0 0 16px; font-size: 20px; color: #0f172a;">Welcome, ${hospital.name}!</h2>
+                <p style="margin: 0 0 20px; font-size: 15px; color: #475569;">
+                  Your healthcare facility has been successfully onboarded on <strong>The Sehat Buddy</strong> network. You now have full access to your dedicated Hospital Management Portal.
+                </p>
+                
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin: 24px 0;">
+                  <h3 style="margin: 0 0 14px; font-size: 15px; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Your Portal Login Credentials</h3>
+                  <div style="margin-bottom: 10px;">
+                    <span style="font-size: 13px; color: #64748b; display: block;">Portal Login URL:</span>
+                    <a href="${portalLoginUrl}" style="font-size: 14px; color: #2563eb; font-weight: 600; text-decoration: none;">${portalLoginUrl}</a>
+                  </div>
+                  <div style="margin-bottom: 10px;">
+                    <span style="font-size: 13px; color: #64748b; display: block;">Official Email (Login ID):</span>
+                    <span style="font-size: 15px; color: #0f172a; font-weight: 600; font-family: monospace;">${hospital.email}</span>
+                  </div>
+                  <div>
+                    <span style="font-size: 13px; color: #64748b; display: block;">Temporary Password:</span>
+                    <span style="font-size: 16px; color: #dc2626; font-weight: 700; font-family: monospace; letter-spacing: 0.5px; background: #fee2e2; padding: 4px 10px; border-radius: 6px; display: inline-block;">${temporaryPassword}</span>
+                  </div>
+                </div>
+
+                <div style="text-align: center; margin: 30px 0;">
+                  <a href="${portalLoginUrl}" style="background: #2563eb; color: #ffffff; padding: 13px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);">
+                    Access Hospital Portal &rarr;
+                  </a>
+                </div>
+
+                <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 28px; font-size: 13px; color: #64748b;">
+                  <p style="margin: 0 0 8px;"><strong>Security Tip:</strong> For your facility's safety, please log in and update your password under Hospital Profile settings.</p>
+                  <p style="margin: 0;">Need assistance? Contact our hospital partner support at <a href="mailto:thesehatbuddy@gmail.com" style="color: #2563eb;">thesehatbuddy@gmail.com</a>.</p>
+                </div>
+              </div>
+              <div style="background: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+                &copy; ${new Date().getFullYear()} The Sehat Buddy Healthcare Platform. All rights reserved.
+              </div>
+            </div>
+          `
+        });
+        console.log(`✓ Welcome email successfully dispatched to hospital: ${hospital.email}`);
+      } catch (emailErr) {
+        console.error(`Failed to dispatch welcome email to ${hospital.email}:`, emailErr.message);
+      }
+
       res.status(201).json({
         success: true,
+        message: 'Hospital registered successfully. Portal login credentials have been emailed.',
         token: generateToken(hospital._id),
-        data: hospital
+        data: hospital,
+        temporaryPassword: temporaryPassword
       });
     } else {
       res.status(400).json({ success: false, message: 'Invalid hospital data' });
@@ -518,6 +620,24 @@ export const getHospitalById = async (req, res) => {
   }
 };
 
+/**
+ * Get profile of currently authenticated hospital
+ */
+export const getMyHospital = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Not authorized: Bearer token required' });
+    }
+    const hospital = await Hospital.findById(req.user.id).select('-password').populate('star_doctors', '-password');
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Authenticated hospital record not found' });
+    }
+    return res.json({ success: true, data: hospital });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const updateHospital = async (req, res) => {
   try {
     let hospital = null;
@@ -527,23 +647,80 @@ export const updateHospital = async (req, res) => {
     if (!hospital) {
       hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] });
     }
+    if (!hospital && req.body?.email) {
+      hospital = await Hospital.findOne({ email: String(req.body.email).toLowerCase().trim() });
+    }
+    if (!hospital && req.body?.name) {
+      hospital = await Hospital.findOne({ name: String(req.body.name).trim() });
+    }
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Hospital not found' });
     }
 
-    // Authorization verification: hospital itself, platform admin, or dev environment
-    const isSelf = req.user && (
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized: Bearer token required to update hospital details'
+      });
+    }
+
+    // Authorization verification: hospital itself or platform admin
+    const isSelf = (
       req.user.id === hospital._id.toString() ||
       req.user._id?.toString() === hospital._id.toString() ||
       (req.user.email && hospital.email && req.user.email.toLowerCase() === hospital.email.toLowerCase())
     );
-    const isAdmin = req.user && req.user.role === 'admin';
-    const isDev = process.env.NODE_ENV !== 'production';
-    if (!isSelf && !isAdmin && !isDev) {
+    const isAdmin = req.user.role === 'admin';
+    const isHospitalAdmin = req.user.role === 'hospital';
+
+    if (!isAdmin && (!isHospitalAdmin || !isSelf)) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: You do not have permission to modify this hospital profile'
+        message: 'Forbidden: You do not have permission to modify another hospital profile'
       });
+    }
+
+    // Backend Security Check: Hospital admins cannot add, edit, or delete Reels or Videos
+    if (isHospitalAdmin && !isAdmin) {
+      if (req.body.reels !== undefined) {
+        const existingReelsStr = JSON.stringify(hospital.reels || []);
+        let incomingReelsStr = '';
+        if (Array.isArray(req.body.reels)) {
+          incomingReelsStr = JSON.stringify(req.body.reels);
+        } else if (typeof req.body.reels === 'string') {
+          try {
+            incomingReelsStr = JSON.stringify(JSON.parse(req.body.reels));
+          } catch {
+            incomingReelsStr = JSON.stringify(req.body.reels.split(/\s+/).filter(Boolean));
+          }
+        }
+        if (existingReelsStr !== incomingReelsStr) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden: Hospital administrators are not authorized to add, edit, or delete Reels. Only website administrators can modify media.'
+          });
+        }
+      }
+
+      if (req.body.youtube_videos !== undefined) {
+        const existingVideosStr = JSON.stringify(hospital.youtube_videos || []);
+        let incomingVideosStr = '';
+        if (Array.isArray(req.body.youtube_videos)) {
+          incomingVideosStr = JSON.stringify(req.body.youtube_videos);
+        } else if (typeof req.body.youtube_videos === 'string') {
+          try {
+            incomingVideosStr = JSON.stringify(JSON.parse(req.body.youtube_videos));
+          } catch {
+            incomingVideosStr = JSON.stringify(req.body.youtube_videos.split(/\s+/).filter(Boolean));
+          }
+        }
+        if (existingVideosStr !== incomingVideosStr) {
+          return res.status(403).json({
+            success: false,
+            message: 'Forbidden: Hospital administrators are not authorized to add, edit, or delete YouTube Videos. Only website administrators can modify media.'
+          });
+        }
+      }
     }
 
     // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
@@ -600,26 +777,119 @@ export const updateHospital = async (req, res) => {
       hospital.specialities = Array.isArray(req.body.specialties) ? req.body.specialties : [];
       hospital.markModified('specialities');
     }
-    if (req.body.reels !== undefined) {
-      hospital.reels = Array.isArray(req.body.reels) ? req.body.reels : [];
-      hospital.markModified('reels');
-    }
-    if (req.body.youtube_videos !== undefined) {
-      hospital.youtube_videos = Array.isArray(req.body.youtube_videos) ? req.body.youtube_videos : [];
-      hospital.markModified('youtube_videos');
+    if (isAdmin) {
+      if (req.body.reels !== undefined) {
+        let incomingReels = [];
+        if (Array.isArray(req.body.reels)) {
+          incomingReels = req.body.reels;
+        } else if (typeof req.body.reels === 'string') {
+          try {
+            const parsed = JSON.parse(req.body.reels);
+            incomingReels = Array.isArray(parsed) ? parsed : [req.body.reels];
+          } catch {
+            incomingReels = req.body.reels.split(/\s+/).filter(Boolean);
+          }
+        } else {
+          incomingReels = [];
+        }
+        hospital.reels = incomingReels;
+        hospital.markModified('reels');
+
+        // Automatic background conversion of Instagram links to Cloudinary direct video
+        (async () => {
+          try {
+            let changed = false;
+            const updatedReels = [...hospital.reels];
+            for (let i = 0; i < updatedReels.length; i++) {
+              const r = updatedReels[i];
+              const rUrl = typeof r === 'string' ? r : r?.url;
+              if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
+                const { exec } = await import('child_process');
+                const { promisify } = await import('util');
+                const execPromise = promisify(exec);
+                const { stdout } = await execPromise(`python -m yt_dlp -g "${rUrl}"`, { timeout: 15000 });
+                const directMp4 = stdout.trim().split('\n')[0].trim();
+                if (directMp4 && directMp4.startsWith('http')) {
+                  const { getCloudinary } = await import('../routes/uploadRoutes.js');
+                  const cld = getCloudinary();
+                  const cldRes = await cld.uploader.upload(directMp4, {
+                    resource_type: 'video',
+                    folder: 'sehatbuddy/reels'
+                  });
+                  if (cldRes && cldRes.secure_url) {
+                    updatedReels[i] = {
+                      url: cldRes.secure_url,
+                      coverPhoto: cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')
+                    };
+                    changed = true;
+                  }
+                }
+              }
+            }
+            if (changed) {
+              await Hospital.updateOne({ _id: hospital._id }, { $set: { reels: updatedReels } });
+              broadcastDbChange('hospitals', 'update', hospital._id, { ...hospital.toObject(), reels: updatedReels });
+            }
+          } catch (cldErr) {
+            console.warn('Background reel Cloudinary conversion warning:', cldErr.message);
+          }
+        })().catch(() => {});
+      }
+      if (req.body.youtube_videos !== undefined) {
+        if (Array.isArray(req.body.youtube_videos)) {
+          hospital.youtube_videos = req.body.youtube_videos;
+        } else if (typeof req.body.youtube_videos === 'string') {
+          try {
+            const parsed = JSON.parse(req.body.youtube_videos);
+            hospital.youtube_videos = Array.isArray(parsed) ? parsed : [req.body.youtube_videos];
+          } catch {
+            hospital.youtube_videos = req.body.youtube_videos.split(/\s+/).filter(Boolean);
+          }
+        } else {
+          hospital.youtube_videos = [];
+        }
+        hospital.markModified('youtube_videos');
+      }
     }
     if (req.body.star_doctors !== undefined) {
       const resolvedStarDoctors = [];
       const inputStarDoctors = Array.isArray(req.body.star_doctors) ? req.body.star_doctors : [];
       for (const sd of inputStarDoctors) {
-        if (/^[0-9a-fA-F]{24}$/.test(sd)) {
-          resolvedStarDoctors.push(sd);
-        } else if (typeof sd === 'string' && sd.includes('@')) {
-          const doc = await Doctor.findOne({ email: sd.trim().toLowerCase() });
-          if (doc) resolvedStarDoctors.push(doc._id);
+        if (!sd) continue;
+        const rawId = (typeof sd === 'object' && sd !== null) ? (sd._id || sd.id) : sd;
+        const rawEmail = (typeof sd === 'object' && sd !== null) ? sd.email : (typeof sd === 'string' && sd.includes('@') ? sd : null);
+        const rawName = (typeof sd === 'object' && sd !== null) ? sd.name : null;
+
+        let foundDoctor = null;
+        if (rawId && typeof rawId === 'string' && /^[0-9a-fA-F]{24}$/.test(rawId)) {
+          foundDoctor = await Doctor.findById(rawId);
+        }
+        if (!foundDoctor && (rawId || rawEmail || rawName)) {
+          const orConditions = [];
+          if (rawId) orConditions.push({ id: rawId }, { id: String(rawId) });
+          if (rawEmail) orConditions.push({ email: String(rawEmail).trim().toLowerCase() });
+          if (rawName) orConditions.push({ name: String(rawName).trim() });
+          foundDoctor = await Doctor.findOne({ $or: orConditions });
+        }
+        if (foundDoctor) {
+          resolvedStarDoctors.push(foundDoctor._id);
+        } else if (rawId && typeof rawId === 'string' && /^[0-9a-fA-F]{24}$/.test(rawId)) {
+          resolvedStarDoctors.push(rawId);
         }
       }
-      hospital.star_doctors = resolvedStarDoctors;
+
+      // Deduplicate star doctors
+      const uniqueStarDoctors = [];
+      const seenStarIds = new Set();
+      for (const sid of resolvedStarDoctors) {
+        const sidStr = String(sid);
+        if (!seenStarIds.has(sidStr)) {
+          seenStarIds.add(sidStr);
+          uniqueStarDoctors.push(sid);
+        }
+      }
+
+      hospital.star_doctors = uniqueStarDoctors;
       hospital.markModified('star_doctors');
     }
     if (req.body.photos !== undefined) {
@@ -829,6 +1099,9 @@ export const getHospitalBeds = async (req, res) => {
 
 export const updateHospitalBeds = async (req, res) => {
   try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Not authorized: Bearer token required' });
+    }
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
       hospital = await Hospital.findById(req.params.id);
@@ -836,8 +1109,28 @@ export const updateHospitalBeds = async (req, res) => {
     if (!hospital) {
       hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] });
     }
+    if (!hospital && req.body?.email) {
+      hospital = await Hospital.findOne({ email: String(req.body.email).toLowerCase().trim() });
+    }
+    if (!hospital && req.body?.name) {
+      hospital = await Hospital.findOne({ name: String(req.body.name).trim() });
+    }
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Hospital not found' });
+    }
+
+    const isAdmin = req.user.role === 'admin';
+    const isSelf = (
+      req.user.id === hospital._id.toString() ||
+      req.user._id?.toString() === hospital._id.toString() ||
+      (req.user.email && hospital.email && req.user.email.toLowerCase() === hospital.email.toLowerCase())
+    );
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to modify bed capacity for another hospital'
+      });
     }
 
     if (req.body.totalBeds !== undefined) {

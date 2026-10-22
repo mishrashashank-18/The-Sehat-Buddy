@@ -6,6 +6,8 @@ import {
   User,
   CheckCircle,
   FileText,
+  MessageSquare,
+  CheckCircle2,
   IndianRupee,
   DollarSign,
   Star,
@@ -2854,6 +2856,13 @@ const DoctorDashboard = ({ onNavigate }) => {
             >
               <User size={18} />
               <span>Profile & Schedule Settings</span>
+            </button>
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'reviews' ? styles.tabBtnActive : ''}`}
+              onClick={() => setActiveTab('reviews')}
+            >
+              <MessageSquare size={18} />
+              <span>Patient Reviews ({doctorVerifiedReviews.length})</span>
             </button>
           </div>
 
@@ -6023,6 +6032,121 @@ const DoctorDashboard = ({ onNavigate }) => {
                 Reset & Clear Details
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: PATIENT REVIEWS & EXPERIENCES */}
+      {activeTab === 'reviews' && (
+        <div className={styles.tabContentCard} style={{ background: '#ffffff', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', overflow: 'hidden' }}>
+          <div style={{ padding: '24px 28px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', background: '#fafafa' }}>
+            <div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#fef3c7', color: '#b45309', padding: '4px 12px', borderRadius: '100px', fontSize: '0.78rem', fontWeight: 700, marginBottom: '8px' }}>
+                <Star size={13} fill="#b45309" color="#b45309" />
+                <span>Verified Patient Testimonials</span>
+              </div>
+              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+                Patient Feedback & Clinical Experiences
+              </h2>
+              <p style={{ fontSize: '0.88rem', color: '#64748b', margin: 0 }}>
+                Reviews submitted by patients treated by you and at your affiliated facility ({activeDoctor.hospital || 'Hospital'}).
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#ffffff', padding: '12px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{doctorAvgRating}</div>
+                <div style={{ display: 'flex', gap: '2px', color: '#f59e0b', marginTop: '4px' }}>
+                  {[1, 2, 3, 4, 5].map(s => (
+                    <Star key={s} size={14} fill={s <= Math.round(Number(doctorAvgRating)) ? '#f59e0b' : '#e2e8f0'} color={s <= Math.round(Number(doctorAvgRating)) ? '#f59e0b' : '#cbd5e1'} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '16px' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{doctorVerifiedReviews.length} Reviews</div>
+                <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>100% Verified Patients</div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: '24px 28px' }}>
+            {doctorVerifiedReviews.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 16px', color: '#94a3b8' }}>
+                <MessageSquare size={48} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
+                <h3 style={{ color: '#475569', fontSize: '1.1rem', margin: '0 0 6px 0' }}>No Patient Reviews Yet</h3>
+                <p style={{ fontSize: '0.88rem', maxWidth: '420px', margin: '0 auto' }}>
+                  When patients submit feedback on the hospital profile or after their clinical consultation, their verified testimonials will appear here.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+                {doctorVerifiedReviews.map((rev, idx) => (
+                  <div
+                    key={rev.id || rev._id || idx}
+                    style={{
+                      background: '#ffffff',
+                      borderRadius: '16px',
+                      border: '1.5px solid #e2e8f0',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <div>
+                          <h4 style={{ margin: '0 0 2px 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                            {rev.patientName || 'Verified Patient'}
+                          </h4>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                            {rev.patientCity || 'Bengaluru'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '2px' }}>
+                          {[1, 2, 3, 4, 5].map(s => (
+                            <Star
+                              key={s}
+                              size={14}
+                              fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'}
+                              color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {rev.treatment && (
+                        <div style={{ display: 'inline-block', background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: '100px', fontSize: '0.74rem', fontWeight: 600, marginBottom: '10px' }}>
+                          Treatment: {rev.treatment}
+                        </div>
+                      )}
+
+                      {rev.title && (
+                        <h5 style={{ margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 700, color: '#1e293b' }}>
+                          {rev.title}
+                        </h5>
+                      )}
+
+                      <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#475569', lineHeight: 1.55 }}>
+                        "{rev.comment}"
+                      </p>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#64748b' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 600 }}>
+                        <CheckCircle2 size={13} color="#059669" /> Verified Patient
+                      </span>
+                      {rev.insuranceUsed && rev.insuranceUsed !== 'None' && (
+                        <span style={{ color: '#0284c7', fontWeight: 600 }}>
+                          {rev.insuranceUsed}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

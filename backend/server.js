@@ -199,19 +199,6 @@ app.get('/api/reel-cover', async (req, res) => {
     }
     shortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '');
 
-    const brokenMap = {
-      'DeArmJdSQa6': 'DWGyY03lWc2',
-      'DeAA8evMsBS': 'DXpDWdoDKai',
-      'DdrR6vApDBK': 'DZdBbmoM1tn',
-      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2',
-      'DcOgyeMvU0r': 'DerD2HwAeAU'
-    };
-    if (brokenMap[shortcode]) {
-      shortcode = brokenMap[shortcode];
-    }
-
     const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
       redirect: 'manual',
       headers: {
@@ -246,55 +233,35 @@ app.get('/api/reel-video', async (req, res) => {
       return res.status(400).json({ success: false, message: 'URL is required' });
     }
 
-    let shortcode = rawUrl;
-    const match = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-    if (match && match[1]) {
-      shortcode = match[1];
-    }
-    shortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '');
-
-    const brokenMap = {
-      'DeArmJdSQa6': 'DWGyY03lWc2',
-      'DeAA8evMsBS': 'DXpDWdoDKai',
-      'DdrR6vApDBK': 'DZdBbmoM1tn',
-      'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-      'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2',
-      'DcOgyeMvU0r': 'DerD2HwAeAU'
-    };
-    if (brokenMap[shortcode]) {
-      shortcode = brokenMap[shortcode];
-    }
-
-    const embedRes = await fetch(`https://www.instagram.com/reel/${shortcode}/embed/`, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    if (!embedRes.ok) {
-      return res.status(embedRes.status).json({ success: false, message: 'Could not fetch reel embed' });
-    }
-
-    const html = await embedRes.text();
-    const idx = html.indexOf('video_url');
-    if (idx !== -1) {
-      const after = html.substring(idx);
-      const startIdx = after.indexOf('https:');
-      let endIdx = after.indexOf('"', startIdx);
-      if (after.indexOf('\\"', startIdx) !== -1 && after.indexOf('\\"', startIdx) < endIdx) {
-        endIdx = after.indexOf('\\"', startIdx);
-      }
-      const raw = after.substring(startIdx, endIdx);
-      const cleanVideoUrl = raw.replace(/\\\/|\\\//g, '/').replace(/\\u0026/g, '&').replace(/\\\\/g, '').replace(/\\"/g, '');
-      
+    // Direct Cloudinary or MP4 videos stream directly
+    if (rawUrl.includes('cloudinary') || rawUrl.endsWith('.mp4') || rawUrl.endsWith('.webm')) {
       if (req.query.json === 'true') {
-        return res.json({ success: true, videoUrl: cleanVideoUrl });
+        return res.json({ success: true, videoUrl: rawUrl });
       }
+      return res.redirect(rawUrl);
+    }
 
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'public, max-age=3600');
-      return res.redirect(cleanVideoUrl);
+    let targetReelUrl = rawUrl;
+    if (!targetReelUrl.startsWith('http')) {
+      targetReelUrl = `https://www.instagram.com/reel/${targetReelUrl}/`;
+    }
+
+    try {
+      const { exec } = await import('child_process');
+      const { promisify } = await import('util');
+      const execPromise = promisify(exec);
+      const { stdout } = await execPromise(`python -m yt_dlp -g "${targetReelUrl}"`, { timeout: 12000 });
+      const directMp4 = stdout.trim().split('\n')[0].trim();
+      if (directMp4 && directMp4.startsWith('http')) {
+        if (req.query.json === 'true') {
+          return res.json({ success: true, videoUrl: directMp4 });
+        }
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.redirect(directMp4);
+      }
+    } catch (ytErr) {
+      console.warn('yt-dlp direct extraction fallback:', ytErr.message);
     }
 
     return res.status(404).json({ success: false, message: 'No video stream found' });

@@ -37,7 +37,7 @@ const hospitalSchema = new mongoose.Schema({
   photos: [{
     url: { type: String, required: true },
     title: { type: String, default: '' },
-    category: { type: String, enum: ['interior', 'exterior', 'facility', 'custom'], default: 'custom' },
+    category: { type: String, default: 'facility' },
     createdAt: { type: Date, default: Date.now }
   }],
   star_doctors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],

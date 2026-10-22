@@ -302,6 +302,49 @@ router.post('/video', protect, (req, res, next) => {
 });
 
 /**
+ * Auto-extract Instagram Reel and Upload to Cloudinary
+ * Returns permanent Cloudinary video url and auto-generated thumbnail
+ */
+router.post('/instagram-reel', protect, async (req, res) => {
+  try {
+    const { url, folder = 'sehatbuddy/reels' } = req.body;
+    if (!url || !url.includes('instagram.com')) {
+      return res.status(400).json({ success: false, message: 'Valid Instagram Reel URL is required' });
+    }
+
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execPromise = promisify(exec);
+
+    // Extract direct video stream using yt-dlp
+    const cmd = `python -m yt_dlp -g "${url}"`;
+    const { stdout } = await execPromise(cmd, { timeout: 15000 });
+    const directMp4 = stdout.trim().split('\n')[0].trim();
+    if (!directMp4 || !directMp4.startsWith('http')) {
+      return res.status(400).json({ success: false, message: 'Could not extract reel stream' });
+    }
+
+    const cld = getCloudinary();
+    const uploadResult = await cld.uploader.upload(directMp4, {
+      resource_type: 'video',
+      folder
+    });
+
+    notifyStorageChanged('cloudinary:video');
+    return res.json({
+      success: true,
+      url: uploadResult.secure_url || uploadResult.url,
+      coverPhoto: (uploadResult.secure_url || uploadResult.url).replace(/\.[^/.]+$/, '.jpg'),
+      public_id: uploadResult.public_id,
+      duration: uploadResult.duration
+    });
+  } catch (err) {
+    console.error('Instagram reel conversion error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to convert reel to Cloudinary' });
+  }
+});
+
+/**
  * Helper to extract Cloudinary public_id from URL
  */
 export const extractCloudinaryPublicId = (url) => {

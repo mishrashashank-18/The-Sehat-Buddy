@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { 
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
@@ -227,17 +227,34 @@ export const getDoctorVerifiedReviews = (doc, liveReviews) => {
   const docDisplayName = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'the doctor';
   const cleanDocName = (doc.name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
   const dId = String(doc.id || doc._id || '');
+  const docHosp = (doc.hospital || '').toLowerCase().trim();
 
-  // 1. Check live reviews from data context
+  // 1. Check live reviews from data context (matches doctor reviews AND reviews for their affiliated hospital facility)
   const matched = (liveReviews || []).filter(r => {
-    if (r.targetType === 'doctor' && r.status !== 'rejected') {
-      const cleanTargetName = (r.targetName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
-      const rTargetId = String(r.targetId || '');
-      return (
-        (rTargetId && rTargetId === dId) ||
-        (cleanTargetName && cleanDocName && (cleanTargetName.includes(cleanDocName) || cleanDocName.includes(cleanTargetName)))
-      );
+    if (r.status === 'rejected') return false;
+    const cleanTargetName = (r.targetName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+    const rTargetId = String(r.targetId || '');
+    const rDoctorId = String(r.doctorId || '');
+    const rDoctorName = (r.doctorName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+
+    // Direct doctor match by ID or Doctor Name
+    if (rDoctorId && rDoctorId === dId) return true;
+    if (rDoctorName && cleanDocName && (rDoctorName.includes(cleanDocName) || cleanDocName.includes(rDoctorName))) return true;
+    if (r.targetType === 'doctor') {
+      if (rTargetId && rTargetId === dId) return true;
+      if (cleanTargetName && cleanDocName && (cleanTargetName.includes(cleanDocName) || cleanDocName.includes(cleanTargetName))) return true;
     }
+
+    // Associated hospital reviews (hospital reviews where this doctor practices)
+    if (r.targetType === 'hospital' && docHosp) {
+      const tName = (r.targetName || '').toLowerCase().trim();
+      const tId = String(r.targetId || '').toLowerCase().trim();
+      const docHospId = String(doc.hospitalId || '').toLowerCase().trim();
+      if ((tId && docHospId && tId === docHospId) || (tName && (tName === docHosp || tName.includes(docHosp) || docHosp.includes(tName)))) {
+        return true;
+      }
+    }
+
     return false;
   });
 
@@ -331,6 +348,163 @@ export const getDoctorVerifiedReviews = (doc, liveReviews) => {
     }
   }
   return combined;
+};
+
+const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
+  const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
+
+  const videoSrc = useMemo(() => {
+    if (!rawUrl) return '';
+    if (rawUrl.endsWith('.mp4') || rawUrl.endsWith('.webm') || rawUrl.includes('res.cloudinary.com')) {
+      return rawUrl;
+    }
+    return `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`;
+  }, [rawUrl]);
+
+  const handleMouseEnter = () => {
+    if (videoRef.current && !videoError) {
+      setHasStarted(true);
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => setIsPlaying(true))
+          .catch((err) => {
+            console.warn('Doctor reel hover play error:', err);
+            setIsPlaying(false);
+          });
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  return (
+    <div
+      className={styles.reelCard}
+      onClick={() => onOpen(reelItem)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      title="Hover to preview, click to watch in full view"
+      style={{
+        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+      }}
+    >
+      {coverPhoto ? (
+        <img
+          src={coverPhoto}
+          alt={`Instagram Reel ${idx + 1}`}
+          className={styles.reelCoverImg}
+          loading="lazy"
+          style={{
+            opacity: isPlaying ? 0 : 1,
+            transition: 'opacity 0.25s ease'
+          }}
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
+      ) : (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
+          padding: '20px',
+          textAlign: 'center',
+          userSelect: 'none',
+          opacity: isPlaying ? 0 : 1,
+          transition: 'opacity 0.25s ease'
+        }}>
+          <div style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+            marginBottom: '12px'
+          }}>
+            <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+          </div>
+          <span style={{
+            color: '#ffffff',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+            marginBottom: '4px'
+          }}>
+            Reel {idx + 1}
+          </span>
+          <span style={{
+            color: '#94a3b8',
+            fontSize: '0.72rem',
+            fontWeight: 500
+          }}>
+            Hover to Preview
+          </span>
+        </div>
+      )}
+
+      {videoSrc && !videoError && (
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          poster={coverPhoto}
+          muted
+          playsInline
+          loop
+          preload="metadata"
+          className={styles.reelHoverVideo}
+          style={{
+            opacity: isPlaying ? 1 : (hasStarted ? 0.85 : 0),
+            transition: 'opacity 0.25s ease',
+            zIndex: 1
+          }}
+          onError={() => setVideoError(true)}
+        />
+      )}
+
+      <div className={styles.reelGradientScrim} style={{ zIndex: 2 }} />
+
+      <div className={styles.reelTopBadge} style={{ zIndex: 3 }}>
+        <SocialInstagramIcon size={14} />
+        <span>{isPlaying ? 'Playing' : 'Reel'}</span>
+      </div>
+
+      <div
+        className={`${styles.reelPlayOverlay} ${isPlaying ? styles.reelPlayingOverlayHidden : ''}`}
+        style={{ zIndex: 3 }}
+      >
+        <div className={styles.reelPlayBtn}>
+          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+        </div>
+      </div>
+
+      {isPlaying && (
+        <div className={styles.reelHoverPlayingIndicator}>
+          <span className={styles.reelPulseDot} />
+          <span>Playing on hover</span>
+        </div>
+      )}
+    </div>
+  );
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
@@ -850,20 +1024,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         // Extract the shortcode from /reel/SHORTCODE, /reels/SHORTCODE, /p/SHORTCODE, or /tv/SHORTCODE
         const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
         if (match && match[1]) {
-          let shortcode = match[1];
-          // Map broken/expired legacy sample reels to verified active medical reels with full video thumbnails
-          const brokenMap = {
-            'DeArmJdSQa6': 'DWGyY03lWc2',
-            'DeAA8evMsBS': 'DXpDWdoDKai',
-            'DdrR6vApDBK': 'DZdBbmoM1tn',
-            'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-            'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-            'C9_K5qXMO9e': 'DWGyY03lWc2',
-            'DcOgyeMvU0r': 'DerD2HwAeAU'
-          };
-          if (brokenMap[shortcode]) {
-            shortcode = brokenMap[shortcode];
-          }
+          const shortcode = match[1];
           return `https://www.instagram.com/reel/${shortcode}/embed/`;
         }
         if (!url.includes('/embed')) {
@@ -1680,19 +1841,6 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     shortcode = match[1];
                   }
 
-                  const brokenMap = {
-                    'DeArmJdSQa6': 'DWGyY03lWc2',
-                    'DeAA8evMsBS': 'DXpDWdoDKai',
-                    'DdrR6vApDBK': 'DZdBbmoM1tn',
-                    'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-                    'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-                    'C9_K5qXMO9e': 'DWGyY03lWc2',
-                    'DcOgyeMvU0r': 'DerD2HwAeAU'
-                  };
-                  if (brokenMap[shortcode]) {
-                    shortcode = brokenMap[shortcode];
-                  }
-
                   const embedUrl = shortcode ? `https://www.instagram.com/reel/${shortcode}/embed/` : getEmbedUrl(url);
 
                   return {
@@ -1747,95 +1895,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
 
                   <div className={styles.reelsGrid}>
-                    {parsedReels.map((reelItem, idx) => {
-                      return (
-                        <div 
-                          key={idx} 
-                          className={styles.reelCard} 
-                          onClick={() => handleOpenReel(reelItem)}
-                          title="Click to view reel in pop up"
-                          style={{
-                            background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
-                          }}
-                        >
-                          {/* If coverPhoto was uploaded by admin in realtime, render it full bleed */}
-                          {reelItem.coverPhoto ? (
-                            <img 
-                              src={reelItem.coverPhoto} 
-                              alt={`Instagram Reel ${idx + 1}`} 
-                              className={styles.reelCoverImg}
-                              loading="lazy"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            /* Clean branded reel card placeholder when no cover is uploaded */
-                            <div style={{
-                              position: 'absolute',
-                              inset: 0,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
-                              padding: '20px',
-                              textAlign: 'center',
-                              userSelect: 'none'
-                            }}>
-                              <div style={{
-                                width: '56px',
-                                height: '56px',
-                                borderRadius: '50%',
-                                background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#ffffff',
-                                boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
-                                marginBottom: '12px'
-                              }}>
-                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                              </div>
-                              <span style={{
-                                color: '#ffffff',
-                                fontSize: '0.86rem',
-                                fontWeight: 700,
-                                letterSpacing: '0.02em',
-                                marginBottom: '4px'
-                              }}>
-                                Reel {idx + 1}
-                              </span>
-                              <span style={{
-                                color: '#94a3b8',
-                                fontSize: '0.72rem',
-                                fontWeight: 500
-                              }}>
-                                Tap to Play
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Gradient shadow scrim overlay when cover image exists */}
-                          {reelItem.coverPhoto && <div className={styles.reelGradientScrim} />}
-
-                          {/* Top Badge: Instagram Tag */}
-                          <div className={styles.reelTopBadge}>
-                            <SocialInstagramIcon size={14} />
-                            <span>Reel</span>
-                          </div>
-
-                          {/* Center Play Button Overlay on Hover (for cards with cover photo) */}
-                          {reelItem.coverPhoto && (
-                            <div className={styles.reelPlayOverlay}>
-                              <div className={styles.reelPlayBtn}>
-                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {parsedReels.map((reelItem, idx) => (
+                      <DoctorReelCard
+                        key={idx}
+                        reelItem={reelItem}
+                        idx={idx}
+                        onOpen={handleOpenReel}
+                      />
+                    ))}
                   </div>
                 </div>
               );
@@ -2185,12 +2252,12 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         </div>
       </Container>
 
-      {/* Reel Pop up Modal on Same Page */}
+      {/* Reel Pop up Modal on Same Page - Clean Native Video Player */}
       {activeReel && (() => {
         const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
-        const videoSrc = `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
+        const isDirect = rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget));
         const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
-        const fallbackEmbed = typeof activeReel === 'object' ? (activeReel.embedUrl || activeReel.url) : activeReel;
+        const modalVideoSrc = isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
 
         return (
           <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
@@ -2208,7 +2275,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 padding: 0
               }}
             >
-              {/* Floating Close Button without any branding header */}
+              {/* Floating Close Button */}
               <button 
                 type="button" 
                 onClick={() => setActiveReel(null)} 
@@ -2237,36 +2304,22 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               </button>
 
               <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {!reelVideoError ? (
-                  <video
-                    key={videoSrc}
-                    src={videoSrc}
-                    poster={coverSrc}
-                    autoPlay
-                    playsInline
-                    controls
-                    controlsList="nodownload"
-                    onError={() => setReelVideoError(true)}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      background: '#000000',
-                      display: 'block'
-                    }}
-                  />
-                ) : (
-                  <iframe 
-                    key={fallbackEmbed}
-                    src={fallbackEmbed} 
-                    title="Reel Player" 
-                    scrolling="no" 
-                    allowTransparency="true"
-                    allow="autoplay; encrypted-media; picture-in-picture; web-share"
-                    allowFullScreen
-                    style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                  />
-                )}
+                <video
+                  key={modalVideoSrc}
+                  src={modalVideoSrc}
+                  poster={coverSrc}
+                  autoPlay
+                  playsInline
+                  controls
+                  controlsList="nodownload"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    background: '#000000',
+                    display: 'block'
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -2418,6 +2471,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         <WriteReviewModal
           isOpen={isWriteReviewOpen}
           onClose={() => setIsWriteReviewOpen(false)}
+          onSuccess={() => setIsWriteReviewOpen(false)}
+          onNavigate={onNavigate}
           targetType="doctor"
           targetId={doctor.id || doctor._id}
           targetName={doctor.name}

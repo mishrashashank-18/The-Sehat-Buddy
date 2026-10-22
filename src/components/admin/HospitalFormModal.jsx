@@ -13,9 +13,13 @@ import {
   ShieldCheck,
   Camera,
   Trash2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Mail,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { isDoctorInStarList, getDoctorCanonicalId } from '../../context/DataContext';
 import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import styles from './HospitalFormModal.module.css';
@@ -226,9 +230,13 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
   });
 
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
+  const [customInsuranceInput, setCustomInsuranceInput] = useState('');
   const [staffEmailInput, setStaffEmailInput] = useState('');
   const [staffDoctorNameInput, setStaffDoctorNameInput] = useState('');
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdResult, setCreatedResult] = useState(null);
+  const [copiedPass, setCopiedPass] = useState(false);
 
   const handleAddStaffDoctor = () => {
     if (!staffEmailInput.trim()) return;
@@ -276,7 +284,10 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
     }
-    if (formData.totalBeds && Number(formData.totalBeds) <= 0) {
+    if (!formData.address.trim()) {
+      newErrors.address = 'Hospital street address is required';
+    }
+    if (hospitalToEdit && formData.totalBeds && Number(formData.totalBeds) <= 0) {
       newErrors.totalBeds = 'Valid bed capacity is required';
     }
     setErrors(newErrors);
@@ -381,79 +392,99 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
 
-    const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
+    setIsSubmitting(true);
+    try {
+      const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
 
-    const payload = {
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      city: formData.city.trim() || 'Delhi',
-      address: formData.address.trim() || `${formData.city || 'Central'} Medical Campus`,
-      rating: parseFloat(formData.rating) || 4.8,
-      reviews: formData.reviews || '50+',
-      totalBeds: parseInt(formData.totalBeds, 10) || 100,
-      emergency24x7: Boolean(formData.emergency24x7),
-      phone: formData.phone.trim() || '+91 11 2000 3000',
-      password: hospitalToEdit ? undefined : 'CHANGEME_PENDING_SETUP',
-      isFirstLogin: hospitalToEdit ? hospitalToEdit.isFirstLogin : true,
-      passwordSet: hospitalToEdit ? hospitalToEdit.passwordSet : false,
-      establishedYear: parseInt(formData.establishedYear, 10) || 2005,
-      description: formData.description.trim(),
-      specialties: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'],
-      specialities: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'], // DB mapping
-      image: finalImage,
-      reels: formData.reels
-        .map(r => {
-          if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
-          if (r && typeof r === 'object') {
-            const url = (r.url || '').trim();
-            const coverPhoto = (r.coverPhoto || '').trim();
-            if (!url && !coverPhoto) return null;
-            return { url, coverPhoto };
+      const payload = {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        city: formData.city.trim() || 'Delhi',
+        address: formData.address.trim() || `${formData.city || 'Central'} Medical Campus`,
+        rating: parseFloat(formData.rating) || 4.8,
+        reviews: formData.reviews || '50+',
+        totalBeds: parseInt(formData.totalBeds, 10) || 100,
+        emergency24x7: Boolean(formData.emergency24x7),
+        phone: formData.phone.trim() || '+91 11 2000 3000',
+        establishedYear: parseInt(formData.establishedYear, 10) || 2005,
+        description: formData.description.trim(),
+        specialties: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'],
+        specialities: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'], // DB mapping
+        image: finalImage,
+        reels: formData.reels
+          .map(r => {
+            if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
+            if (r && typeof r === 'object') {
+              const url = (r.url || '').trim();
+              const coverPhoto = (r.coverPhoto || '').trim();
+              if (!url && !coverPhoto) return null;
+              return { url, coverPhoto };
+            }
+            return null;
+          })
+          .filter(Boolean),
+        youtube_videos: formData.youtube_videos
+          .map(v => {
+            if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+            if (v && typeof v === 'object') {
+              const url = (v.url || '').trim();
+              const coverPhoto = (v.coverPhoto || '').trim();
+              if (!url && !coverPhoto) return null;
+              return { url, coverPhoto };
+            }
+            return null;
+          })
+          .filter(Boolean),
+        star_doctors: formData.star_doctors,
+        staff_emails: formData.staff_emails,
+        staff_doctors: formData.staff_doctors,
+        cashlessInsurance: formData.cashlessInsurance,
+        acceptedInsurances: formData.acceptedInsurances,
+        tpaHelpdesk: {
+          phone: formData.tpaPhone.trim() || formData.phone.trim() || '080-45678900',
+          email: formData.tpaEmail.trim() || formData.email.trim(),
+          preAuthTime: formData.tpaPreAuthTime.trim() || '30 Mins Cashless Pre-Approval'
+        },
+        insuranceHelpline: formData.insuranceHelpline.trim() || '1800-SEHAT-CARE',
+        latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
+        longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
+      };
+
+      if (hospitalToEdit) {
+        await updateHospital(hospitalToEdit.id || hospitalToEdit._id, payload);
+        if (onSuccess) {
+          onSuccess('Hospital updated successfully!');
+        }
+        onClose();
+      } else {
+        const res = await addHospital(payload);
+        if (res?.temporaryPassword) {
+          setCreatedResult({
+            name: payload.name,
+            email: payload.email,
+            temporaryPassword: res.temporaryPassword,
+            portalUrl: `${window.location.origin}/hospital`
+          });
+          if (onSuccess) {
+            onSuccess(`Hospital "${payload.name}" registered! Portal credentials dispatched.`);
           }
-          return null;
-        })
-        .filter(Boolean),
-      youtube_videos: formData.youtube_videos
-        .map(v => {
-          if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
-          if (v && typeof v === 'object') {
-            const url = (v.url || '').trim();
-            const coverPhoto = (v.coverPhoto || '').trim();
-            if (!url && !coverPhoto) return null;
-            return { url, coverPhoto };
+        } else {
+          if (onSuccess) {
+            onSuccess('Hospital registered successfully!');
           }
-          return null;
-        })
-        .filter(Boolean),
-      star_doctors: formData.star_doctors,
-      staff_emails: formData.staff_emails,
-      staff_doctors: formData.staff_doctors,
-      cashlessInsurance: formData.cashlessInsurance,
-      acceptedInsurances: formData.acceptedInsurances,
-      tpaHelpdesk: {
-        phone: formData.tpaPhone.trim() || formData.phone.trim() || '080-45678900',
-        email: formData.tpaEmail.trim() || formData.email.trim(),
-        preAuthTime: formData.tpaPreAuthTime.trim() || '30 Mins Cashless Pre-Approval'
-      },
-      insuranceHelpline: formData.insuranceHelpline.trim() || '1800-SEHAT-CARE',
-      latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
-      longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
-    };
-
-    if (hospitalToEdit) {
-      updateHospital(hospitalToEdit.id || hospitalToEdit._id, payload);
-    } else {
-      addHospital(payload);
+          onClose();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit hospital:', err);
+      alert(err.message || 'Failed to save hospital');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (onSuccess) {
-      onSuccess(hospitalToEdit ? 'Hospital updated successfully!' : 'Hospital added successfully!');
-    }
-    onClose();
   };
 
   // Filter doctors to ONLY show doctors affiliated with this hospital
@@ -525,8 +556,156 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     return list;
   }, [doctors, formData.name, formData.staff_emails, formData.staff_doctors, hospitalToEdit]);
 
+  if (createdResult) {
+    return (
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()} style={{ maxWidth: '580px', height: 'auto', maxHeight: '92vh' }}>
+        <div className={styles.header}>
+          <div className={styles.titleWrap}>
+            <div className={styles.iconBadge} style={{ background: '#ecfdf5', color: '#059669' }}>
+              <Check size={24} />
+            </div>
+            <div>
+              <h2>Hospital Added Successfully</h2>
+              <p>Credentials dispatched to hospital email</p>
+            </div>
+          </div>
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className={styles.body} style={{ padding: '24px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              background: '#ecfdf5',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 12px',
+              color: '#059669'
+            }}>
+              <Check size={28} />
+            </div>
+            <h3 style={{ margin: '0 0 6px', color: '#0f172a', fontSize: '1.25rem' }}>
+              {createdResult.name}
+            </h3>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+              Hospital registered on Sehat Buddy. Onboarding credentials have been sent via email.
+            </p>
+          </div>
+
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
+            padding: '18px 20px',
+            marginBottom: '20px'
+          }}>
+            <div style={{ marginBottom: '14px' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Official Login Email (ID)
+              </span>
+              <span style={{ fontSize: '0.98rem', color: '#0f172a', fontWeight: 700, fontFamily: 'monospace' }}>
+                {createdResult.email}
+              </span>
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Temporary Login Password
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
+                <span style={{
+                  fontSize: '1.05rem',
+                  color: '#dc2626',
+                  fontWeight: 700,
+                  fontFamily: 'monospace',
+                  background: '#fee2e2',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  letterSpacing: '0.5px'
+                }}>
+                  {createdResult.temporaryPassword}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdResult.temporaryPassword);
+                    setCopiedPass(true);
+                    setTimeout(() => setCopiedPass(false), 2000);
+                  }}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    color: '#334155'
+                  }}
+                >
+                  {copiedPass ? '✓ Copied' : 'Copy'}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.78rem', color: '#64748b', display: 'block', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Hospital Portal URL
+              </span>
+              <a
+                href={createdResult.portalUrl}
+                target="_blank"
+                rel="noreferrer"
+                style={{ fontSize: '0.9rem', color: '#2563eb', fontWeight: 600, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+              >
+                {createdResult.portalUrl} <ExternalLink size={13} />
+              </a>
+            </div>
+          </div>
+
+          <div style={{
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '10px',
+            padding: '12px 16px',
+            fontSize: '0.82rem',
+            color: '#1e40af',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <ShieldCheck size={18} color="#2563eb" style={{ flexShrink: 0 }} />
+            <span>
+              The hospital admin can now sign in at the Hospital Portal using their email and this temporary password.
+            </span>
+          </div>
+        </div>
+
+        <div className={styles.footer} style={{ justifyContent: 'flex-end', padding: '16px 24px' }}>
+          <button
+            type="button"
+            className={styles.submitBtn}
+            onClick={onClose}
+            style={{ minWidth: '110px' }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <div
+      className={styles.modal}
+      onClick={(e) => e.stopPropagation()}
+      style={!hospitalToEdit ? { maxWidth: '620px', height: 'auto', maxHeight: '92vh' } : {}}
+    >
       <div className={styles.header}>
         <div className={styles.titleWrap}>
           <div className={styles.iconBadge}>
@@ -534,7 +713,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           </div>
           <div>
             <h2>{hospitalToEdit ? 'Edit Hospital' : 'Add New Hospital'}</h2>
-            <p>{hospitalToEdit ? 'Update clinical facilities, departments and location' : 'Register a new verified healthcare facility to Sehat Buddy'}</p>
+            <p>{hospitalToEdit ? 'Update clinical facilities, departments and location' : 'Register hospital facility & email portal login credentials'}</p>
           </div>
         </div>
         <button className={styles.closeBtn} onClick={onClose} aria-label="Close modal">
@@ -548,20 +727,20 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           <div className={styles.sectionHeader}>Hospital Overview & Portal Credentials</div>
 
           <div style={{
-            background: '#f0fdf4',
-            border: '1px solid #bbf7d0',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
             borderRadius: '10px',
             padding: '12px 16px',
             marginBottom: '16px',
             fontSize: '0.86rem',
-            color: '#166534',
+            color: '#1e40af',
             display: 'flex',
             alignItems: 'center',
             gap: '10px'
           }}>
-            <ShieldCheck size={20} color="#16a34a" style={{ flexShrink: 0 }} />
+            <Mail size={20} color="#2563eb" style={{ flexShrink: 0 }} />
             <div>
-              <strong>Hospital Portal Access:</strong> When the hospital logs into the Hospital Portal with this email, their name will be fetched automatically from the database, and they will be prompted to set their password on first login.
+              <strong>Automatic Portal Credentials:</strong> When you click <strong>Add Hospital</strong>, a secure temporary password will be automatically generated and emailed to this hospital address along with their portal login URL (<code>/hospital</code>).
             </div>
           </div>
 
@@ -625,9 +804,11 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             {errors.address && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.address}</span>}
           </div>
 
-          <div className={styles.grid2}>
-            <div className={styles.formGroup}>
-              <label>Latitude (e.g. 12.9592)</label>
+          {hospitalToEdit && (
+            <>
+              <div className={styles.grid2}>
+                <div className={styles.formGroup}>
+                  <label>Latitude (e.g. 12.9592)</label>
               <input
                 type="number"
                 step="any"
@@ -1051,27 +1232,21 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             {hospitalDoctors && hospitalDoctors.length > 0 ? (
               hospitalDoctors.map((doc) => {
                 const docId = doc.id || doc._id || doc.email;
-                const isSelected = formData.star_doctors.some(id => 
-                  String(id) === String(docId) || (doc.email && String(id).toLowerCase() === doc.email.toLowerCase())
-                );
+                const isSelected = isDoctorInStarList(doc, formData.star_doctors);
                 const isHospitalStaff = (doc.hospital && formData.name && doc.hospital.toLowerCase().includes(formData.name.toLowerCase())) ||
                   (formData.staff_emails && formData.staff_emails.includes(doc.email?.toLowerCase())) ||
                   (formData.staff_doctors && formData.staff_doctors.some(sd => (sd.email || sd)?.toLowerCase() === doc.email?.toLowerCase()));
 
                 return (
                   <div
-                    key={doc.id || doc._id || doc.email}
+                    key={docId}
                     className={`${styles.starDocItem} ${isSelected ? styles.starDocItemActive : ''}`}
                     onClick={() => {
-                      const targetId = doc.id || doc._id || doc.email;
-                      const isAlreadySelected = formData.star_doctors.some(id => 
-                        String(id) === String(targetId) || (doc.email && String(id).toLowerCase() === doc.email.toLowerCase())
-                      );
+                      const canonicalId = getDoctorCanonicalId(doc) || String(docId);
+                      const isAlreadySelected = isDoctorInStarList(doc, formData.star_doctors);
                       const newDocs = isAlreadySelected
-                        ? formData.star_doctors.filter(id => 
-                            String(id) !== String(targetId) && (!doc.email || String(id).toLowerCase() !== doc.email.toLowerCase())
-                          )
-                        : [...formData.star_doctors, targetId];
+                        ? formData.star_doctors.filter(sd => !isDoctorInStarList(doc, [sd]))
+                        : [...formData.star_doctors.filter(sd => !isDoctorInStarList(doc, [sd])), canonicalId];
                       setFormData({ ...formData, star_doctors: newDocs });
                     }}
                     title={isSelected ? "Click to remove Star status" : "Click to select as Star Doctor"}
@@ -1286,58 +1461,131 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                Select Accepted Insurance Companies & TPAs:
+                Accepted Insurance Companies & TPAs ({formData.acceptedInsurances.length} Active):
               </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {insurancePartners.map((partner) => {
-                  const isSelected = formData.acceptedInsurances.includes(partner.name);
-                  return (
+
+              {/* Active Insurance Badges */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                {formData.acceptedInsurances.map((insName, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: '#ecfdf5',
+                      border: '1.5px solid #059669',
+                      color: '#065f46',
+                      borderRadius: '8px',
+                      padding: '5px 10px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600
+                    }}
+                  >
+                    <ShieldCheck size={13} color="#059669" />
+                    <span>{insName}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          acceptedInsurances: formData.acceptedInsurances.filter((_, i) => i !== idx)
+                        });
+                      }}
+                      style={{ background: 'none', border: 'none', color: '#065f46', cursor: 'pointer', padding: 0, display: 'flex' }}
+                      title="Remove Insurance"
+                    >
+                      <X size={13} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {/* Add Custom Insurance Input */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', maxWidth: '460px' }}>
+                <input
+                  type="text"
+                  placeholder="Add custom insurance or TPA..."
+                  value={customInsuranceInput}
+                  onChange={(e) => setCustomInsuranceInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const val = customInsuranceInput.trim();
+                      if (val && !formData.acceptedInsurances.some(i => i.toLowerCase() === val.toLowerCase())) {
+                        setFormData({ ...formData, acceptedInsurances: [...formData.acceptedInsurances, val] });
+                        setCustomInsuranceInput('');
+                      }
+                    }
+                  }}
+                  style={{ flex: 1, padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = customInsuranceInput.trim();
+                    if (val && !formData.acceptedInsurances.some(i => i.toLowerCase() === val.toLowerCase())) {
+                      setFormData({ ...formData, acceptedInsurances: [...formData.acceptedInsurances, val] });
+                      setCustomInsuranceInput('');
+                    }
+                  }}
+                  style={{ padding: '7px 12px', background: '#059669', color: '#ffffff', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Add
+                </button>
+              </div>
+
+              {/* Quick Pick Suggestions */}
+              <span style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>
+                Quick Add Suggestions:
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {insurancePartners
+                  .filter(p => !formData.acceptedInsurances.some(ins => ins.toLowerCase() === p.name.toLowerCase()))
+                  .map(partner => (
                     <button
                       key={partner.id}
                       type="button"
                       onClick={() => {
-                        if (isSelected) {
-                          setFormData({
-                            ...formData,
-                            acceptedInsurances: formData.acceptedInsurances.filter(n => n !== partner.name)
-                          });
-                        } else {
-                          setFormData({
-                            ...formData,
-                            acceptedInsurances: [...formData.acceptedInsurances, partner.name]
-                          });
-                        }
+                        setFormData({
+                          ...formData,
+                          acceptedInsurances: [...formData.acceptedInsurances, partner.name]
+                        });
                       }}
                       style={{
-                        background: isSelected ? '#ecfdf5' : '#ffffff',
-                        border: `1.5px solid ${isSelected ? '#059669' : '#cbd5e1'}`,
-                        color: isSelected ? '#065f46' : '#475569',
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '0.8rem',
+                        background: '#ffffff',
+                        border: '1px dashed #94a3b8',
+                        color: '#475569',
+                        borderRadius: '6px',
+                        padding: '4px 8px',
+                        fontSize: '0.76rem',
                         fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        transition: 'all 0.15s'
+                        cursor: 'pointer'
                       }}
                     >
-                      {isSelected ? '✓ ' : '+ '} {partner.name}
+                      + {partner.name}
                     </button>
-                  );
-                })}
+                  ))}
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
 
         <div className={styles.footer}>
-          <button type="button" className={styles.cancelBtn} onClick={onClose}>
+          <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isSubmitting}>
             Cancel
           </button>
-          <button type="submit" className={styles.submitBtn}>
-            {hospitalToEdit ? 'Save Changes' : 'Add Hospital'}
+          <button type="submit" className={styles.submitBtn} disabled={isSubmitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            {isSubmitting ? (
+              <>
+                <Loader2 size={16} className={styles.spinAnimation} />
+                <span>Registering & Emailing...</span>
+              </>
+            ) : (
+              <span>{hospitalToEdit ? 'Save Changes' : 'Add Hospital & Send Credentials'}</span>
+            )}
           </button>
         </div>
       </form>

@@ -345,4 +345,59 @@ export const getStorageStats = async (req, res) => {
   }
 };
 
+export const getAllAppointments = async (req, res) => {
+  try {
+    const appointments = await Appointment.find().sort({ createdAt: -1, date: -1 });
+    res.json({ success: true, count: appointments.length, data: appointments });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const updateAppointmentStatus = async (req, res) => {
+  try {
+    const { status, cancelled, isCompleted } = req.body;
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+    if (status !== undefined) {
+      appointment.status = status;
+      if (status === 'Completed') {
+        appointment.isCompleted = true;
+      } else if (status === 'Cancelled') {
+        appointment.cancelled = true;
+      }
+    }
+    if (cancelled !== undefined) appointment.cancelled = Boolean(cancelled);
+    if (isCompleted !== undefined) appointment.isCompleted = Boolean(isCompleted);
+    await appointment.save();
+
+    try {
+      broadcastDbChange('appointments', 'update', appointment._id.toString(), appointment);
+    } catch {}
+
+    res.json({ success: true, message: 'Appointment status updated', data: appointment });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const deleteAppointment = async (req, res) => {
+  try {
+    const appointment = await Appointment.findByIdAndDelete(req.params.id);
+    if (!appointment) {
+      return res.status(404).json({ success: false, message: 'Appointment not found' });
+    }
+
+    try {
+      broadcastDbChange('appointments', 'delete', req.params.id);
+    } catch {}
+
+    res.json({ success: true, message: 'Appointment deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export { streamStorageStats };
