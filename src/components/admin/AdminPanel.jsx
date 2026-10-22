@@ -35,7 +35,13 @@ import {
   AlertTriangle,
   Mail,
   Send,
-  History
+  History,
+  Calendar,
+  User,
+  Users,
+  UserCheck,
+  CalendarDays,
+  Check
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
@@ -130,6 +136,170 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
+
+  // Appointments Management State
+  const [appointments, setAppointments] = useState([]);
+  const [loadingAppointments, setLoadingAppointments] = useState(false);
+  const [appointmentSearch, setAppointmentSearch] = useState('');
+  const [appointmentTypeFilter, setAppointmentTypeFilter] = useState('all'); // 'all' | 'hospital' | 'doctor'
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('all'); // 'all' | 'Confirmed' | 'Completed' | 'Cancelled'
+  const [appointmentYearFilter, setAppointmentYearFilter] = useState('all');
+  const [appointmentMonthFilter, setAppointmentMonthFilter] = useState('all');
+  const [appointmentDayFilter, setAppointmentDayFilter] = useState('all');
+  const [appointmentPreset, setAppointmentPreset] = useState('all'); // 'all' | 'today' | 'this_month' | 'this_year'
+
+  const fetchAppointments = useCallback(async () => {
+    setLoadingAppointments(true);
+    try {
+      const data = await api.getAdminAppointments();
+      if (Array.isArray(data)) {
+        setAppointments(data);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch admin appointments:', err);
+      try {
+        const local = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
+        setAppointments(local);
+      } catch {}
+    } finally {
+      setLoadingAppointments(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAppointments();
+    const handleAptChanged = () => {
+      fetchAppointments();
+    };
+    window.addEventListener('sehat_appointments_changed', handleAptChanged);
+    window.addEventListener('sehat_db_change', handleAptChanged);
+    return () => {
+      window.removeEventListener('sehat_appointments_changed', handleAptChanged);
+      window.removeEventListener('sehat_db_change', handleAptChanged);
+    };
+  }, [fetchAppointments]);
+
+  const handleUpdateStatus = async (appointmentId, newStatus) => {
+    try {
+      await api.updateAdminAppointmentStatus(appointmentId, {
+        status: newStatus,
+        isCompleted: newStatus === 'Completed',
+        cancelled: newStatus === 'Cancelled'
+      });
+      setAppointments(prev => prev.map(a => (a._id === appointmentId || a.id === appointmentId) ? { ...a, status: newStatus, isCompleted: newStatus === 'Completed', cancelled: newStatus === 'Cancelled' } : a));
+      showToast(`Appointment status updated to ${newStatus}`);
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      showToast('Failed to update status', 'error');
+    }
+  };
+
+  const handleDeleteAppointment = async (appointmentId) => {
+    if (!window.confirm('Are you sure you want to delete this appointment record?')) return;
+    try {
+      await api.deleteAdminAppointment(appointmentId);
+      setAppointments(prev => prev.filter(a => a._id !== appointmentId && a.id !== appointmentId));
+      showToast('Appointment record deleted successfully');
+    } catch (err) {
+      console.error('Failed to delete appointment:', err);
+      showToast('Failed to delete appointment', 'error');
+    }
+  };
+
+  const availableAppointmentYears = React.useMemo(() => {
+    const years = new Set();
+    appointments.forEach(apt => {
+      const rawDate = apt.slotDate || (apt.createdAt ? apt.createdAt.slice(0, 10) : '');
+      if (rawDate && rawDate.includes('-')) {
+        const y = rawDate.split('-')[0];
+        if (y && y.length === 4) years.add(y);
+      }
+    });
+    years.add(new Date().getFullYear().toString());
+    return Array.from(years).sort().reverse();
+  }, [appointments]);
+
+  const filteredAppointments = React.useMemo(() => {
+    return appointments.filter(apt => {
+      if (appointmentTypeFilter === 'hospital' && apt.appointmentType !== 'hospital' && !apt.hospitalId && !apt.hospitalData) return false;
+      if (appointmentTypeFilter === 'doctor' && (apt.appointmentType === 'hospital' || (!apt.docId && apt.hospitalId))) return false;
+
+      if (appointmentStatusFilter !== 'all') {
+        const s = (apt.status || 'Confirmed').toLowerCase();
+        if (appointmentStatusFilter === 'Completed' && (s !== 'completed' && !apt.isCompleted)) return false;
+        if (appointmentStatusFilter === 'Confirmed' && (s !== 'confirmed' || apt.cancelled || apt.isCompleted)) return false;
+        if (appointmentStatusFilter === 'Cancelled' && (s !== 'cancelled' && !apt.cancelled)) return false;
+      }
+
+      // Date parsing
+      const rawDate = apt.slotDate || (apt.createdAt ? apt.createdAt.slice(0, 10) : '');
+      const parts = rawDate.split('-');
+      const aptYear = parts[0] || '';
+      const aptMonth = parts[1] || '';
+      const aptDay = parts[2] ? parts[2].padStart(2, '0') : '';
+      const now = new Date();
+
+      if (appointmentPreset === 'today') {
+        if (rawDate !== now.toISOString().slice(0, 10)) return false;
+      } else if (appointmentPreset === 'this_month') {
+        if (aptYear !== now.getFullYear().toString() || aptMonth !== String(now.getMonth() + 1).padStart(2, '0')) return false;
+      } else if (appointmentPreset === 'this_year') {
+        if (aptYear !== now.getFullYear().toString()) return false;
+      } else {
+        if (appointmentYearFilter !== 'all' && aptYear !== appointmentYearFilter) return false;
+        if (appointmentMonthFilter !== 'all' && aptMonth !== appointmentMonthFilter) return false;
+        if (appointmentDayFilter !== 'all' && aptDay !== appointmentDayFilter.padStart(2, '0')) return false;
+      }
+
+      if (appointmentSearch.trim()) {
+        const q = appointmentSearch.toLowerCase().trim();
+        const pName = (apt.userData?.name || apt.patientName || '').toLowerCase();
+        const pPhone = (apt.userData?.phone || apt.patientPhone || '').toLowerCase();
+        const pEmail = (apt.userData?.email || apt.patientEmail || '').toLowerCase();
+        const hName = (apt.hospitalData?.name || apt.hospitalName || '').toLowerCase();
+        const dName = (apt.docData?.name || apt.doctorName || '').toLowerCase();
+        const dept = (apt.department || '').toLowerCase();
+        const token = (apt._id || apt.id || '').toLowerCase();
+
+        return pName.includes(q) || pPhone.includes(q) || pEmail.includes(q) || hName.includes(q) || dName.includes(q) || dept.includes(q) || token.includes(q);
+      }
+
+      return true;
+    });
+  }, [appointments, appointmentTypeFilter, appointmentStatusFilter, appointmentPreset, appointmentYearFilter, appointmentMonthFilter, appointmentDayFilter, appointmentSearch]);
+
+  // Statistics for selected Year / Month / Day
+  const appointmentStats = React.useMemo(() => {
+    const base = appointments.filter(apt => {
+      const rawDate = apt.slotDate || (apt.createdAt ? apt.createdAt.slice(0, 10) : '');
+      const parts = rawDate.split('-');
+      const aptYear = parts[0] || '';
+      const aptMonth = parts[1] || '';
+      const aptDay = parts[2] ? parts[2].padStart(2, '0') : '';
+      const now = new Date();
+
+      if (appointmentPreset === 'today') {
+        return rawDate === now.toISOString().slice(0, 10);
+      }
+      if (appointmentPreset === 'this_month') {
+        return aptYear === now.getFullYear().toString() && aptMonth === String(now.getMonth() + 1).padStart(2, '0');
+      }
+      if (appointmentPreset === 'this_year') {
+        return aptYear === now.getFullYear().toString();
+      }
+      if (appointmentYearFilter !== 'all' && aptYear !== appointmentYearFilter) return false;
+      if (appointmentMonthFilter !== 'all' && aptMonth !== appointmentMonthFilter) return false;
+      if (appointmentDayFilter !== 'all' && aptDay !== appointmentDayFilter.padStart(2, '0')) return false;
+      return true;
+    });
+
+    const total = base.length;
+    const visited = base.filter(a => a.status === 'Completed' || a.isCompleted).length;
+    const upcoming = base.filter(a => (a.status === 'Confirmed' || a.status === 'Pending') && !a.cancelled && !a.isCompleted).length;
+    const cancelled = base.filter(a => a.status === 'Cancelled' || a.cancelled).length;
+
+    return { total, visited, upcoming, cancelled };
+  }, [appointments, appointmentPreset, appointmentYearFilter, appointmentMonthFilter, appointmentDayFilter]);
 
   // Search & Filters for FAQs
   const [faqSearch, setFaqSearch] = useState('');
@@ -407,6 +577,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   };
 
   const handleOpenEditHospital = (hosp) => {
+    const hospId = hosp?.id || hosp?._id;
+    if (onNavigate && hospId) {
+      onNavigate('admin-edit-hospital', hospId);
+      return;
+    }
     setHospitalToEdit(hosp);
     setIsHospitalModalOpen(true);
   };
@@ -553,6 +728,15 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             </button>
 
             <button
+              className={`${styles.navItem} ${activeTab === 'appointments' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('appointments')}
+            >
+              <Calendar size={20} />
+              <span>Appointments</span>
+              <span className={styles.navCount}>{appointments.length}</span>
+            </button>
+
+            <button
               className={`${styles.navItem} ${activeTab === 'content' ? styles.navItemActive : ''}`}
               onClick={() => setActiveTab('content')}
             >
@@ -677,6 +861,19 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <span className={styles.statLabel}>Total Hospitals</span>
                     <span className={styles.statValue}>{stats.totalHospitals}</span>
                     <span className={styles.statSub}>Across {uniqueCities.length || 1} cities</span>
+                  </div>
+                </div>
+
+                <div className={styles.statCard} onClick={() => setActiveTab('appointments')}>
+                  <div className={`${styles.statIconWrap}`} style={{ background: '#ecfdf5', color: '#059669' }}>
+                    <Calendar size={24} />
+                  </div>
+                  <div className={styles.statInfo}>
+                    <span className={styles.statLabel}>Total Bookings</span>
+                    <span className={styles.statValue}>{appointments.length}</span>
+                    <span className={styles.statSub}>
+                      {appointments.filter(a => a.appointmentType === 'hospital' || a.hospitalId).length} Hospital Visits
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1518,6 +1715,528 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               )}
             </div>
+
+          {/* TAB: APPOINTMENTS & BOOKINGS */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'appointments' ? 'block' : 'none' }}>
+            <div className={styles.viewHeader}>
+              <div>
+                <h1 className={styles.pageTitle}>Appointments & Hospital Bookings</h1>
+                <p className={styles.pageSubtitle}>
+                  Real-time patient visits, hospital OPD bookings, and doctor consultations across all facilities
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={fetchAppointments}
+                  disabled={loadingAppointments}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <RefreshCw size={15} className={loadingAppointments ? styles.spinning : ''} />
+                  <span>Refresh Bookings</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Total Bookings</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#0f172a', marginTop: '4px' }}>{appointments.length}</div>
+              </div>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '16px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#1d4ed8', fontWeight: 600, textTransform: 'uppercase' }}>Hospital Visits & Beds</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#1d4ed8', marginTop: '4px' }}>
+                  {appointments.filter(a => a.appointmentType === 'hospital' || a.hospitalId).length}
+                </div>
+              </div>
+              <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '12px', padding: '16px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#047857', fontWeight: 600, textTransform: 'uppercase' }}>Doctor Consultations</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#047857', marginTop: '4px' }}>
+                  {appointments.filter(a => a.appointmentType !== 'hospital' && !a.hospitalId).length}
+                </div>
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600, textTransform: 'uppercase' }}>Confirmed Active</span>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#059669', marginTop: '4px' }}>
+                  {appointments.filter(a => (a.status || 'Confirmed') === 'Confirmed').length}
+                </div>
+              </div>
+            </div>
+
+            {/* Visit & Booking Metric Cards */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+              gap: '14px',
+              marginBottom: '16px'
+            }}>
+              <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Users size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>{appointmentStats.total}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginTop: '2px' }}>Total Booked Patients</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#059669', lineHeight: 1.1 }}>{appointmentStats.visited}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginTop: '2px' }}>
+                    Patients Visited ({appointmentStats.total > 0 ? Math.round((appointmentStats.visited / appointmentStats.total) * 100) : 0}%)
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CalendarDays size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#d97706', lineHeight: 1.1 }}>{appointmentStats.upcoming}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginTop: '2px' }}>Upcoming / Scheduled</div>
+                </div>
+              </div>
+
+              <div style={{ background: '#ffffff', borderRadius: '12px', padding: '16px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#fef2f2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AlertTriangle size={22} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#dc2626', lineHeight: 1.1 }}>{appointmentStats.cancelled}</div>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginTop: '2px' }}>Cancelled Bookings</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Comprehensive Filter Bar (Presets, Year/Month/Day, Type, Status, Search) */}
+            <div style={{
+              background: '#ffffff',
+              padding: '16px 20px',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px'
+            }}>
+              {/* Row 1: Quick Time Presets & Reset */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                    Period Preset:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentPreset('all');
+                      setAppointmentYearFilter('all');
+                      setAppointmentMonthFilter('all');
+                      setAppointmentDayFilter('all');
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: appointmentPreset === 'all' && appointmentYearFilter === 'all' && appointmentMonthFilter === 'all' && appointmentDayFilter === 'all' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: appointmentPreset === 'all' && appointmentYearFilter === 'all' && appointmentMonthFilter === 'all' && appointmentDayFilter === 'all' ? '#2563eb' : '#ffffff',
+                      color: appointmentPreset === 'all' && appointmentYearFilter === 'all' && appointmentMonthFilter === 'all' && appointmentDayFilter === 'all' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    All Time ({appointments.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentPreset('today');
+                      setAppointmentYearFilter('all');
+                      setAppointmentMonthFilter('all');
+                      setAppointmentDayFilter('all');
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: appointmentPreset === 'today' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: appointmentPreset === 'today' ? '#2563eb' : '#ffffff',
+                      color: appointmentPreset === 'today' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentPreset('this_month');
+                      setAppointmentYearFilter('all');
+                      setAppointmentMonthFilter('all');
+                      setAppointmentDayFilter('all');
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: appointmentPreset === 'this_month' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: appointmentPreset === 'this_month' ? '#2563eb' : '#ffffff',
+                      color: appointmentPreset === 'this_month' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    This Month
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentPreset('this_year');
+                      setAppointmentYearFilter('all');
+                      setAppointmentMonthFilter('all');
+                      setAppointmentDayFilter('all');
+                    }}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: appointmentPreset === 'this_year' ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                      background: appointmentPreset === 'this_year' ? '#2563eb' : '#ffffff',
+                      color: appointmentPreset === 'this_year' ? '#ffffff' : '#475569',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    This Year ({new Date().getFullYear()})
+                  </button>
+                </div>
+
+                {(appointmentPreset !== 'all' || appointmentYearFilter !== 'all' || appointmentMonthFilter !== 'all' || appointmentDayFilter !== 'all' || appointmentTypeFilter !== 'all' || appointmentStatusFilter !== 'all' || appointmentSearch) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAppointmentPreset('all');
+                      setAppointmentYearFilter('all');
+                      setAppointmentMonthFilter('all');
+                      setAppointmentDayFilter('all');
+                      setAppointmentTypeFilter('all');
+                      setAppointmentStatusFilter('all');
+                      setAppointmentSearch('');
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#ef4444',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+
+              {/* Row 2: Granular Selectors */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: '10px',
+                alignItems: 'center'
+              }}>
+                {/* Year */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Year</label>
+                  <select
+                    value={appointmentPreset !== 'all' ? 'preset' : appointmentYearFilter}
+                    onChange={(e) => {
+                      setAppointmentPreset('all');
+                      setAppointmentYearFilter(e.target.value);
+                    }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  >
+                    <option value="all">All Years</option>
+                    {availableAppointmentYears.map(yr => (
+                      <option key={yr} value={yr}>{yr}</option>
+                    ))}
+                    {appointmentPreset !== 'all' && <option value="preset" disabled>Custom (Preset Active)</option>}
+                  </select>
+                </div>
+
+                {/* Month */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Month</label>
+                  <select
+                    value={appointmentPreset !== 'all' ? 'preset' : appointmentMonthFilter}
+                    onChange={(e) => {
+                      setAppointmentPreset('all');
+                      setAppointmentMonthFilter(e.target.value);
+                    }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  >
+                    <option value="all">All Months</option>
+                    <option value="01">01 - Jan</option>
+                    <option value="02">02 - Feb</option>
+                    <option value="03">03 - Mar</option>
+                    <option value="04">04 - Apr</option>
+                    <option value="05">05 - May</option>
+                    <option value="06">06 - Jun</option>
+                    <option value="07">07 - Jul</option>
+                    <option value="08">08 - Aug</option>
+                    <option value="09">09 - Sep</option>
+                    <option value="10">10 - Oct</option>
+                    <option value="11">11 - Nov</option>
+                    <option value="12">12 - Dec</option>
+                    {appointmentPreset !== 'all' && <option value="preset" disabled>Custom (Preset Active)</option>}
+                  </select>
+                </div>
+
+                {/* Day */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Day</label>
+                  <select
+                    value={appointmentPreset !== 'all' ? 'preset' : appointmentDayFilter}
+                    onChange={(e) => {
+                      setAppointmentPreset('all');
+                      setAppointmentDayFilter(e.target.value);
+                    }}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  >
+                    <option value="all">All Days (1 - 31)</option>
+                    {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => (
+                      <option key={d} value={d}>Day {d}</option>
+                    ))}
+                    {appointmentPreset !== 'all' && <option value="preset" disabled>Custom (Preset Active)</option>}
+                  </select>
+                </div>
+
+                {/* Type */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Target</label>
+                  <select
+                    value={appointmentTypeFilter}
+                    onChange={(e) => setAppointmentTypeFilter(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  >
+                    <option value="all">All Targets</option>
+                    <option value="hospital">🏥 Hospitals Only</option>
+                    <option value="doctor">👨‍⚕️ Doctors Only</option>
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Visit Status</label>
+                  <select
+                    value={appointmentStatusFilter}
+                    onChange={(e) => setAppointmentStatusFilter(e.target.value)}
+                    style={{ width: '100%', padding: '7px 10px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, color: '#0f172a', background: '#ffffff', outline: 'none' }}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="Completed">Visited / Completed</option>
+                    <option value="Confirmed">Confirmed / Upcoming</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Search */}
+                <div style={{ gridColumn: 'span 1' }}>
+                  <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '3px', textTransform: 'uppercase' }}>Search</label>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type="text"
+                      value={appointmentSearch}
+                      onChange={(e) => setAppointmentSearch(e.target.value)}
+                      placeholder="Patient, phone, hospital..."
+                      style={{ width: '100%', padding: '7px 10px 7px 30px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '0.82rem', outline: 'none' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Appointments Table */}
+            <div className={styles.tableContainer}>
+              <table className={styles.dataTable}>
+                <thead>
+                  <tr>
+                    <th>Token / ID</th>
+                    <th>Type</th>
+                    <th>Medical Center / Specialist</th>
+                    <th>Patient Details</th>
+                    <th>Schedule Slot</th>
+                    <th>Status</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAppointments.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                        No appointments found matching current filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredAppointments.map((apt) => {
+                      const aptId = apt._id || apt.id || apt.appointmentId;
+                      const isHospital = apt.appointmentType === 'hospital' || Boolean(apt.hospitalId);
+                      const targetName = isHospital 
+                        ? (apt.hospitalData?.name || apt.hospitalName || 'Hospital Visit')
+                        : (apt.docData?.name || apt.doctorName || 'Doctor Consultation');
+                      const subtitle = isHospital 
+                        ? (apt.department ? `${apt.department} • ${apt.consultationType || 'OPD'}` : (apt.hospitalData?.city || 'Hospital OPD'))
+                        : (apt.docData?.specialty || apt.department || 'Consultant');
+                      const patientName = apt.userData?.name || apt.patientName || 'Patient';
+                      const patientPhone = apt.userData?.phone || apt.patientPhone || 'N/A';
+                      const patientEmail = apt.userData?.email || apt.patientEmail || '';
+                      const dateSlot = apt.slotDate || apt.dateLabel || 'Scheduled';
+                      const timeSlot = apt.slotTime || '';
+                      const status = apt.status || 'Confirmed';
+
+                      return (
+                        <tr key={aptId}>
+                          <td>
+                            <span style={{
+                              fontFamily: 'monospace',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              background: '#f1f5f9',
+                              padding: '3px 7px',
+                              borderRadius: '4px',
+                              color: '#334155'
+                            }}>
+                              {aptId ? String(aptId).slice(-8).toUpperCase() : 'APT'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '100px',
+                              background: isHospital ? '#eff6ff' : '#ecfdf5',
+                              color: isHospital ? '#1d4ed8' : '#047857',
+                              border: isHospital ? '1px solid #bfdbfe' : '1px solid #a7f3d0'
+                            }}>
+                              {isHospital ? <Building2 size={12} /> : <Stethoscope size={12} />}
+                              <span>{isHospital ? 'Hospital OPD' : 'Doctor Consult'}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{targetName}</strong>
+                              <span style={{ fontSize: '0.76rem', color: '#64748b' }}>{subtitle}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{patientName}</strong>
+                              <span style={{ fontSize: '0.76rem', color: '#475569' }}>
+                                📞 {patientPhone} {patientEmail ? `• ${patientEmail}` : ''}
+                              </span>
+                              {(apt.userData?.symptoms || apt.symptoms) && (
+                                <span style={{ fontSize: '0.72rem', color: '#64748b', fontStyle: 'italic', marginTop: '2px' }}>
+                                  Reason: {apt.userData?.symptoms || apt.symptoms}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{dateSlot}</strong>
+                              <span style={{ fontSize: '0.76rem', color: '#2563eb', fontWeight: 600 }}>{timeSlot}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span style={{
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              background: status === 'Confirmed' ? '#ecfdf5' : status === 'Completed' ? '#eff6ff' : '#fef2f2',
+                              color: status === 'Confirmed' ? '#059669' : status === 'Completed' ? '#2563eb' : '#dc2626'
+                            }}>
+                              {status}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}>
+                              {status !== 'Completed' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateStatus(aptId, 'Completed')}
+                                  title="Mark as Visited / Completed"
+                                  style={{
+                                    padding: '4px 9px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #86efac',
+                                    background: '#dcfce7',
+                                    color: '#15803d',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}
+                                >
+                                  <Check size={12} />
+                                  <span>Mark Visited</span>
+                                </button>
+                              )}
+                              {status !== 'Cancelled' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateStatus(aptId, 'Cancelled')}
+                                  title="Cancel Appointment"
+                                  style={{
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #fecaca',
+                                    background: '#fef2f2',
+                                    color: '#dc2626',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 600,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAppointment(aptId)}
+                                title="Delete Record"
+                                style={{
+                                  padding: '5px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: '#94a3b8',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
           {/* TAB 4: FRONT PAGE CONTENT */}
           <div className={styles.viewSection} style={{ display: activeTab === 'content' ? 'block' : 'none' }}>

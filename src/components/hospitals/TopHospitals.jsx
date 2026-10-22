@@ -6,7 +6,7 @@ import { useData } from '../../context/useData';
 import styles from './TopHospitals.module.css';
 
 const TopHospitals = ({ onNavigate }) => {
-  const { hospitals } = useData();
+  const { hospitals, reviews } = useData();
 
   const displayHospitals = hospitals && hospitals.length > 0 ? hospitals : [];
   // Duplicate hospitals for seamless infinite marquee loop (running right)
@@ -38,7 +38,12 @@ const TopHospitals = ({ onNavigate }) => {
               >
                 <div
                   className={styles.card}
-                  onClick={() => onNavigate && onNavigate('hospital-profile', hospital.id || hospital._id)}
+                  onClick={() => {
+                    localStorage.setItem('autoOpenHospitalBooking', 'true');
+                    if (onNavigate) {
+                      onNavigate('hospital-profile', hospital.id || hospital._id);
+                    }
+                  }}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className={styles.imageWrapper}>
@@ -60,7 +65,15 @@ const TopHospitals = ({ onNavigate }) => {
                       <h3 className={styles.name}>{hospital.name}</h3>
                       <div className={styles.rating}>
                         <Star size={13} fill="#FACC15" color="#FACC15" />
-                        <span>{hospital.rating}</span>
+                        <span>{(() => {
+                          const hospReviews = (reviews || []).filter(r => r.status !== 'rejected' && (
+                            (r.targetId && (r.targetId === hospital.id || r.targetId === hospital._id)) ||
+                            (r.targetName && hospital.name && (r.targetName.toLowerCase() === hospital.name.toLowerCase() || hospital.name.toLowerCase().includes(r.targetName.toLowerCase())))
+                          ));
+                          return hospReviews.length > 0
+                            ? (hospReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / hospReviews.length).toFixed(1)
+                            : (hospital.rating || '4.8');
+                        })()}</span>
                       </div>
                     </div>
 
@@ -93,17 +106,32 @@ const TopHospitals = ({ onNavigate }) => {
                         <ShieldCheck size={14} color="#2563EB" />
                         <span>Verified Partner</span>
                       </div>
-                      <button
-                        className={styles.viewDetailsBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (onNavigate) {
-                            onNavigate('hospital-profile', hospital.id || hospital._id);
-                          }
-                        }}
-                      >
-                        View Center
-                      </button>
+                      <div className={styles.btnGroup}>
+                        <button
+                          className={styles.bookVisitBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            localStorage.setItem('autoOpenHospitalBooking', 'true');
+                            if (onNavigate) {
+                              onNavigate('hospital-profile', hospital.id || hospital._id);
+                            }
+                          }}
+                        >
+                          Book Visit
+                        </button>
+                        <button
+                          className={styles.viewDetailsBtn}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            localStorage.setItem('autoOpenHospitalBooking', 'true');
+                            if (onNavigate) {
+                              onNavigate('hospital-profile', hospital.id || hospital._id);
+                            }
+                          }}
+                        >
+                          View Center
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

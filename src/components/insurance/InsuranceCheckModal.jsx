@@ -296,6 +296,7 @@ const InsuranceCheckModal = ({ initialItem, initialInsurer, initialHospital, ini
                           className={styles.viewCenterBtn}
                           onClick={() => {
                             onClose();
+                            localStorage.setItem('autoOpenHospitalBooking', 'true');
                             if (onNavigate) {
                               onNavigate('hospital-profile', hosp.id || hosp._id);
                             }

@@ -1,5 +1,44 @@
 import Review from '../models/Review.js';
+import Hospital from '../models/Hospital.js';
+import mongoose from 'mongoose';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+
+// Helper to keep Hospital aggregate rating & review count synced with verified reviews
+export const syncHospitalRating = async (targetId, targetName) => {
+  try {
+    let hospital = null;
+    if (targetId && mongoose.Types.ObjectId.isValid(targetId)) {
+      hospital = await Hospital.findById(targetId);
+    }
+    if (!hospital && targetName) {
+      hospital = await Hospital.findOne({ name: new RegExp(targetName.trim(), 'i') });
+    }
+    if (!hospital) return;
+
+    const hospReviews = await Review.find({
+      status: { $ne: 'rejected' },
+      $or: [
+        { targetId: String(hospital._id) },
+        { targetName: new RegExp(hospital.name, 'i') }
+      ]
+    });
+
+    if (hospReviews.length > 0) {
+      const avg = hospReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / hospReviews.length;
+      const newRating = parseFloat(avg.toFixed(1));
+      const newReviews = `${hospReviews.length} Review${hospReviews.length === 1 ? '' : 's'}`;
+      await Hospital.updateOne(
+        { _id: hospital._id },
+        { $set: { rating: newRating, reviews: newReviews } }
+      );
+      hospital.rating = newRating;
+      hospital.reviews = newReviews;
+      broadcastDbChange('hospitals', 'update', hospital._id, hospital);
+    }
+  } catch (err) {
+    console.error('Error syncing hospital rating:', err);
+  }
+};
 
 const DEFAULT_REVIEWS = [
   {
@@ -100,6 +139,8 @@ export const createReview = async (req, res) => {
       targetType,
       targetId,
       targetName,
+      doctorId,
+      doctorName,
       rating,
       title,
       comment,
@@ -121,6 +162,8 @@ export const createReview = async (req, res) => {
       targetType: targetType || 'hospital',
       targetId: targetId || '',
       targetName,
+      doctorId: doctorId || '',
+      doctorName: doctorName || '',
       rating: Number(rating),
       title: title || '',
       comment,
@@ -131,6 +174,9 @@ export const createReview = async (req, res) => {
     });
 
     broadcastDbChange('reviews', 'insert', review._id, review);
+    if (review.targetType === 'hospital') {
+      syncHospitalRating(review.targetId, review.targetName).catch(() => {});
+    }
     res.status(201).json({ success: true, message: 'Review submitted successfully', data: review });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -143,9 +189,25 @@ export const updateReview = async (req, res) => {
     if (!review) {
       return res.status(404).json({ success: false, message: 'Review not found' });
     }
+
+    if (req.user && req.user.role === 'hospital') {
+      const userHospId = String(req.user.id || req.user.doc?._id || '').toLowerCase();
+      const userHospName = (req.user.name || '').toLowerCase();
+      const rTargetId = String(review.targetId || '').toLowerCase();
+      const rTargetName = (review.targetName || '').toLowerCase();
+      const isOwner = (rTargetId && rTargetId === userHospId) ||
+                      (rTargetName && userHospName && (rTargetName.includes(userHospName) || userHospName.includes(rTargetName)));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You can only update reviews for your own hospital' });
+      }
+    }
+
     Object.assign(review, req.body);
     const updated = await review.save();
     broadcastDbChange('reviews', 'update', updated._id, updated);
+    if (updated.targetType === 'hospital') {
+      syncHospitalRating(updated.targetId, updated.targetName).catch(() => {});
+    }
     res.json({ success: true, message: 'Review updated successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -158,9 +220,28 @@ export const deleteReview = async (req, res) => {
     if (!review) {
       return res.status(404).json({ success: false, message: 'Review not found' });
     }
+
+    if (req.user && req.user.role === 'hospital') {
+      const userHospId = String(req.user.id || req.user.doc?._id || '').toLowerCase();
+      const userHospName = (req.user.name || '').toLowerCase();
+      const rTargetId = String(review.targetId || '').toLowerCase();
+      const rTargetName = (review.targetName || '').toLowerCase();
+      const isOwner = (rTargetId && rTargetId === userHospId) ||
+                      (rTargetName && userHospName && (rTargetName.includes(userHospName) || userHospName.includes(rTargetName)));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You can only delete reviews for your own hospital' });
+      }
+    }
+
     const revId = review._id;
+    const tType = review.targetType;
+    const tId = review.targetId;
+    const tName = review.targetName;
     await review.deleteOne();
     broadcastDbChange('reviews', 'delete', revId);
+    if (tType === 'hospital') {
+      syncHospitalRating(tId, tName).catch(() => {});
+    }
     res.json({ success: true, message: 'Review deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -18,6 +18,8 @@ const faqSchema = new mongoose.Schema({
     type: String, 
     default: 'credit-card' 
   },
+  note: { type: String, default: '' },
+  steps: [{ type: String }],
   order: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });

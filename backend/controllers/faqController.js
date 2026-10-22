@@ -92,7 +92,14 @@ export const getFaqs = async (req, res) => {
 
 export const createFaq = async (req, res) => {
   try {
-    const { question, answer, category, targetType, targetId, targetName, icon, order, isActive } = req.body;
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only website administrators can create FAQs'
+      });
+    }
+
+    const { question, answer, category, targetType, targetId, targetName, icon, note, steps, order, isActive } = req.body;
     if (!question || !answer) {
       return res.status(400).json({ success: false, message: 'Question and answer are required' });
     }
@@ -103,7 +110,9 @@ export const createFaq = async (req, res) => {
       targetType: targetType || 'general',
       targetId: targetId || '',
       targetName: targetName || '',
-      icon: icon || 'credit-card',
+      icon: icon || 'help-circle',
+      note: note || '',
+      steps: Array.isArray(steps) ? steps : (steps ? [steps] : []),
       order: order !== undefined ? Number(order) : 0,
       isActive: isActive !== undefined ? Boolean(isActive) : true
     });
@@ -116,6 +125,13 @@ export const createFaq = async (req, res) => {
 
 export const updateFaq = async (req, res) => {
   try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only website administrators can update FAQs'
+      });
+    }
+
     const faq = await Faq.findById(req.params.id);
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
@@ -131,6 +147,13 @@ export const updateFaq = async (req, res) => {
 
 export const deleteFaq = async (req, res) => {
   try {
+    if (!req.user || req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only website administrators can delete FAQs'
+      });
+    }
+
     const faq = await Faq.findById(req.params.id);
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });

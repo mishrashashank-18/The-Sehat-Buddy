@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   ArrowLeft,
   Star,
@@ -27,12 +27,17 @@ import {
   HelpCircle,
   CheckSquare,
   ExternalLink,
-  MessageSquare
+  MessageSquare,
+  Plus,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { isDoctorInStarList, matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
+import HospitalBookingModal from './HospitalBookingModal';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
@@ -159,13 +164,54 @@ const FaqMapPinIcon = () => (
   </svg>
 );
 
+const FaqClockIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="14" fill="#eff6ff" stroke="#2563eb" strokeWidth="2" />
+    <polyline points="18,10 18,18 23,21" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const FaqBedIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="6" y="14" width="24" height="12" rx="2" fill="#e0e7ff" stroke="#4f46e5" strokeWidth="1.8" />
+    <path d="M6 26V30M30 26V30M6 18V9" stroke="#4f46e5" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="12" cy="12" r="2.5" fill="#4f46e5" />
+  </svg>
+);
+
+const FaqPhoneIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="14" fill="#dcfce7" stroke="#16a34a" strokeWidth="2" />
+    <path d="M23 21.5c-1.2 1.2-3 1.5-5.5-0.5s-1.8-4.2-0.5-5.5l1.5-1.5c0.4-0.4 0.9-0.4 1.3 0l1.8 1.8c0.4 0.4 0.4 0.9 0 1.3l-0.8 0.8c0.8 1.5 1.7 2.4 3.2 3.2l0.8-0.8c0.4-0.4 0.9-0.4 1.3 0l1.8 1.8c0.4 0.4 0.4 0.9 0 1.3l-2 2z" fill="#16a34a" />
+  </svg>
+);
+
+const FaqHeartIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="14" fill="#ffe4e6" stroke="#e11d48" strokeWidth="2" />
+    <path d="M18 24l-6.5-6.5a4 4 0 0 1 5.6-5.6l.9.9.9-.9a4 4 0 0 1 5.6 5.6L18 24z" fill="#e11d48" />
+  </svg>
+);
+
+const FaqHelpCircleIcon = () => (
+  <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="18" cy="18" r="14" fill="#f1f5f9" stroke="#475569" strokeWidth="2" />
+    <text x="18" y="24" textAnchor="middle" fontSize="18" fontWeight="bold" fill="#475569">?</text>
+  </svg>
+);
+
 const FAQ_ICONS = [
   FaqCreditCardIcon,
   FaqDocumentIcon,
   FaqEmergencySirenIcon,
   FaqDoctorAvatarIcon,
   FaqShieldCheckIcon,
-  FaqMapPinIcon
+  FaqMapPinIcon,
+  FaqClockIcon,
+  FaqBedIcon,
+  FaqPhoneIcon,
+  FaqHeartIcon,
+  FaqHelpCircleIcon
 ];
 
 const FAQ_ICON_MAP = {
@@ -173,7 +219,12 @@ const FAQ_ICON_MAP = {
   'document': FaqDocumentIcon,
   'emergency': FaqEmergencySirenIcon,
   'doctor': FaqDoctorAvatarIcon,
-  'shield': FaqShieldCheckIcon
+  'shield': FaqShieldCheckIcon,
+  'clock': FaqClockIcon,
+  'bed': FaqBedIcon,
+  'phone': FaqPhoneIcon,
+  'heart': FaqHeartIcon,
+  'help-circle': FaqHelpCircleIcon
 };
 
 const SocialInstagramIcon = ({ size = 18 }) => (
@@ -205,8 +256,198 @@ const formatSocialUrl = (url, platform) => {
   return `https://${trimmed}`;
 };
 
+const getInstagramEmbedUrl = (url) => {
+  if (!url) return '';
+  const match = String(url).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+  if (match && match[1]) {
+    return `https://www.instagram.com/reel/${match[1]}/embed/`;
+  }
+  const clean = String(url).split('?')[0].replace(/\/+$/, '');
+  return `${clean}/embed/`;
+};
+
+const isDirectVideoUrl = (url) => {
+  if (!url) return false;
+  return (
+    String(url).includes('cloudinary.com') ||
+    /\.(mp4|webm|mov|ogg)(\?.*)?$/i.test(String(url))
+  );
+};
+
+const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
+  const videoRef = useRef(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
+  const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
+
+  // Determine video streaming source (Cloudinary direct stream or backend video streamer)
+  const videoSrc = useMemo(() => {
+    if (!rawUrl) return '';
+    if (isDirectVideoUrl(rawUrl)) {
+      return rawUrl;
+    }
+    return `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`;
+  }, [rawUrl]);
+
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      setHasStarted(true);
+      videoRef.current.currentTime = 0;
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            console.warn('Reel hover preview autoplay error:', err);
+          });
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  return (
+    <div
+      className={styles.reelCard}
+      onClick={() => onOpen(reelItem)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      title="Hover to preview, click to watch in full view"
+      style={{
+        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+      }}
+    >
+      {/* Background/Cover Image (visible when paused) */}
+      {coverPhoto ? (
+        <img
+          src={coverPhoto}
+          alt={`Instagram Reel ${idx + 1}`}
+          className={styles.reelCoverImg}
+          loading="lazy"
+          style={{
+            opacity: isPlaying ? 0 : 1,
+            transition: 'opacity 0.25s ease'
+          }}
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }}
+        />
+      ) : (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
+          padding: '20px',
+          textAlign: 'center',
+          userSelect: 'none',
+          opacity: isPlaying ? 0 : 1,
+          transition: 'opacity 0.25s ease'
+        }}>
+          <div style={{
+            width: '56px',
+            height: '56px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#ffffff',
+            boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+            marginBottom: '12px'
+          }}>
+            <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+          </div>
+          <span style={{
+            color: '#ffffff',
+            fontSize: '0.86rem',
+            fontWeight: 700,
+            letterSpacing: '0.02em',
+            marginBottom: '4px'
+          }}>
+            Reel {idx + 1}
+          </span>
+          <span style={{
+            color: '#94a3b8',
+            fontSize: '0.72rem',
+            fontWeight: 500
+          }}>
+            Hover to Preview
+          </span>
+        </div>
+      )}
+
+      {/* Hover Video Element */}
+      {videoSrc && !videoError && (
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          poster={coverPhoto}
+          muted
+          playsInline
+          loop
+          preload="auto"
+          className={styles.reelHoverVideo}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            opacity: isPlaying ? 1 : 0,
+            transition: 'opacity 0.3s ease',
+            zIndex: 1
+          }}
+          onPlay={() => setIsPlaying(true)}
+          onError={() => setVideoError(true)}
+        />
+      )}
+
+      {/* Gradient shadow scrim overlay */}
+      <div className={styles.reelGradientScrim} style={{ zIndex: 2 }} />
+
+      {/* Top Badge: Instagram Tag / Playing Status */}
+      <div className={styles.reelTopBadge} style={{ zIndex: 3 }}>
+        <SocialInstagramIcon size={14} />
+        <span>{isPlaying ? '▶ Playing' : 'Reel'}</span>
+      </div>
+
+      {/* Center Play Button Overlay (visible when paused or hover out) */}
+      <div
+        className={`${styles.reelPlayOverlay} ${isPlaying ? styles.reelPlayingOverlayHidden : ''}`}
+        style={{ zIndex: 3 }}
+      >
+        <div className={styles.reelPlayBtn}>
+          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+        </div>
+      </div>
+
+      {/* Floating Status Indicator on Hover */}
+      {isPlaying && (
+        <div className={styles.reelHoverPlayingIndicator} style={{ zIndex: 4 }}>
+          <span className={styles.reelPulseDot} />
+          <span>Autoplay on hover</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors, reviews, faqs } = useData();
+  const { hospitals, doctors, reviews, faqs, user } = useData();
   const [activeReel, setActiveReel] = useState(null);
   const [reelVideoError, setReelVideoError] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
@@ -234,7 +475,78 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       }
     }
   }, [activeReel]);
-  const [activePhoto, setActivePhoto] = useState(null);
+  const hospital = hospitals.find(h => 
+    String(h.id) === String(hospitalId) || 
+    String(h._id) === String(hospitalId) ||
+    (h.email && String(hospitalId).includes('@') && h.email.toLowerCase() === String(hospitalId).toLowerCase())
+  ) || hospitals[0];
+
+  // Gallery Photos for Slider & Showcase
+  const defaultFacilityPhotos = useMemo(() => [
+    {
+      url: 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1200&q=80',
+      title: 'Executive Reception & Outpatient Lounge',
+      category: 'Reception'
+    },
+    {
+      url: 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=1200&q=80',
+      title: 'Advanced Intensive Care Unit (ICU)',
+      category: 'Critical Care'
+    },
+    {
+      url: 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80',
+      title: 'Ultra-Modern Modular Operation Theater',
+      category: 'Operation Theater'
+    },
+    {
+      url: 'https://images.unsplash.com/photo-1538108149393-fbbd81895907?auto=format&fit=crop&w=1200&q=80',
+      title: 'Inpatient Deluxe Suite & Patient Care',
+      category: 'Inpatient Suite'
+    },
+    {
+      url: 'https://images.unsplash.com/photo-1579684385127-1ef15d508118?auto=format&fit=crop&w=1200&q=80',
+      title: 'Diagnostic Imaging, MRI & Radiology Center',
+      category: 'Radiology'
+    }
+  ], []);
+
+  const allHospitalPhotos = useMemo(() => {
+    const list = [];
+    const mainImg = hospital?.image || 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1200&q=80';
+    list.push({
+      url: mainImg,
+      title: `${hospital?.name || 'Hospital'} - Main Campus & Exterior`,
+      category: 'Exterior'
+    });
+
+    if (Array.isArray(hospital?.photos) && hospital.photos.length > 0) {
+      hospital.photos.forEach((item, idx) => {
+        const url = typeof item === 'string' ? item : item.url;
+        if (!url || url === mainImg) return;
+        list.push({
+          url,
+          title: (typeof item === 'object' && item.title) ? item.title : `Facility View #${idx + 1}`,
+          category: (typeof item === 'object' && item.category) ? item.category : 'Facility'
+        });
+      });
+    }
+
+    if (list.length < 5) {
+      defaultFacilityPhotos.forEach(dp => {
+        if (!list.some(existing => existing.url === dp.url)) {
+          list.push({
+            url: dp.url,
+            title: `${hospital?.name || 'Hospital'} - ${dp.title}`,
+            category: dp.category
+          });
+        }
+      });
+    }
+
+    return list;
+  }, [hospital, defaultFacilityPhotos]);
+
+  const [activePhotoIndex, setActivePhotoIndex] = useState(null);
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
   const [isWriteReviewModalOpen, setIsWriteReviewModalOpen] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState('overview');
@@ -248,17 +560,68 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     }
   };
 
-  const hospital = hospitals.find(h => 
-    String(h.id) === String(hospitalId) || 
-    String(h._id) === String(hospitalId) ||
-    (h.email && String(hospitalId).includes('@') && h.email.toLowerCase() === String(hospitalId).toLowerCase())
-  ) || hospitals[0];
+  // Keyboard navigation for photo lightbox
+  useEffect(() => {
+    if (activePhotoIndex === null) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setActivePhotoIndex(null);
+      } else if (e.key === 'ArrowLeft') {
+        setActivePhotoIndex(prev => {
+          if (prev === null) return null;
+          return (prev - 1 + allHospitalPhotos.length) % allHospitalPhotos.length;
+        });
+      } else if (e.key === 'ArrowRight') {
+        setActivePhotoIndex(prev => {
+          if (prev === null) return null;
+          return (prev + 1) % allHospitalPhotos.length;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activePhotoIndex, allHospitalPhotos.length]);
 
   // Map & Directions state
   const [showDirections, setShowDirections] = useState(false);
   const [userLocation, setUserLocation] = useState(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState(null);
+
+  // Hospital appointment booking state
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [preselectedDept, setPreselectedDept] = useState(null);
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  const handleOpenBooking = (dept = null) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    let userObj = null;
+    try {
+      const u = localStorage.getItem('user');
+      if (u) userObj = JSON.parse(u);
+    } catch {}
+
+    if (!token && !userObj && !user) {
+      setPreselectedDept(dept);
+      setShowLoginPrompt(true);
+      return;
+    }
+    setPreselectedDept(dept);
+    setIsBookingModalOpen(true);
+  };
+
+  // About facility expansion state
+  const [isAboutExpanded, setIsAboutExpanded] = useState(false);
+
+  // Auto-open booking modal if arriving from "Book Appointment" / "Book Hospital Visit"
+  React.useEffect(() => {
+    if (localStorage.getItem('autoOpenHospitalBooking') === 'true') {
+      setIsBookingModalOpen(true);
+      localStorage.removeItem('autoOpenHospitalBooking');
+    }
+  }, [hospitalId]);
 
   const handleGetDirections = () => {
     setLocationError(null);
@@ -313,19 +676,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       if (url.includes('instagram.com')) {
         const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
         if (match && match[1]) {
-          let shortcode = match[1];
-          const brokenMap = {
-            'DeArmJdSQa6': 'DWGyY03lWc2',
-            'DeAA8evMsBS': 'DXpDWdoDKai',
-            'DdrR6vApDBK': 'DZdBbmoM1tn',
-            'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-            'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-            'C9_K5qXMO9e': 'DWGyY03lWc2',
-            'DcOgyeMvU0r': 'DerD2HwAeAU'
-          };
-          if (brokenMap[shortcode]) {
-            shortcode = brokenMap[shortcode];
-          }
+          const shortcode = match[1];
           return `https://www.instagram.com/reel/${shortcode}/embed/`;
         }
         if (!url.includes('/embed')) {
@@ -354,8 +705,12 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     );
   }
 
-  // Collect reels: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
-  const rawHospitalReels = Array.isArray(hospital.reels) ? hospital.reels : [];
+  // Collect reels: ONLY show real videos added by hospital/admin, NO dummy video padding
+  const rawHospitalReels = Array.isArray(hospital.reels)
+    ? hospital.reels
+    : (typeof hospital.reels === 'string' && hospital.reels.trim()
+        ? (hospital.reels.includes('http') ? hospital.reels.trim().split(/\s+/).filter(u => u.startsWith('http')) : hospital.reels.split(',').map(s => s.trim()).filter(Boolean))
+        : []);
   const parsedReels = rawHospitalReels
     .map((r) => {
       let url = '';
@@ -376,19 +731,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         shortcode = match[1];
       }
 
-      const brokenMap = {
-        'DeArmJdSQa6': 'DWGyY03lWc2',
-        'DeAA8evMsBS': 'DXpDWdoDKai',
-        'DdrR6vApDBK': 'DZdBbmoM1tn',
-        'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-        'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-        'C9_K5qXMO9e': 'DWGyY03lWc2',
-        'DcOgyeMvU0r': 'DerD2HwAeAU'
-      };
-      if (brokenMap[shortcode]) {
-        shortcode = brokenMap[shortcode];
-      }
-
       const embedUrl = shortcode ? `https://www.instagram.com/reel/${shortcode}/embed/` : getEmbedUrl(url);
 
       return {
@@ -398,74 +740,71 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         coverPhoto: customCover || ''
       };
     })
-    .filter(Boolean)
-    .slice(0, 5);
+    .filter(Boolean);
 
-  // Collect YouTube videos: ONLY show real videos added by hospital/admin (max 5), NO dummy video padding
-  const displayVideos = (Array.isArray(hospital.youtube_videos)
-    ? hospital.youtube_videos.map(v => {
-        if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
-        if (v && typeof v === 'object') {
-          const url = (v.url || '').trim();
-          const coverPhoto = (v.coverPhoto || '').trim();
-          return url ? { url, coverPhoto } : null;
-        }
-        return null;
-      }).filter(Boolean)
-    : []
-  ).slice(0, 5);
+  // Collect YouTube videos: ONLY show real videos added by hospital/admin, NO dummy video padding
+  const rawHospitalVideos = Array.isArray(hospital.youtube_videos)
+    ? hospital.youtube_videos
+    : (typeof hospital.youtube_videos === 'string' && hospital.youtube_videos.trim()
+        ? (hospital.youtube_videos.includes('http') ? hospital.youtube_videos.trim().split(/\s+/).filter(u => u.startsWith('http')) : hospital.youtube_videos.split(',').map(s => s.trim()).filter(Boolean))
+        : []);
+
+  const displayVideos = rawHospitalVideos
+    .map(v => {
+      if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+      if (v && typeof v === 'object') {
+        const url = (v.url || '').trim();
+        const coverPhoto = (v.coverPhoto || '').trim();
+        return url ? { url, coverPhoto } : null;
+      }
+      return null;
+    })
+    .filter(Boolean);
 
   // Alias for nav tab usage
   const displayReels = parsedReels;
 
-  // Resolve star doctors for this hospital center (only genuinely affiliated doctors)
-  const hospName = (hospital?.name || '').toLowerCase().trim();
-  const staffEmails = new Set([
-    ...(hospital?.staff_emails || []).map(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim()),
-    ...(hospital?.staff_doctors || []).map(d => (typeof d === 'string' ? d : d?.email)?.toLowerCase().trim())
-  ].filter(Boolean));
-
+  // Resolve star doctors for this hospital center (all designated star doctors)
   let starDoctorsList = [];
   if (Array.isArray(hospital?.star_doctors) && hospital.star_doctors.length > 0) {
     starDoctorsList = hospital.star_doctors.map(sd => {
-      if (typeof sd === 'object' && sd !== null && (sd._id || sd.id || sd.name)) {
-        const docHosp = (sd.hospital || '').toLowerCase().trim();
-        const docEmail = (sd.email || '').toLowerCase().trim();
-        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
-          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
-        if (!isAffiliated) return null;
+      if (!sd) return null;
 
+      // 1. Check if matching doctor exists in global doctors collection
+      const matchedGlobal = (doctors || []).find(d => isDoctorInStarList(d, [sd]));
+      if (matchedGlobal) {
+        return {
+          ...matchedGlobal,
+          id: matchedGlobal._id || matchedGlobal.id,
+          _id: matchedGlobal._id || matchedGlobal.id,
+          specialty: matchedGlobal.specialization || matchedGlobal.specialty || 'Specialist',
+          price: matchedGlobal.fees || matchedGlobal.price || 750,
+          experience: typeof matchedGlobal.experience === 'number' ? `${matchedGlobal.experience}+ Years Experience` : (matchedGlobal.experience || '10+ Years Experience')
+        };
+      }
+
+      // 2. If sd is already a populated doctor object from backend
+      if (typeof sd === 'object' && sd !== null && (sd._id || sd.id || sd.name)) {
         return {
           ...sd,
           id: sd._id || sd.id,
+          _id: sd._id || sd.id,
           specialty: sd.specialization || sd.specialty || 'Specialist',
           price: sd.fees || sd.price || 750,
           experience: typeof sd.experience === 'number' ? `${sd.experience}+ Years Experience` : (sd.experience || '10+ Years Experience')
         };
       }
-      
-      const sdString = String(sd).toLowerCase().trim();
-      let matched = doctors.find(d => String(d.id || d._id || d.email).toLowerCase().trim() === sdString);
-      
-      // If matched from global doctors, ensure doctor actually belongs to this hospital center
-      if (matched) {
-        const docHosp = (matched.hospital || '').toLowerCase().trim();
-        const docEmail = (matched.email || '').toLowerCase().trim();
-        const isAffiliated = (docEmail && staffEmails.has(docEmail)) ||
-          (hospName && docHosp && (docHosp === hospName || docHosp.includes(hospName) || hospName.includes(docHosp)));
-        if (!isAffiliated) return null;
-      }
-      
-      // If not in global doctors, check if it's a hospital staff doctor
-      if (!matched && hospital.staff_doctors) {
+
+      // 3. Fallback: check hospital staff_doctors
+      if (hospital.staff_doctors) {
         const staffDoc = hospital.staff_doctors.find(staff => {
-          if (typeof staff === 'string') return staff.toLowerCase().trim() === sdString;
-          return staff.email?.toLowerCase().trim() === sdString;
+          if (typeof staff === 'string') return staff.toLowerCase().trim() === String(sd).toLowerCase().trim();
+          return (staff.email && String(sd).toLowerCase().trim() === staff.email.toLowerCase().trim()) ||
+                 (staff.name && String(sd).toLowerCase().trim() === staff.name.toLowerCase().trim());
         });
-        
         if (staffDoc) {
           const sEmail = (typeof staffDoc === 'string' ? staffDoc : staffDoc.email).toLowerCase().trim();
-          matched = {
+          return {
             id: sEmail,
             _id: sEmail,
             name: typeof staffDoc === 'object' && staffDoc.name ? staffDoc.name : ('Dr. ' + sEmail.split('@')[0].replace(/[._-]/g, ' ')),
@@ -480,10 +819,46 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           };
         }
       }
-      
-      return matched;
+
+      return null;
     }).filter(Boolean);
   }
+
+  // Filtered reviews belonging strictly to this hospital
+  const hospitalReviews = useMemo(() => {
+    if (!reviews || !hospital) return [];
+    const hospId = String(hospital?.id || hospital?._id || '').toLowerCase().trim();
+    const hospName = String(hospital?.name || '').toLowerCase().trim();
+
+    return reviews
+      .filter(r => r.status !== 'rejected')
+      .filter(r => {
+        if (r.targetType && r.targetType !== 'hospital') return false;
+        const tId = String(r.targetId || '').toLowerCase().trim();
+        const tName = String(r.targetName || '').toLowerCase().trim();
+
+        if (tId) {
+          return tId === hospId;
+        }
+        if (tName && hospName) {
+          return tName === hospName || (tName.length > 5 && hospName.includes(tName)) || (hospName.length > 5 && tName.includes(hospName));
+        }
+        return false;
+      });
+  }, [reviews, hospital]);
+
+  const avgRating = useMemo(() => {
+    if (hospitalReviews.length === 0) return (hospital?.rating ? String(hospital.rating) : '4.8');
+    const total = hospitalReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+    return (total / hospitalReviews.length).toFixed(1);
+  }, [hospitalReviews, hospital?.rating]);
+
+  const reviewsCountText = useMemo(() => {
+    if (hospitalReviews.length === 0) {
+      return hospital?.reviews || '50+ Reviews';
+    }
+    return `${hospitalReviews.length} Review${hospitalReviews.length === 1 ? '' : 's'}`;
+  }, [hospitalReviews, hospital?.reviews]);
 
   return (
     <div className={styles.pageWrapper}>
@@ -496,7 +871,19 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         <div className={styles.profileCard} id="hospital-overview">
           {/* Left Column: Image & Contact Info */}
           <div className={styles.imageCol}>
-            <div className={styles.imageWrapper}>
+            <div
+              className={styles.imageWrapper}
+              onClick={() => setActivePhotoIndex(0)}
+              title="Click to view all facility photos"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setActivePhotoIndex(0);
+                }
+              }}
+            >
               <img
                 src={hospital.image}
                 alt={hospital.name}
@@ -504,8 +891,26 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
                 }}
               />
+
+              {/* Plus Option to open photo popup and slide photos */}
+              <button
+                type="button"
+                className={styles.photoPlusBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActivePhotoIndex(0);
+                }}
+                aria-label="View all photos"
+                title="View all photos"
+              >
+                <div className={styles.photoPlusIconCircle}>
+                  <Plus size={14} strokeWidth={2.8} />
+                </div>
+                <span className={styles.photoPlusText}>{allHospitalPhotos.length} Photos</span>
+              </button>
+
               <div className={styles.cityBadge}>
-                <MapPin size={13} /> {hospital.city || 'Bengaluru'}, {hospital.state || 'Karnataka'}
+                <MapPin size={13} /> {hospital.city ? hospital.city.replace(/,\s*Karnataka,\s*Karnataka/gi, ', Karnataka').replace(/,\s*Karnataka/gi, '') + ', Karnataka' : 'Bengaluru, Karnataka'}
               </div>
             </div>
 
@@ -539,18 +944,33 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             )}
 
-            <div className={styles.contactBox}>
-              <a href={`tel:${hospital.phone || '+9118001023222'}`} className={styles.contactItem}>
-                <Phone size={17} className={styles.contactIcon} />
-                <span>Call <strong>{hospital.phone || '+91 1800 102 3222'}</strong></span>
+            <div className={styles.contactCard}>
+              <a href={`tel:${hospital.phone || '+9118001023222'}`} className={styles.contactItem} title="Call Emergency & Helpdesk">
+                <div className={styles.contactIconCirclePhone}>
+                  <Phone size={15} />
+                </div>
+                <div className={styles.contactItemText}>
+                  <span className={styles.contactLabel}>Hospital Helpdesk</span>
+                  <strong>{hospital.phone || '+91 1800 102 3222'}</strong>
+                </div>
               </a>
-              <a href={`mailto:${hospital.email || 'info@manipalhd.com'}`} className={styles.contactItem}>
-                <Mail size={17} className={styles.contactIcon} />
-                <span>Email <strong>{hospital.email || 'info@manipalhd.com'}</strong></span>
+              <a href={`mailto:${hospital.email || 'info@manipalhd.com'}`} className={styles.contactItem} title="Send Email Enquiry">
+                <div className={styles.contactIconCircleMail}>
+                  <Mail size={15} />
+                </div>
+                <div className={styles.contactItemText}>
+                  <span className={styles.contactLabel}>Enquiry Desk</span>
+                  <strong>{hospital.email || 'info@manipalhd.com'}</strong>
+                </div>
               </a>
               <div className={styles.contactItem}>
-                <Calendar size={17} className={styles.contactIcon} />
-                <span>Est. <strong>{hospital.establishedYear || '2000'}</strong></span>
+                <div className={styles.contactIconCircleClock}>
+                  <Clock size={15} />
+                </div>
+                <div className={styles.contactItemText}>
+                  <span className={styles.contactLabel}>Availability</span>
+                  <strong>24x7 Emergency Ready</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -559,33 +979,93 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           <div className={styles.infoCol}>
             <div className={styles.headerRow}>
               <div className={styles.titleSection}>
-                <h1 className={styles.hospitalTitle}>{hospital.name}</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h1 className={styles.hospitalTitle}>{hospital.name}</h1>
+                  {user?.role === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate && onNavigate('admin-edit-hospital', hospital.id || hospital._id)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        background: '#eff6ff',
+                        color: '#1d4ed8',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                      title="Edit Hospital details in Admin Panel"
+                    >
+                      <Edit3 size={13} />
+                      <span>Edit (Admin)</span>
+                    </button>
+                  )}
+                </div>
                 <div className={styles.verifiedPill}>
                   <ShieldCheck size={15} /> {hospital.isVerified !== false ? 'Verified Healthcare Partner' : 'Standard Healthcare Listing'}
                 </div>
               </div>
               <div className={styles.rating}>
                 <Star size={16} fill="#EAB308" color="#EAB308" />
-                <span>{hospital.rating || '4.8'}</span>
+                <span>{avgRating}</span>
                 <span className={styles.reviewCount}>
-                  ({hospital.reviews || '50+'})
+                  ({reviewsCountText})
                 </span>
               </div>
             </div>
 
             <div className={styles.locationActionRow}>
-              <div className={styles.addressRow}>
-                <MapPin size={17} className={styles.addressPinIcon} />
-                <span>{hospital.address || '98, HAL Old Airport Road, Kodihalli, Bengaluru, Karnataka 560017'}</span>
+              <div className={styles.infoLeftBlock}>
+                <div className={styles.addressRow}>
+                  <div className={styles.addressPinWrapper}>
+                    <MapPin size={15} />
+                  </div>
+                  <span>{hospital.address || '98, HAL Old Airport Road, Kodihalli, Bengaluru, Karnataka 560017'}</span>
+                </div>
+
+                {locationError && (
+                  <div className={styles.directionsError}>
+                    <span>⚠️ {locationError}</span>
+                  </div>
+                )}
+
+                <div className={styles.statsRow}>
+                  <div className={styles.statPillBeds}>
+                    <Bed size={16} />
+                    <span>{hospital.totalBeds || 100} Inpatient Beds</span>
+                  </div>
+                  <div className={styles.statPillEmergency}>
+                    <Clock size={16} />
+                    <span>{hospital.emergency24x7 !== false ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
+                  </div>
+                  <div className={styles.statPillEst}>
+                    <Calendar size={16} />
+                    <span>Est. {hospital.establishedYear || 2000}</span>
+                  </div>
+                </div>
               </div>
+
               <div className={styles.headerActionsStack}>
+                <button
+                  type="button"
+                  className={styles.bookHospitalBtn}
+                  onClick={() => handleOpenBooking(null)}
+                  title="Book appointment or hospital visit at this medical center"
+                >
+                  <Calendar size={15} />
+                  <span>Book Appointment</span>
+                </button>
                 <button
                   type="button"
                   className={styles.insuranceBtn}
                   onClick={() => setIsInsuranceModalOpen(true)}
                   title="Search all available insurances in this hospital"
                 >
-                  <CheckSquare size={16} />
+                  <CheckSquare size={15} />
                   <span>Insurance Accepted</span>
                 </button>
                 <button
@@ -597,7 +1077,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 >
                   {isLocating ? (
                     <>
-                      <Loader2 size={16} className={styles.spinIcon} />
+                      <Loader2 size={15} className={styles.spinIcon} />
                       <span>Locating...</span>
                     </>
                   ) : (
@@ -610,27 +1090,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             </div>
 
-            {locationError && (
-              <div className={styles.directionsError}>
-                <span>⚠️ {locationError}</span>
-              </div>
-            )}
-
-            <div className={styles.statsRow}>
-              <div className={styles.statPillBeds}>
-                <Bed size={16} />
-                <span>{hospital.totalBeds || 100} Inpatient Beds</span>
-              </div>
-              <div className={styles.statPillEmergency}>
-                <Clock size={16} />
-                <span>{hospital.emergency24x7 !== false ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
-              </div>
-              <div className={styles.statPillEst}>
-                <Calendar size={16} />
-                <span>Est. {hospital.establishedYear || 2000}</span>
-              </div>
-            </div>
-
             <div className={styles.specialtiesSection}>
               <div className={styles.sectionSubLabel}>DEPARTMENTS & KEY SPECIALTIES</div>
               <div className={styles.specialtiesWrap}>
@@ -639,31 +1098,56 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   : (hospital.specialities && hospital.specialities.length > 0
                       ? hospital.specialities
                       : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery'])
-                ).map((spec, i) => {
-                  const paletteClasses = [
-                    styles.specLavender,
-                    styles.specBlue,
-                    styles.specPeach,
-                    styles.specSky,
-                    styles.specIndigo,
-                    styles.specMint,
-                    styles.specRose
-                  ];
-                  return (
-                    <span key={i} className={`${styles.specBadge} ${paletteClasses[i % paletteClasses.length]}`}>
-                      {spec}
-                    </span>
-                  );
-                })}
+                ).map((spec, i) => (
+                  <span
+                    key={i}
+                    className={styles.modernSpecBadge}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleOpenBooking(spec)}
+                    title={`Click to book appointment in ${spec}`}
+                  >
+                    <Stethoscope size={13} className={styles.specIcon} />
+                    <span>{spec}</span>
+                  </span>
+                ))}
               </div>
             </div>
 
             <div className={styles.aboutBox}>
               <div className={styles.sectionSubLabel}>ABOUT THIS FACILITY</div>
-              <p>
-                {hospital.description ||
-                  `${hospital.name} is a major multispecialty hospital in ${hospital.city || 'Bengaluru'} providing comprehensive medical and surgical core across a wide range of specialties. The hospital provides emergency and critical-care services and is part of the hospital network. Its location makes it accessible to several central and eastern neighbourhoods.`}
-              </p>
+              {(() => {
+                const aboutText = hospital.description ||
+                  `${hospital.name} is a major multispecialty hospital in ${hospital.city || 'Bengaluru'} providing comprehensive medical and surgical care across a wide range of specialties. The hospital provides emergency and critical-care services and is part of the hospital network. Its location makes it accessible to several central and eastern neighbourhoods.`;
+
+                const paragraphs = aboutText.trim().split(/\n\s*\n/).filter(Boolean);
+                const isLong = aboutText.length > 200 || paragraphs.length > 1;
+
+                return (
+                  <>
+                    <div className={`${styles.aboutTextWrap} ${!isAboutExpanded && isLong ? styles.aboutTextClamped : ''}`}>
+                      {paragraphs.map((p, pIdx) => (
+                        <p key={pIdx} style={pIdx > 0 ? { marginTop: '8px' } : undefined}>
+                          {p}
+                        </p>
+                      ))}
+                    </div>
+                    {isLong && (
+                      <button
+                        type="button"
+                        className={styles.aboutMoreBtn}
+                        onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+                        aria-expanded={isAboutExpanded}
+                      >
+                        <span>{isAboutExpanded ? 'Show Less' : '+ More'}</span>
+                        <ChevronDown
+                          size={14}
+                          className={`${styles.aboutChevron} ${isAboutExpanded ? styles.aboutChevronOpen : ''}`}
+                        />
+                      </button>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -703,16 +1187,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               onClick={() => scrollToHospitalSection('hospital-media', 'media')}
             >
               Videos & Shorts ({displayVideos.length + displayReels.length})
-            </button>
-          )}
-
-          {Array.isArray(hospital.photos) && hospital.photos.length > 0 && (
-            <button
-              type="button"
-              className={`${styles.practoNavTab} ${activeProfileTab === 'photos' ? styles.practoNavTabActive : ''}`}
-              onClick={() => scrollToHospitalSection('hospital-photos', 'photos')}
-            >
-              Photos ({hospital.photos.length})
             </button>
           )}
 
@@ -815,7 +1289,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         )}
 
         {/* SECTION 2: SPECIALITIES & CLINICAL PROCEDURES */}
-        <div id="hospital-specialities" style={{ margin: '24px 0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0, 0, 0, 0.04)', border: '1px solid #e2e8f0' }}>
+        <div id="hospital-specialities">
           <SpecialitiesProceduresSection onNavigate={onNavigate} />
         </div>
 
@@ -860,95 +1334,14 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </div>
 
             <div className={styles.reelsGrid}>
-              {parsedReels.map((reelItem, idx) => {
-                return (
-                  <div
-                    key={idx}
-                    className={styles.reelCard}
-                    onClick={() => handleOpenReel(reelItem)}
-                    title="Click to view reel in pop up"
-                    style={{
-                      background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
-                    }}
-                  >
-                    {/* If coverPhoto was uploaded by admin in realtime, render it full bleed */}
-                    {reelItem.coverPhoto ? (
-                      <img
-                        src={reelItem.coverPhoto}
-                        alt={`Instagram Reel ${idx + 1}`}
-                        className={styles.reelCoverImg}
-                        loading="lazy"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      /* Clean branded reel card placeholder when no cover is uploaded */
-                      <div style={{
-                        position: 'absolute',
-                        inset: 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
-                        padding: '20px',
-                        textAlign: 'center',
-                        userSelect: 'none'
-                      }}>
-                        <div style={{
-                          width: '56px',
-                          height: '56px',
-                          borderRadius: '50%',
-                          background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: '#ffffff',
-                          boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
-                          marginBottom: '12px'
-                        }}>
-                          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                        </div>
-                        <span style={{
-                          color: '#ffffff',
-                          fontSize: '0.86rem',
-                          fontWeight: 700,
-                          letterSpacing: '0.02em',
-                          marginBottom: '4px'
-                        }}>
-                          Reel {idx + 1}
-                        </span>
-                        <span style={{
-                          color: '#94a3b8',
-                          fontSize: '0.72rem',
-                          fontWeight: 500
-                        }}>
-                          Tap to Play
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Gradient shadow scrim overlay when cover photo exists */}
-                    {reelItem.coverPhoto && <div className={styles.reelGradientScrim} />}
-
-                    {/* Top Badge: Instagram Tag */}
-                    <div className={styles.reelTopBadge}>
-                      <SocialInstagramIcon size={14} />
-                      <span>Reel</span>
-                    </div>
-
-                    {/* Center Play Button Overlay on Hover */}
-                    {reelItem.coverPhoto && (
-                      <div className={styles.reelPlayOverlay}>
-                        <div className={styles.reelPlayBtn}>
-                          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+              {parsedReels.map((reelItem, idx) => (
+                <HospitalReelCard
+                  key={idx}
+                  reelItem={reelItem}
+                  idx={idx}
+                  onOpen={handleOpenReel}
+                />
+              ))}
             </div>
           </div>
         )}
@@ -1003,96 +1396,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </div>
           </section>
         )}
-        {/* SECTION 4: INTERIOR & EXTERIOR GALLERY */}
-        {Array.isArray(hospital.photos) && hospital.photos.length > 0 && (
-          <section className={styles.sectionBlock} id="hospital-photos">
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitleGroup}>
-                <h2>
-                  <Camera size={24} color="#059669" />
-                  Facility Showcase: Interior & Exterior Gallery
-                </h2>
-                <p>High-resolution walkthrough of our clinical facilities, operation theaters, patient suites, and exterior campus.</p>
-              </div>
-              <span className={styles.countTag}>{hospital.photos.length} Photo{hospital.photos.length > 1 ? 's' : ''}</span>
-            </div>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-              gap: '20px'
-            }}>
-              {hospital.photos.map((item, idx) => {
-                const imgUrl = typeof item === 'string' ? item : item.url;
-                const title = typeof item === 'object' && item.title ? item.title : `Facility View #${idx + 1}`;
-                const category = typeof item === 'object' && item.category ? item.category : 'facility';
-
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => setActivePhoto({ url: imgUrl, title, category })}
-                    style={{
-                      position: 'relative',
-                      borderRadius: '12px',
-                      overflow: 'hidden',
-                      background: '#0f172a',
-                      aspectRatio: '4 / 3',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.08)',
-                      transition: 'transform 0.2s, box-shadow 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-4px)';
-                      e.currentTarget.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.08)';
-                    }}
-                  >
-                    <img
-                      src={imgUrl}
-                      alt={title}
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                    />
-                    <div style={{
-                      position: 'absolute',
-                      top: '10px',
-                      left: '10px',
-                      background: 'rgba(0, 0, 0, 0.65)',
-                      color: 'white',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
-                      padding: '3px 8px',
-                      borderRadius: '4px',
-                      backdropFilter: 'blur(4px)'
-                    }}>
-                      {category}
-                    </div>
-                    <div style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      background: 'linear-gradient(transparent, rgba(0, 0, 0, 0.85))',
-                      color: 'white',
-                      padding: '16px 12px 10px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis'
-                    }}>
-                      {title}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
-
         {/* SECTION 5: FREQUENTLY ASKED QUESTIONS (FAQS) */}
         <section className={styles.sectionBlock} id="hospital-faqs">
           <div className={styles.faqCard}>
@@ -1239,7 +1542,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
         {/* SECTION 7: VERIFIED PATIENT REVIEWS */}
         <section className={styles.sectionBlock} id="hospital-reviews">
-          <div className={styles.sectionHeader}>
+          <div className={styles.sectionHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '18px' }}>
             <div className={styles.sectionTitleGroup}>
               <h2>
                 <Star size={24} color="#f59e0b" />
@@ -1247,17 +1550,89 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </h2>
               <p>Real feedback from patients treated at {hospital.name}.</p>
             </div>
+            <button
+              type="button"
+              className={styles.writeReviewBtn}
+              onClick={() => setIsWriteReviewModalOpen(true)}
+              style={{
+                background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '9px 18px',
+                borderRadius: '10px',
+                fontSize: '0.86rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Edit3 size={15} />
+              <span>Write a Review</span>
+            </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-            {reviews
-              .filter(r => r.status !== 'rejected')
-              .filter(r => 
-                (r.targetName && hospital?.name && r.targetName.toLowerCase().includes(hospital.name.toLowerCase())) ||
-                r.targetType === 'hospital'
-              )
-              .slice(0, 4)
-              .map((rev) => (
+          {/* Rating Summary Bar */}
+          <div style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '24px',
+            flexWrap: 'wrap',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.03)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>{avgRating}</span>
+              <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 600 }}>/ 5</span>
+            </div>
+            <div>
+              <div style={{ display: 'flex', gap: '3px', marginBottom: '4px' }}>
+                {[1, 2, 3, 4, 5].map(s => (
+                  <Star
+                    key={s}
+                    size={18}
+                    fill={s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#e2e8f0'}
+                    color={s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#cbd5e1'}
+                  />
+                ))}
+              </div>
+              <div style={{ fontSize: '0.84rem', color: '#64748b', fontWeight: 600 }}>
+                {hospitalReviews.length > 0 
+                  ? `Based on ${hospitalReviews.length} verified patient review${hospitalReviews.length === 1 ? '' : 's'}`
+                  : `Overall facility rating (${hospital.reviews || '50+ Reviews'})`}
+              </div>
+            </div>
+          </div>
+
+          {hospitalReviews.length === 0 ? (
+            <div style={{ padding: '36px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: '14px', border: '1px dashed #cbd5e1', color: '#64748b' }}>
+              <p style={{ margin: '0 0 12px', fontSize: '0.95rem' }}>No patient reviews yet for {hospital.name}.</p>
+              <button
+                type="button"
+                onClick={() => setIsWriteReviewModalOpen(true)}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Be the first to leave a review
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+              {hospitalReviews.map((rev) => (
                 <div
                   key={rev.id || rev._id}
                   style={{
@@ -1303,54 +1678,134 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   )}
                 </div>
               ))}
-          </div>
+            </div>
+          )}
         </section>
       </Container>
 
-      {/* Photo Modal */}
-      {activePhoto && (
-        <div className={styles.modalOverlay} onClick={() => setActivePhoto(null)}>
+      {/* Photo Lightbox Slider Modal */}
+      {activePhotoIndex !== null && allHospitalPhotos[activePhotoIndex] && (() => {
+        const currentPhoto = allHospitalPhotos[activePhotoIndex];
+        const totalPhotos = allHospitalPhotos.length;
+
+        const handlePrev = (e) => {
+          if (e) e.stopPropagation();
+          setActivePhotoIndex((prev) => (prev - 1 + totalPhotos) % totalPhotos);
+        };
+
+        const handleNext = (e) => {
+          if (e) e.stopPropagation();
+          setActivePhotoIndex((prev) => (prev + 1) % totalPhotos);
+        };
+
+        return (
           <div
-            style={{
-              position: 'relative',
-              maxWidth: '900px',
-              width: '90%',
-              background: '#0f172a',
-              borderRadius: '16px',
-              overflow: 'hidden',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-            }}
-            onClick={(e) => e.stopPropagation()}
+            className={styles.photoLightboxOverlay}
+            onClick={() => setActivePhotoIndex(null)}
+            role="dialog"
+            aria-modal="true"
           >
-            <button className={styles.closeModal} onClick={() => setActivePhoto(null)}>
-              <X size={26} />
-            </button>
-            <img
-              src={activePhoto.url}
-              alt={activePhoto.title}
-              style={{ width: '100%', maxHeight: '75vh', objectFit: 'contain', display: 'block' }}
-            />
-            <div style={{ padding: '16px 20px', background: '#0f172a', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{activePhoto.title}</h4>
-                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'capitalize' }}>
-                  Category: {activePhoto.category} View
-                </span>
+            <div
+              className={styles.photoLightboxContainer}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top Header Bar */}
+              <div className={styles.lightboxHeader}>
+                <div className={styles.lightboxTitleInfo}>
+                  <div className={styles.lightboxHospitalName}>
+                    {hospital.name}
+                  </div>
+                  <div className={styles.lightboxCounterBadge}>
+                    <ImageIcon size={14} />
+                    <span>{activePhotoIndex + 1} / {totalPhotos}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className={styles.lightboxCloseBtn}
+                  onClick={() => setActivePhotoIndex(null)}
+                  aria-label="Close photo viewer"
+                >
+                  <X size={20} />
+                </button>
               </div>
-              <span style={{ fontSize: '0.8rem', background: '#2563eb', padding: '3px 10px', borderRadius: '100px' }}>
-                {hospital.name}
-              </span>
+
+              {/* Stage with Navigation Arrows and Current Image */}
+              <div className={styles.lightboxStage}>
+                {totalPhotos > 1 && (
+                  <button
+                    type="button"
+                    className={`${styles.lightboxArrowBtn} ${styles.arrowPrev}`}
+                    onClick={handlePrev}
+                    aria-label="Previous photo"
+                  >
+                    <ChevronLeft size={28} />
+                  </button>
+                )}
+
+                <div className={styles.lightboxImageWrap}>
+                  <img
+                    key={currentPhoto.url}
+                    src={currentPhoto.url}
+                    alt={currentPhoto.title || hospital.name}
+                    className={styles.lightboxMainImage}
+                    onError={(e) => {
+                      e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1200&q=80';
+                    }}
+                  />
+                  {currentPhoto.category && (
+                    <div className={styles.lightboxCategoryBadge}>
+                      {currentPhoto.category}
+                    </div>
+                  )}
+                </div>
+
+                {totalPhotos > 1 && (
+                  <button
+                    type="button"
+                    className={`${styles.lightboxArrowBtn} ${styles.arrowNext}`}
+                    onClick={handleNext}
+                    aria-label="Next photo"
+                  >
+                    <ChevronRight size={28} />
+                  </button>
+                )}
+              </div>
+
+              {/* Bottom Bar: Title & Thumbnails */}
+              <div className={styles.lightboxFooter}>
+                <div className={styles.lightboxCaptionRow}>
+                  <h4 className={styles.lightboxPhotoTitle}>{currentPhoto.title}</h4>
+                </div>
+
+                {totalPhotos > 1 && (
+                  <div className={styles.lightboxThumbStrip}>
+                    {allHospitalPhotos.map((photo, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`${styles.thumbBtn} ${idx === activePhotoIndex ? styles.thumbBtnActive : ''}`}
+                        onClick={() => setActivePhotoIndex(idx)}
+                        aria-label={`Jump to photo ${idx + 1}`}
+                      >
+                        <img src={photo.url} alt="" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {/* Reel Popup Modal */}
+      {/* Reel Popup Modal - Clean Native Video Player (No Instagram Style) */}
       {activeReel && (() => {
         const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
-        const videoSrc = `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
+        const isDirect = isDirectVideoUrl(rawTarget);
         const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
-        const fallbackEmbed = typeof activeReel === 'object' ? (activeReel.embedUrl || activeReel.url) : activeReel;
+        const modalVideoSrc = isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
 
         return (
           <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
@@ -1368,7 +1823,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 padding: 0
               }}
             >
-              {/* Floating Close Button without any branding header */}
+              {/* Floating Close Button */}
               <button 
                 type="button" 
                 onClick={() => setActiveReel(null)} 
@@ -1397,36 +1852,22 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </button>
 
               <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {!reelVideoError ? (
-                  <video
-                    key={videoSrc}
-                    src={videoSrc}
-                    poster={coverSrc}
-                    autoPlay
-                    playsInline
-                    controls
-                    controlsList="nodownload"
-                    onError={() => setReelVideoError(true)}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                      background: '#000000',
-                      display: 'block'
-                    }}
-                  />
-                ) : (
-                  <iframe
-                    key={fallbackEmbed}
-                    src={fallbackEmbed}
-                    title="Reel Player"
-                    scrolling="no"
-                    allowTransparency="true"
-                    allow="autoplay; encrypted-media; picture-in-picture; web-share"
-                    allowFullScreen
-                    style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
-                  />
-                )}
+                <video
+                  key={modalVideoSrc}
+                  src={modalVideoSrc}
+                  poster={coverSrc}
+                  autoPlay
+                  playsInline
+                  controls
+                  controlsList="nodownload"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    background: '#000000',
+                    display: 'block'
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1446,6 +1887,106 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
+          </div>
+        </div>
+      )}
+
+      {/* Hospital Appointment Booking Modal */}
+      {isBookingModalOpen && (
+        <HospitalBookingModal
+          hospital={hospital}
+          preselectedDepartment={preselectedDept}
+          onNavigate={onNavigate}
+          onClose={() => {
+            setIsBookingModalOpen(false);
+            setPreselectedDept(null);
+          }}
+          onGetDirections={handleGetDirections}
+        />
+      )}
+
+      {/* Login Prompt Dialog Modal */}
+      {showLoginPrompt && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 11000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '440px',
+            width: '100%',
+            padding: '26px',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: '#eff6ff',
+              color: '#2563eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px'
+            }}>
+              <Calendar size={28} />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>
+              Please Log In to Book
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 20px', lineHeight: 1.5 }}>
+              To book an appointment at <strong>{hospital.name}</strong>, please sign in or register with your Sehat Buddy account first. Once logged in, you will be able to complete your booking.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowLoginPrompt(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLoginPrompt(false);
+                  if (onNavigate) {
+                    onNavigate('user-login', { view: 'hospital-profile', param: hospital.id || hospital._id });
+                  } else {
+                    window.location.href = '/login';
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Log In / Sign Up
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1470,7 +2011,11 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       {/* Write Hospital Review Modal */}
       {isWriteReviewModalOpen && (
         <WriteReviewModal
-          preselectedTarget={{ type: 'hospital', name: hospital.name }}
+          preselectedTarget={{ type: 'hospital', name: hospital.name, id: hospital.id || hospital._id }}
+          targetId={hospital.id || hospital._id}
+          targetName={hospital.name}
+          targetType="hospital"
+          onNavigate={onNavigate}
           onClose={() => setIsWriteReviewModalOpen(false)}
           onSuccess={() => setIsWriteReviewModalOpen(false)}
         />

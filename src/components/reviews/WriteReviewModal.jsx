@@ -1,66 +1,118 @@
-import React, { useState } from 'react';
-import { X, Star, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Star, ShieldCheck, CheckCircle2, MessageSquare, Building2, User, Stethoscope, LogIn } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { defaultAcceptedInsurances } from '../../data/insurancePartners';
 import styles from './WriteReviewModal.module.css';
 
-const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, targetType: propTargetType, targetName: propTargetName, targetId: propTargetId }) => {
-  const { addReview, hospitals } = useData();
+const WriteReviewModal = ({
+  onClose,
+  preselectedTarget = null,
+  onSuccess,
+  onNavigate,
+  targetType: propTargetType,
+  targetName: propTargetName,
+  targetId: propTargetId
+}) => {
+  const { addReview, hospitals, doctors } = useData();
 
-  const isAdmin = (() => {
+  // Check authenticated patient login session
+  const { loggedInUser, isLoggedIn } = useMemo(() => {
     try {
+      const token = localStorage.getItem('token');
       const userStr = localStorage.getItem('user');
-      if (userStr) {
+      if (token && userStr) {
         const u = JSON.parse(userStr);
-        if (u.role === 'admin' || u.isAdmin || u.type === 'admin') return true;
+        if (u && (u.name || u.email || u._id || u.id)) {
+          return { loggedInUser: u, isLoggedIn: true };
+        }
       }
-      if (localStorage.getItem('admin_logged_in') === 'true') return true;
-    } catch {
-      return false;
-    }
-    return false;
-  })();
+    } catch {}
+    return { loggedInUser: null, isLoggedIn: false };
+  }, []);
 
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
-  const [patientName, setPatientName] = useState('');
-  const [patientCity, setPatientCity] = useState('Bengaluru');
-  const [targetType, setTargetType] = useState(propTargetType || preselectedTarget?.type || 'doctor');
+  const [patientName, setPatientName] = useState(loggedInUser?.name || '');
+  const [patientCity, setPatientCity] = useState(loggedInUser?.city || 'Bengaluru');
+  const [targetType, setTargetType] = useState(propTargetType || preselectedTarget?.type || 'hospital');
   const [targetName, setTargetName] = useState(propTargetName || preselectedTarget?.name || hospitals[0]?.name || '');
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
   const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
   const [treatment, setTreatment] = useState(preselectedTarget?.treatment || '');
   const [insuranceUsed, setInsuranceUsed] = useState('Star Health');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!isAdmin) {
-      alert('Review writing is restricted to administrators.');
-      return;
-    }
-    if (!patientName.trim() || !comment.trim() || !targetName.trim()) {
-      alert('Please fill out all required fields.');
-      return;
-    }
-
-    addReview({
-      patientName: patientName.trim(),
-      patientCity: patientCity.trim(),
-      targetType,
-      targetName: targetName.trim(),
-      targetId: propTargetId || preselectedTarget?.id || '',
-      rating: Number(rating),
-      title: title.trim(),
-      comment: comment.trim(),
-      treatment: treatment.trim(),
-      insuranceUsed: insuranceUsed.trim(),
-      isVerified: true,
-      status: 'approved'
+  // Doctors affiliated with the target hospital
+  const availableDoctors = useMemo(() => {
+    if (!targetName || !Array.isArray(doctors)) return [];
+    const hospQuery = targetName.toLowerCase().trim();
+    return doctors.filter(doc => {
+      const docHosp = (doc.hospital || '').toLowerCase().trim();
+      return docHosp && (docHosp === hospQuery || docHosp.includes(hospQuery) || hospQuery.includes(docHosp));
     });
+  }, [doctors, targetName]);
 
-    setSubmitted(true);
-    if (onSuccess) onSuccess();
+  const handleGoToLogin = () => {
+    if (onClose) onClose();
+    const returnTargetId = propTargetId || preselectedTarget?.id || preselectedTarget?._id;
+    if (onNavigate) {
+      onNavigate('user-login', {
+        view: targetType === 'doctor' ? 'doctor-profile' : 'hospital-profile',
+        param: returnTargetId
+      });
+    } else {
+      window.location.href = '/login';
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!isLoggedIn) {
+      handleGoToLogin();
+      return;
+    }
+
+    if (!patientName.trim() || !comment.trim() || !targetName.trim()) {
+      alert('Please fill out all required fields: Your Name, Hospital / Specialist, and Your Review.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const docObj = availableDoctors.find(d => String(d.id || d._id) === String(selectedDoctorId));
+
+    try {
+      await addReview({
+        patientName: patientName.trim(),
+        patientCity: patientCity.trim() || 'Bengaluru',
+        userId: loggedInUser?._id || loggedInUser?.id || '',
+        userEmail: loggedInUser?.email || '',
+        targetType,
+        targetName: targetName.trim(),
+        targetId: propTargetId || preselectedTarget?.id || preselectedTarget?._id || '',
+        doctorId: docObj ? String(docObj._id || docObj.id) : '',
+        doctorName: docObj ? docObj.name : '',
+        rating: Number(rating),
+        title: title.trim(),
+        comment: comment.trim(),
+        treatment: treatment.trim(),
+        insuranceUsed: insuranceUsed.trim(),
+        isVerified: true,
+        status: 'approved' // Live immediately for hospital, doctors, admin, and patient community
+      });
+
+      setSubmitted(true);
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      console.error('Error submitting patient review:', err);
+      // Still show success since DataContext performs optimistic local persistence and broadcast
+      setSubmitted(true);
+      if (onSuccess) onSuccess();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -70,44 +122,104 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
           <X size={20} />
         </button>
 
-        {!isAdmin ? (
-          <div style={{ textAlign: 'center', padding: '36px 16px' }}>
-            <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#fee2e2', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              <ShieldCheck size={28} />
-            </div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
-              Admin Authorization Required
-            </h2>
-            <p style={{ fontSize: '0.90rem', color: '#64748b', margin: '0 auto 24px auto', maxWidth: '380px', lineHeight: 1.55 }}>
-              Patient review submission and publishing is restricted to authorized hospital administrators and patient care moderators. Public reviews are closed.
-            </p>
-            <button
-              type="button"
-              onClick={onClose}
+        {!isLoggedIn ? (
+          <div style={{ textAlign: 'center', padding: '24px 12px' }}>
+            <div
               style={{
-                background: '#0f172a',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '10px 24px',
-                fontWeight: 600,
-                fontSize: '0.9rem',
-                cursor: 'pointer'
+                width: '68px',
+                height: '68px',
+                borderRadius: '50%',
+                background: '#eff6ff',
+                color: '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px auto',
+                border: '2px solid #bfdbfe',
+                boxShadow: '0 8px 16px -4px rgba(37, 99, 235, 0.15)'
               }}
             >
-              Close Window
-            </button>
+              <LogIn size={32} />
+            </div>
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: '#fef3c7',
+                color: '#b45309',
+                padding: '4px 12px',
+                borderRadius: '100px',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                marginBottom: '12px',
+                border: '1px solid #fde68a'
+              }}
+            >
+              <ShieldCheck size={14} color="#b45309" />
+              <span>Login Required for Verified Reviews</span>
+            </div>
+
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '0 0 10px 0' }}>
+              Please Log In to Write a Review
+            </h2>
+
+            <p style={{ fontSize: '0.92rem', color: '#64748b', maxWidth: '440px', margin: '0 auto 24px auto', lineHeight: 1.6 }}>
+              To ensure all hospital experiences, treatment ratings, and cashless feedback are genuine and trustworthy for other patients, you must sign in before posting a review for <strong>{targetName || 'this facility'}</strong>.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={handleGoToLogin}
+                style={{
+                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 28px',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                }}
+              >
+                <LogIn size={18} />
+                <span>Log In / Sign Up to Continue</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  background: '#f1f5f9',
+                  color: '#475569',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '12px 22px',
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         ) : !submitted ? (
           <div>
             <div className={styles.header}>
-              <div className={styles.badge} style={{ background: '#fef3c7', borderColor: '#fde68a', color: '#b45309' }}>
-                <ShieldCheck size={14} color="#b45309" />
-                <span>Admin Portal • Verified Patient Review</span>
+              <div className={styles.badge} style={{ background: '#ecfdf5', borderColor: '#a7f3d0', color: '#059669' }}>
+                <ShieldCheck size={14} color="#059669" />
+                <span>Verified Patient Review • Community Healthcare</span>
               </div>
-              <h2 className={styles.title}>Add Verified Patient Review</h2>
+              <h2 className={styles.title}>Share Your Hospital Experience</h2>
               <p className={styles.subtitle}>
-                Publish verified clinical experiences and insurance settlement testimonials for {targetName || 'healthcare specialists'}.
+                Your review for <strong>{targetName}</strong> will be displayed publicly and shared directly with the hospital administration, doctors, and fellow patients.
               </p>
             </div>
 
@@ -124,6 +236,7 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                       onClick={() => setRating(star)}
                       onMouseEnter={() => setHoverRating(star)}
                       onMouseLeave={() => setHoverRating(0)}
+                      title={`Rate ${star} out of 5 Stars`}
                     >
                       <Star
                         size={30}
@@ -136,30 +249,22 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                 </div>
               </div>
 
-              {/* Review Category */}
+              {/* Target Facility & Optional Doctor */}
               <div className={styles.formRow}>
                 <div className={styles.formGroup}>
-                  <label>Review Type *</label>
-                  <select
-                    value={targetType}
-                    onChange={(e) => {
-                      setTargetType(e.target.value);
-                      if (e.target.value === 'hospital' && hospitals.length > 0) {
-                        setTargetName(hospitals[0].name);
-                      }
-                    }}
-                    className={styles.input}
-                  >
-                    <option value="hospital">Hospital Experience</option>
-                    <option value="surgery">Surgery / Procedure</option>
-                    <option value="doctor">Specialist Doctor</option>
-                    <option value="platform">The Sehat Buddy Platform</option>
-                  </select>
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Hospital or Doctor / Surgery Name *</label>
-                  {targetType === 'hospital' ? (
+                  <label>
+                    <Building2 size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                    Hospital Name *
+                  </label>
+                  {propTargetName ? (
+                    <input
+                      type="text"
+                      value={targetName}
+                      readOnly
+                      className={styles.input}
+                      style={{ background: '#f1f5f9', cursor: 'not-allowed', fontWeight: 600 }}
+                    />
+                  ) : (
                     <select
                       value={targetName}
                       onChange={(e) => setTargetName(e.target.value)}
@@ -172,25 +277,36 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                         </option>
                       ))}
                     </select>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="e.g. Apollo Hospital or Dr. Vivek Jawali"
-                      value={targetName}
-                      onChange={(e) => setTargetName(e.target.value)}
-                      className={styles.input}
-                      required
-                    />
                   )}
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label>
+                    <Stethoscope size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                    Attending Doctor (Optional)
+                  </label>
+                  <select
+                    value={selectedDoctorId}
+                    onChange={(e) => setSelectedDoctorId(e.target.value)}
+                    className={styles.input}
+                  >
+                    <option value="">General Hospital Experience (No specific doctor)</option>
+                    {availableDoctors.map((doc) => (
+                      <option key={doc.id || doc._id} value={doc.id || doc._id}>
+                        {doc.name} — {doc.specialty || doc.specialization || 'Specialist'}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
+              {/* Treatment and Insurance */}
               <div className={styles.formRow}>
                 <div className={styles.formGroup}>
-                  <label>Treatment / Surgery Undergone</label>
+                  <label>Department / Treatment / Surgery</label>
                   <input
                     type="text"
-                    placeholder="e.g. Robotic Knee Replacement, Angioplasty"
+                    placeholder="e.g. Cardiology, Orthopedics, Knee Replacement"
                     value={treatment}
                     onChange={(e) => setTreatment(e.target.value)}
                     className={styles.input}
@@ -207,18 +323,26 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                     {defaultAcceptedInsurances.map((ins, i) => (
                       <option key={i} value={ins}>{ins}</option>
                     ))}
-                    <option value="Other TPA">Other Insurance / TPA</option>
-                    <option value="None / Self-pay">None / Self-pay</option>
+                    <option value="Star Health">Star Health & Allied Insurance</option>
+                    <option value="HDFC ERGO">HDFC ERGO General Insurance</option>
+                    <option value="ICICI Lombard">ICICI Lombard Health</option>
+                    <option value="Care Health">Care Health Insurance</option>
+                    <option value="Other TPA / Cashless">Other TPA / Cashless</option>
+                    <option value="None / Self-pay">None / Self-pay (Cash)</option>
                   </select>
                 </div>
               </div>
 
+              {/* Patient Name & City */}
               <div className={styles.formRow}>
                 <div className={styles.formGroup}>
-                  <label>Your Full Name *</label>
+                  <label>
+                    <User size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                    Your Name (Verified Patient) *
+                  </label>
                   <input
                     type="text"
-                    placeholder="e.g. Sunil Sharma"
+                    placeholder="e.g. Shashank Verma"
                     value={patientName}
                     onChange={(e) => setPatientName(e.target.value)}
                     className={styles.input}
@@ -227,10 +351,10 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label>City *</label>
+                  <label>Your City *</label>
                   <input
                     type="text"
-                    placeholder="e.g. Bengaluru, Delhi"
+                    placeholder="e.g. Bengaluru, Karnataka"
                     value={patientCity}
                     onChange={(e) => setPatientCity(e.target.value)}
                     className={styles.input}
@@ -239,22 +363,27 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                 </div>
               </div>
 
+              {/* Review Headline */}
               <div className={styles.formGroup}>
                 <label>Review Headline / Title</label>
                 <input
                   type="text"
-                  placeholder="e.g. Smooth 100% Cashless Surgery Experience"
+                  placeholder="e.g. World-class cardiology care & 30-min cashless approval"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   className={styles.input}
                 />
               </div>
 
+              {/* Review Comment */}
               <div className={styles.formGroup}>
-                <label>Detailed Experience & Feedback *</label>
+                <label>
+                  <MessageSquare size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                  Detailed Experience & Feedback *
+                </label>
                 <textarea
                   rows={4}
-                  placeholder="Share details about the doctors, hospital facilities, insurance pre-authorization speed, nursing staff, etc."
+                  placeholder="Share details about your hospital stay, doctors, nursing staff, insurance pre-authorization speed, or admission process..."
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                   className={styles.textarea}
@@ -262,8 +391,8 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
                 />
               </div>
 
-              <button type="submit" className={styles.submitBtn}>
-                Submit Verified Review
+              <button type="submit" className={styles.submitBtn} disabled={isSubmitting}>
+                {isSubmitting ? 'Publishing Your Review...' : 'Submit Patient Review'}
               </button>
             </form>
           </div>
@@ -272,10 +401,10 @@ const WriteReviewModal = ({ onClose, preselectedTarget = null, onSuccess, target
             <CheckCircle2 size={54} color="#059669" />
             <h3 className={styles.successTitle}>Thank You For Your Review!</h3>
             <p className={styles.successDesc}>
-              Your feedback has been published and will help other patients looking for trustworthy healthcare and cashless facilities.
+              Your review for <strong>{targetName}</strong> has been published successfully. It is now visible to the hospital administration, medical team, platform admin, and patients.
             </p>
             <button type="button" className={styles.doneBtn} onClick={onClose}>
-              Close
+              Done
             </button>
           </div>
         )}

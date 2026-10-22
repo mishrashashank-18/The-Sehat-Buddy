@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
+import Hospital from '../models/Hospital.js';
 import Appointment from '../models/Appointment.js';
 import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
@@ -254,6 +255,7 @@ export const updateProfile = async (req, res) => {
 export const bookAppointment = async (req, res) => {
   const {
     docId,
+    hospitalId,
     slotDate,
     slotTime,
     patientName,
@@ -264,6 +266,10 @@ export const bookAppointment = async (req, res) => {
     symptoms,
     consultationType
   } = req.body;
+
+  if (!docId && hospitalId) {
+    return bookHospitalAppointment(req, res);
+  }
 
   try {
     if (!docId || !slotDate || !slotTime) {
@@ -354,6 +360,125 @@ export const bookAppointment = async (req, res) => {
     } catch {}
 
     res.json({ success: true, message: 'Appointment Booked Successfully', data: newAppointment });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+export const bookHospitalAppointment = async (req, res) => {
+  const {
+    hospitalId,
+    slotDate,
+    slotTime,
+    department,
+    patientName,
+    patientPhone,
+    patientEmail,
+    age,
+    gender,
+    symptoms,
+    consultationType,
+    doctorId
+  } = req.body;
+
+  try {
+    if (!hospitalId || !slotDate || !slotTime) {
+      return res.status(400).json({ success: false, message: 'Hospital ID, date, and time slot are required' });
+    }
+
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(hospitalId)) {
+      hospital = await Hospital.findById(hospitalId);
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ id: hospitalId });
+    }
+    if (!hospital && typeof hospitalId === 'string' && hospitalId.includes('@')) {
+      hospital = await Hospital.findOne({ email: hospitalId.toLowerCase().trim() });
+    }
+
+    let user = null;
+    if (req.user && req.user.id) {
+      user = await User.findById(req.user.id).select('-password');
+    }
+
+    let docData = null;
+    if (doctorId) {
+      let doctor = null;
+      if (mongoose.Types.ObjectId.isValid(doctorId)) {
+        doctor = await Doctor.findById(doctorId).select('-password');
+      }
+      if (!doctor) {
+        doctor = await Doctor.findOne({ id: doctorId }).select('-password');
+      }
+      if (doctor) {
+        docData = {
+          _id: doctor._id.toString(),
+          name: doctor.name,
+          specialty: doctor.specialization || doctor.specialty || department || 'Specialist',
+          image: doctor.image
+        };
+      }
+    }
+
+    const clientName = (patientName || user?.name || 'Patient').trim();
+    const clientPhone = (patientPhone || user?.phone || '').trim();
+    const clientEmail = (patientEmail || user?.email || '').trim();
+
+    const hospitalName = hospital?.name || 'Hospital Center';
+    const hospitalAddress = hospital?.address || '';
+
+    const newAppointment = await Appointment.create({
+      userId: user ? user._id.toString() : `guest_${Date.now()}`,
+      hospitalId: hospital ? hospital._id.toString() : hospitalId,
+      docId: docData?._id || '',
+      slotDate,
+      slotTime,
+      department: department || 'General Medicine',
+      appointmentType: 'hospital',
+      userData: {
+        _id: user ? user._id.toString() : null,
+        name: clientName,
+        email: clientEmail,
+        phone: clientPhone,
+        age: parseInt(age, 10) || user?.age || 30,
+        gender: gender || user?.gender || 'Not specified',
+        symptoms: (symptoms || 'Hospital OPD Consultation').trim()
+      },
+      hospitalData: {
+        _id: hospital ? hospital._id.toString() : hospitalId,
+        name: hospitalName,
+        address: hospitalAddress,
+        city: hospital?.city || '',
+        image: hospital?.image || '',
+        phone: hospital?.phone || ''
+      },
+      docData: docData,
+      amount: 0,
+      status: 'Confirmed',
+      symptoms: (symptoms || 'Hospital OPD Consultation').trim(),
+      consultationType: consultationType || 'Hospital OPD Visit',
+      date: Date.now()
+    });
+
+    if (clientEmail) {
+      try {
+        await sendEmail({
+          email: clientEmail,
+          subject: `Appointment Booked Successfully - ${hospitalName}`,
+          message: `Your visit at ${hospitalName} is confirmed for ${slotDate} at ${slotTime} (${department || 'General OPD'}).`,
+          html: `<h4>Hello ${clientName},</h4><p>Your appointment at <strong>${hospitalName}</strong> has been confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Department / Speciality: <strong>${department || 'General Medicine'}</strong></p><p>Consultation Type: <strong>${consultationType || 'Hospital OPD Visit'}</strong></p><p>Hospital Address: ${hospitalAddress}</p><p>We look forward to assisting you.</p>`
+        });
+      } catch (err) {
+        console.log('Error sending email notification:', err.message);
+      }
+    }
+
+    try {
+      broadcastDbChange('appointments', 'insert', newAppointment._id.toString(), newAppointment);
+    } catch {}
+
+    res.json({ success: true, message: 'Hospital Visit Booked Successfully', data: newAppointment });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

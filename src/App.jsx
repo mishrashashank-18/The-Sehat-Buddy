@@ -12,6 +12,7 @@ import HealthContentSection from './components/content/HealthContentSection';
 import CorporateTieups from './components/corporate/CorporateTieups';
 import Footer from './components/layout/Footer';
 import AdminPanel from './components/admin/AdminPanel';
+import AdminHospitalEditPage from './components/admin/AdminHospitalEditPage';
 import DoctorDashboard from './components/doctor-dashboard/DoctorDashboard';
 import HospitalDashboard from './components/hospital-dashboard/HospitalDashboard';
 import ErrorBoundary from './components/common/ErrorBoundary';
@@ -47,6 +48,15 @@ function MainWebsite({ onNavigate, currentView }) {
 const resolveCurrentView = () => {
   const path = window.location.pathname.toLowerCase().replace(/\/+$/, '');
   const hash = window.location.hash.toLowerCase();
+
+  const adminHospMatch = path.match(/^\/admin\/hospitals\/([^/]+)\/edit$/);
+  if (adminHospMatch) {
+    return 'admin-edit-hospital:' + adminHospMatch[1];
+  }
+  const hashAdminHospMatch = hash.match(/^#\/?admin\/hospitals\/([^/]+)\/edit$/) || hash.match(/^#\/?admin-edit-hospital\/([^/]+)$/);
+  if (hashAdminHospMatch) {
+    return 'admin-edit-hospital:' + hashAdminHospMatch[1];
+  }
 
   if (path === '/admin' || path.startsWith('/admin/') || hash === '#admin' || hash === '#/admin') {
     return 'admin';
@@ -352,6 +362,7 @@ function AppContent() {
 
     let targetPath = '/';
     if (resolvedView === 'admin') targetPath = '/admin';
+    else if (resolvedView === 'admin-edit-hospital') targetPath = `/admin/hospitals/${resolvedParam}/edit`;
     else if (resolvedView === 'doctor') targetPath = '/doctor';
     else if (resolvedView === 'hospital') targetPath = '/hospital';
     else if (resolvedView === 'user-login') targetPath = '/login';
@@ -380,7 +391,9 @@ function AppContent() {
     }
 
     setCurrentView(
-      resolvedView === 'doctor-profile' 
+      resolvedView === 'admin-edit-hospital'
+        ? `admin-edit-hospital:${resolvedParam}`
+        : resolvedView === 'doctor-profile' 
         ? `doctor-profile:${resolvedParam}` 
         : resolvedView === 'hospital-profile'
         ? `hospital-profile:${resolvedParam}`
@@ -399,6 +412,12 @@ function AppContent() {
 
   const hospitalToken = getRoleToken('hospital');
   const hospitalRole = getSessionRole('hospital');
+
+  if (currentView.startsWith('admin-edit-hospital:')) {
+    const hospId = currentView.split(':')[1];
+    if (!token) return <LoginPage role="admin" setView={navigateTo} />;
+    return <AdminHospitalEditPage hospitalId={hospId} onNavigate={navigateTo} />;
+  }
 
   if (currentView === 'admin') {
     if (!adminToken || adminRole !== 'admin') return <LoginPage role="admin" setView={navigateTo} />;

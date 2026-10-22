@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef } from 'react';
-import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag, CreditCard, FileText, Siren, ShieldCheck, Upload, Loader2 } from 'lucide-react';
+import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag, CreditCard, FileText, Siren, ShieldCheck, Upload, Loader2, Clock, Bed, Phone, Heart } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
 import styles from './DoctorFormModal.module.css';
@@ -9,7 +9,12 @@ export const FAQ_ICON_OPTIONS = [
   { id: 'document', label: 'Admission / Info', icon: FileText, color: '#0284c7', bg: '#e0f2fe' },
   { id: 'emergency', label: 'Emergency / 24x7', icon: Siren, color: '#ef4444', bg: '#fee2e2' },
   { id: 'doctor', label: 'Doctor / Specialist', icon: Stethoscope, color: '#7c3aed', bg: '#ede9fe' },
-  { id: 'shield', label: 'Verified / Policy', icon: ShieldCheck, color: '#059669', bg: '#d1fae5' }
+  { id: 'shield', label: 'Verified / Policy', icon: ShieldCheck, color: '#059669', bg: '#d1fae5' },
+  { id: 'clock', label: 'Visiting Hours', icon: Clock, color: '#2563eb', bg: '#eff6ff' },
+  { id: 'bed', label: 'Rooms & Beds', icon: Bed, color: '#4f46e5', bg: '#e0e7ff' },
+  { id: 'phone', label: 'Helpdesk Phone', icon: Phone, color: '#16a34a', bg: '#dcfce7' },
+  { id: 'heart', label: 'Patient Care', icon: Heart, color: '#e11d48', bg: '#ffe4e6' },
+  { id: 'help-circle', label: 'General Queries', icon: HelpCircle, color: '#475569', bg: '#f1f5f9' }
 ];
 
 const FAQ_CATEGORIES = [
@@ -351,7 +356,7 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
                 </button>
               )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
               {FAQ_ICON_OPTIONS.map(opt => {
                 const isSelected = formData.icon === opt.id;
                 const IconComp = opt.icon;
