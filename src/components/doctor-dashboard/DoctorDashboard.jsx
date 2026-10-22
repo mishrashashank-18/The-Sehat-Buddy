@@ -7378,10 +7378,10 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#ffffff', padding: '12px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{doctorAvgRating}</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{verifiedAvgRating}</div>
                 <div style={{ display: 'flex', gap: '2px', color: '#f59e0b', marginTop: '4px' }}>
                   {[1, 2, 3, 4, 5].map(s => (
-                    <Star key={s} size={14} fill={s <= Math.round(Number(doctorAvgRating)) ? '#f59e0b' : '#e2e8f0'} color={s <= Math.round(Number(doctorAvgRating)) ? '#f59e0b' : '#cbd5e1'} />
+                    <Star key={s} size={14} fill={s <= Math.round(Number(verifiedAvgRating)) ? '#f59e0b' : '#e2e8f0'} color={s <= Math.round(Number(verifiedAvgRating)) ? '#f59e0b' : '#cbd5e1'} />
                   ))}
                 </div>
               </div>
