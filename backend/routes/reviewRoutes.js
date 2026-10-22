@@ -5,7 +5,7 @@ import { protect, optionalProtect, requireRole } from '../middleware/authMiddlew
 const router = express.Router();
 
 router.get('/', getReviews);
-router.post('/', protect, createReview);
+router.post('/', optionalProtect, createReview);
 router.put('/:id', protect, requireRole('admin', 'hospital'), updateReview);
 router.delete('/:id', protect, requireRole('admin', 'hospital'), deleteReview);
 

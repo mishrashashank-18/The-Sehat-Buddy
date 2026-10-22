@@ -409,7 +409,7 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, faqs } = useData();
+  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, refreshReviews, faqs } = useData();
 
   const fallbackDoctor = React.useMemo(() => {
     try {
@@ -2058,17 +2058,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     </div>
                   </div>
 
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      className={styles.adminWriteReviewBtn}
-                      onClick={() => setIsWriteReviewOpen(true)}
-                      title="Admin-only: Add verified patient review"
-                    >
-                      <ShieldCheck size={16} />
-                      <span>Admin: Add Review</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={styles.writeReviewBtn}
+                    onClick={() => setIsWriteReviewOpen(true)}
+                  >
+                    <Star size={16} fill="currentColor" />
+                    <span>Write a Review</span>
+                  </button>
                 </div>
               </div>
 
@@ -2129,24 +2126,22 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               ) : (
                 <div style={{ textAlign: 'center', padding: '36px 20px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
                   <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', color: '#2563eb' }}>
-                    <ShieldCheck size={24} />
+                    <Star size={24} />
                   </div>
                   <h4 style={{ margin: '0 0 6px 0', fontSize: '1.05rem', color: '#0f172a', fontWeight: 700 }}>
-                    Official Patient Reviews
+                    Patient Reviews
                   </h4>
                   <p style={{ margin: '0 0 16px 0', fontSize: '0.88rem', color: '#64748b', maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto' }}>
-                    Patient experiences are strictly verified and published by our hospital administration board.
+                    Share your experience with Dr. {doctor.name || 'this doctor'} to help other patients.
                   </p>
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      className={styles.adminWriteReviewBtn}
-                      onClick={() => setIsWriteReviewOpen(true)}
-                    >
-                      <ShieldCheck size={16} />
-                      <span>Admin: Add Review</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={styles.writeReviewBtn}
+                    onClick={() => setIsWriteReviewOpen(true)}
+                  >
+                    <Star size={16} fill="currentColor" />
+                    <span>Write the First Review</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -2372,10 +2367,15 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         <WriteReviewModal
           isOpen={isWriteReviewOpen}
           onClose={() => setIsWriteReviewOpen(false)}
-          onSuccess={() => setIsWriteReviewOpen(false)}
+          onSuccess={() => {
+            setIsWriteReviewOpen(false);
+            if (typeof refreshReviews === 'function') {
+              refreshReviews();
+            }
+          }}
           onNavigate={onNavigate}
           targetType="doctor"
-          targetId={doctor.id || doctor._id}
+          targetId={doctor._id || doctor.id}
           targetName={doctor.name}
         />
       )}

@@ -80,19 +80,18 @@ const WriteReviewModal = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!isLoggedIn) {
-      handleGoToLogin();
-      return;
-    }
 
     if (!patientName.trim() || !comment.trim() || !targetName.trim()) {
-      alert('Please fill out all required fields: Your Name, Hospital / Specialist, and Your Review.');
+      alert('Please fill out all required fields: Your Name and Your Review.');
       return;
     }
 
     setIsSubmitting(true);
 
     const docObj = availableDoctors.find(d => String(d.id || d._id) === String(selectedDoctorId));
+    const isDocTarget = targetType === 'doctor';
+    const resolvedDocId = isDocTarget ? String(propTargetId || preselectedTarget?.id || preselectedTarget?._id || '') : (docObj ? String(docObj._id || docObj.id) : '');
+    const resolvedDocName = isDocTarget ? targetName.trim() : (docObj ? docObj.name : '');
 
     try {
       await addReview({
@@ -103,8 +102,8 @@ const WriteReviewModal = ({
         targetType,
         targetName: targetName.trim(),
         targetId: propTargetId || preselectedTarget?.id || preselectedTarget?._id || '',
-        doctorId: docObj ? String(docObj._id || docObj.id) : '',
-        doctorName: docObj ? docObj.name : '',
+        doctorId: resolvedDocId,
+        doctorName: resolvedDocName,
         rating: Number(rating),
         title: title.trim(),
         comment: comment.trim(),
@@ -133,106 +132,53 @@ const WriteReviewModal = ({
           <X size={20} />
         </button>
 
-        {!isLoggedIn ? (
-          <div style={{ textAlign: 'center', padding: '24px 12px' }}>
-            <div
-              style={{
-                width: '68px',
-                height: '68px',
-                borderRadius: '50%',
-                background: '#eff6ff',
-                color: '#2563eb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto 16px auto',
-                border: '2px solid #bfdbfe',
-                boxShadow: '0 8px 16px -4px rgba(37, 99, 235, 0.15)'
-              }}
-            >
-              <LogIn size={32} />
-            </div>
-
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: '#fef3c7',
-                color: '#b45309',
-                padding: '4px 12px',
-                borderRadius: '100px',
-                fontSize: '0.78rem',
-                fontWeight: 700,
-                marginBottom: '12px',
-                border: '1px solid #fde68a'
-              }}
-            >
-              <ShieldCheck size={14} color="#b45309" />
-              <span>Login Required for Verified Reviews</span>
-            </div>
-
-            <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: '#0f172a', margin: '0 0 10px 0' }}>
-              Please Log In to Write a Review
-            </h2>
-
-            <p style={{ fontSize: '0.92rem', color: '#64748b', maxWidth: '440px', margin: '0 auto 24px auto', lineHeight: 1.6 }}>
-              To ensure all hospital experiences, treatment ratings, and cashless feedback are genuine and trustworthy for other patients, you must sign in before posting a review for <strong>{targetName || 'this facility'}</strong>.
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                onClick={handleGoToLogin}
-                style={{
-                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-                  color: '#ffffff',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '12px 28px',
-                  fontWeight: 700,
-                  fontSize: '0.95rem',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
-                }}
-              >
-                <LogIn size={18} />
-                <span>Log In / Sign Up to Continue</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  background: '#f1f5f9',
-                  color: '#475569',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '12px 22px',
-                  fontWeight: 600,
-                  fontSize: '0.95rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : !submitted ? (
+        {!submitted ? (
           <div>
             <div className={styles.header}>
               <div className={styles.badge} style={{ background: '#ecfdf5', borderColor: '#a7f3d0', color: '#059669' }}>
                 <ShieldCheck size={14} color="#059669" />
                 <span>Verified Patient Review • Community Healthcare</span>
               </div>
-              <h2 className={styles.title}>Share Your Hospital Experience</h2>
+              <h2 className={styles.title}>
+                {targetType === 'doctor' ? `Review Dr. ${targetName.replace(/^Dr\.\s*/i, '')}` : 'Share Your Hospital Experience'}
+              </h2>
               <p className={styles.subtitle}>
-                Your review for <strong>{targetName}</strong> will be displayed publicly and shared directly with the hospital administration, doctors, and fellow patients.
+                Your review for <strong>{targetName}</strong> will be displayed publicly and shared directly with fellow patients.
               </p>
             </div>
+
+            {!isLoggedIn && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '8px',
+                padding: '8px 14px',
+                marginBottom: '16px',
+                fontSize: '0.82rem',
+                color: '#1e40af'
+              }}>
+                <span>Posting as Public Patient. Have an account?</span>
+                <button
+                  type="button"
+                  onClick={handleGoToLogin}
+                  style={{
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Sign In
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className={styles.form}>
               {/* Rating Selector */}
@@ -262,10 +208,19 @@ const WriteReviewModal = ({
 
               {/* Target Facility & Optional Doctor */}
               <div className={styles.formRow}>
-                <div className={styles.formGroup}>
+                <div className={styles.formGroup} style={{ flex: targetType === 'doctor' ? '1 1 100%' : '1 1 200px' }}>
                   <label>
-                    <Building2 size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                    Hospital Name *
+                    {targetType === 'doctor' ? (
+                      <>
+                        <Stethoscope size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                        Doctor Name *
+                      </>
+                    ) : (
+                      <>
+                        <Building2 size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                        Hospital Name *
+                      </>
+                    )}
                   </label>
                   {propTargetName ? (
                     <input
@@ -291,24 +246,26 @@ const WriteReviewModal = ({
                   )}
                 </div>
 
-                <div className={styles.formGroup}>
-                  <label>
-                    <Stethoscope size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
-                    Attending Doctor (Optional)
-                  </label>
-                  <select
-                    value={selectedDoctorId}
-                    onChange={(e) => setSelectedDoctorId(e.target.value)}
-                    className={styles.input}
-                  >
-                    <option value="">General Hospital Experience (No specific doctor)</option>
-                    {availableDoctors.map((doc) => (
-                      <option key={doc.id || doc._id} value={doc.id || doc._id}>
-                        {doc.name} — {doc.specialty || doc.specialization || 'Specialist'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {targetType !== 'doctor' && (
+                  <div className={styles.formGroup}>
+                    <label>
+                      <Stethoscope size={13} style={{ display: 'inline', marginRight: '4px', verticalAlign: '-1px' }} />
+                      Attending Doctor (Optional)
+                    </label>
+                    <select
+                      value={selectedDoctorId}
+                      onChange={(e) => setSelectedDoctorId(e.target.value)}
+                      className={styles.input}
+                    >
+                      <option value="">General Hospital Experience (No specific doctor)</option>
+                      {availableDoctors.map((doc) => (
+                        <option key={doc.id || doc._id} value={doc.id || doc._id}>
+                          {doc.name} — {doc.specialty || doc.specialization || 'Specialist'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Treatment and Insurance */}
