@@ -271,7 +271,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, []);
 
   const todayDateStr = React.useMemo(() => getLocalDateString(currentPcDate), [currentPcDate]);
-  const { doctors, updateDoctor, deleteDoctor, reviews } = useData();
+  const { doctors, updateDoctor, deleteDoctor, reviews, refreshReviews } = useData();
 
   // Active doctor selection: strictly locks to the authenticated doctor's account
   const storedUser = React.useMemo(() => {
@@ -623,6 +623,33 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [deleteConfirmationWord, setDeleteConfirmationWord] = useState('');
   const [isEarningsBreakdownOpen, setIsEarningsBreakdownOpen] = useState(false);
+  const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
+  const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+
+  // Refresh reviews from DB when opening Patient Satisfaction modal
+  React.useEffect(() => {
+    if (isReviewsModalOpen && typeof refreshReviews === 'function') {
+      refreshReviews();
+    }
+  }, [isReviewsModalOpen, refreshReviews]);
+
+  const reviewDistribution = React.useMemo(() => {
+    const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    doctorVerifiedReviews.forEach(r => {
+      const rNum = Math.min(5, Math.max(1, Math.round(Number(r.rating) || 5)));
+      dist[rNum] = (dist[rNum] || 0) + 1;
+    });
+    return dist;
+  }, [doctorVerifiedReviews]);
+
+  const filteredDoctorReviews = React.useMemo(() => {
+    if (reviewRatingFilter === 'all') return doctorVerifiedReviews;
+    if (reviewRatingFilter === '5') return doctorVerifiedReviews.filter(r => Math.round(Number(r.rating) || 5) === 5);
+    if (reviewRatingFilter === '4') return doctorVerifiedReviews.filter(r => Math.round(Number(r.rating) || 5) === 4);
+    if (reviewRatingFilter === '3') return doctorVerifiedReviews.filter(r => Math.round(Number(r.rating) || 5) === 3);
+    if (reviewRatingFilter === 'low') return doctorVerifiedReviews.filter(r => Math.round(Number(r.rating) || 5) <= 2);
+    return doctorVerifiedReviews;
+  }, [doctorVerifiedReviews, reviewRatingFilter]);
 
   // Featured Media (Reels & Videos) Preview Modal state
   const [previewMediaModal, setPreviewMediaModal] = useState(null); // { type: 'reel' | 'youtube', url, title, coverPhoto }
@@ -2985,14 +3012,21 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className={styles.kpiCard}>
+          <div
+            className={styles.kpiCard}
+            onClick={() => setIsReviewsModalOpen(true)}
+            style={{ cursor: 'pointer' }}
+            title="Click to view verified patient reviews & satisfaction ratings"
+          >
             <div className={`${styles.kpiIconWrap} ${styles.kpiYellow}`}>
               <Star size={22} />
             </div>
             <div>
               <span className={styles.kpiLabel}>Patient Satisfaction</span>
               <div className={styles.kpiValue}>{verifiedAvgRating} ★</div>
-              <span className={styles.kpiSub}>{verifiedReviewsCount} {verifiedReviewsCount === 1 ? 'review' : 'reviews'}</span>
+              <span className={styles.kpiSub}>
+                {verifiedReviewsCount} {verifiedReviewsCount === 1 ? 'review' : 'reviews'} • Click to view
+              </span>
             </div>
           </div>
 
@@ -7966,6 +8000,283 @@ const DoctorDashboard = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => setIsEarningsBreakdownOpen(false)}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  color: '#334155',
+                  fontWeight: 600,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Satisfaction & Reviews Modal */}
+      {isReviewsModalOpen && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setIsReviewsModalOpen(false)}
+          style={{
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '18px',
+              width: '92%',
+              maxWidth: '640px',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1.5px solid #e2e8f0',
+              maxHeight: '88vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
+                  <Star size={22} fill="currentColor" />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Patient Satisfaction & Reviews</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                    Dr. {activeDoctor.name || 'Doctor'} • {verifiedReviewsCount} verified review{verifiedReviewsCount === 1 ? '' : 's'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReviewsModalOpen(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Rating Summary Banner */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '16px 20px', margin: '16px 0', display: 'flex', flexWrap: 'wrap', gap: '20px', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>
+                  {verifiedAvgRating}
+                </div>
+                <div>
+                  <div style={{ display: 'flex', gap: '3px', color: '#f59e0b', marginBottom: '4px' }}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        size={18}
+                        fill={s <= Math.round(Number(verifiedAvgRating)) ? 'currentColor' : '#e2e8f0'}
+                        color={s <= Math.round(Number(verifiedAvgRating)) ? 'currentColor' : '#cbd5e1'}
+                      />
+                    ))}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
+                    Based on {verifiedReviewsCount} patient {verifiedReviewsCount === 1 ? 'rating' : 'ratings'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Distribution mini-bars */}
+              <div style={{ minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                {[5, 4, 3, 2, 1].map((starNum) => {
+                  const count = reviewDistribution[starNum] || 0;
+                  const pct = verifiedReviewsCount > 0 ? (count / verifiedReviewsCount) * 100 : 0;
+                  return (
+                    <div key={starNum} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.74rem' }}>
+                      <span style={{ width: '22px', fontWeight: 600, color: '#64748b' }}>{starNum}★</span>
+                      <div style={{ flex: 1, height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: starNum >= 4 ? '#10b981' : (starNum === 3 ? '#f59e0b' : '#ef4444'), borderRadius: '3px' }} />
+                      </div>
+                      <span style={{ width: '18px', textAlign: 'right', color: '#94a3b8', fontWeight: 500 }}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            {verifiedReviewsCount > 0 && (
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                {[
+                  { key: 'all', label: `All (${verifiedReviewsCount})` },
+                  { key: '5', label: `5★ (${reviewDistribution[5] || 0})` },
+                  { key: '4', label: `4★ (${reviewDistribution[4] || 0})` },
+                  { key: '3', label: `3★ (${reviewDistribution[3] || 0})` },
+                  { key: 'low', label: `1-2★ (${(reviewDistribution[1] || 0) + (reviewDistribution[2] || 0)})` }
+                ].map(tab => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setReviewRatingFilter(tab.key)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      border: reviewRatingFilter === tab.key ? '1.5px solid #2563eb' : '1px solid #e2e8f0',
+                      background: reviewRatingFilter === tab.key ? '#eff6ff' : '#ffffff',
+                      color: reviewRatingFilter === tab.key ? '#1d4ed8' : '#64748b',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Scrollable Reviews List */}
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: '4px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {filteredDoctorReviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#fef3c7', color: '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                    <Star size={24} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.94rem', fontWeight: 600, color: '#1e293b' }}>
+                    {doctorVerifiedReviews.length === 0 ? 'No patient reviews yet.' : 'No reviews match this rating filter.'}
+                  </p>
+                  <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>
+                    {doctorVerifiedReviews.length === 0 
+                      ? 'When patients write reviews on your public profile, they will appear here in real time.'
+                      : 'Try selecting "All" to view all patient feedback.'}
+                  </p>
+                </div>
+              ) : (
+                filteredDoctorReviews.map((rev, idx) => {
+                  const pName = rev.patientName || 'Verified Patient';
+                  const dateStr = rev.createdAt || rev.date ? getLocalDateString(rev.createdAt || rev.date) : '';
+                  const ratingNum = Math.min(5, Math.max(1, Number(rev.rating) || 5));
+
+                  return (
+                    <div
+                      key={rev.id || rev._id || idx}
+                      style={{
+                        padding: '14px 16px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '50%',
+                            background: '#e0f2fe',
+                            color: '#0369a1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: '0.85rem'
+                          }}>
+                            {pName.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.92rem', color: '#0f172a' }}>{pName}</span>
+                              {rev.isVerified !== false && (
+                                <span title="Verified Patient Experience" style={{ display: 'inline-flex', alignItems: 'center', color: '#059669' }}>
+                                  <CheckCircle2 size={15} />
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: '#64748b', display: 'flex', gap: '8px' }}>
+                              {rev.patientCity && <span>📍 {rev.patientCity}</span>}
+                              {dateStr && <span>🗓️ {dateStr}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stars */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'flex', gap: '2px', color: '#f59e0b' }}>
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                size={14}
+                                fill={s <= ratingNum ? 'currentColor' : '#e2e8f0'}
+                                color={s <= ratingNum ? 'currentColor' : '#cbd5e1'}
+                              />
+                            ))}
+                          </div>
+                          <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                            {ratingNum}.0
+                          </span>
+                        </div>
+                      </div>
+
+                      {rev.title && (
+                        <h4 style={{ margin: '4px 0 0', fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
+                          {rev.title}
+                        </h4>
+                      )}
+
+                      <p style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55 }}>
+                        {rev.comment}
+                      </p>
+
+                      {(rev.treatment || rev.insuranceUsed) && (
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                          {rev.treatment && (
+                            <span style={{ background: '#e0f2fe', color: '#0369a1', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                              🩺 {rev.treatment}
+                            </span>
+                          )}
+                          {rev.insuranceUsed && (
+                            <span style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '6px', fontWeight: 600 }}>
+                              🛡️ {rev.insuranceUsed} Cashless
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e2e8f0', marginTop: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                Showing {filteredDoctorReviews.length} of {verifiedReviewsCount} review{verifiedReviewsCount === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsReviewsModalOpen(false)}
                 style={{
                   padding: '9px 18px',
                   borderRadius: '8px',
