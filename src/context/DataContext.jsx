@@ -580,7 +580,15 @@ export const DataProvider = ({ children }) => {
                         availableSlots: docData.availableSlots !== undefined ? docData.availableSlots : d.availableSlots,
                         slotDuration: docData.slotDuration !== undefined ? docData.slotDuration : d.slotDuration,
                         dayWiseSlots: docData.dayWiseSlots !== undefined ? docData.dayWiseSlots : d.dayWiseSlots,
-                        dateWiseSlots: docData.dateWiseSlots !== undefined ? docData.dateWiseSlots : d.dateWiseSlots
+                        dateWiseSlots: docData.dateWiseSlots !== undefined ? docData.dateWiseSlots : d.dateWiseSlots,
+                        tags: Array.isArray(docData.tags) ? docData.tags : d.tags,
+                        about: docData.about !== undefined ? docData.about : d.about,
+                        awards: Array.isArray(docData.awards) ? docData.awards : d.awards,
+                        certifications: Array.isArray(docData.certifications) ? docData.certifications : d.certifications,
+                        memberships: Array.isArray(docData.memberships) ? docData.memberships : d.memberships,
+                        careerExperience: Array.isArray(docData.careerExperience) ? docData.careerExperience : d.careerExperience,
+                        reels: Array.isArray(docData.reels) ? docData.reels : d.reels,
+                        youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos
                       };
                     }
                     return d;
