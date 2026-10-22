@@ -7376,23 +7376,27 @@ const DoctorDashboard = ({ onNavigate }) => {
                 Reviews submitted by patients treated by you and at your affiliated facility ({activeDoctor.hospital || 'Hospital'}).
               </p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#ffffff', padding: '12px 20px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', background: '#ffffff', padding: '14px 22px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.03)' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{verifiedAvgRating}</div>
-                <div style={{ display: 'flex', gap: '2px', color: '#f59e0b', marginTop: '4px' }}>
+                <div style={{ fontSize: '1.9rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>{verifiedAvgRating}</div>
+                <div style={{ display: 'flex', gap: '3px', color: '#f59e0b', marginTop: '6px' }}>
                   {[1, 2, 3, 4, 5].map(s => (
                     <Star key={s} size={14} fill={s <= Math.round(Number(verifiedAvgRating)) ? '#f59e0b' : '#e2e8f0'} color={s <= Math.round(Number(verifiedAvgRating)) ? '#f59e0b' : '#cbd5e1'} />
                   ))}
                 </div>
               </div>
-              <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '16px' }}>
-                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>{doctorVerifiedReviews.length} Reviews</div>
-                <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>100% Verified Patients</div>
+              <div style={{ borderLeft: '1px solid #e2e8f0', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0f172a' }}>
+                  {doctorVerifiedReviews.length} {doctorVerifiedReviews.length === 1 ? 'Review' : 'Reviews'}
+                </div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>
+                  <CheckCircle2 size={13} color="#10b981" /> 100% Verified
+                </div>
               </div>
             </div>
           </div>
 
-          <div style={{ padding: '24px 28px' }}>
+          <div style={{ padding: '28px' }}>
             {doctorVerifiedReviews.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px 16px', color: '#94a3b8' }}>
                 <MessageSquare size={48} style={{ margin: '0 auto 12px auto', opacity: 0.5 }} />
@@ -7402,73 +7406,173 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
-                {doctorVerifiedReviews.map((rev, idx) => (
-                  <div
-                    key={rev.id || rev._id || idx}
-                    style={{
-                      background: '#ffffff',
-                      borderRadius: '16px',
-                      border: '1.5px solid #e2e8f0',
-                      padding: '20px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    <div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                        <div>
-                          <h4 style={{ margin: '0 0 2px 0', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
-                            {rev.patientName || 'Verified Patient'}
-                          </h4>
-                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                            {rev.patientCity || 'Bengaluru'}
-                          </span>
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: doctorVerifiedReviews.length === 1 ? 'minmax(320px, 640px)' : 'repeat(auto-fit, minmax(360px, 1fr))', 
+                gap: '24px',
+                alignItems: 'stretch'
+              }}>
+                {doctorVerifiedReviews.map((rev, idx) => {
+                  const initial = ((rev.patientName || 'P').trim().charAt(0) || 'P').toUpperCase();
+                  const ratingNum = Number(rev.rating) || 5;
+
+                  return (
+                    <div
+                      key={rev.id || rev._id || idx}
+                      style={{
+                        background: '#ffffff',
+                        borderRadius: '16px',
+                        border: '1px solid #e2e8f0',
+                        padding: '24px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        transition: 'all 0.2s ease',
+                        minHeight: '220px'
+                      }}
+                    >
+                      {/* Top Header Row: Patient Avatar, Name & City + Star Rating */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', marginBottom: '14px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{
+                            width: '42px',
+                            height: '42px',
+                            borderRadius: '50%',
+                            background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                            color: '#1d4ed8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.05rem',
+                            fontWeight: 800,
+                            border: '1.5px solid #bfdbfe',
+                            flexShrink: 0
+                          }}>
+                            {initial}
+                          </div>
+                          <div>
+                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a', textTransform: 'capitalize' }}>
+                              {rev.patientName || 'Verified Patient'}
+                            </h4>
+                            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                              {rev.patientCity || 'Bengaluru'}
+                            </span>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '2px' }}>
-                          {[1, 2, 3, 4, 5].map(s => (
-                            <Star
-                              key={s}
-                              size={14}
-                              fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'}
-                              color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'}
-                            />
-                          ))}
+
+                        {/* Rating pill with stars */}
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '6px', 
+                          background: '#fffbeb', 
+                          padding: '4px 10px', 
+                          borderRadius: '8px', 
+                          border: '1px solid #fef3c7',
+                          flexShrink: 0 
+                        }}>
+                          <div style={{ display: 'flex', gap: '2px' }}>
+                            {[1, 2, 3, 4, 5].map(s => (
+                              <Star
+                                key={s}
+                                size={14}
+                                fill={s <= ratingNum ? '#f59e0b' : '#e2e8f0'}
+                                color={s <= ratingNum ? '#f59e0b' : '#cbd5e1'}
+                              />
+                            ))}
+                          </div>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#b45309' }}>
+                            {ratingNum.toFixed(1)}
+                          </span>
                         </div>
                       </div>
 
-                      {rev.treatment && (
-                        <div style={{ display: 'inline-block', background: '#eff6ff', color: '#1d4ed8', padding: '3px 10px', borderRadius: '100px', fontSize: '0.74rem', fontWeight: 600, marginBottom: '10px' }}>
-                          Treatment: {rev.treatment}
+                      {/* Content Area: Treatment Tag, Title, and Comment Quote */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        {rev.treatment && (
+                          <div style={{ marginBottom: '12px' }}>
+                            <span style={{ 
+                              display: 'inline-flex', 
+                              alignItems: 'center', 
+                              gap: '5px', 
+                              background: '#eff6ff', 
+                              color: '#1d4ed8', 
+                              padding: '4px 12px', 
+                              borderRadius: '100px', 
+                              fontSize: '0.75rem', 
+                              fontWeight: 600,
+                              border: '1px solid #dbeafe'
+                            }}>
+                              <span style={{ color: '#3b82f6' }}>●</span> Treatment: {rev.treatment}
+                            </span>
+                          </div>
+                        )}
+
+                        {rev.title && (
+                          <h5 style={{ margin: '0 0 8px 0', fontSize: '0.96rem', fontWeight: 700, color: '#1e293b' }}>
+                            {rev.title}
+                          </h5>
+                        )}
+
+                        <div style={{ 
+                          flex: 1,
+                          background: '#f8fafc', 
+                          padding: '12px 14px', 
+                          borderRadius: '10px', 
+                          borderLeft: '3px solid #3b82f6',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}>
+                          <p style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55, fontStyle: 'italic' }}>
+                            "{rev.comment}"
+                          </p>
                         </div>
-                      )}
+                      </div>
 
-                      {rev.title && (
-                        <h5 style={{ margin: '0 0 6px 0', fontSize: '0.92rem', fontWeight: 700, color: '#1e293b' }}>
-                          {rev.title}
-                        </h5>
-                      )}
-
-                      <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#475569', lineHeight: 1.55 }}>
-                        "{rev.comment}"
-                      </p>
-                    </div>
-
-                    <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.74rem', color: '#64748b' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#059669', fontWeight: 600 }}>
-                        <CheckCircle2 size={13} color="#059669" /> Verified Patient
-                      </span>
-                      {rev.insuranceUsed && rev.insuranceUsed !== 'None' && (
-                        <span style={{ color: '#0284c7', fontWeight: 600 }}>
-                          {rev.insuranceUsed}
+                      {/* Bottom Footer: Verified Badge + Insurance Badge */}
+                      <div style={{ 
+                        borderTop: '1px solid #f1f5f9', 
+                        marginTop: '16px', 
+                        paddingTop: '12px', 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        fontSize: '0.75rem'
+                      }}>
+                        <span style={{ 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '5px', 
+                          color: '#059669', 
+                          background: '#ecfdf5', 
+                          padding: '3px 10px', 
+                          borderRadius: '100px', 
+                          fontWeight: 600,
+                          border: '1px solid #d1fae5'
+                        }}>
+                          <CheckCircle2 size={13} color="#059669" /> Verified Patient
                         </span>
-                      )}
+
+                        {rev.insuranceUsed && rev.insuranceUsed !== 'None' && (
+                          <span style={{ 
+                            display: 'inline-flex', 
+                            alignItems: 'center', 
+                            gap: '5px', 
+                            color: '#0284c7', 
+                            background: '#f0f9ff', 
+                            padding: '3px 10px', 
+                            borderRadius: '100px', 
+                            fontWeight: 600,
+                            border: '1px solid #e0f2fe'
+                          }}>
+                            <ShieldCheck size={13} color="#0284c7" /> {rev.insuranceUsed}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
