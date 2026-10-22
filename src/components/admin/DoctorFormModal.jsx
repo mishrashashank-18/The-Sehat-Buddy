@@ -860,7 +860,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             </div>
           ))}
 
-          {/* Doctor Profile FAQs (Managed by Admin or Hospital) */}
+          {/* Doctor Profile FAQs (Managed by Admin) */}
           <div className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <HelpCircle size={16} />
@@ -884,7 +884,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             </button>
           </div>
           <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
-            Frequently Asked Questions shown on this doctor's public profile page. (Only Admin or their registered Hospital can modify these).
+            Frequently Asked Questions shown on this doctor's public profile page. (FAQs can be edited only by admin).
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>

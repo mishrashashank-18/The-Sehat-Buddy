@@ -6752,15 +6752,15 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               </form>
 
-              {/* SECTION: DOCTOR PROFILE FAQS (GOVERNED BY REGISTERED HOSPITAL OR ADMIN) */}
+              {/* SECTION: DOCTOR PROFILE FAQS (GOVERNED EXCLUSIVELY BY ADMIN) */}
               <div style={{ marginTop: '28px', borderTop: '1px solid #e2e8f0', paddingTop: '22px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
                     <HelpCircle size={18} color="#0284c7" />
-                    Doctor Profile FAQs (Managed by Hospital / Admin)
+                    Doctor Profile FAQs (Managed by Admin)
                   </h4>
                   <span style={{ fontSize: '0.76rem', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                    Hospital Governed (Read-Only)
+                    Admin Governed (Read-Only)
                   </span>
                 </div>
 
@@ -6768,9 +6768,9 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                     <ShieldCheck size={20} color="#0284c7" style={{ flexShrink: 0, marginTop: '2px' }} />
                     <div style={{ fontSize: '0.86rem', color: '#0369a1', lineHeight: 1.5 }}>
-                      <strong>Hospital Governance Policy:</strong> The FAQs displayed on your public doctor profile page can only be updated by the hospital under which you are registered (<strong>{activeDoctor.hospital || 'Your Registered Hospital'}</strong>) or platform Administrators. Doctors cannot directly alter public clinical policy FAQs.
+                      <strong>Admin Governance Policy:</strong> FAQs can be edited only by platform Administrators. Doctors and hospital staff cannot directly alter public clinical policy FAQs.
                       <div style={{ marginTop: '5px', fontSize: '0.8rem', color: '#0284c7' }}>
-                        To request updates or custom clinical FAQs on your page, please contact your hospital administration.
+                        To request updates or custom clinical FAQs on your page, please contact the platform administrator.
                       </div>
                     </div>
                   </div>

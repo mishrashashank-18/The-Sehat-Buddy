@@ -1008,12 +1008,11 @@ export const updateDoctorFaqsByHospital = async (req, res) => {
   const { faqs } = req.body;
 
   try {
-    const isHospital = req.user && req.user.role === 'hospital';
     const isAdmin = req.user && req.user.role === 'admin';
-    if (!isHospital && !isAdmin) {
+    if (!isAdmin) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Access restricted to hospitals and administrators'
+        message: 'Forbidden: FAQs can be edited only by admin'
       });
     }
 
@@ -1060,7 +1059,7 @@ export const updateDoctorFaqsByHospital = async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Doctor FAQs updated successfully by ${hospital ? hospital.name : 'Hospital'}`,
+      message: 'Doctor FAQs updated successfully by Admin',
       data: updated
     });
   } catch (error) {

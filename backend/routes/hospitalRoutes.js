@@ -46,7 +46,7 @@ router.put('/:id/beds', protect, updateHospitalBeds);
 router.put('/:id', protect, upload.single('image'), updateHospital);
 router.delete('/:id', protect, requireAdmin, deleteHospital);
 
-// Hospital updating registered doctor FAQs (Hospital or Admin)
-router.put('/:hospitalId/doctor-faqs/:doctorId', protect, updateDoctorFaqsByHospital);
+// Doctor FAQs management (Admin only)
+router.put('/:hospitalId/doctor-faqs/:doctorId', protect, requireAdmin, updateDoctorFaqsByHospital);
 
 export default router;
