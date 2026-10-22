@@ -528,12 +528,50 @@ const DoctorDashboard = ({ onNavigate }) => {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    const isReload = (() => {
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries && navEntries.length > 0) {
+          return navEntries[0].type === 'reload';
+        }
+        return performance.navigation.type === 1;
+      } catch {
+        return false;
+      }
+    })();
+
+    if (isReload) {
+      const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
+      if (savedScroll !== null) {
+        const top = parseInt(savedScroll, 10);
+        if (!isNaN(top) && top > 0) {
+          const restore = () => {
+            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            const target = Math.min(top, maxScroll);
+            window.scrollTo({ top: target, behavior: 'instant' });
+          };
+          requestAnimationFrame(restore);
+          const t1 = setTimeout(restore, 80);
+          const t2 = setTimeout(restore, 200);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+          };
+        }
+      }
+    } else {
+      sessionStorage.setItem('sehat_doctor_scroll_pos', '0');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
     // Save scroll on page unload (before refresh)
     const handleBeforeUnload = () => {
-      if (window.scrollY > 0) {
-        sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY));
-        sessionStorage.setItem('sehat_doctor_scroll_tab', activeTab);
-      }
+      sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY || 0));
+      sessionStorage.setItem('sehat_doctor_scroll_tab', activeTab);
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -542,25 +580,10 @@ const DoctorDashboard = ({ onNavigate }) => {
     const onScroll = () => {
       clearTimeout(scrollDebounce);
       scrollDebounce = setTimeout(() => {
-        if (window.scrollY > 0) {
-          sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY));
-        }
-      }, 100);
+        sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY || 0));
+      }, 50);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
-
-    // Restore scroll position after mount/refresh across rendering ticks
-    const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
-    if (savedScroll) {
-      const top = parseInt(savedScroll, 10);
-      if (!isNaN(top) && top > 0) {
-        [60, 150, 350, 600].forEach(delay => {
-          setTimeout(() => {
-            window.scrollTo({ top, behavior: 'instant' });
-          }, delay);
-        });
-      }
-    }
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);

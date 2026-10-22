@@ -474,10 +474,48 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     if (typeof window === 'undefined') return;
     const scrollKey = `sehat_doc_profile_scroll_${doctorId || 'default'}`;
 
-    const handleBeforeUnload = () => {
-      if (window.scrollY > 0) {
-        sessionStorage.setItem(scrollKey, String(window.scrollY));
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+
+    const isReload = (() => {
+      try {
+        const navEntries = performance.getEntriesByType('navigation');
+        if (navEntries && navEntries.length > 0) {
+          return navEntries[0].type === 'reload';
+        }
+        return performance.navigation.type === 1;
+      } catch {
+        return false;
       }
+    })();
+
+    if (isReload) {
+      const saved = sessionStorage.getItem(scrollKey);
+      if (saved !== null) {
+        const top = parseInt(saved, 10);
+        if (!isNaN(top) && top > 0) {
+          const restore = () => {
+            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+            const target = Math.min(top, maxScroll);
+            window.scrollTo({ top: target, behavior: 'instant' });
+          };
+          requestAnimationFrame(restore);
+          const t1 = setTimeout(restore, 80);
+          const t2 = setTimeout(restore, 200);
+          return () => {
+            clearTimeout(t1);
+            clearTimeout(t2);
+          };
+        }
+      }
+    } else {
+      sessionStorage.setItem(scrollKey, '0');
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+
+    const handleBeforeUnload = () => {
+      sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -485,24 +523,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     const handleScroll = () => {
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(() => {
-        if (window.scrollY > 0) {
-          sessionStorage.setItem(scrollKey, String(window.scrollY));
-        }
-      }, 100);
+        sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
+      }, 50);
     };
     window.addEventListener('scroll', handleScroll, { passive: true });
-
-    const saved = sessionStorage.getItem(scrollKey);
-    if (saved) {
-      const top = parseInt(saved, 10);
-      if (!isNaN(top) && top > 0) {
-        [60, 180, 400].forEach(delay => {
-          setTimeout(() => {
-            window.scrollTo({ top, behavior: 'instant' });
-          }, delay);
-        });
-      }
-    }
 
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
