@@ -31,7 +31,7 @@ import {
 } from '../doctor-dashboard/DoctorDashboard';
 import styles from './DoctorHistoryModal.module.css';
 
-const DoctorHistoryModal = ({ doctor, onClose }) => {
+const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
   const { doctors, reviews } = useData();
   const liveDoc = useMemo(() => {
     return (doctors || []).find(d => matchesId(d, doctor?.id || doctor?._id)) || doctor || {};
@@ -49,13 +49,6 @@ const DoctorHistoryModal = ({ doctor, onClose }) => {
 
     return { score, count: `${count} ${count === 1 ? 'review' : 'reviews'}` };
   }, [liveDoc, reviews]);
-
-  const [activeTab, setActiveTab] = useState('consultations'); // 'consultations' | 'prescriptions'
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [isLoading, setIsLoading] = useState(true);
-  const [appointments, setAppointments] = useState([]);
-  const [prescriptions, setPrescriptions] = useState([]);
 
   // Collect doctor storage keys matching email, numeric ID, and Mongo ID
   const storageKeys = useMemo(() => {
@@ -78,10 +71,140 @@ const DoctorHistoryModal = ({ doctor, onClose }) => {
     return Array.from(keys);
   }, [doctor]);
 
+  // Synchronously compute initial consultations & prescriptions for instant 0ms modal render
+  const initialDoctorData = useMemo(() => {
+    if (!doctor) return { appointments: [], prescriptions: [] };
+    let initialList = [];
+    let initialRx = [];
+
+    try {
+      // 1. Initial appointments passed from parent AdminPanel
+      if (Array.isArray(initialAppointments) && initialAppointments.length > 0) {
+        const fromParent = initialAppointments
+          .filter(apt => {
+            if (isMockPatientAppointment(apt)) return false;
+            if (matchesId(doctor, apt.docId || apt.doctorId)) return true;
+            if (apt.doctorName && doctor.name && apt.doctorName.toLowerCase().trim() === doctor.name.toLowerCase().trim()) return true;
+            if (apt.docData && (matchesId(doctor, apt.docData.id || apt.docData._id) || (doctor.name && apt.docData.name && apt.docData.name.toLowerCase().trim() === doctor.name.toLowerCase().trim()))) return true;
+            return false;
+          })
+          .map(apt => {
+            const rawDate = apt.slotDate || apt.dateStr || apt.date || '';
+            const isCompleted = apt.isCompleted === true || apt.status === 'Completed' || String(apt.status).toLowerCase() === 'completed';
+            return {
+              id: apt._id || apt.id,
+              _id: apt._id,
+              patientName: apt.userData?.name || apt.patientName || 'Patient',
+              age: apt.userData?.age || apt.age || 30,
+              gender: apt.userData?.gender || apt.gender || 'Not specified',
+              phone: apt.userData?.phone || apt.patientPhone || apt.phone || '—',
+              time: apt.slotTime || apt.time || '10:00 AM',
+              date: rawDate,
+              dateStr: rawDate,
+              slotDate: rawDate,
+              slotTime: apt.slotTime || apt.time || '10:00 AM',
+              amount: Number(apt.amount) || Number(doctor.price ?? doctor.fees) || 500,
+              type: apt.consultationType || 'In-Clinic',
+              symptoms: apt.symptoms || apt.userData?.symptoms || 'Clinical Consultation',
+              status: isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : (apt.status || 'Confirmed')),
+              isCompleted,
+              createdAt: apt.createdAt || apt.date || new Date().toISOString()
+            };
+          });
+        initialList.push(...fromParent);
+      }
+
+      // 2. Local public site bookings (sehat_buddy_appointments)
+      const raw = localStorage.getItem('sehat_buddy_appointments');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const userBookings = parsed
+            .filter(b => {
+              if (isMockPatientAppointment(b)) return false;
+              if (matchesId(doctor, b.docId)) return true;
+              if (b.doctorName && doctor.name && b.doctorName.toLowerCase().trim() === doctor.name.toLowerCase().trim()) return true;
+              return false;
+            })
+            .map(b => {
+              const rawDate = b.slotDate || b.dateStr || b.date || '';
+              const isCompleted = b.status === 'Completed' || b.isCompleted === true || String(b.status).toLowerCase() === 'completed';
+              return {
+                id: b.id || b._id,
+                _id: b._id,
+                patientName: b.patientName || 'Patient',
+                age: b.age || 30,
+                gender: b.gender || 'Not specified',
+                phone: b.patientPhone || b.phone || '—',
+                time: b.slotTime || b.time || '10:00 AM',
+                date: rawDate,
+                dateStr: rawDate,
+                slotDate: rawDate,
+                slotTime: b.slotTime || b.time || '10:00 AM',
+                amount: Number(b.amount || b.fee) || Number(doctor.price ?? doctor.fees) || 500,
+                type: b.consultationType || 'In-Clinic',
+                symptoms: b.symptoms || 'General Consultation',
+                status: isCompleted ? 'Completed' : (b.status || 'Confirmed'),
+                isCompleted,
+                createdAt: b.bookedAt || b.createdAt || new Date().toISOString()
+              };
+            });
+          initialList.push(...userBookings);
+        }
+      }
+
+      // 3. Local doctor dashboard appointments from doctor storage keys
+      for (const k of storageKeys) {
+        const saved = localStorage.getItem(k);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const clean = parsed.filter(a => !isMockPatientAppointment(a));
+            initialList.push(...clean);
+          }
+        }
+        const rxKey = k.replace('appointments', 'prescriptions');
+        const savedRx = localStorage.getItem(rxKey);
+        if (savedRx) {
+          const parsedRx = JSON.parse(savedRx);
+          if (Array.isArray(parsedRx)) {
+            const cleanRx = parsedRx.filter(r => !isMockPrescriptionItem(r));
+            initialRx.push(...cleanRx);
+          }
+        }
+      }
+    } catch {}
+
+    const deduped = dedupeAppointments(initialList);
+    deduped.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+    return { appointments: deduped, prescriptions: initialRx };
+  }, [doctor, storageKeys, initialAppointments]);
+
+  const [activeTab, setActiveTab] = useState('consultations'); // 'consultations' | 'prescriptions'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [appointments, setAppointments] = useState(initialDoctorData.appointments);
+  const [prescriptions, setPrescriptions] = useState(initialDoctorData.prescriptions);
+
+  // Sync internal state if initialDoctorData changes
+  useEffect(() => {
+    if (initialDoctorData.appointments.length > 0) {
+      setAppointments(initialDoctorData.appointments);
+    }
+    if (initialDoctorData.prescriptions.length > 0) {
+      setPrescriptions(initialDoctorData.prescriptions);
+    }
+  }, [initialDoctorData]);
+
   // Load all consultations & prescriptions for this doctor
-  const loadDoctorData = async () => {
+  const loadDoctorData = async (forceShowSpinner = false) => {
     if (!doctor) return;
-    setIsLoading(true);
+    if (forceShowSpinner || appointments.length === 0) {
+      setIsLoading(true);
+    }
+    setIsSyncing(true);
 
     try {
       const docLookupId = doctor._id || doctor.id;
@@ -203,6 +326,7 @@ const DoctorHistoryModal = ({ doctor, onClose }) => {
 
     } finally {
       setIsLoading(false);
+      setIsSyncing(false);
     }
   };
 
@@ -424,12 +548,12 @@ const DoctorHistoryModal = ({ doctor, onClose }) => {
 
               <button
                 type="button"
-                onClick={loadDoctorData}
+                onClick={() => loadDoctorData(true)}
                 className={styles.closeBtn}
                 title="Refresh history data"
                 style={{ width: '32px', height: '32px' }}
               >
-                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                <RefreshCw size={14} className={isLoading || isSyncing ? 'animate-spin' : ''} />
               </button>
             </div>
           </div>

@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const appointmentSchema = new mongoose.Schema({
   userId: { type: String, default: 'guest' },
-  docId: { type: String, required: false },
-  hospitalId: { type: String, required: false },
+  docId: { type: String, required: false, index: true },
+  hospitalId: { type: String, required: false, index: true },
   slotDate: { type: String, required: true },
   slotTime: { type: String, required: true },
   userData: { type: Object, required: true },
@@ -20,6 +20,11 @@ const appointmentSchema = new mongoose.Schema({
   payment: { type: Boolean, default: false },
   isCompleted: { type: Boolean, default: false },
 }, { timestamps: true });
+
+appointmentSchema.index({ createdAt: -1 });
+appointmentSchema.index({ docId: 1, createdAt: -1 });
+appointmentSchema.index({ 'docData.id': 1 });
+appointmentSchema.index({ status: 1 });
 
 const Appointment = mongoose.model('Appointment', appointmentSchema);
 export default Appointment;

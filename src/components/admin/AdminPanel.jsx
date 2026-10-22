@@ -138,7 +138,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
 
   // Appointments Management State
-  const [appointments, setAppointments] = useState([]);
+  const [appointments, setAppointments] = useState(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem('sehat_buddy_appointments') || '[]');
+      return Array.isArray(local) ? local : [];
+    } catch {
+      return [];
+    }
+  });
   const [loadingAppointments, setLoadingAppointments] = useState(false);
   const [appointmentSearch, setAppointmentSearch] = useState('');
   const [appointmentTypeFilter, setAppointmentTypeFilter] = useState('all'); // 'all' | 'hospital' | 'doctor'
@@ -2826,6 +2833,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       {selectedDoctorForHistory && (
         <DoctorHistoryModal
           doctor={selectedDoctorForHistory}
+          initialAppointments={appointments}
           onClose={() => setSelectedDoctorForHistory(null)}
         />
       )}

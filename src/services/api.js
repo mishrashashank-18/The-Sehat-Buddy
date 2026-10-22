@@ -1,6 +1,11 @@
 export const resolveApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
-  if (!envUrl) return 'http://localhost:5000/api';
+  if (!envUrl) {
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+      return 'http://127.0.0.1:5000/api';
+    }
+    return 'http://localhost:5000/api';
+  }
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 };

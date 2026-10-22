@@ -12,7 +12,12 @@ let debounceTimeout = null;
 let changeStream = null;
 
 // Core calculation function for MongoDB, Cloudinary, and Brevo
-export const calculateStorageStats = async () => {
+export const calculateStorageStats = async (force = false) => {
+  // Return cached result if fresh within 30 seconds to prevent rate limits and 2+ second remote network latency
+  if (!force && cachedStats && (Date.now() - lastCalculated < 30000)) {
+    return cachedStats;
+  }
+
   let mongoStats = null;
   let cloudinaryStats = null;
   let brevoStats = null;

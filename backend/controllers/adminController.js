@@ -396,7 +396,7 @@ export const getStorageStats = async (req, res) => {
 
 export const getAllAppointments = async (req, res) => {
   try {
-    const appointments = await Appointment.find().sort({ createdAt: -1, date: -1 });
+    const appointments = await Appointment.find().sort({ createdAt: -1, date: -1 }).lean();
     res.json({ success: true, count: appointments.length, data: appointments });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

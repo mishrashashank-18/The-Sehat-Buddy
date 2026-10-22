@@ -419,6 +419,13 @@ export const getDoctorById = async (req, res) => {
   }
 };
 
+// High-performance short-lived in-memory cache for doctor dashboard queries (TTL: 15s)
+const doctorDashboardCache = new Map();
+
+export const clearDoctorDashboardCache = () => {
+  doctorDashboardCache.clear();
+};
+
 export const doctorDashboard = async (req, res) => {
   try {
     const docId = String(req.query.docId || req.user?.id || '').trim();
@@ -428,21 +435,31 @@ export const doctorDashboard = async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    // Resolve doctor document to gather all known aliases (ObjectId, numeric ID, email)
-    let doctorDoc = null;
+    // Fast Cache Check (sub-millisecond response)
+    const cacheKey = `${docId}__${docEmail}`;
+    const cached = doctorDashboardCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < 15000)) {
+      return res.json({ success: true, data: cached.data });
+    }
+
+    // Resolve doctor document in a single fast indexed query
+    const docOrConditions = [];
     if (docId) {
       if (mongoose.Types.ObjectId.isValid(docId)) {
-        doctorDoc = await Doctor.findById(docId);
+        docOrConditions.push({ _id: docId });
       }
-      if (!doctorDoc) {
-        doctorDoc = await Doctor.findOne({ id: docId });
-      }
-      if (!doctorDoc && !isNaN(Number(docId))) {
-        doctorDoc = await Doctor.findOne({ id: Number(docId) });
+      docOrConditions.push({ id: docId });
+      if (!isNaN(Number(docId))) {
+        docOrConditions.push({ id: Number(docId) });
       }
     }
-    if (!doctorDoc && docEmail) {
-      doctorDoc = await Doctor.findOne({ email: docEmail });
+    if (docEmail) {
+      docOrConditions.push({ email: docEmail });
+    }
+
+    let doctorDoc = null;
+    if (docOrConditions.length > 0) {
+      doctorDoc = await Doctor.findOne({ $or: docOrConditions }).select('_id id name email').lean();
     }
 
     const conditions = [];
@@ -480,7 +497,11 @@ export const doctorDashboard = async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    const appointments = await Appointment.find({ $or: conditions }).sort({ createdAt: -1, date: -1 });
+    const appointments = await Appointment.find({ $or: conditions })
+      .sort({ createdAt: -1, date: -1 })
+      .lean();
+
+    doctorDashboardCache.set(cacheKey, { timestamp: Date.now(), data: appointments });
     res.json({ success: true, data: appointments });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -521,6 +542,7 @@ export const updateDoctorAppointmentStatus = async (req, res) => {
     }
 
     await apt.save();
+    doctorDashboardCache.clear();
     broadcastDbChange('appointments', 'update', apt._id.toString(), apt);
     res.json({ success: true, message: 'Appointment updated', data: apt });
   } catch (error) {
@@ -590,6 +612,7 @@ export const createDoctorAppointment = async (req, res) => {
     });
 
     broadcastDbChange('appointments', 'insert', apt._id.toString(), apt);
+    doctorDashboardCache.clear();
     res.status(201).json({ success: true, message: 'Appointment created', data: apt });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -619,6 +642,7 @@ export const deleteDoctorAppointment = async (req, res) => {
       } catch {}
       broadcastDbChange('appointments', 'delete', apt._id.toString(), { id: apt._id.toString() });
     }
+    doctorDashboardCache.clear();
     res.json({ success: true, message: 'Appointment permanently deleted', id });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
