@@ -550,6 +550,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
+  // Auto-open write review modal if arriving from login redirect
+  React.useEffect(() => {
+    if (localStorage.getItem('open_write_review') === 'true') {
+      setIsWriteReviewOpen(true);
+      localStorage.removeItem('open_write_review');
+    }
+  }, [doctorId]);
+
   // Booking interaction states
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);

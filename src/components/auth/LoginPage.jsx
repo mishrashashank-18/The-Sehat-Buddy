@@ -79,6 +79,17 @@ const LoginPage = ({ role, setView }) => {
     user: 'home',
   };
 
+  const completeLoginRedirect = (userRole) => {
+    const redirectAfter = localStorage.getItem('redirect_after_login');
+    if (redirectAfter && (userRole === 'user' || !userRole)) {
+      localStorage.removeItem('redirect_after_login');
+      window.location.href = redirectAfter;
+      return;
+    }
+    const targetPath = `/${roleRedirects[userRole] === 'home' ? '' : roleRedirects[userRole]}`;
+    window.location.href = targetPath;
+  };
+
   // DOCTOR STEP 1: Check Email
   const handleDoctorEmailCheck = async (e) => {
     e.preventDefault();
@@ -557,8 +568,7 @@ const LoginPage = ({ role, setView }) => {
         if (data.user || data.data) {
           localStorage.setItem('user', JSON.stringify(data.user || data.data));
         }
-        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
-        window.location.href = targetPath;
+        completeLoginRedirect(role);
       } else {
         setError(data.message || 'OTP verification failed.');
       }
@@ -628,8 +638,7 @@ const LoginPage = ({ role, setView }) => {
         if (data.user || data.data) {
           localStorage.setItem('user', JSON.stringify(data.user || data.data));
         }
-        const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
-        window.location.href = targetPath;
+        completeLoginRedirect(role);
       } else {
         setError(data.message || 'Google login failed.');
       }
