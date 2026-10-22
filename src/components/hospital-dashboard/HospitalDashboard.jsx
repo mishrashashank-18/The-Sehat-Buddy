@@ -954,7 +954,7 @@ const HospitalDashboard = ({ onNavigate }) => {
                                       if (updateDoctor) {
                                         await updateDoctor(docTargetId, {
                                           availabilityStatus: newStatus,
-                                          available: newStatus === 'Available'
+                                          available: true // Doctor remains listed in directory regardless of shift status
                                         });
                                       }
                                       if (refreshDoctors) await refreshDoctors();

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
-  GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
+  GraduationCap, Phone, X, Play, ChevronDown, ChevronLeft, ChevronRight, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
   History, Milestone, CalendarClock, ExternalLink
@@ -341,11 +341,28 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     String(d.id) === String(doctorId) || 
     String(d._id) === String(doctorId) ||
     (d.email && String(doctorId).includes('@') && d.email.toLowerCase() === String(doctorId).toLowerCase())
-  ) || ((String(doctorId) === '1' || doctorId === 'default' || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul')) || doctors[0]) : null);
+  ) || ((String(doctorId) === '1' || doctorId === 'default' || doctorId === '6ac270f38586bcec9f96207f' || String(doctorId).toLowerCase().includes('rahul') || !doctorId) ? (doctors.find(d => (d.email || '').includes('rahul') || (d.name || '').toLowerCase().includes('rahul')) || doctors[0]) : null);
 
   const [activeReel, setActiveReel] = useState(null);
   const [reelVideoError, setReelVideoError] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
+
+  // Reel Hover Video Preview state
+  const [hoveredReelIdx, setHoveredReelIdx] = useState(null);
+  const [hoverError, setHoverError] = useState({});
+  const hoverTimerRef = React.useRef(null);
+
+  const handleReelMouseEnter = (idx) => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = setTimeout(() => {
+      setHoveredReelIdx(idx);
+    }, 120);
+  };
+
+  const handleReelMouseLeave = () => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setHoveredReelIdx(null);
+  };
 
   const handleOpenReel = (reelItem) => {
     setReelVideoError(false);
@@ -376,10 +393,55 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
-  // Booking interaction states
+  // Booking interaction states (persisted across page refresh)
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
-  const [selectedDateIdx, setSelectedDateIdx] = useState(0);
+  const [selectedDateIdx, setSelectedDateIdxState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('sehat_profile_date_idx');
+      return saved !== null ? parseInt(saved, 10) || 0 : 0;
+    } catch { return 0; }
+  });
+  const setSelectedDateIdx = (idx) => {
+    setSelectedDateIdxState(idx);
+    try { sessionStorage.setItem('sehat_profile_date_idx', String(idx)); } catch {}
+  };
+
+  const [dateStartIndex, setDateStartIndexState] = useState(() => {
+    try {
+      const saved = sessionStorage.getItem('sehat_profile_date_start');
+      return saved !== null ? parseInt(saved, 10) || 0 : 0;
+    } catch { return 0; }
+  });
+  const setDateStartIndex = (idx) => {
+    setDateStartIndexState(idx);
+    try { sessionStorage.setItem('sehat_profile_date_start', String(idx)); } catch {}
+  };
+
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('04:00 PM');
+
+  // Track and restore scroll position on refresh
+  React.useEffect(() => {
+    const onScroll = () => {
+      try { sessionStorage.setItem('sehat_profile_scroll_pos', String(window.scrollY)); } catch {}
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      const savedScroll = sessionStorage.getItem('sehat_profile_scroll_pos');
+      if (savedScroll) {
+        const top = parseInt(savedScroll, 10);
+        if (!isNaN(top) && top > 0) {
+          const timer = setTimeout(() => {
+            window.scrollTo({ top, behavior: 'instant' });
+          }, 120);
+          return () => clearTimeout(timer);
+        }
+      }
+    } catch {}
+  }, []);
 
 
 
@@ -460,17 +522,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     };
   }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
 
-  // Dynamic 3 upcoming appointment days with real live available slot count
+  // Dynamic upcoming appointment days (15 days / 3-day chunks window) with real live available slot count
   const dateOptions = React.useMemo(() => {
-    const dates = [
-      new Date(),
-      new Date(Date.now() + 86400000),
-      new Date(Date.now() + 172800000)
-    ];
+    const totalDays = 15;
+    const dates = Array.from({ length: totalDays }, (_, i) => new Date(Date.now() + i * 86400000));
 
     return dates.map((d, index) => {
       const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayNameLong = d.toLocaleDateString('en-US', { weekday: 'long' });
       const dayLabel = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameShort);
+      const displayDay = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameLong);
       const dateStr = getLocalDateString(d);
       
       const resolved = resolveSlotsForDate(d);
@@ -488,6 +549,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
       return {
         day: dayLabel,
+        displayDay,
         date: `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
         label: `${dayLabel}, ${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`,
         dateStr,
@@ -500,6 +562,23 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       };
     });
   }, [resolveSlotsForDate, doctor?.slots_booked]);
+
+  // Pagination for appointment dates (shifts by 3 days at a time)
+  const handleNextDays = () => {
+    if (dateStartIndex + 3 < dateOptions.length) {
+      const nextIndex = Math.min(dateStartIndex + 3, dateOptions.length - 3);
+      setDateStartIndex(nextIndex);
+      setSelectedDateIdx(nextIndex);
+    }
+  };
+
+  const handlePrevDays = () => {
+    if (dateStartIndex > 0) {
+      const prevIndex = Math.max(0, dateStartIndex - 3);
+      setDateStartIndex(prevIndex);
+      setSelectedDateIdx(prevIndex);
+    }
+  };
 
   // Current day's slots with booked status
   const currentDaySlots = React.useMemo(() => {
@@ -1231,27 +1310,88 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
             {/* Select Date & Time */}
             <div className={styles.bookingSection}>
-              <label className={styles.bookingSectionLabel}>Select Appointment Date</label>
-              <div className={styles.dateSlotsGroup}>
-                {dateOptions.map((opt, idx) => (
-                  <button 
-                    key={idx} 
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <label className={styles.bookingSectionLabel}>Select Appointment Date</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
                     type="button"
-                    className={`${styles.dateSlotCard} ${selectedDateIdx === idx ? styles.dateSlotCardActive : ''}`}
-                    onClick={() => setSelectedDateIdx(idx)}
+                    onClick={handlePrevDays}
+                    disabled={dateStartIndex === 0}
+                    title="Previous days"
+                    aria-label="Previous appointment dates"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: dateStartIndex === 0 ? '#f8fafc' : '#ffffff',
+                      color: dateStartIndex === 0 ? '#94a3b8' : '#1e293b',
+                      cursor: dateStartIndex === 0 ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: dateStartIndex === 0 ? 'none' : '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
                   >
-                    <span className={styles.dateSlotDayName}>{opt.day}</span>
-                    <span className={styles.dateSlotDateNum}>{opt.date}</span>
-                    <span className={`${styles.dateSlotPill} ${selectedDateIdx === idx ? styles.dateSlotPillActive : ''}`}>
-                      {opt.slots}
-                    </span>
+                    <ChevronLeft size={16} />
                   </button>
-                ))}
+                  <button
+                    type="button"
+                    onClick={handleNextDays}
+                    disabled={dateStartIndex + 3 >= dateOptions.length}
+                    title="Next days"
+                    aria-label="Next appointment dates"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '6px',
+                      border: '1px solid #cbd5e1',
+                      background: dateStartIndex + 3 >= dateOptions.length ? '#f8fafc' : '#ffffff',
+                      color: dateStartIndex + 3 >= dateOptions.length ? '#94a3b8' : '#1e293b',
+                      cursor: dateStartIndex + 3 >= dateOptions.length ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxShadow: dateStartIndex + 3 >= dateOptions.length ? 'none' : '0 1px 2px rgba(0,0,0,0.04)'
+                    }}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.dateSlotsGroup}>
+                {dateOptions.slice(dateStartIndex, dateStartIndex + 3).map((opt, vIdx) => {
+                  const actualIdx = dateStartIndex + vIdx;
+                  return (
+                    <button 
+                      key={opt.dateStr || actualIdx} 
+                      type="button"
+                      className={`${styles.dateSlotCard} ${selectedDateIdx === actualIdx ? styles.dateSlotCardActive : ''}`}
+                      onClick={() => setSelectedDateIdx(actualIdx)}
+                    >
+                      <span className={styles.dateSlotDayName}>{opt.day}</span>
+                      <span className={styles.dateSlotDateNum}>{opt.date}</span>
+                      <span 
+                        className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}
+                        style={!opt.isWorkingDay ? {
+                          background: selectedDateIdx === actualIdx ? '#dbeafe' : '#f1f5f9',
+                          color: selectedDateIdx === actualIdx ? '#1d4ed8' : '#64748b',
+                          borderColor: selectedDateIdx === actualIdx ? '#bfdbfe' : '#e2e8f0'
+                        } : {}}
+                      >
+                        {opt.slots}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               <div className={styles.timeSlotsHeader}>
                 <Clock size={13} color="#475569" />
-                <span>Available Slots for {dateOptions[selectedDateIdx]?.day || 'Today'}</span>
+                <span>Available Slots for {dateOptions[selectedDateIdx]?.displayDay || dateOptions[selectedDateIdx]?.day || 'Today'}</span>
               </div>
               <div className={styles.timeSlotsGrid}>
                 {dateOptions[selectedDateIdx]?.isWorkingDay === false ? (
@@ -1420,22 +1560,28 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               };
 
               const parseTimelineItem = (text) => {
-                const isPresent = text.toLowerCase().includes('present');
-                let title = text;
+                const raw = String(text || '').trim();
+                const isPresent = raw.toLowerCase().includes('present');
+                let title = raw;
                 let hospital = doctor.hospital || 'Apollo Hospital';
-                let years = '2018 – Present';
-                if (text.includes(' - ')) {
-                  const parts = text.split(' - ');
-                  title = parts[0].trim();
-                  const rest = parts.slice(1).join(' - ').trim();
-                  if (rest.includes('(')) {
-                    const idx = rest.indexOf('(');
-                    hospital = rest.slice(0, idx).trim();
-                    years = rest.slice(idx).replace(/[()]/g, '').trim();
-                  } else {
-                    hospital = rest;
-                  }
+                let years = '';
+
+                // Extract parentheses first (e.g. '(2018 - Present)' or '(2014 - 2018)' or '(Present)')
+                const parenMatch = raw.match(/\((.*?)\)/);
+                let mainText = raw;
+                if (parenMatch) {
+                  years = parenMatch[1].trim();
+                  mainText = raw.replace(/\(.*?\)/, '').trim();
                 }
+
+                if (mainText.includes(' - ')) {
+                  const parts = mainText.split(' - ');
+                  title = parts[0].trim();
+                  hospital = parts.slice(1).join(' - ').trim() || (doctor.hospital || 'Apollo Hospital');
+                } else {
+                  title = mainText;
+                }
+
                 return { title, hospital, years, isPresent };
               };
 
@@ -1578,75 +1724,90 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                             <div style={{ padding: '12px 14px', fontSize: '0.85rem', color: '#64748b', fontStyle: 'italic', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
                               No career experience entries listed yet.
                             </div>
-                          ) : (
-                            timelineList.map((item, idx) => {
-                            const parsed = parseTimelineItem(item);
-                            const isPresent = parsed.isPresent || (idx === 0 && !timelineList.some(t => t.toLowerCase().includes('present')));
+                          ) : (() => {
+                            const parsedTimelineList = timelineList.map((item, idx) => {
+                              const parsed = parseTimelineItem(item);
+                              const isPresent = parsed.isPresent || (idx === 0 && !timelineList.some(t => t.toLowerCase().includes('present')));
+                              return { ...parsed, isPresent, raw: item };
+                            });
+
                             const getTimelineCardIcon = (i, isPres) => {
                               if (isPres || i === 0) return <Clock size={16} />;
                               if (i === 1) return <Milestone size={16} />;
                               if (i === 2) return <History size={16} />;
                               return <CalendarClock size={16} />;
                             };
-                            return (
-                              <div key={idx} className={styles.timelineRow}>
-                                {/* Left Vertical Timeline Track */}
-                                <div className={styles.timelineTrackCol}>
-                                  {/* Top connecting line segment */}
-                                  <div
-                                    className={`${styles.timelineLineTop} ${
-                                      idx === 0
-                                        ? styles.timelineLineHidden
-                                        : idx === 1 && timelineList[0]?.toLowerCase().includes('present')
-                                        ? styles.timelineLineSolid
-                                        : styles.timelineLineDotted
-                                    }`}
-                                  />
 
-                                  {/* Node: Double circle for present, single circle for rest */}
-                                  <div className={styles.timelineNodeWrap}>
-                                    {isPresent ? (
-                                      <div className={styles.timelineDoubleCircle} title="Current Role (Present)">
-                                        <div className={styles.timelineDoubleCircleInner} />
-                                      </div>
+                            return parsedTimelineList.map((itemData, idx) => {
+                              const isPresent = itemData.isPresent;
+                              const prevIsPresent = idx > 0 ? parsedTimelineList[idx - 1].isPresent : false;
+                              const nextIsPresent = idx < parsedTimelineList.length - 1 ? parsedTimelineList[idx + 1].isPresent : false;
+
+                              // Top connecting line from previous node: solid if both previous and this node are present
+                              const isTopSolid = idx > 0 && prevIsPresent && isPresent;
+                              // Bottom connecting line to next node: solid if both this and next node are present
+                              const isBottomSolid = idx < parsedTimelineList.length - 1 && isPresent && nextIsPresent;
+
+                              return (
+                                <div key={idx} className={styles.timelineRow}>
+                                  {/* Left Vertical Timeline Track */}
+                                  <div className={styles.timelineTrackCol}>
+                                    {/* Top connecting line segment */}
+                                    <div
+                                      className={
+                                        idx === 0
+                                          ? styles.timelineLineTopHidden
+                                          : (isTopSolid ? styles.timelineLineTopSolid : styles.timelineLineTopDotted)
+                                      }
+                                    />
+
+                                    {/* Node: Double circle for present, single circle for rest */}
+                                    <div className={styles.timelineNodeWrap}>
+                                      {isPresent ? (
+                                        <div className={styles.timelineDoubleCircle} title="Current Role (Present)">
+                                          <div className={styles.timelineDoubleCircleInner} />
+                                        </div>
+                                      ) : (
+                                        <div className={styles.timelineSingleCircle} title="Previous Role" />
+                                      )}
+                                    </div>
+
+                                    {/* Bottom connecting line / tail */}
+                                    {idx < parsedTimelineList.length - 1 ? (
+                                      <div className={isBottomSolid ? styles.timelineLineBottomSolid : styles.timelineLineBottomDotted} />
                                     ) : (
-                                      <div className={styles.timelineSingleCircle} title="Previous Role" />
+                                      <div
+                                        className={isPresent ? styles.timelineLineBottomSolid : styles.timelineTailDotted}
+                                        style={isPresent ? { height: '18px', width: '2px', background: '#3b82f6', marginTop: '2px', flex: 'none' } : undefined}
+                                      />
                                     )}
                                   </div>
 
-                                  {/* Bottom connecting line / tail */}
-                                  {idx < timelineList.length - 1 ? (
-                                    <div className={isPresent ? styles.timelineLineSolid : styles.timelineLineDotted} />
-                                  ) : (
-                                    <div className={styles.timelineTailDotted} />
-                                  )}
-                                </div>
-
-                                {/* Right Timeline Card */}
-                                <div className={styles.timelineCard}>
-                                  <div className={styles.timelineIconWrap}>
-                                    {getTimelineCardIcon(idx, isPresent)}
-                                  </div>
-                                  <div className={styles.credItemTextWrap}>
-                                    <div className={styles.credItemTitle}>{parsed.title}</div>
-                                    <div className={styles.credItemSubRow}>
-                                      <span className={styles.credItemSub}>{parsed.hospital}</span>
-                                      {isPresent ? (
-                                        <span className={styles.presentBadge}>
-                                          <Clock size={11} /> Present
-                                        </span>
-                                      ) : (
-                                        <span className={styles.timelineYearChip}>
-                                          <Calendar size={11} /> {parsed.years}
-                                        </span>
-                                      )}
+                                  {/* Right Timeline Card */}
+                                  <div className={styles.timelineCard}>
+                                    <div className={styles.timelineIconWrap}>
+                                      {getTimelineCardIcon(idx, isPresent)}
+                                    </div>
+                                    <div className={styles.credItemTextWrap}>
+                                      <div className={styles.credItemTitle}>{itemData.title}</div>
+                                      <div className={styles.credItemSubRow}>
+                                        <span className={styles.credItemSub}>{itemData.hospital}</span>
+                                        {isPresent ? (
+                                          <span className={styles.presentBadge}>
+                                            <Clock size={11} /> {itemData.years && itemData.years.toLowerCase().includes('present') && itemData.years.toLowerCase() !== 'present' ? itemData.years : 'Present'}
+                                          </span>
+                                        ) : itemData.years ? (
+                                          <span className={styles.timelineYearChip}>
+                                            <Calendar size={11} /> {itemData.years}
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
-                              </div>
-                            );
-                          })
-                          )}
+                              );
+                            });
+                          })()}
                         </div>
                       </div>
                     </div>
@@ -1745,16 +1906,68 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
                   <div className={styles.reelsGrid}>
                     {parsedReels.map((reelItem, idx) => {
+                      const isHovered = hoveredReelIdx === idx;
+                      const rawTarget = typeof reelItem === 'object' ? (reelItem.url || reelItem.embedUrl) : reelItem;
+                      const hoverVideoSrc = `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
+
                       return (
                         <div 
                           key={idx} 
                           className={styles.reelCard} 
                           onClick={() => handleOpenReel(reelItem)}
-                          title="Click to view reel in pop up"
+                          onMouseEnter={() => handleReelMouseEnter(idx)}
+                          onMouseLeave={handleReelMouseLeave}
+                          title="Hover to play preview, click to open full reel"
                           style={{
-                            background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+                            background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
+                            position: 'relative',
+                            overflow: 'hidden'
                           }}
                         >
+                          {/* Live Hover Video Preview */}
+                          {isHovered && !hoverError[idx] && (
+                            <video
+                              key={`hover-video-${idx}`}
+                              src={hoverVideoSrc}
+                              autoPlay
+                              muted
+                              loop
+                              playsInline
+                              onError={() => setHoverError(prev => ({ ...prev, [idx]: true }))}
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                borderRadius: 'inherit',
+                                zIndex: 1,
+                                background: '#000000',
+                                pointerEvents: 'none'
+                              }}
+                            />
+                          )}
+
+                          {/* Fallback Iframe on Hover if direct video extraction errors */}
+                          {isHovered && hoverError[idx] && (
+                            <iframe
+                              key={`hover-iframe-${idx}`}
+                              src={`${reelItem.embedUrl || reelItem.url}?autoplay=1`}
+                              title="Reel Preview"
+                              scrolling="no"
+                              allow="autoplay; encrypted-media"
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                border: 'none',
+                                zIndex: 1,
+                                pointerEvents: 'none'
+                              }}
+                            />
+                          )}
+
                           {/* If coverPhoto was uploaded by admin in realtime, render it full bleed */}
                           {reelItem.coverPhoto ? (
                             <img 
@@ -1780,35 +1993,21 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                               textAlign: 'center',
                               userSelect: 'none'
                             }}>
-                              <div style={{
-                                width: '56px',
-                                height: '56px',
-                                borderRadius: '50%',
-                                background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#ffffff',
-                                boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
-                                marginBottom: '12px'
-                              }}>
-                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                              </div>
                               <span style={{
                                 color: '#ffffff',
-                                fontSize: '0.86rem',
-                                fontWeight: 700,
+                                fontSize: '0.96rem',
+                                fontWeight: 800,
                                 letterSpacing: '0.02em',
-                                marginBottom: '4px'
+                                marginBottom: '6px'
                               }}>
                                 Reel {idx + 1}
                               </span>
                               <span style={{
                                 color: '#94a3b8',
-                                fontSize: '0.72rem',
+                                fontSize: '0.76rem',
                                 fontWeight: 500
                               }}>
-                                Tap to Play
+                                {isHovered ? 'Playing Preview' : 'Tap to Play'}
                               </span>
                             </div>
                           )}
@@ -1816,20 +2015,19 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           {/* Gradient shadow scrim overlay when cover image exists */}
                           {reelItem.coverPhoto && <div className={styles.reelGradientScrim} />}
 
-                          {/* Top Badge: Instagram Tag */}
-                          <div className={styles.reelTopBadge}>
+                          {/* Top Badge: Instagram Tag / Live playing indicator */}
+                          <div 
+                            className={styles.reelTopBadge}
+                            style={{
+                              background: isHovered ? 'rgba(225, 48, 108, 0.95)' : undefined,
+                              boxShadow: isHovered ? '0 2px 10px rgba(225, 48, 108, 0.5)' : undefined,
+                              transition: 'all 0.2s ease',
+                              zIndex: 2
+                            }}
+                          >
                             <SocialInstagramIcon size={14} />
-                            <span>Reel</span>
+                            <span>{isHovered ? 'Playing' : 'Reel'}</span>
                           </div>
-
-                          {/* Center Play Button Overlay on Hover (for cards with cover photo) */}
-                          {reelItem.coverPhoto && (
-                            <div className={styles.reelPlayOverlay}>
-                              <div className={styles.reelPlayBtn}>
-                                <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-                              </div>
-                            </div>
-                          )}
                         </div>
                       );
                     })}

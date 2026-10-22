@@ -31,12 +31,27 @@ const FindDoctors = ({ onNavigate }) => {
     }
   }, []);
 
+  // Helper to ensure core anchor doctor (Dr. Rahul Verma) is permanently visible
+  const isProtectedDoctor = (doc) => {
+    if (!doc) return false;
+    const name = (doc.name || '').toLowerCase();
+    const email = (doc.email || '').toLowerCase();
+    const id = String(doc.id || doc._id || '');
+    return name.includes('rahul') || email.includes('rahul') || id === '1' || id === '6ac270f38586bcec9f96207f';
+  };
+
   // Get unique specialties for the dropdown
-  const uniqueSpecialties = Array.from(new Set(doctors.filter(d => d.available !== false).map(d => d.specialty || d.specialization).filter(Boolean)));
+  const uniqueSpecialties = Array.from(new Set(
+    doctors
+      .filter(d => d.available !== false || isProtectedDoctor(d))
+      .map(d => d.specialty || d.specialization)
+      .filter(Boolean)
+  ));
 
   // Filter for active/listed doctors and apply search criteria
   const activeDoctors = doctors.filter(doc => {
-    if (doc.available === false) return false;
+    // Only filter out doctors explicitly de-listed by admin, never core doctor Dr. Rahul Verma
+    if (!isProtectedDoctor(doc) && doc.available === false) return false;
     
     // Keyword match (name, specialty, degree, about, or treatments)
     if (searchName) {

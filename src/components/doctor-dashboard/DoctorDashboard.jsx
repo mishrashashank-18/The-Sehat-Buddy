@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { broadcastSync, matchesId } from '../../context/DataContext';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
@@ -67,6 +67,37 @@ const Youtube = ({ size = 18, color = "currentColor", style }) => (
     <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"></polygon>
   </svg>
 );
+
+const getMediaEmbedUrl = (url) => {
+  if (!url) return '';
+  try {
+    if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
+      let videoId = '';
+      if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+      else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
+      else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}?autoplay=1` : url;
+    }
+    if (url.includes('instagram.com')) {
+      const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1]) {
+        let shortcode = match[1];
+        const brokenMap = {
+          'DeArmJdSQa6': 'DWGyY03lWc2',
+          'DeAA8evMsBS': 'DXpDWdoDKai',
+          'DdrR6vApDBK': 'DZdBbmoM1tn',
+          'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
+          'C9_K5qXMO9e': 'DWGyY03lWc2'
+        };
+        if (brokenMap[shortcode]) shortcode = brokenMap[shortcode];
+        return `https://www.instagram.com/reel/${shortcode}/embed/`;
+      }
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
 
 const INITIAL_APPOINTMENTS = [];
 const INITIAL_PRESCRIPTIONS = [];
@@ -294,7 +325,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (docId) {
       await updateDoctor(docId, {
         availabilityStatus: newStatus,
-        available: newStatus === 'Available'
+        available: true // Doctor remains listed in directory regardless of shift status
       });
     }
     const label = newStatus === 'Busy' ? 'In Surgery / Busy' : newStatus;
@@ -371,8 +402,23 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Selected prescription for formatted printable PDF preview
   const [selectedRxForPrint, setSelectedRxForPrint] = useState(null);
 
-  // Active Tab: 'appointments' | 'prescriptions' | 'profile'
-  const [activeTab, setActiveTab] = useState('appointments');
+  // Active Tab: 'appointments' | 'prescriptions' | 'profile' (persisted across refresh)
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('sehat_doctor_active_tab');
+      if (saved && ['appointments', 'prescriptions', 'profile'].includes(saved)) {
+        return saved;
+      }
+    } catch {}
+    return 'appointments';
+  });
+
+  const setActiveTab = (tab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem('sehat_doctor_active_tab', tab);
+    } catch {}
+  };
 
   // Helper for default procedure & qualification tags
   const getDefaultDoctorTags = (doc) => {
@@ -416,16 +462,47 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [newCertInput, setNewCertInput] = useState('');
   const [newMembershipInput, setNewMembershipInput] = useState('');
   const [newCareerExpInput, setNewCareerExpInput] = useState('');
+  const [newCareerExpStartYear, setNewCareerExpStartYear] = useState('');
+  const [newCareerExpEndYear, setNewCareerExpEndYear] = useState('');
+  const [newCareerExpIsPresent, setNewCareerExpIsPresent] = useState(false);
 
   // Inline editing states for modifying existing items
   const [editingAward, setEditingAward] = useState({ index: null, text: '', year: '' });
   const [editingCert, setEditingCert] = useState({ index: null, text: '' });
   const [editingMembership, setEditingMembership] = useState({ index: null, text: '' });
-  const [editingCareerExp, setEditingCareerExp] = useState({ index: null, text: '' });
+  const [editingCareerExp, setEditingCareerExp] = useState({ index: null, text: '', startYear: '', endYear: '', isPresent: false });
 
-  // Schedule & Time Slots Management state
-  const [slotConfigMode, setSlotConfigMode] = useState('all'); // 'all' (Standard) | 'day' (Day-wise) | 'date' (Date-wise)
-  const [selectedScheduleDay, setSelectedScheduleDay] = useState('Mon');
+  // Schedule & Time Slots Management state (persisted across refresh)
+  const [slotConfigMode, setSlotConfigModeState] = useState(() => {
+    try {
+      return localStorage.getItem('sehat_doctor_slot_mode') || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const setSlotConfigMode = (mode) => {
+    setSlotConfigModeState(mode);
+    try {
+      localStorage.setItem('sehat_doctor_slot_mode', mode);
+    } catch {}
+  };
+
+  const [selectedScheduleDay, setSelectedScheduleDayState] = useState(() => {
+    try {
+      return localStorage.getItem('sehat_doctor_slot_day') || 'Mon';
+    } catch {
+      return 'Mon';
+    }
+  });
+
+  const setSelectedScheduleDay = (day) => {
+    setSelectedScheduleDayState(day);
+    try {
+      localStorage.setItem('sehat_doctor_slot_day', day);
+    } catch {}
+  };
+
   const [selectedScheduleDate, setSelectedScheduleDate] = useState(() => {
     const d = new Date();
     const y = d.getFullYear();
@@ -438,6 +515,45 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [slotMin, setSlotMin] = useState('00');
   const [slotPeriod, setSlotPeriod] = useState('PM');
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
+  // Track and restore scroll position across refreshes
+  React.useEffect(() => {
+    const onScroll = () => {
+      try {
+        sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY));
+      } catch {}
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
+      if (savedScroll) {
+        const top = parseInt(savedScroll, 10);
+        if (!isNaN(top) && top > 0) {
+          const timer = setTimeout(() => {
+            window.scrollTo({ top, behavior: 'instant' });
+          }, 120);
+          return () => clearTimeout(timer);
+        }
+      }
+    } catch {}
+  }, [activeTab]);
+
+  // Multi-day Planned Leave state
+  const [leaveStartDate, setLeaveStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [leaveEndDate, setLeaveEndDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 3);
+    return d.toISOString().split('T')[0];
+  });
+  const [leaveNote, setLeaveNote] = useState('');
 
   // Real-time Earnings Heatmap state
   const [heatmapView, setHeatmapView] = useState('year'); // 'year' | 'weeks' | 'month'
@@ -457,6 +573,10 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [deleteConfirmationWord, setDeleteConfirmationWord] = useState('');
   const [isEarningsBreakdownOpen, setIsEarningsBreakdownOpen] = useState(false);
+
+  // Featured Media (Reels & Videos) Preview Modal state
+  const [previewMediaModal, setPreviewMediaModal] = useState(null); // { type: 'reel' | 'youtube', url, title, coverPhoto }
+  const [previewReelError, setPreviewReelError] = useState(false);
 
   const initialDoctorIdRef = React.useRef(null);
 
@@ -724,6 +844,58 @@ const DoctorDashboard = ({ onNavigate }) => {
     });
   }, [activeDoctor?.about, isSavingAbout]);
 
+  // Synchronize profileForm schedule & slots whenever activeDoctor updates from DB, SSE, or DataContext
+  React.useEffect(() => {
+    if (!activeDoctor) return;
+    setProfileForm(prev => {
+      if (!prev) return activeDoctor;
+      let changed = false;
+      const next = { ...prev };
+
+      if (Array.isArray(activeDoctor.availableSlots) && activeDoctor.availableSlots.length > 0) {
+        if (JSON.stringify(prev.availableSlots) !== JSON.stringify(activeDoctor.availableSlots)) {
+          next.availableSlots = activeDoctor.availableSlots;
+          changed = true;
+        }
+      }
+      if (activeDoctor.dayWiseSlots && typeof activeDoctor.dayWiseSlots === 'object') {
+        if (JSON.stringify(prev.dayWiseSlots) !== JSON.stringify(activeDoctor.dayWiseSlots)) {
+          next.dayWiseSlots = activeDoctor.dayWiseSlots;
+          changed = true;
+        }
+      }
+      if (activeDoctor.dateWiseSlots && typeof activeDoctor.dateWiseSlots === 'object') {
+        if (JSON.stringify(prev.dateWiseSlots) !== JSON.stringify(activeDoctor.dateWiseSlots)) {
+          next.dateWiseSlots = activeDoctor.dateWiseSlots;
+          changed = true;
+        }
+      }
+      if (Array.isArray(activeDoctor.scheduleDays) && activeDoctor.scheduleDays.length > 0) {
+        if (JSON.stringify(prev.scheduleDays) !== JSON.stringify(activeDoctor.scheduleDays)) {
+          next.scheduleDays = activeDoctor.scheduleDays;
+          changed = true;
+        }
+      }
+      if (activeDoctor.availableDays && activeDoctor.availableDays !== prev.availableDays) {
+        next.availableDays = activeDoctor.availableDays;
+        changed = true;
+      }
+      if (activeDoctor.slotDuration && activeDoctor.slotDuration !== prev.slotDuration) {
+        next.slotDuration = activeDoctor.slotDuration;
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [
+    activeDoctor?.availableSlots,
+    activeDoctor?.dayWiseSlots,
+    activeDoctor?.dateWiseSlots,
+    activeDoctor?.scheduleDays,
+    activeDoctor?.availableDays,
+    activeDoctor?.slotDuration
+  ]);
+
   // Tags / Badges handlers (reflects instantly in real time)
   const handleAddTag = (e) => {
     e?.preventDefault();
@@ -933,21 +1105,92 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Career experience timeline handlers
   const handleAddCareerExp = (e) => {
     e?.preventDefault();
-    if (!newCareerExpInput.trim()) return;
+    let roleText = newCareerExpInput.trim();
+    if (!roleText) return;
+
+    // Strip pre-existing parenthesis from role text to cleanly format
+    roleText = roleText.replace(/\(.*?\)/g, '').trim();
+
+    let finalStr = roleText;
+    const startY = newCareerExpStartYear.trim();
+    const endY = newCareerExpEndYear.trim();
+
+    if (newCareerExpIsPresent) {
+      finalStr = startY ? `${roleText} (${startY} - Present)` : `${roleText} (Present)`;
+    } else if (startY && endY) {
+      finalStr = `${roleText} (${startY} - ${endY})`;
+    } else if (startY) {
+      finalStr = `${roleText} (${startY})`;
+    } else if (endY) {
+      finalStr = `${roleText} (${endY})`;
+    }
+
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    const updated = [...current, newCareerExpInput.trim()];
+    const updated = newCareerExpIsPresent ? [finalStr, ...current] : [...current, finalStr];
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
     setNewCareerExpInput('');
+    setNewCareerExpStartYear('');
+    setNewCareerExpEndYear('');
+    setNewCareerExpIsPresent(false);
     updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
     showToast('Hospital timeline role added!');
   };
 
+  const handleStartEditCareerExp = (index, fullStr) => {
+    let text = fullStr;
+    let startYear = '';
+    let endYear = '';
+    let isPresent = false;
+
+    if (fullStr.includes('(') && fullStr.includes(')')) {
+      const match = fullStr.match(/\((.*?)\)/);
+      if (match) {
+        const yearPart = match[1].trim();
+        text = fullStr.replace(/\(.*?\)/, '').trim();
+        if (yearPart.toLowerCase().includes('present')) {
+          isPresent = true;
+          const yMatch = yearPart.match(/(\d{4})/);
+          if (yMatch) startYear = yMatch[1];
+        } else if (yearPart.includes('-') || yearPart.includes('–')) {
+          const yParts = yearPart.split(/[-–]/).map(s => s.trim());
+          startYear = yParts[0] || '';
+          endYear = yParts[1] || '';
+        } else {
+          startYear = yearPart;
+        }
+      }
+    } else if (fullStr.toLowerCase().includes('present')) {
+      isPresent = true;
+      text = fullStr.replace(/present/i, '').replace(/[-–()]/g, '').trim();
+    }
+    setEditingCareerExp({ index, text, startYear, endYear, isPresent });
+  };
+
   const handleUpdateCareerExp = (index) => {
-    if (!editingCareerExp.text.trim()) return;
+    let roleText = (editingCareerExp.text || '').trim();
+    if (!roleText) return;
+
+    // Strip pre-existing parenthesis from role text to cleanly format
+    roleText = roleText.replace(/\(.*?\)/g, '').trim();
+
+    let finalStr = roleText;
+    const startY = (editingCareerExp.startYear || '').trim();
+    const endY = (editingCareerExp.endYear || '').trim();
+
+    if (editingCareerExp.isPresent) {
+      finalStr = startY ? `${roleText} (${startY} - Present)` : `${roleText} (Present)`;
+    } else if (startY && endY) {
+      finalStr = `${roleText} (${startY} - ${endY})`;
+    } else if (startY) {
+      finalStr = `${roleText} (${startY})`;
+    } else if (endY) {
+      finalStr = `${roleText} (${endY})`;
+    }
+
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    const updated = current.map((item, i) => (i === index ? editingCareerExp.text.trim() : item));
+    const updated = current.map((item, i) => (i === index ? finalStr : item));
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-    setEditingCareerExp({ index: null, text: '' });
+    setEditingCareerExp({ index: null, text: '', startYear: '', endYear: '', isPresent: false });
     updateDoctor(activeDoctor.id || activeDoctor._id, { careerExperience: updated });
     showToast('Timeline role modified successfully!');
   };
@@ -1090,12 +1333,18 @@ const DoctorDashboard = ({ onNavigate }) => {
     const updated = currentDays.includes(day)
       ? currentDays.filter(d => d !== day)
       : [...currentDays, day];
-    setProfileForm(prev => ({ ...prev, scheduleDays: updated }));
+    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
+    if (!updated.includes(day)) {
+      newDayWise[day] = 'off';
+    } else if (newDayWise[day] === 'off') {
+      delete newDayWise[day];
+    }
+    setProfileForm(prev => ({ ...prev, scheduleDays: updated, dayWiseSlots: newDayWise }));
     const docId = activeDoctor?.id || activeDoctor?._id;
     if (docId) {
-      await updateDoctor(docId, { scheduleDays: updated });
+      await updateDoctor(docId, { scheduleDays: updated, dayWiseSlots: newDayWise });
     }
-    showToast(`Working days updated (${updated.length} active)`);
+    showToast(`${DAY_NAME_MAP[day] || day} is now ${updated.includes(day) ? 'Active' : 'Closed / Off'}`);
   };
 
   const DAYS_LIST = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -1109,6 +1358,11 @@ const DoctorDashboard = ({ onNavigate }) => {
     Sun: 'Sunday'
   };
 
+  const selectDayForSlots = (dayKey) => {
+    setSelectedScheduleDay(dayKey);
+    setSlotConfigMode('day');
+  };
+
   // Helper to get slots for current mode (All / Day / Date)
   const getCurrentModeSlots = () => {
     if (slotConfigMode === 'all') {
@@ -1116,7 +1370,10 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
     if (slotConfigMode === 'day') {
       const dayConfig = profileForm.dayWiseSlots?.[selectedScheduleDay];
-      if (dayConfig === 'off' || dayConfig?.isOff === true) return [];
+      const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(selectedScheduleDay) && dayConfig === undefined)) {
+        return [];
+      }
       if (Array.isArray(dayConfig)) return dayConfig;
       if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
       return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
@@ -1129,7 +1386,10 @@ const DoctorDashboard = ({ onNavigate }) => {
       // Inherited from day-wise or default
       const dayOfWeekShort = new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
       const dayConfig = profileForm.dayWiseSlots?.[dayOfWeekShort];
-      if (dayConfig === 'off' || dayConfig?.isOff === true) return [];
+      const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(dayOfWeekShort) && dayConfig === undefined)) {
+        return [];
+      }
       if (Array.isArray(dayConfig)) return dayConfig;
       if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
       return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
@@ -1137,18 +1397,25 @@ const DoctorDashboard = ({ onNavigate }) => {
     return [];
   };
 
+  const isDayOff = (day) => {
+    if (!day) return false;
+    const dayConfig = profileForm.dayWiseSlots?.[day];
+    if (dayConfig === 'off' || dayConfig?.isOff === true) return true;
+    const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (!currentDays.includes(day) && (dayConfig === undefined || dayConfig === null)) return true;
+    return false;
+  };
+
   const isCurrentModeOff = () => {
     if (slotConfigMode === 'day') {
-      const dayConfig = profileForm.dayWiseSlots?.[selectedScheduleDay];
-      return dayConfig === 'off' || dayConfig?.isOff === true;
+      return isDayOff(selectedScheduleDay);
     }
     if (slotConfigMode === 'date') {
       const dateConfig = profileForm.dateWiseSlots?.[selectedScheduleDate];
       if (dateConfig === 'off' || dateConfig?.isOff === true) return true;
       if (dateConfig === undefined) {
         const dayOfWeekShort = new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-        const dayConfig = profileForm.dayWiseSlots?.[dayOfWeekShort];
-        return dayConfig === 'off' || dayConfig?.isOff === true;
+        return isDayOff(dayOfWeekShort);
       }
       return false;
     }
@@ -1181,8 +1448,12 @@ const DoctorDashboard = ({ onNavigate }) => {
       showToast(`General time slot "${slot}" added and saved!`);
     } else if (slotConfigMode === 'day') {
       const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: updated };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (!newScheduleDays.includes(selectedScheduleDay)) {
+        newScheduleDays.push(selectedScheduleDay);
+      }
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
       showToast(`Slot "${slot}" added for ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}!`);
     } else if (slotConfigMode === 'date') {
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
@@ -1224,8 +1495,12 @@ const DoctorDashboard = ({ onNavigate }) => {
       showToast(`Applied "${presetTitle}" to General Schedule (${presetSlots.length} slots)`);
     } else if (slotConfigMode === 'day') {
       const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: presetSlots };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (!newScheduleDays.includes(selectedScheduleDay)) {
+        newScheduleDays.push(selectedScheduleDay);
+      }
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
       showToast(`Applied "${presetTitle}" to ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} (${presetSlots.length} slots)`);
     } else if (slotConfigMode === 'date') {
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: presetSlots };
@@ -1260,28 +1535,50 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   // Day-wise specific helpers
-  const handleToggleDayOff = async () => {
+  const handleToggleDayOff = async (targetDay) => {
+    const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
     const docId = activeDoctor?.id || activeDoctor?._id;
-    const isCurrentlyOff = profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off';
+    const currentDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const isCurrentlyOff = isDayOff(dayKey);
+
     const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
+    let newScheduleDays = [...currentDays];
+
     if (isCurrentlyOff) {
-      delete newDayWise[selectedScheduleDay];
-      showToast(`${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} marked Open (Using General Slots)`);
+      delete newDayWise[dayKey];
+      if (!newScheduleDays.includes(dayKey)) {
+        newScheduleDays.push(dayKey);
+      }
+      // Populate with existing baseline slots or standard slots so doctor immediately sees & can customize slots
+      const existing = Array.isArray(profileForm.dayWiseSlots?.[dayKey]) ? profileForm.dayWiseSlots[dayKey] : null;
+      if (!existing || existing.length === 0) {
+        const baselineSlots = Array.isArray(profileForm.availableSlots) && profileForm.availableSlots.length > 0
+          ? [...profileForm.availableSlots]
+          : ['09:00 AM', '10:00 AM', '11:00 AM', '04:00 PM', '05:00 PM', '06:00 PM'];
+        newDayWise[dayKey] = baselineSlots;
+      }
+      showToast(`${DAY_NAME_MAP[dayKey] || dayKey} marked Open & Active!`);
     } else {
-      newDayWise[selectedScheduleDay] = 'off';
-      showToast(`${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} marked Closed / Off`);
+      newDayWise[dayKey] = 'off';
+      newScheduleDays = newScheduleDays.filter(d => d !== dayKey);
+      showToast(`${DAY_NAME_MAP[dayKey] || dayKey} marked Closed / Off`);
     }
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
   };
 
-  const handleResetDayToDefault = async () => {
+  const handleResetDayToDefault = async (targetDay) => {
+    const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
     const docId = activeDoctor?.id || activeDoctor?._id;
     const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-    delete newDayWise[selectedScheduleDay];
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
-    showToast(`${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} reset to General Default Schedule`);
+    delete newDayWise[dayKey];
+    let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (!newScheduleDays.includes(dayKey)) {
+      newScheduleDays.push(dayKey);
+    }
+    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+    showToast(`${DAY_NAME_MAP[dayKey] || dayKey} reset to General Default Schedule`);
   };
 
   const handleCopyDayToAllDays = async () => {
@@ -1292,8 +1589,9 @@ const DoctorDashboard = ({ onNavigate }) => {
     DAYS_LIST.forEach(d => {
       newDayWise[d] = [...currentSlots];
     });
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, availableSlots: [...currentSlots] }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, availableSlots: [...currentSlots] });
+    const allWorkingDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, availableSlots: [...currentSlots], scheduleDays: allWorkingDays }));
+    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, availableSlots: [...currentSlots], scheduleDays: allWorkingDays });
     showToast(`Copied ${currentSlots.length} slots to all days of the week!`);
   };
 
@@ -1321,6 +1619,87 @@ const DoctorDashboard = ({ onNavigate }) => {
     setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
     if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
     showToast(`Date ${dateKey} reset to standard schedule`);
+  };
+
+  // Planned Leave / Multi-day Off Handlers
+  const handleApplyDateRangeLeave = async (e) => {
+    e?.preventDefault();
+    if (!leaveStartDate || !leaveEndDate) {
+      showToast('Please select both Start Date and End Date');
+      return;
+    }
+    const start = new Date(leaveStartDate + 'T00:00:00');
+    const end = new Date(leaveEndDate + 'T00:00:00');
+    if (end < start) {
+      showToast('End Date must be on or after Start Date');
+      return;
+    }
+
+    const docId = activeDoctor?.id || activeDoctor?._id;
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
+
+    const curr = new Date(start);
+    let count = 0;
+    while (curr <= end && count < 60) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${d}`;
+      newDateWise[dateStr] = 'off';
+      curr.setDate(curr.getDate() + 1);
+      count++;
+    }
+
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+    if (docId) {
+      await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    }
+    showToast(`Marked ${count} day(s) off from ${leaveStartDate} to ${leaveEndDate}!`);
+  };
+
+  const handleApplyWeeklyDaysOffPreset = async (presetType) => {
+    const docId = activeDoctor?.id || activeDoctor?._id;
+    let newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
+
+    if (presetType === 'weekend') {
+      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+      newDayWise['Sat'] = 'off';
+      newDayWise['Sun'] = 'off';
+      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(d => {
+        if (newDayWise[d] === 'off') delete newDayWise[d];
+      });
+      showToast('Set Weekend Off (Saturday & Sunday Closed)');
+    } else if (presetType === 'sunday') {
+      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      newDayWise['Sun'] = 'off';
+      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
+        if (newDayWise[d] === 'off') delete newDayWise[d];
+      });
+      showToast('Set Sunday Only Off (Monday - Saturday Working)');
+    } else if (presetType === 'all_working') {
+      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      DAYS_LIST.forEach(d => {
+        if (newDayWise[d] === 'off') delete newDayWise[d];
+      });
+      showToast('All 7 Days Marked Working (No Days Off)');
+    }
+
+    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+    if (docId) {
+      await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+    }
+  };
+
+  const handleRemoveDateOff = async (dateStr) => {
+    const docId = activeDoctor?.id || activeDoctor?._id;
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
+    delete newDateWise[dateStr];
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+    if (docId) {
+      await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    }
+    showToast(`Removed leave for ${dateStr} (Restored regular schedule)`);
   };
 
   const handleSlotDurationChange = async (durationMinutes) => {
@@ -1418,10 +1797,12 @@ const DoctorDashboard = ({ onNavigate }) => {
       tags: Array.isArray(profileForm.tags) ? profileForm.tags : [],
       reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : (Array.isArray(profileForm.reels) ? profileForm.reels : []),
       youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : (Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []),
-      availableDays: profileForm.availableDays || 'Mon - Sat (10am - 4pm)',
-      scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-      availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'],
-      slotDuration: Number(profileForm.slotDuration) || 20
+      availableDays: profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
+      scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : (activeDoctor.scheduleDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
+      availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : (activeDoctor.availableSlots || []),
+      slotDuration: Number(profileForm.slotDuration) || activeDoctor.slotDuration || 20,
+      dayWiseSlots: (profileForm.dayWiseSlots && typeof profileForm.dayWiseSlots === 'object') ? profileForm.dayWiseSlots : (activeDoctor.dayWiseSlots || {}),
+      dateWiseSlots: (profileForm.dateWiseSlots && typeof profileForm.dateWiseSlots === 'object') ? profileForm.dateWiseSlots : (activeDoctor.dateWiseSlots || {})
     };
 
     await updateDoctor(docId, payload);
@@ -1887,17 +2268,16 @@ const DoctorDashboard = ({ onNavigate }) => {
     return map;
   }, [appointments, consultationFee, resolveAppointmentDateKey]);
 
-  // Heatmap color generator based on doctor earnings & completed consultation count
+  // Heatmap color generator matching white theme contribution calendar
   const getHeatmapColor = React.useCallback((earnings, count = 0, isFuture = false) => {
-    if (isFuture) return '#f8fafc';
+    if (isFuture) return '#fafafa';
     const c = Number(count) || 0;
     const e = Number(earnings) || 0;
-    if (c === 0 && e === 0) return '#f1f5f9';
-    if (c === 1 || e <= consultationFee) return '#bbf7d0'; // 1 consultation (mint)
-    if (c === 2 || e <= consultationFee * 2) return '#86efac'; // 2 consultations (light green)
-    if (c <= 4 || e <= consultationFee * 4) return '#4ade80'; // 3-4 consultations (medium green)
-    if (c <= 6 || e <= consultationFee * 6) return '#16a34a'; // 5-6 consultations (vibrant green)
-    return '#15803d'; // 7+ consultations (deep emerald green)
+    if (c === 0 && e === 0) return '#ebedf0'; // Empty day (clean light gray tile)
+    if (c === 1 || e <= consultationFee) return '#9be9a8'; // Level 1 (soft mint green)
+    if (c === 2 || e <= consultationFee * 2) return '#40c463'; // Level 2 (medium light green)
+    if (c <= 4 || e <= consultationFee * 4) return '#30a14e'; // Level 3 (vibrant green)
+    return '#216e39'; // Level 4 (deep emerald green)
   }, [consultationFee]);
 
   // 12-Week Timeline data (Mon to Sun rows, 12 week columns)
@@ -2285,23 +2665,20 @@ const DoctorDashboard = ({ onNavigate }) => {
           <div
             className={styles.kpiCard}
             onClick={() => setIsEarningsBreakdownOpen(true)}
-            style={{
-              background: '#f0fdf4',
-              border: '1.5px solid #86efac',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              position: 'relative'
-            }}
+            style={{ cursor: 'pointer' }}
             title="Click to view patient consultation fees breakdown"
           >
             <div className={`${styles.kpiIconWrap} ${styles.kpiEmerald}`}>
               <TrendingUp size={22} />
             </div>
             <div>
-              <span className={styles.kpiLabel} style={{ color: '#15803d', fontWeight: 700 }}>Amount Made Today</span>
-              <div className={styles.kpiValue} style={{ color: '#14532d', display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+              <span className={styles.kpiLabel}>Amount Made Today</span>
+              <div className={styles.kpiValue}>
                 ₹{amountMadeToday.toLocaleString('en-IN')}
               </div>
+              <span className={styles.kpiSub}>
+                Total earnings
+              </span>
             </div>
           </div>
 
@@ -2329,18 +2706,46 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
           </div>
 
-          <div className={styles.kpiCard}>
-            <div className={`${styles.kpiIconWrap} ${styles.kpiPurple}`}>
-              <Clock size={22} />
-            </div>
-            <div>
-              <span className={styles.kpiLabel}>Clinic Timings</span>
-              <div className={styles.kpiValue} style={{ fontSize: '1rem', marginTop: '4px' }}>
-                {activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'}
+          {(() => {
+            const rawTiming = String(activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)').trim();
+            let daysText = rawTiming;
+            let hoursText = null;
+
+            const parenMatch = rawTiming.match(/^(.*?)\s*\((.*?)\)$/);
+            if (parenMatch) {
+              daysText = parenMatch[1].trim();
+              hoursText = parenMatch[2].trim();
+            } else if (rawTiming.includes(':')) {
+              const parts = rawTiming.split(':');
+              daysText = parts[0].trim();
+              hoursText = parts.slice(1).join(':').trim();
+            }
+
+            const timingSub = hoursText || `${activeDoctor.slotDuration || 20} mins slot`;
+
+            return (
+              <div className={styles.kpiCard}>
+                <div className={`${styles.kpiIconWrap} ${styles.kpiPurple}`}>
+                  <Clock size={22} />
+                </div>
+                <div>
+                  <span className={styles.kpiLabel}>Clinic Timings</span>
+                  <div
+                    className={styles.kpiValue}
+                    title={rawTiming}
+                  >
+                    {daysText}
+                  </div>
+                  <span 
+                    className={styles.kpiSub} 
+                    title={`${daysText} (${timingSub}) • OPD Slot: ${activeDoctor.slotDuration || 20} mins`}
+                  >
+                    {timingSub}
+                  </span>
+                </div>
               </div>
-              <span className={styles.kpiSub}>OPD Slot: {activeDoctor.slotDuration || 20} mins</span>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
         {/* REAL-TIME DOCTOR EARNINGS HEATMAP */}
@@ -2359,14 +2764,14 @@ const DoctorDashboard = ({ onNavigate }) => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
               {/* Year Selector Control (Heat.js style) */}
-              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#0f172a', borderRadius: '8px', padding: '2px', border: '1px solid #1e293b' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f8fafc', borderRadius: '8px', padding: '2px', border: '1px solid #e2e8f0' }}>
                 <button
                   type="button"
                   onClick={() => setSelectedHeatmapYear(y => y - 1)}
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: '#94a3b8',
+                    color: '#64748b',
                     cursor: 'pointer',
                     padding: '4px 6px',
                     display: 'flex',
@@ -2377,7 +2782,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 >
                   <ChevronLeft size={15} />
                 </button>
-                <span style={{ color: '#ffffff', fontWeight: 800, fontSize: '0.80rem', padding: '0 8px', letterSpacing: '0.02em' }}>
+                <span style={{ color: '#0f172a', fontWeight: 800, fontSize: '0.80rem', padding: '0 8px', letterSpacing: '0.02em' }}>
                   {heatmapYearData.year}
                 </span>
                 <button
@@ -2387,7 +2792,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                   style={{
                     background: 'transparent',
                     border: 'none',
-                    color: heatmapYearData.year >= currentPcDate.getFullYear() ? '#475569' : '#94a3b8',
+                    color: heatmapYearData.year >= currentPcDate.getFullYear() ? '#cbd5e1' : '#64748b',
                     cursor: heatmapYearData.year >= currentPcDate.getFullYear() ? 'not-allowed' : 'pointer',
                     padding: '4px 6px',
                     display: 'flex',
@@ -2462,7 +2867,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 onClick={() => setIsHeatmapExpanded(!isHeatmapExpanded)}
                 style={{
                   background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
+                  border: '1px solid #e2e8f0',
                   borderRadius: '8px',
                   padding: '5px 10px',
                   fontSize: '0.76rem',
@@ -2571,7 +2976,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                                       className={`${styles.heatmapCell} ${cell.isToday ? styles.heatmapCellToday : ''} ${isSelected ? styles.heatmapCellActive : ''}`}
                                       style={{
                                         background: bgColor,
-                                        cursor: 'pointer'
+                                        cursor: 'pointer',
+                                        outline: 'none'
                                       }}
                                       onClick={() => setSelectedHeatmapCell(cell)}
                                       title={`${cell.formattedDate}\n₹${cell.earnings.toLocaleString('en-IN')} Earned\n${cell.count} Completed Consultation${cell.count === 1 ? '' : 's'}${cell.isToday ? ' (Today)' : ''}`}
@@ -2619,8 +3025,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                                 <div
                                   key={dIdx}
                                   style={{
-                                    width: '16px',
-                                    height: '16px',
+                                    width: '12px',
+                                    height: '12px',
                                     visibility: 'hidden',
                                     pointerEvents: 'none'
                                   }}
@@ -2636,7 +3042,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                                 className={`${styles.heatmapCell} ${cell.isToday ? styles.heatmapCellToday : ''} ${isSelected ? styles.heatmapCellActive : ''}`}
                                 style={{
                                   background: bgColor,
-                                  cursor: 'pointer'
+                                  cursor: 'pointer',
+                                  outline: 'none'
                                 }}
                                 onClick={() => setSelectedHeatmapCell(cell)}
                                 title={`${cell.formattedDate}\n₹${cell.earnings.toLocaleString('en-IN')} Earned\n${cell.count} Completed Consultation${cell.count === 1 ? '' : 's'}${cell.isToday ? ' (Today)' : ''}`}
@@ -2652,20 +3059,20 @@ const DoctorDashboard = ({ onNavigate }) => {
 
               {/* VIEW 2: CURRENT MONTH CALENDAR VIEW */}
               {heatmapView === 'month' && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
+                <div style={{ background: '#181d24', border: '1px solid #272f3d', borderRadius: '12px', padding: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <h4 style={{ margin: 0, fontSize: '0.94rem', color: '#0f172a', fontWeight: 700 }}>
-                      <CalendarDays size={16} color="#2563eb" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
+                    <h4 style={{ margin: 0, fontSize: '0.94rem', color: '#ffffff', fontWeight: 700 }}>
+                      <CalendarDays size={16} color="#38bdf8" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
                       {heatmapMonthData.monthName} Consultation Earnings
                     </h4>
-                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                    <span style={{ fontSize: '0.76rem', color: '#8b949e' }}>
                       Click on any date to inspect earnings breakdown
                     </span>
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center' }}>
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(dName => (
-                      <div key={dName} style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', paddingBottom: '4px' }}>
+                      <div key={dName} style={{ fontSize: '0.72rem', fontWeight: 700, color: '#8b949e', paddingBottom: '4px' }}>
                         {dName}
                       </div>
                     ))}
@@ -2676,7 +3083,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       }
                       const isSelected = selectedHeatmapCell?.dateStr === cell.dateStr;
                       const isFuture = cell.isFuture;
-                      const bgColor = isFuture ? '#fafafa' : getHeatmapColor(cell.earnings, cell.count, false);
+                      const bgColor = isFuture ? '#1a2029' : getHeatmapColor(cell.earnings, cell.count, false);
                       return (
                         <div
                           key={idx}
@@ -2685,7 +3092,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             minHeight: '54px',
                             borderRadius: '8px',
                             background: bgColor,
-                            border: isSelected ? '2px solid #0f172a' : (isFuture ? '1px dashed #e2e8f0' : '1px solid rgba(0,0,0,0.08)'),
+                            border: isSelected ? '2px solid #56e36d' : (isFuture ? '1px dashed #2d3644' : '1px solid #30363d'),
                             padding: '4px 6px',
                             cursor: isFuture ? 'default' : 'pointer',
                             opacity: isFuture ? 0.45 : 1,
@@ -2695,24 +3102,24 @@ const DoctorDashboard = ({ onNavigate }) => {
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             transition: 'all 0.15s ease',
-                            boxShadow: isSelected ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'
+                            boxShadow: isSelected ? '0 0 12px rgba(86, 227, 109, 0.35)' : 'none'
                           }}
                           title={isFuture ? `${cell.formattedDate} (Upcoming)` : `${cell.formattedDate}: ₹${cell.earnings} (${cell.count} completed)`}
                         >
                           <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: cell.isToday ? '#15803d' : (isFuture ? '#94a3b8' : '#334155') }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: cell.isToday ? '#4ade80' : (isFuture ? '#64748b' : '#c9d1d9') }}>
                               {cell.dayNum}
                             </span>
                             {cell.isToday && (
-                              <span style={{ fontSize: '0.62rem', fontWeight: 800, background: '#16a34a', color: '#fff', borderRadius: '4px', padding: '0 3px' }}>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 800, background: '#238636', color: '#fff', borderRadius: '4px', padding: '0 3px' }}>
                                 Today
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: !isFuture && cell.earnings > 0 ? '#14532d' : '#94a3b8' }}>
+                          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: !isFuture && cell.earnings > 0 ? '#4ade80' : '#64748b' }}>
                             {!isFuture && cell.earnings > 0 ? `₹${cell.earnings}` : '—'}
                           </div>
-                          <div style={{ fontSize: '0.64rem', color: isFuture ? '#94a3b8' : (cell.count > 0 ? '#166534' : '#94a3b8'), fontWeight: 600 }}>
+                          <div style={{ fontSize: '0.64rem', color: isFuture ? '#64748b' : (cell.count > 0 ? '#86efac' : '#64748b'), fontWeight: 600 }}>
                             {isFuture ? 'Upcoming' : (cell.count > 0 ? `${cell.count} visit${cell.count === 1 ? '' : 's'}` : '0 visits')}
                           </div>
                         </div>
@@ -2732,16 +3139,18 @@ const DoctorDashboard = ({ onNavigate }) => {
 
                 return (
                   <div style={{
+                    position: 'relative',
                     background: '#f0fdf4',
                     border: '1.5px solid #86efac',
                     borderRadius: '12px',
-                    padding: '12px 16px',
+                    padding: '12px 42px 12px 16px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     flexWrap: 'wrap',
                     gap: '12px',
-                    animation: 'fadeIn 0.2s ease'
+                    animation: 'fadeIn 0.2s ease',
+                    color: '#0f172a'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803d', fontWeight: 800, fontSize: '0.92rem' }}>
@@ -2757,7 +3166,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                           )}
                         </div>
                         <div style={{ fontSize: '0.78rem', color: '#166534', marginTop: '2px' }}>
-                          Total Revenue: <strong>₹{displayEarnings.toLocaleString('en-IN')}</strong> ({displayCount} completed consultation{displayCount === 1 ? '' : 's'} × ₹{consultationFee})
+                          Total Revenue: <strong>₹{displayEarnings.toLocaleString('en-IN')}</strong>
                         </div>
                       </div>
                     </div>
@@ -2771,14 +3180,30 @@ const DoctorDashboard = ({ onNavigate }) => {
                             style={{
                               background: '#ffffff',
                               border: '1px solid #86efac',
-                              padding: '3px 8px',
+                              padding: '3px 9px',
                               borderRadius: '6px',
                               fontSize: '0.74rem',
                               fontWeight: 600,
-                              color: '#15803d'
+                              color: '#15803d',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
                             }}
                           >
-                            {p.name} ({p.time})
+                            <span>{p.name}</span>
+                            <span style={{ color: '#64748b', fontWeight: 500 }}>({p.time})</span>
+                            <span
+                              style={{
+                                background: '#dcfce7',
+                                color: '#15803d',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontWeight: 700,
+                                fontSize: '0.72rem'
+                              }}
+                            >
+                              ₹{Number(p.fee || consultationFee).toLocaleString('en-IN')}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -2792,18 +3217,34 @@ const DoctorDashboard = ({ onNavigate }) => {
                       type="button"
                       onClick={() => setSelectedHeatmapCell(null)}
                       style={{
-                        background: 'transparent',
-                        border: 'none',
+                        position: 'absolute',
+                        top: '10px',
+                        right: '10px',
+                        background: '#ffffff',
+                        border: '1px solid #bbf7d0',
                         color: '#64748b',
                         cursor: 'pointer',
                         padding: '4px',
                         display: 'flex',
                         alignItems: 'center',
-                        borderRadius: '6px'
+                        justifyContent: 'center',
+                        borderRadius: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = '#ef4444';
+                        e.currentTarget.style.borderColor = '#fca5a5';
+                        e.currentTarget.style.background = '#fef2f2';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = '#64748b';
+                        e.currentTarget.style.borderColor = '#bbf7d0';
+                        e.currentTarget.style.background = '#ffffff';
                       }}
                       title="Close details"
                     >
-                      <X size={16} />
+                      <X size={15} />
                     </button>
                   </div>
                 );
@@ -2818,13 +3259,12 @@ const DoctorDashboard = ({ onNavigate }) => {
                 <div className={styles.heatmapLegend}>
                   <span>Earnings:</span>
                   <span>₹0</span>
-                  <div className={styles.legendBox} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0' }} title="₹0 (No completed patients)" />
-                  <div className={styles.legendBox} style={{ background: '#bbf7d0' }} title={`₹${consultationFee} (1 patient)`} />
-                  <div className={styles.legendBox} style={{ background: '#86efac' }} title={`₹${consultationFee * 2} (2 patients)`} />
-                  <div className={styles.legendBox} style={{ background: '#4ade80' }} title={`₹${consultationFee * 4} (3-4 patients)`} />
-                  <div className={styles.legendBox} style={{ background: '#16a34a' }} title={`₹${consultationFee * 6} (5-6 patients)`} />
-                  <div className={styles.legendBox} style={{ background: '#15803d' }} title={`₹${consultationFee * 7}+ (Peak day)`} />
-                  <span>₹{consultationFee * 7}+</span>
+                  <div className={styles.legendBox} style={{ background: '#ebedf0', border: '1px solid #e2e8f0' }} title="₹0 (No completed patients)" />
+                  <div className={styles.legendBox} style={{ background: '#9be9a8' }} title={`₹${consultationFee} (1 patient)`} />
+                  <div className={styles.legendBox} style={{ background: '#40c463' }} title={`₹${consultationFee * 2} (2 patients)`} />
+                  <div className={styles.legendBox} style={{ background: '#30a14e' }} title={`₹${consultationFee * 4} (3-4 patients)`} />
+                  <div className={styles.legendBox} style={{ background: '#216e39' }} title={`₹${consultationFee * 5}+ (Peak day)`} />
+                  <span>₹{consultationFee * 5}+</span>
                 </div>
               </div>
             </>
@@ -3390,30 +3830,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                       These badges appear under your doctor name on your public profile in real-time (e.g. MBBS, Interventional Cardiologist, Angioplasty Specialist). Add or remove badges as needed.
                     </p>
                   </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={handleResetDefaultTags}
-                      style={{
-                        padding: '6px 12px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        background: '#f8fafc',
-                        color: '#475569',
-                        fontSize: '0.8rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px'
-                      }}
-                      title="Reset badges to default clinical recommendations"
-                    >
-                      <RotateCcw size={13} />
-                      Reset to Defaults
-                    </button>
-                  </div>
                 </div>
 
                 {/* Badges Chips List */}
@@ -3471,7 +3887,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     ))
                   ) : (
                     <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '6px 0' }}>
-                      No badges added yet. Type a badge name below or click "Reset to Defaults".
+                      No badges added yet. Type a badge name below to add one.
                     </div>
                   )}
                 </div>
@@ -3609,130 +4025,235 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* SCHEDULE MODE SELECTOR TABS: ALL DAYS | DAY-WISE | DATE-WISE */}
-                <div style={{ background: '#f1f5f9', padding: '6px', borderRadius: '12px', marginBottom: '18px', display: 'flex', gap: '6px', border: '1px solid #cbd5e1' }}>
-                  <button
-                    type="button"
-                    onClick={() => setSlotConfigMode('all')}
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: slotConfigMode === 'all' ? '#ffffff' : 'transparent',
-                      color: slotConfigMode === 'all' ? '#1d4ed8' : '#64748b',
-                      fontWeight: 700,
-                      fontSize: '0.84rem',
-                      cursor: 'pointer',
-                      boxShadow: slotConfigMode === 'all' ? '0 2px 5px rgba(37,99,235,0.12)' : 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Clock size={16} color={slotConfigMode === 'all' ? '#2563eb' : '#64748b'} />
-                    <span>General (All Days)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSlotConfigMode('day')}
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: slotConfigMode === 'day' ? '#ffffff' : 'transparent',
-                      color: slotConfigMode === 'day' ? '#1d4ed8' : '#64748b',
-                      fontWeight: 700,
-                      fontSize: '0.84rem',
-                      cursor: 'pointer',
-                      boxShadow: slotConfigMode === 'day' ? '0 2px 5px rgba(37,99,235,0.12)' : 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <CalendarDays size={16} color={slotConfigMode === 'day' ? '#2563eb' : '#64748b'} />
-                    <span>Day-wise (Weekly)</span>
-                    {Object.keys(profileForm.dayWiseSlots || {}).length > 0 && (
-                      <span style={{ background: '#dbeafe', color: '#1e40af', padding: '1px 7px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 800 }}>
-                        {Object.keys(profileForm.dayWiseSlots || {}).length} custom
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSlotConfigMode('date')}
-                    style={{
-                      flex: 1,
-                      padding: '10px 14px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: slotConfigMode === 'date' ? '#ffffff' : 'transparent',
-                      color: slotConfigMode === 'date' ? '#1d4ed8' : '#64748b',
-                      fontWeight: 700,
-                      fontSize: '0.84rem',
-                      cursor: 'pointer',
-                      boxShadow: slotConfigMode === 'date' ? '0 2px 5px rgba(37,99,235,0.12)' : 'none',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <Calendar size={16} color={slotConfigMode === 'date' ? '#2563eb' : '#64748b'} />
-                    <span>Date-wise (Specific Dates)</span>
-                    {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
-                      <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 7px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 800 }}>
-                        {Object.keys(profileForm.dateWiseSlots || {}).length} dates
-                      </span>
-                    )}
-                  </button>
+                {/* UNIFIED SCHEDULE SELECTOR: BASELINE | 7 DAY BUTTONS | DATE OVERRIDE */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CalendarDays size={18} color="#2563eb" />
+                      <span>Select Day to View & Customize Slots:</span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => setSlotConfigMode('all')}
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: '8px',
+                          border: slotConfigMode === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          background: slotConfigMode === 'all' ? '#eff6ff' : '#ffffff',
+                          color: slotConfigMode === 'all' ? '#1d4ed8' : '#475569',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Clock size={14} color={slotConfigMode === 'all' ? '#2563eb' : '#64748b'} />
+                        <span>🌐 Baseline (All Days)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSlotConfigMode('date')}
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: '8px',
+                          border: slotConfigMode === 'date' ? '2px solid #d97706' : '1px solid #cbd5e1',
+                          background: slotConfigMode === 'date' ? '#fffbeb' : '#ffffff',
+                          color: slotConfigMode === 'date' ? '#b45309' : '#475569',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <Calendar size={14} color={slotConfigMode === 'date' ? '#d97706' : '#64748b'} />
+                        <span>📅 Specific Date Override</span>
+                        {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
+                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 800 }}>
+                            {Object.keys(profileForm.dateWiseSlots || {}).length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSlotConfigMode('leave')}
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: '8px',
+                          border: slotConfigMode === 'leave' ? '2px solid #ef4444' : '1px solid #cbd5e1',
+                          background: slotConfigMode === 'leave' ? '#fff1f2' : '#ffffff',
+                          color: slotConfigMode === 'leave' ? '#b91c1c' : '#475569',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <AlertTriangle size={14} color={slotConfigMode === 'leave' ? '#ef4444' : '#64748b'} />
+                        <span>🏖️ Mark Days Off & Leave</span>
+                        {(DAYS_LIST.filter(d => isDayOff(d)).length > 0 || Object.values(profileForm.dateWiseSlots || {}).filter(v => v === 'off' || v?.isOff === true).length > 0) && (
+                          <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '1px 7px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 800 }}>
+                            {DAYS_LIST.filter(d => isDayOff(d)).length + Object.values(profileForm.dateWiseSlots || {}).filter(v => v === 'off' || v?.isOff === true).length} off
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 7 Day Tabs: Mon, Tue, Wed, Thu, Fri, Sat, Sun */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '8px' }}>
+                    {DAYS_LIST.map(dayKey => {
+                      const isSelected = slotConfigMode === 'day' && selectedScheduleDay === dayKey;
+                      const dayConfig = profileForm.dayWiseSlots?.[dayKey];
+                      const isDayOffVal = isDayOff(dayKey);
+                      const hasCustomSlots = !isDayOffVal && (Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots));
+                      const slotCount = isDayOffVal
+                        ? 0
+                        : (hasCustomSlots 
+                            ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) 
+                            : (profileForm.availableSlots?.length || 0));
+
+                      return (
+                        <button
+                          key={dayKey}
+                          type="button"
+                          onClick={() => selectDayForSlots(dayKey)}
+                          style={{
+                            padding: '10px 8px',
+                            borderRadius: '10px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '4px',
+                            border: isSelected 
+                              ? '2px solid #2563eb' 
+                              : (isDayOffVal ? '1.5px solid #f87171' : (hasCustomSlots ? '1.5px solid #93c5fd' : '1px solid #e2e8f0')),
+                            background: isSelected 
+                              ? '#eff6ff' 
+                              : (isDayOffVal ? '#fff1f2' : (hasCustomSlots ? '#f8faff' : '#ffffff')),
+                            color: isSelected ? '#1d4ed8' : '#1e293b',
+                            boxShadow: isSelected ? '0 3px 8px rgba(37,99,235,0.18)' : '0 1px 2px rgba(0,0,0,0.02)',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontWeight: 800, fontSize: '0.86rem' }}>
+                              {DAY_NAME_MAP[dayKey] || dayKey}
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 700,
+                            padding: '2px 7px',
+                            borderRadius: '6px',
+                            background: isDayOffVal ? '#fee2e2' : (hasCustomSlots ? '#dbeafe' : '#f1f5f9'),
+                            color: isDayOffVal ? '#b91c1c' : (hasCustomSlots ? '#1d4ed8' : '#64748b')
+                          }}>
+                            {isDayOffVal ? 'Closed / Off' : (hasCustomSlots ? `⚡ ${slotCount} custom` : `${slotCount} slots`)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* MODE 1: ALL WORKING DAYS */}
                 {slotConfigMode === 'all' && (
                   <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                    <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
-                      Active Working Days (Click to toggle on / off)
-                    </label>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                      <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                        Active Working Days & Quick Day-Slot Selection:
+                      </label>
+                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                        Click any day below to configure its slots specifically
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+                      {DAYS_LIST.map(day => {
                         const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                        const isActive = currentDays.includes(day);
+                        const dayConfig = profileForm.dayWiseSlots?.[day];
+                        const isOff = dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(day) && dayConfig === undefined);
+                        const hasCustom = Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots);
+                        const count = isOff ? 0 : (hasCustom ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) : (profileForm.availableSlots?.length || 0));
+
                         return (
-                          <button
+                          <div
                             key={day}
-                            type="button"
-                            onClick={() => handleToggleScheduleDay(day)}
                             style={{
-                              display: 'inline-flex',
+                              display: 'flex',
                               alignItems: 'center',
-                              gap: '6px',
-                              padding: '8px 14px',
+                              justifyContent: 'space-between',
+                              padding: '8px 12px',
                               borderRadius: '8px',
-                              fontWeight: 700,
-                              fontSize: '0.82rem',
-                              cursor: 'pointer',
-                              border: isActive ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                              background: isActive ? '#eff6ff' : '#ffffff',
-                              color: isActive ? '#1d4ed8' : '#64748b',
+                              border: !isOff ? '1.5px solid #bfdbfe' : '1px solid #e2e8f0',
+                              background: !isOff ? '#ffffff' : '#f8fafc',
                               transition: 'all 0.15s ease'
                             }}
                           >
-                            {isActive ? <Check size={14} color="#2563eb" /> : <X size={14} color="#94a3b8" />}
-                            <span>{day === 'Mon' ? 'Monday' : day === 'Tue' ? 'Tuesday' : day === 'Wed' ? 'Wednesday' : day === 'Thu' ? 'Thursday' : day === 'Fri' ? 'Friday' : day === 'Sat' ? 'Saturday' : 'Sunday'}</span>
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleScheduleDay(day)}
+                              title={!isOff ? 'Click to mark day Closed' : 'Click to mark day Open'}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: 0,
+                                fontWeight: 700,
+                                fontSize: '0.82rem',
+                                color: !isOff ? '#1e3a8a' : '#94a3b8'
+                              }}
+                            >
+                              {!isOff ? <Check size={16} color="#2563eb" /> : <X size={16} color="#94a3b8" />}
+                              <span>{DAY_NAME_MAP[day]}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => selectDayForSlots(day)}
+                              title={`Configure slots specifically for ${DAY_NAME_MAP[day]}`}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                background: hasCustom ? '#dbeafe' : (!isOff ? '#eff6ff' : '#f1f5f9'),
+                                color: hasCustom ? '#1d4ed8' : (!isOff ? '#2563eb' : '#64748b'),
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '4px 8px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <span>{isOff ? 'Closed' : `${count} slots`}</span>
+                              <span>⚙️</span>
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
-                    <div style={{ marginTop: '8px', fontSize: '0.76rem', color: '#64748b' }}>
-                      Days checked will display available appointment slots to patients. Unchecked days will show "Clinic Closed / Off".
+                    <div style={{ marginTop: '10px', fontSize: '0.76rem', color: '#64748b' }}>
+                      💡 These baseline slots apply to all active days. Click on any specific day (e.g. <strong>Monday</strong>) above or beside to set custom morning/evening timings for that day.
                     </div>
                   </div>
                 )}
@@ -3742,13 +4263,33 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <div style={{ background: '#f8fafc', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: '#1e3a8a', margin: 0 }}>
-                          Select Day of Week to Customize
+                        <label style={{ display: 'block', fontSize: '0.92rem', fontWeight: 800, color: '#1e3a8a', margin: 0 }}>
+                          🗓️ {DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s Consultation Schedule
                         </label>
-                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          Set custom morning/evening timings for specific days or mark individual weekdays as clinic holidays.
+                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                          Set custom morning/evening slots for {DAY_NAME_MAP[selectedScheduleDay]}s or mark it as doctor off day.
                         </span>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSlotConfigMode('all')}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #cbd5e1',
+                          color: '#475569',
+                          padding: '5px 10px',
+                          borderRadius: '6px',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <span>← Back to General Baseline</span>
+                      </button>
                     </div>
 
                     {/* Day selector pills */}
@@ -3756,11 +4297,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                       {DAYS_LIST.map(dayKey => {
                         const isSelected = selectedScheduleDay === dayKey;
                         const dayConfig = profileForm.dayWiseSlots?.[dayKey];
-                        const isDayOff = dayConfig === 'off' || dayConfig?.isOff === true;
-                        const hasCustomSlots = Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots);
-                        const slotCount = hasCustomSlots 
-                          ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) 
-                          : (profileForm.availableSlots?.length || 0);
+                        const isOff = isDayOff(dayKey);
+                        const hasCustomSlots = !isOff && (Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots));
+                        const slotCount = isOff 
+                          ? 0 
+                          : (hasCustomSlots 
+                              ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) 
+                              : (profileForm.availableSlots?.length || 0));
 
                         return (
                           <button
@@ -3772,8 +4315,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                               padding: '10px 12px',
                               borderRadius: '8px',
                               cursor: 'pointer',
-                              border: isSelected ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                              background: isSelected ? '#ffffff' : (isDayOff ? '#fff1f2' : (hasCustomSlots ? '#eff6ff' : '#ffffff')),
+                              border: isSelected ? '2px solid #2563eb' : (isOff ? '1px dashed #fca5a5' : '1px solid #cbd5e1'),
+                              background: isSelected ? '#ffffff' : (isOff ? '#fff1f2' : (hasCustomSlots ? '#eff6ff' : '#ffffff')),
                               color: isSelected ? '#1e40af' : '#334155',
                               display: 'flex',
                               flexDirection: 'column',
@@ -3789,10 +4332,10 @@ const DoctorDashboard = ({ onNavigate }) => {
                               fontWeight: 700,
                               padding: '2px 6px',
                               borderRadius: '4px',
-                              background: isDayOff ? '#fee2e2' : (hasCustomSlots ? '#dbeafe' : '#f1f5f9'),
-                              color: isDayOff ? '#b91c1c' : (hasCustomSlots ? '#1d4ed8' : '#64748b')
+                              background: isOff ? '#fee2e2' : (hasCustomSlots ? '#dbeafe' : '#f1f5f9'),
+                              color: isOff ? '#b91c1c' : (hasCustomSlots ? '#1d4ed8' : '#64748b')
                             }}>
-                              {isDayOff ? 'Closed / Off' : (hasCustomSlots ? `${slotCount} Custom` : `General (${slotCount})`)}
+                              {isOff ? 'Closed / Off' : (hasCustomSlots ? `${slotCount} Custom` : `General (${slotCount})`)}
                             </span>
                           </button>
                         );
@@ -3810,22 +4353,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                           fontWeight: 700,
                           padding: '3px 8px',
                           borderRadius: '6px',
-                          background: profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? '#fee2e2' : (profileForm.dayWiseSlots?.[selectedScheduleDay] ? '#dbeafe' : '#f1f5f9'),
-                          color: profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? '#b91c1c' : (profileForm.dayWiseSlots?.[selectedScheduleDay] ? '#1d4ed8' : '#475569')
+                          background: isDayOff(selectedScheduleDay) ? '#fee2e2' : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? '#dbeafe' : '#f1f5f9'),
+                          color: isDayOff(selectedScheduleDay) ? '#b91c1c' : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? '#1d4ed8' : '#475569')
                         }}>
-                          {profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off'
+                          {isDayOff(selectedScheduleDay)
                             ? 'Marked OFF / Clinic Closed'
-                            : (profileForm.dayWiseSlots?.[selectedScheduleDay] ? 'Custom Schedule Active' : 'Using General Default Slots')}
+                            : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? 'Custom Schedule Active' : 'Using General Default Slots')}
                         </span>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <button
                           type="button"
-                          onClick={handleToggleDayOff}
+                          onClick={() => handleToggleDayOff(selectedScheduleDay)}
                           style={{
-                            background: profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? '#10b981' : '#fee2e2',
-                            color: profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? '#ffffff' : '#b91c1c',
+                            background: isDayOff(selectedScheduleDay) ? '#10b981' : '#fee2e2',
+                            color: isDayOff(selectedScheduleDay) ? '#ffffff' : '#b91c1c',
                             border: 'none',
                             padding: '6px 12px',
                             borderRadius: '6px',
@@ -3837,8 +4380,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                             gap: '4px'
                           }}
                         >
-                          {profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? <Check size={12} /> : <X size={12} />}
-                          {profileForm.dayWiseSlots?.[selectedScheduleDay] === 'off' ? `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Open` : `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Off / Closed`}
+                          {isDayOff(selectedScheduleDay) ? <Check size={12} /> : <X size={12} />}
+                          {isDayOff(selectedScheduleDay) ? `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Open` : `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Off / Closed`}
                         </button>
 
                         <button
@@ -4099,7 +4642,412 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 )}
 
+                {/* MODE 4: DAYS OFF & PLANNED LEAVES MANAGER */}
+                {slotConfigMode === 'leave' && (
+                  <div style={{ background: '#f8fafc', border: '1px solid #fecdd3', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
+                    {/* Section Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid #fecdd3' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '1.2rem' }}>🏖️</span>
+                          <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#991b1b' }}>
+                            Doctor Days Off & Planned Leaves Manager
+                          </h4>
+                          <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
+                            Live Booking Protection
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                          Mark recurring weekly days off (e.g. Sunday or Weekend), or schedule specific multi-day vacation leaves. When marked off, patients cannot book appointments on those days.
+                        </p>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSlotConfigMode('day')}
+                          style={{
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            color: '#334155',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          <span>← Back to Weekly Slots</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* PART 1: WEEKLY RECURRING DAYS OFF */}
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '18px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                            📅 1. Recurring Weekly Days Off (Fixed Schedule)
+                          </label>
+                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            Toggle any day of the week to mark it permanently closed or open for consultations.
+                          </span>
+                        </div>
+
+                        {/* Quick Bulk Presets */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>Quick Presets:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyWeeklyDaysOffPreset('sunday')}
+                            style={{
+                              background: '#f1f5f9',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              color: '#334155',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            ☀️ Sunday Only Off
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyWeeklyDaysOffPreset('weekend')}
+                            style={{
+                              background: '#f1f5f9',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              color: '#334155',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🏖️ Weekend Off (Sat + Sun)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyWeeklyDaysOffPreset('all_working')}
+                            style={{
+                              background: '#ecfdf5',
+                              border: '1px solid #a7f3d0',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.74rem',
+                              fontWeight: 700,
+                              color: '#065f46',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            💼 All 7 Days Working
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 7 Days Cards */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                        {DAYS_LIST.map(dayKey => {
+                          const off = isDayOff(dayKey);
+                          return (
+                            <div
+                              key={dayKey}
+                              style={{
+                                background: off ? '#fff1f2' : '#f0fdf4',
+                                border: off ? '1.5px solid #fca5a5' : '1.5px solid #86efac',
+                                borderRadius: '8px',
+                                padding: '12px 10px',
+                                textAlign: 'center',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '8px',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: off ? '#991b1b' : '#166534' }}>
+                                {DAY_NAME_MAP[dayKey] || dayKey}
+                              </div>
+
+                              <span style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                background: off ? '#fee2e2' : '#dcfce7',
+                                color: off ? '#991b1b' : '#15803d'
+                              }}>
+                                {off ? '🔴 Closed / Day Off' : '🟢 Open / Working'}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDayOff(dayKey)}
+                                style={{
+                                  width: '100%',
+                                  marginTop: '4px',
+                                  background: off ? '#10b981' : '#fee2e2',
+                                  color: off ? '#ffffff' : '#b91c1c',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '5px 8px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                {off ? <Check size={12} /> : <X size={12} />}
+                                {off ? 'Mark Working' : 'Mark Day Off'}
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* PART 2: MULTI-DAY VACATION / DATE RANGE LEAVE PLANNER */}
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '18px' }}>
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                          ✈️ 2. Schedule Specific Dates Off / Vacation Leave (Single or Multi-Day)
+                        </label>
+                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                          Going on a vacation, attending a conference, or taking personal leave? Select start and end dates to block slots automatically.
+                        </span>
+                      </div>
+
+                      <form onSubmit={handleApplyDateRangeLeave} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'flex-end', background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                            From (Start Date):
+                          </label>
+                          <input
+                            type="date"
+                            value={leaveStartDate}
+                            min={new Date().toISOString().split('T')[0]}
+                            onChange={(e) => setLeaveStartDate(e.target.value)}
+                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                            To (End Date):
+                          </label>
+                          <input
+                            type="date"
+                            value={leaveEndDate}
+                            min={leaveStartDate || new Date().toISOString().split('T')[0]}
+                            onChange={(e) => setLeaveEndDate(e.target.value)}
+                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                            Leave Reason / Note (Optional):
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Vacation, Medical Conference"
+                            value={leaveNote}
+                            onChange={(e) => setLeaveNote(e.target.value)}
+                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', background: '#ffffff' }}
+                          />
+                        </div>
+
+                        <div>
+                          <button
+                            type="submit"
+                            style={{
+                              width: '100%',
+                              background: '#dc2626',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '8px 14px',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              boxShadow: '0 2px 4px rgba(220,38,38,0.2)'
+                            }}
+                          >
+                            <CalendarDays size={14} />
+                            <span>Mark Doctor On Leave</span>
+                          </button>
+                        </div>
+                      </form>
+
+                      {/* Quick helper buttons for dates */}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', alignSelf: 'center' }}>Quick Fill:</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const today = new Date().toISOString().split('T')[0];
+                            setLeaveStartDate(today);
+                            setLeaveEndDate(today);
+                          }}
+                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                        >
+                          Today Only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tom = new Date();
+                            tom.setDate(tom.getDate() + 1);
+                            const tomStr = tom.toISOString().split('T')[0];
+                            setLeaveStartDate(tomStr);
+                            setLeaveEndDate(tomStr);
+                          }}
+                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                        >
+                          Tomorrow Only
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            const day = d.getDay();
+                            const satDiff = (6 - day + 7) % 7;
+                            const sat = new Date(d);
+                            sat.setDate(d.getDate() + satDiff);
+                            const sun = new Date(sat);
+                            sun.setDate(sat.getDate() + 1);
+                            setLeaveStartDate(sat.toISOString().split('T')[0]);
+                            setLeaveEndDate(sun.toISOString().split('T')[0]);
+                          }}
+                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                        >
+                          Upcoming Weekend
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const d1 = new Date();
+                            const d2 = new Date();
+                            d2.setDate(d2.getDate() + 6);
+                            setLeaveStartDate(d1.toISOString().split('T')[0]);
+                            setLeaveEndDate(d2.toISOString().split('T')[0]);
+                          }}
+                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                        >
+                          Next 7 Days
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* PART 3: ACTIVE SCHEDULED LEAVES & BLOCKED DATES LIST */}
+                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                            📋 3. Currently Configured Specific Leaves & Closed Dates
+                          </label>
+                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            Dates where your clinic is marked closed. Click the red ✕ to cancel leave and reopen appointments.
+                          </span>
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const offDates = Object.entries(profileForm.dateWiseSlots || {})
+                          .filter(([_, val]) => val === 'off' || val?.isOff === true)
+                          .map(([d]) => d)
+                          .sort();
+
+                        if (offDates.length === 0) {
+                          return (
+                            <div style={{ textAlign: 'center', padding: '24px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                              <div style={{ fontSize: '1.2rem', marginBottom: '6px' }}>✨</div>
+                              <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155', marginBottom: '2px' }}>
+                                No Date-Specific Leaves Active
+                              </div>
+                              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                                Your clinic is open and accepting appointments on all your active weekly working days.
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
+                            {offDates.map(dateStr => {
+                              const dObj = new Date(dateStr + 'T00:00:00');
+                              const dayName = dObj.toLocaleDateString('en-US', { weekday: 'short' });
+                              const formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+                              return (
+                                <div
+                                  key={dateStr}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    background: '#fff1f2',
+                                    border: '1px solid #fecdd3',
+                                    borderRadius: '8px',
+                                    padding: '8px 12px'
+                                  }}
+                                >
+                                  <div>
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#991b1b' }}>
+                                      {formattedDate} ({dayName})
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 600 }}>
+                                      Clinic Closed / On Leave
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveDateOff(dateStr)}
+                                    title={`Cancel leave for ${dateStr} and reopen`}
+                                    style={{
+                                      background: '#fee2e2',
+                                      border: '1px solid #fca5a5',
+                                      color: '#ef4444',
+                                      borderRadius: '6px',
+                                      padding: '4px 8px',
+                                      fontSize: '0.72rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px'
+                                    }}
+                                  >
+                                    <X size={12} />
+                                    <span>Cancel</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+
                 {/* SUBSECTION: TIME SLOTS EDITOR FOR ACTIVE MODE */}
+                {slotConfigMode !== 'leave' && (
                 <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
                     <div>
@@ -4152,7 +5100,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                       </div>
                       <button
                         type="button"
-                        onClick={slotConfigMode === 'day' ? handleToggleDayOff : handleToggleDateOff}
+                        onClick={() => {
+                          if (slotConfigMode === 'day') {
+                            handleToggleDayOff(selectedScheduleDay);
+                          } else {
+                            handleToggleDateOff();
+                          }
+                        }}
                         style={{
                           background: '#10b981',
                           color: '#ffffff',
@@ -4390,6 +5344,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     </>
                   )}
                 </div>
+                )}
 
                 {/* SUBSECTION 3: SLOT DURATION & SUMMARY */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
@@ -5026,28 +5981,65 @@ const DoctorDashboard = ({ onNavigate }) => {
                           }}
                         >
                           {editingCareerExp.index === idx ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
                               <input
                                 type="text"
+                                placeholder="Role & Hospital (e.g. Senior Consultant - Apollo Hospital)"
                                 value={editingCareerExp.text}
-                                onChange={(e) => setEditingCareerExp({ index: idx, text: e.target.value })}
-                                style={{ flex: 1, padding: '4px 8px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #2563eb', outline: 'none' }}
+                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, text: e.target.value }))}
+                                style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #2563eb', outline: 'none' }}
                                 autoFocus
                               />
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateCareerExp(idx)}
-                                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditingCareerExp({ index: null, text: '' })}
-                                style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '4px 8px', cursor: 'pointer', fontSize: '0.78rem' }}
-                              >
-                                Cancel
-                              </button>
+                              <input
+                                type="text"
+                                placeholder="Start Year"
+                                value={editingCareerExp.startYear || ''}
+                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, startYear: e.target.value }))}
+                                style={{ width: '95px', padding: '6px 8px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
+                              />
+                              <input
+                                type="text"
+                                placeholder="End Year"
+                                value={editingCareerExp.isPresent ? 'Present' : (editingCareerExp.endYear || '')}
+                                disabled={!!editingCareerExp.isPresent}
+                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, endYear: e.target.value }))}
+                                style={{
+                                  width: '95px',
+                                  padding: '6px 8px',
+                                  fontSize: '0.82rem',
+                                  borderRadius: '6px',
+                                  border: '1px solid #cbd5e1',
+                                  outline: 'none',
+                                  background: editingCareerExp.isPresent ? '#f1f5f9' : '#ffffff',
+                                  color: editingCareerExp.isPresent ? '#059669' : '#0f172a',
+                                  fontWeight: editingCareerExp.isPresent ? 700 : 400
+                                }}
+                              />
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, color: '#1e293b' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!editingCareerExp.isPresent}
+                                  onChange={(e) => setEditingCareerExp(prev => ({ ...prev, isPresent: e.target.checked, endYear: e.target.checked ? '' : prev.endYear }))}
+                                  style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#2563eb' }}
+                                />
+                                <span>Present</span>
+                              </label>
+                              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateCareerExp(idx)}
+                                  style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCareerExp({ index: null, text: '', startYear: '', endYear: '', isPresent: false })}
+                                  style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.78rem' }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <>
@@ -5121,7 +6113,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
                                 <button
                                   type="button"
-                                  onClick={() => setEditingCareerExp({ index: idx, text: expRole })}
+                                  onClick={() => handleStartEditCareerExp(idx, expRole)}
                                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2563eb', padding: '3px', display: 'flex', borderRadius: '4px' }}
                                   title="Modify role"
                                 >
@@ -5146,20 +6138,63 @@ const DoctorDashboard = ({ onNavigate }) => {
                   )}
                 </div>
 
-                <form onSubmit={handleAddCareerExp} style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="e.g. Senior Consultant - Apollo Hospital (2018 - Present)..."
-                    value={newCareerExpInput}
-                    onChange={(e) => setNewCareerExpInput(e.target.value)}
-                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
-                  />
-                  <button
-                    type="submit"
-                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                  >
-                    + Add Role
-                  </button>
+                <form onSubmit={handleAddCareerExp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="Role & Hospital (e.g. Senior Consultant - Apollo Hospital)"
+                      value={newCareerExpInput}
+                      onChange={(e) => setNewCareerExpInput(e.target.value)}
+                      style={{ flex: '1 1 260px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', background: '#ffffff' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Start Year (e.g. 2018)"
+                      value={newCareerExpStartYear}
+                      onChange={(e) => setNewCareerExpStartYear(e.target.value)}
+                      style={{ width: '140px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', background: '#ffffff' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="End Year (e.g. 2024)"
+                      value={newCareerExpIsPresent ? 'Present' : newCareerExpEndYear}
+                      disabled={newCareerExpIsPresent}
+                      onChange={(e) => setNewCareerExpEndYear(e.target.value)}
+                      style={{
+                        width: '140px',
+                        padding: '8px 12px',
+                        border: '1.5px solid #cbd5e1',
+                        borderRadius: '8px',
+                        fontSize: '0.88rem',
+                        background: newCareerExpIsPresent ? '#f1f5f9' : '#ffffff',
+                        color: newCareerExpIsPresent ? '#059669' : '#0f172a',
+                        fontWeight: newCareerExpIsPresent ? 700 : 400
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 600, color: '#1e293b', userSelect: 'none' }}>
+                      <input
+                        type="checkbox"
+                        checked={newCareerExpIsPresent}
+                        onChange={(e) => {
+                          setNewCareerExpIsPresent(e.target.checked);
+                          if (e.target.checked) setNewCareerExpEndYear('');
+                        }}
+                        style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }}
+                      />
+                      <span>Currently working here (Present)</span>
+                    </label>
+
+                    <button
+                      type="submit"
+                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 2px rgba(37,99,235,0.2)' }}
+                    >
+                      <Plus size={15} />
+                      <span>Add Role</span>
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -5208,39 +6243,108 @@ const DoctorDashboard = ({ onNavigate }) => {
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '8px',
+                              gap: '10px',
                               background: '#fdf2f8',
                               border: '1px solid #fbcfe8',
-                              padding: '7px 12px',
+                              padding: '8px 12px',
                               borderRadius: '8px',
-                              fontSize: '0.84rem'
+                              fontSize: '0.84rem',
+                              transition: 'all 0.15s ease'
                             }}
                           >
                             {coverPhoto ? (
                               <img 
                                 src={coverPhoto} 
                                 alt="Cover" 
-                                style={{ width: '22px', height: '30px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }} 
+                                style={{ width: '26px', height: '34px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0, cursor: 'pointer' }}
+                                onClick={() => {
+                                  setPreviewReelError(false);
+                                  setPreviewMediaModal({
+                                    type: 'reel',
+                                    url: reelUrl,
+                                    title: `Instagram Reel #${idx + 1}`,
+                                    coverPhoto
+                                  });
+                                }}
+                                title="Click to preview reel" 
                               />
                             ) : (
-                              <Play size={13} color="#db2777" style={{ flexShrink: 0 }} />
+                              <div
+                                onClick={() => {
+                                  setPreviewReelError(false);
+                                  setPreviewMediaModal({
+                                    type: 'reel',
+                                    url: reelUrl,
+                                    title: `Instagram Reel #${idx + 1}`,
+                                    coverPhoto
+                                  });
+                                }}
+                                style={{ width: '26px', height: '26px', borderRadius: '6px', background: '#fce7f3', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                                title="Click to preview reel"
+                              >
+                                <Play size={12} color="#db2777" fill="#db2777" />
+                              </div>
                             )}
-                            <a
-                              href={reelUrl || '#'}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: '#db2777', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+
+                            <span
+                              onClick={() => {
+                                setPreviewReelError(false);
+                                setPreviewMediaModal({
+                                  type: 'reel',
+                                  url: reelUrl,
+                                  title: `Instagram Reel #${idx + 1}`,
+                                  coverPhoto
+                                });
+                              }}
+                              style={{ color: '#db2777', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, cursor: 'pointer', fontWeight: 600 }}
+                              title="Click to preview reel directly in dashboard"
                             >
                               {reelUrl || 'Cover Photo Uploaded'}
-                            </a>
+                            </span>
+
                             {coverPhoto && (
-                              <span style={{ fontSize: '0.7rem', color: '#0369a1', background: '#e0f2fe', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              <span style={{ fontSize: '0.7rem', color: '#0369a1', background: '#e0f2fe', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, flexShrink: 0 }}>
                                 Custom Cover
                               </span>
                             )}
-                            <span style={{ fontSize: '0.72rem', color: '#9d174d', background: '#fce7f3', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+
+                            <span style={{ fontSize: '0.72rem', color: '#9d174d', background: '#fce7f3', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, flexShrink: 0 }}>
                               Live on Profile
                             </span>
+
+                            {/* Direct Preview Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewReelError(false);
+                                setPreviewMediaModal({
+                                  type: 'reel',
+                                  url: reelUrl,
+                                  title: `Instagram Reel #${idx + 1}`,
+                                  coverPhoto
+                                });
+                              }}
+                              title="Directly play and preview this reel"
+                              style={{
+                                background: '#be185d',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                                boxShadow: '0 1px 3px rgba(190, 24, 93, 0.25)',
+                                flexShrink: 0,
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <Play size={11} fill="#ffffff" />
+                              <span>Preview</span>
+                            </button>
                           </div>
                         );
                       })}
@@ -5261,26 +6365,78 @@ const DoctorDashboard = ({ onNavigate }) => {
                           style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '8px',
+                            gap: '10px',
                             background: '#fef2f2',
                             border: '1px solid #fecaca',
-                            padding: '7px 12px',
+                            padding: '8px 12px',
                             borderRadius: '8px',
-                            fontSize: '0.84rem'
+                            fontSize: '0.84rem',
+                            transition: 'all 0.15s ease'
                           }}
                         >
-                          <Play size={13} color="#dc2626" style={{ flexShrink: 0 }} />
-                          <a
-                            href={vidUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: '#dc2626', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+                          <div
+                            onClick={() => {
+                              setPreviewMediaModal({
+                                type: 'youtube',
+                                url: vidUrl,
+                                title: `YouTube Video #${idx + 1}`
+                              });
+                            }}
+                            style={{ width: '26px', height: '26px', borderRadius: '6px', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                            title="Click to preview video"
+                          >
+                            <Play size={12} color="#dc2626" fill="#dc2626" />
+                          </div>
+
+                          <span
+                            onClick={() => {
+                              setPreviewMediaModal({
+                                type: 'youtube',
+                                url: vidUrl,
+                                title: `YouTube Video #${idx + 1}`
+                              });
+                            }}
+                            style={{ color: '#dc2626', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, cursor: 'pointer', fontWeight: 600 }}
+                            title="Click to preview video directly in dashboard"
                           >
                             {vidUrl}
-                          </a>
-                          <span style={{ fontSize: '0.72rem', color: '#991b1b', background: '#fee2e2', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                          </span>
+
+                          <span style={{ fontSize: '0.72rem', color: '#991b1b', background: '#fee2e2', padding: '2px 8px', borderRadius: '4px', fontWeight: 600, flexShrink: 0 }}>
                             Live on Profile
                           </span>
+
+                          {/* Direct Preview Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPreviewMediaModal({
+                                type: 'youtube',
+                                url: vidUrl,
+                                title: `YouTube Video #${idx + 1}`
+                              });
+                            }}
+                            title="Directly play and preview this video"
+                            style={{
+                              background: '#dc2626',
+                              color: '#ffffff',
+                              border: 'none',
+                              padding: '5px 12px',
+                              borderRadius: '6px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              boxShadow: '0 1px 3px rgba(220, 38, 38, 0.25)',
+                              flexShrink: 0,
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <Play size={11} fill="#ffffff" />
+                            <span>Preview</span>
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -5364,7 +6520,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 {/* Display Current Live FAQs */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {((activeDoctor.faqs && activeDoctor.faqs.length > 0) ? activeDoctor.faqs : [
-                    { q: `How can I book an appointment with Dr. ${activeDoctor.name || 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
+                    { q: `How can I book an appointment with ${activeDoctor.name ? (activeDoctor.name.startsWith('Dr.') ? activeDoctor.name : `Dr. ${activeDoctor.name}`) : 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
                     { q: 'What do I need to show at the clinic?', a: 'Carry a valid government photo ID, health insurance policy e-card (if claiming cashless coverage), and previous doctor prescriptions or test reports.' },
                     { q: 'Is my consultation private with the doctor?', a: 'Yes, 100%. All consultations, patient notes, and medical discussions are strictly confidential.' },
                     { q: 'Can I reschedule my appointment?', a: 'Yes, you can easily reschedule or cancel prior to your slot time through your patient account.' },
@@ -6278,6 +7434,134 @@ const DoctorDashboard = ({ onNavigate }) => {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FEATURED MEDIA PREVIEW MODAL */}
+      {previewMediaModal && (
+        <div 
+          onClick={() => setPreviewMediaModal(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.85)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            padding: '16px'
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#090d16',
+              borderRadius: '18px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.85)',
+              width: '100%',
+              maxWidth: previewMediaModal.type === 'reel' ? '420px' : '840px',
+              position: 'relative',
+              border: '1px solid rgba(255, 255, 255, 0.15)'
+            }}
+          >
+            {/* Top Header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '12px 18px',
+              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'rgba(255, 255, 255, 0.04)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {previewMediaModal.type === 'reel' ? (
+                  <Instagram size={16} color="#f43f5e" />
+                ) : (
+                  <Youtube size={16} color="#ef4444" />
+                )}
+                <span style={{ color: '#ffffff', fontSize: '0.86rem', fontWeight: 700 }}>
+                  {previewMediaModal.title}
+                </span>
+                <span style={{
+                  fontSize: '0.68rem',
+                  background: previewMediaModal.type === 'reel' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                  color: previewMediaModal.type === 'reel' ? '#fda4af' : '#fca5a5',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  fontWeight: 700
+                }}>
+                  Live on Profile
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewMediaModal(null)}
+                title="Close Preview"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.12)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#ffffff',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Video Display Container */}
+            <div style={{
+              width: '100%',
+              height: previewMediaModal.type === 'reel' ? '70vh' : 'auto',
+              maxHeight: previewMediaModal.type === 'reel' ? '640px' : 'none',
+              aspectRatio: previewMediaModal.type === 'reel' ? '9/16' : '16/9',
+              background: '#000000',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative'
+            }}>
+              {previewMediaModal.type === 'reel' ? (
+                !previewReelError ? (
+                  <video
+                    key={previewMediaModal.url}
+                    src={`${API_BASE}/reel-video?url=${encodeURIComponent(previewMediaModal.url)}`}
+                    poster={previewMediaModal.coverPhoto}
+                    autoPlay
+                    playsInline
+                    controls
+                    onError={() => setPreviewReelError(true)}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000000' }}
+                  />
+                ) : (
+                  <iframe
+                    src={getMediaEmbedUrl(previewMediaModal.url)}
+                    title="Reel Preview Player"
+                    scrolling="no"
+                    allow="autoplay; encrypted-media; picture-in-picture"
+                    allowFullScreen
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                  />
+                )
+              ) : (
+                <iframe
+                  src={getMediaEmbedUrl(previewMediaModal.url)}
+                  title="YouTube Video Preview Player"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ width: '100%', height: '100%', border: 'none' }}
+                />
+              )}
             </div>
           </div>
         </div>

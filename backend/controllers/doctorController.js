@@ -798,6 +798,13 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.image = incomingImage;
     }
 
+    // Ensure core flagship doctor (Dr. Rahul Verma) always stays available / listed in directory
+    const isRahul = doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'));
+    if (isRahul) {
+      doctor.available = true;
+      doctor.markModified('available');
+    }
+
     const updated = await doctor.save();
     const docObj = updated.toObject();
     delete docObj.password;
@@ -844,6 +851,13 @@ export const deleteDoctorProfile = async (req, res) => {
         return res.json({ success: true, message: 'Hospital staff doctor removed successfully' });
       }
       return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    if (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))) {
+      return res.status(400).json({
+        success: false,
+        message: 'System protection: Dr. Rahul Verma cannot be deleted.'
+      });
     }
 
     const isSelf = req.user && (

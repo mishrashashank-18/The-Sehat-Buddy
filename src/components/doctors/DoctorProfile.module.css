@@ -1004,12 +1004,17 @@
 
 .awardItemPill:hover,
 .certItemPill:hover,
-.membershipItemPill:hover,
-.timelineCard:hover {
+.membershipItemPill:hover {
   background: #ffffff;
   border-color: #cbd5e1;
   transform: translateY(-2px);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+}
+
+.timelineCard:hover {
+  background: #ffffff;
+  border-color: #93c5fd;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.08);
 }
 
 /* Career Experience Vertical Timeline Layout */
@@ -1024,7 +1029,6 @@
   align-items: stretch;
   gap: 12px;
   position: relative;
-  transition: transform 0.2s ease;
 }
 
 .timelineRow:hover .timelineCard {
@@ -1033,12 +1037,10 @@
 }
 
 .timelineRow:hover .timelineDoubleCircle {
-  transform: scale(1.12);
   box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.24);
 }
 
 .timelineRow:hover .timelineSingleCircle {
-  transform: scale(1.18);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
 }
 
@@ -1051,29 +1053,39 @@
   position: relative;
 }
 
-.timelineLineTop {
-  width: 0;
-  height: 20px;
+.timelineLineTopHidden {
+  visibility: hidden;
+  width: 2px;
+  height: 18px;
   flex-shrink: 0;
 }
 
-.timelineLineHidden {
-  visibility: hidden;
-  height: 20px;
+.timelineLineTopSolid {
+  width: 2px;
+  height: 18px;
+  background: #3b82f6;
+  flex-shrink: 0;
 }
 
-.timelineLineSolid {
+.timelineLineTopDotted {
+  width: 0;
+  height: 18px;
+  border-left: 2px dotted #94a3b8;
+  flex-shrink: 0;
+}
+
+.timelineLineBottomSolid {
   width: 2px;
   background: #3b82f6;
   flex: 1;
-  min-height: 12px;
+  min-height: 14px;
 }
 
-.timelineLineDotted {
+.timelineLineBottomDotted {
   width: 0;
   border-left: 2px dotted #94a3b8;
   flex: 1;
-  min-height: 12px;
+  min-height: 14px;
 }
 
 .timelineTailDotted {
@@ -1106,7 +1118,7 @@
   justify-content: center;
   box-shadow: 0 0 0 3.5px rgba(37, 99, 235, 0.16);
   flex-shrink: 0;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow 0.15s ease;
 }
 
 .timelineDoubleCircleInner {
@@ -1125,7 +1137,7 @@
   border: 2px solid #ffffff;
   box-shadow: 0 0 0 2px #60a5fa;
   flex-shrink: 0;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: box-shadow 0.15s ease;
 }
 
 /* Text hierarchy inside every card */
@@ -1370,43 +1382,6 @@
   letter-spacing: 0.03em;
   z-index: 2;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.reelPlayOverlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.18);
-  opacity: 0;
-  transition: opacity 0.22s ease;
-  z-index: 2;
-}
-
-.reelCard:hover .reelPlayOverlay {
-  opacity: 1;
-}
-
-.reelPlayBtn {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #e1306c;
-  transform: scale(0.9);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.reelCard:hover .reelPlayBtn {
-  transform: scale(1);
 }
 
 .reelBottomBar {

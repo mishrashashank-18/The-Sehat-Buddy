@@ -165,6 +165,36 @@ const makeCircularFavicon = (imageUrl) => {
   });
 };
 
+const getSessionRole = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      const base64Url = parts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(
+        atob(base64)
+          .split('')
+          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+          .join('')
+      );
+      const parsed = JSON.parse(jsonPayload);
+      if (parsed.exp && parsed.exp * 1000 < Date.now()) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        return null;
+      }
+      if (parsed.role) return parsed.role;
+    }
+  } catch {}
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user && user.role) return user.role;
+  } catch {}
+  return null;
+};
+
 function AppContent() {
   const { branding } = useData();
   const [currentView, setCurrentView] = useState(resolveCurrentView);
@@ -279,19 +309,20 @@ function AppContent() {
   };
 
   const token = localStorage.getItem('token');
+  const sessionRole = getSessionRole();
 
   if (currentView === 'admin') {
-    if (!token) return <LoginPage role="admin" setView={navigateTo} />;
+    if (!token || sessionRole !== 'admin') return <LoginPage role="admin" setView={navigateTo} />;
     return <AdminPanel onExit={() => navigateTo('site')} onNavigate={navigateTo} />;
   }
 
   if (currentView === 'doctor') {
-    if (!token) return <LoginPage role="doctor" setView={navigateTo} />;
+    if (!token || sessionRole !== 'doctor') return <LoginPage role="doctor" setView={navigateTo} />;
     return <DoctorDashboard onNavigate={navigateTo} />;
   }
 
   if (currentView === 'hospital') {
-    if (!token) return <LoginPage role="hospital" setView={navigateTo} />;
+    if (!token || sessionRole !== 'hospital') return <LoginPage role="hospital" setView={navigateTo} />;
     return <HospitalDashboard onNavigate={navigateTo} />;
   }
 

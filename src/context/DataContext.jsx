@@ -83,16 +83,18 @@ export const matchesId = (item, id) => {
     if (item.email && cid.includes('@') && item.email.toLowerCase().trim() === cid.toLowerCase()) return true;
   }
 
-  // Alias handling for Dr. Rahul Verma (id: 1, '1', 'default', 'rahul')
+  // Alias handling for Dr. Rahul Verma (id: 1, '1', 'default', 'rahul', '6ac270f38586bcec9f96207f')
   const itemIsRahul = (
     item.id === 1 ||
     String(item.id) === '1' ||
+    String(item.id) === '6ac270f38586bcec9f96207f' ||
+    String(item._id) === '6ac270f38586bcec9f96207f' ||
     (item.email && item.email.toLowerCase().includes('rahul')) ||
     (item.name && item.name.toLowerCase().includes('rahul verma'))
   );
   if (itemIsRahul) {
     for (const cid of candidateIds) {
-      if (cid === '1' || cid === 'default' || cid.toLowerCase().includes('rahul')) return true;
+      if (cid === '1' || cid === 'default' || cid === '6ac270f38586bcec9f96207f' || cid.toLowerCase().includes('rahul')) return true;
     }
   }
 
@@ -301,9 +303,14 @@ export const DataProvider = ({ children }) => {
       const existing = prevDoctors.find(p => matchesId(p, d));
       const resolvedSpecialty = d.specialization || d.specialty || existing?.specialty || existing?.specialization || 'General Physician';
       const resolvedPrice = d.fees ?? d.price ?? existing?.price ?? existing?.fees ?? 500;
+      const isRahul = (d.email && d.email.toLowerCase().includes('rahul')) ||
+                      (d.name && d.name.toLowerCase().includes('rahul verma')) ||
+                      d.id === 1 || String(d.id) === '1' || d._id === '6ac270f38586bcec9f96207f';
+      const resolvedAvailable = isRahul ? true : (d.available !== undefined ? d.available : (existing?.available !== undefined ? existing.available : true));
       return {
         ...existing,
         ...d,
+        available: resolvedAvailable,
         id: existing?.id || d.id || d._id,
         _id: d._id || existing?._id || d.id,
         specialty: resolvedSpecialty,
@@ -706,9 +713,14 @@ export const DataProvider = ({ children }) => {
         if (matchesId(doc, id)) {
           const resolvedSpecialty = updatedData.specialty || updatedData.specialization || doc.specialty || doc.specialization;
           const resolvedPrice = updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : (updatedData.fees !== undefined ? parseInt(updatedData.fees, 10) || doc.fees : doc.price);
+          const isRahul = (doc.email && doc.email.toLowerCase().includes('rahul')) ||
+                          (doc.name && doc.name.toLowerCase().includes('rahul verma')) ||
+                          doc.id === 1 || String(doc.id) === '1' || doc._id === '6ac270f38586bcec9f96207f';
+          const resolvedAvailable = isRahul ? true : (updatedData.available !== undefined ? updatedData.available : (doc.available !== undefined ? doc.available : true));
           mergedDoctor = {
             ...doc,
             ...updatedData,
+            available: resolvedAvailable,
             id: doc.id || updatedData.id || doc._id,
             _id: doc._id || updatedData._id || doc.id,
             specialty: resolvedSpecialty,

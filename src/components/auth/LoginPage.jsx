@@ -554,8 +554,9 @@ const LoginPage = ({ role, setView }) => {
 
       if (response.ok) {
         localStorage.setItem('token', data.token);
-        if (data.user || data.data) {
-          localStorage.setItem('user', JSON.stringify(data.user || data.data));
+        const userData = data.user || data.data || data.admin;
+        if (userData) {
+          localStorage.setItem('user', JSON.stringify(userData));
         }
         const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
         window.location.href = targetPath;
@@ -594,8 +595,9 @@ const LoginPage = ({ role, setView }) => {
           setError('');
         } else {
           localStorage.setItem('token', data.token);
-          if (data.user || data.data) {
-            localStorage.setItem('user', JSON.stringify(data.user || data.data));
+          const userData = data.user || data.data || data.admin;
+          if (userData) {
+            localStorage.setItem('user', JSON.stringify(userData));
           }
           const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
           window.location.href = targetPath;
@@ -625,8 +627,9 @@ const LoginPage = ({ role, setView }) => {
 
       if (response.ok) {
         localStorage.setItem('token', data.token);
-        if (data.user || data.data) {
-          localStorage.setItem('user', JSON.stringify(data.user || data.data));
+        const userData = data.user || data.data || data.admin;
+        if (userData) {
+          localStorage.setItem('user', JSON.stringify(userData));
         }
         const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
         window.location.href = targetPath;

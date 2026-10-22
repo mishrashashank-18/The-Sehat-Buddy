@@ -210,6 +210,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
           ? 'Backend server is offline or unreachable. Please ensure the backend is running.'
           : (err.message || 'Failed to load cloud storage stats');
         setStorageError(message);
+        if (message.toLowerCase().includes('forbidden') || message.toLowerCase().includes('permission')) {
+          setIsRealtimeConnected(false);
+        }
       }
     } finally {
       if (!isSilent) setLoadingStorage(false);
@@ -659,8 +662,29 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 {storageError && !storageData && (
                   <div className={styles.storageErrorBox}>
                     <AlertTriangle size={18} />
-                    <span>Failed to retrieve storage metrics: {storageError}</span>
-                    <button onClick={fetchStorageStats} className={styles.storageRetryBtn}>Try Again</button>
+                    <div style={{ flex: 1 }}>
+                      {storageError.toLowerCase().includes('forbidden') || storageError.toLowerCase().includes('permission') ? (
+                        <span>
+                          <strong>Admin Privileges Required:</strong> Your current session does not have Administrator permissions. Please sign in with an Admin account to view and stream real-time cloud storage metrics.
+                        </span>
+                      ) : (
+                        <span>Failed to retrieve storage metrics: {storageError}</span>
+                      )}
+                    </div>
+                    {storageError.toLowerCase().includes('forbidden') || storageError.toLowerCase().includes('permission') ? (
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem('token');
+                          localStorage.removeItem('user');
+                          window.location.href = '/admin';
+                        }}
+                        className={styles.storageRetryBtn}
+                      >
+                        Sign In as Admin
+                      </button>
+                    ) : (
+                      <button onClick={fetchStorageStats} className={styles.storageRetryBtn}>Try Again</button>
+                    )}
                   </div>
                 )}
 
