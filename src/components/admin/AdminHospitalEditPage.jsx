@@ -1371,6 +1371,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 type="button"
                 className={styles.logoutBtn}
                 onClick={() => {
+                  localStorage.removeItem('hospital_token');
+                  localStorage.removeItem('hospital_user');
                   localStorage.removeItem('token');
                   localStorage.removeItem('user');
                   window.location.href = '/hospital';

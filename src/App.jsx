@@ -415,7 +415,7 @@ function AppContent() {
 
   if (currentView.startsWith('admin-edit-hospital:')) {
     const hospId = currentView.split(':')[1];
-    if (!token) return <LoginPage role="admin" setView={navigateTo} />;
+    if (!adminToken || adminRole !== 'admin') return <LoginPage role="admin" setView={navigateTo} />;
     return <AdminHospitalEditPage hospitalId={hospId} onNavigate={navigateTo} />;
   }
 
