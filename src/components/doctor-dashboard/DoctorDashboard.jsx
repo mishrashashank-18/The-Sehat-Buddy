@@ -606,6 +606,9 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [previewReelError, setPreviewReelError] = useState(false);
 
   const initialDoctorIdRef = React.useRef(null);
+  const initialDoctorEmailRef = React.useRef(null);
+  const currentLoadedDocIdRef = React.useRef(null);
+  const isLocalCredentialUpdateRef = React.useRef(0);
   const isEditingAvailableDaysRef = React.useRef(false);
   const knownAppointmentFingerprintsRef = React.useRef(new Set());
   const isInitialAppointmentsLoadedRef = React.useRef(false);
@@ -616,10 +619,12 @@ const DoctorDashboard = ({ onNavigate }) => {
     knownAppointmentFingerprintsRef.current = new Set();
   }, [activeDoctor?.id, activeDoctor?._id]);
 
+  const lookupId = activeDoctor?._id || activeDoctor?.id || (doctors[0]?._id || doctors[0]?.id || '1');
+  const lookupEmail = activeDoctor?.email || storedUser?.email || (doctors[0]?.email || 'dr.rahul@sehatbuddy.com');
+  const docFee = Number(activeDoctor?.price ?? activeDoctor?.fees) || 800;
+
   // Fetch remote appointments from database in real time
   const fetchRemoteAppointments = React.useCallback(() => {
-    const lookupId = activeDoctor?._id || activeDoctor?.id || (doctors[0]?._id || doctors[0]?.id || '1');
-    const lookupEmail = activeDoctor?.email || storedUser?.email || (doctors[0]?.email || 'dr.rahul@sehatbuddy.com');
     if (!lookupId && !lookupEmail) return;
 
     api.getDoctorDashboard(lookupId, lookupEmail).then(data => {
@@ -646,7 +651,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 dateStr: resolvedDateStr,
                 slotDate: apt.slotDate || resolvedDateStr,
                 slotTime: apt.slotTime || '02:00 PM',
-                amount: Number(apt.amount) || Number(activeDoctor.price ?? activeDoctor.fees) || 800,
+                amount: Number(apt.amount) || docFee,
                 type: apt.consultationType || 'In-Clinic',
                 symptoms: apt.symptoms || apt.userData?.symptoms || 'Clinical Consultation Booking',
                 status: isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : (apt.status || 'Confirmed')),
@@ -665,7 +670,7 @@ const DoctorDashboard = ({ onNavigate }) => {
               const parsed = JSON.parse(raw);
               if (Array.isArray(parsed)) {
                 userBookings = parsed
-                  .filter(b => matchesId(activeDoctor, b.docId) && !isMockPatientAppointment(b))
+                  .filter(b => (b.docId && matchesId({ _id: lookupId, id: lookupId, email: lookupEmail }, b.docId)) && !isMockPatientAppointment(b))
                   .map(b => {
                     const rawSlot = String(b.slotDate || '').trim();
                     const resolvedDateStr = (/^\d{4}-\d{2}-\d{2}$/.test(rawSlot) ? rawSlot : '') ||
@@ -683,7 +688,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       dateStr: resolvedDateStr,
                       slotDate: b.slotDate || resolvedDateStr,
                       slotTime: b.slotTime || '10:00 AM',
-                      amount: Number(b.amount) || Number(activeDoctor.price ?? activeDoctor.fees) || 800,
+                      amount: Number(b.amount) || docFee,
                       type: b.consultationType || 'In-Clinic',
                       symptoms: b.symptoms || 'General Consultation',
                       status: isCompleted ? 'Completed' : (b.status || 'Confirmed'),
@@ -765,10 +770,16 @@ const DoctorDashboard = ({ onNavigate }) => {
         });
       }
     }).catch(() => {});
-  }, [activeDoctor, storedUser, doctors, todayDateStr, saveDoctorAppointments, applyStatusOverrides]);
+  }, [lookupId, lookupEmail, docFee, todayDateStr, saveDoctorAppointments, applyStatusOverrides]);
 
   // Load appointments & prescriptions whenever active doctor switches, and sync with backend
   React.useEffect(() => {
+    const currentId = String(lookupId || activeDocId);
+    if (currentLoadedDocIdRef.current === currentId) {
+      return;
+    }
+    currentLoadedDocIdRef.current = currentId;
+
     try {
       let loadedApts = null;
       const keys = getDoctorStorageKeys(activeDoctor, storedUser);
@@ -816,7 +827,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     } catch {}
 
     fetchRemoteAppointments();
-  }, [activeDoctor, storedUser, fetchRemoteAppointments, applyStatusOverrides]);
+  }, [lookupId, activeDocId, fetchRemoteAppointments, applyStatusOverrides]);
 
   // Real-time synchronization listener: broadcasts, storage events, polling & tab switching
   React.useEffect(() => {
@@ -888,15 +899,21 @@ const DoctorDashboard = ({ onNavigate }) => {
       window.removeEventListener('focus', handleTabSwitch);
       clearInterval(pollInterval);
     };
-  }, [activeDoctor, storedUser, fetchRemoteAppointments, applyStatusOverrides]);
+  }, [lookupId, activeDocId, fetchRemoteAppointments, applyStatusOverrides]);
 
   // Load initial profile data strictly when the doctor identity changes (prevents flickering/overwriting during in-place edits)
   React.useEffect(() => {
     const currentId = activeDoctor?._id || activeDoctor?.id;
-    if (!currentId) return;
+    const currentEmail = (activeDoctor?.email || storedUser?.email || '').toLowerCase().trim();
+    if (!currentId && !currentEmail) return;
 
-    if (String(currentId) !== String(initialDoctorIdRef.current) || !profileForm?.name) {
+    const isSameDoctor = 
+      (initialDoctorIdRef.current && String(currentId) === String(initialDoctorIdRef.current)) ||
+      (initialDoctorEmailRef.current && currentEmail === initialDoctorEmailRef.current);
+
+    if (!isSameDoctor || !profileForm?.name) {
       initialDoctorIdRef.current = String(currentId);
+      initialDoctorEmailRef.current = currentEmail;
       setProfileForm({
         ...activeDoctor,
         name: activeDoctor.name || '',
@@ -929,7 +946,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         dateWiseSlots: (activeDoctor.dateWiseSlots && typeof activeDoctor.dateWiseSlots === 'object') ? activeDoctor.dateWiseSlots : {}
       });
     }
-  }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.name]);
+  }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.email]);
 
   // Synchronize profileForm.about whenever activeDoctor.about updates from DB, SSE, or DataContext
   React.useEffect(() => {
@@ -1001,6 +1018,8 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Synchronize profileForm credentials (awards, certs, memberships, timeline, tags) whenever activeDoctor updates
   React.useEffect(() => {
     if (!activeDoctor) return;
+    if (Date.now() - isLocalCredentialUpdateRef.current < 2000) return;
+
     setProfileForm(prev => {
       if (!prev) return activeDoctor;
       let changed = false;
@@ -1047,6 +1066,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       showToast('This badge is already in your list');
       return;
     }
+    isLocalCredentialUpdateRef.current = Date.now();
     const updated = [...current, tagText];
     setProfileForm(prev => ({ ...prev, tags: updated }));
     setNewTagInput('');
@@ -1055,6 +1075,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveTag = (tagToRemove) => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.tags) ? profileForm.tags : getDefaultDoctorTags(activeDoctor);
     const updated = current.filter(t => t !== tagToRemove);
     setProfileForm(prev => ({ ...prev, tags: updated }));
@@ -1063,6 +1084,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleResetDefaultTags = () => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const defaultList = [];
     if (activeDoctor?.degree || activeDoctor?.qualifications) {
       const parts = (activeDoctor.degree || activeDoctor.qualifications).split(/[,/]+/).map(s => s.trim()).filter(Boolean);
@@ -1118,6 +1140,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleAddAward = (e) => {
     e?.preventDefault();
     if (!newAwardInput.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
     const title = newAwardInput.trim();
     const year = newAwardYear.trim();
@@ -1140,6 +1163,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleUpdateAward = (index) => {
     if (!editingAward.text.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
     const title = editingAward.text.trim();
     const year = (editingAward.year || '').trim();
@@ -1155,6 +1179,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveAward = (index) => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, awards: updated }));
@@ -1164,6 +1189,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleClearAllAwards = () => {
     if (!window.confirm('Are you sure you want to delete all awards?')) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     setProfileForm(prev => ({ ...prev, awards: [] }));
     updateDoctor(activeDoctor._id || activeDoctor.id, { awards: [] });
     showToast('All awards deleted.');
@@ -1173,6 +1199,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleAddCert = (e) => {
     e?.preventDefault();
     if (!newCertInput.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
     const updated = [...current, newCertInput.trim()];
     setProfileForm(prev => ({ ...prev, certifications: updated }));
@@ -1183,6 +1210,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleUpdateCert = (index) => {
     if (!editingCert.text.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
     const updated = current.map((item, i) => (i === index ? editingCert.text.trim() : item));
     setProfileForm(prev => ({ ...prev, certifications: updated }));
@@ -1192,6 +1220,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveCert = (index) => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, certifications: updated }));
@@ -1201,6 +1230,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleClearAllCerts = () => {
     if (!window.confirm('Are you sure you want to delete all certificates?')) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     setProfileForm(prev => ({ ...prev, certifications: [] }));
     updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: [] });
     showToast('All certificates deleted.');
@@ -1210,6 +1240,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleAddMembership = (e) => {
     e?.preventDefault();
     if (!newMembershipInput.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
     const updated = [...current, newMembershipInput.trim()];
     setProfileForm(prev => ({ ...prev, memberships: updated }));
@@ -1220,6 +1251,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleUpdateMembership = (index) => {
     if (!editingMembership.text.trim()) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
     const updated = current.map((item, i) => (i === index ? editingMembership.text.trim() : item));
     setProfileForm(prev => ({ ...prev, memberships: updated }));
@@ -1229,6 +1261,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveMembership = (index) => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, memberships: updated }));
@@ -1238,6 +1271,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleClearAllMemberships = () => {
     if (!window.confirm('Are you sure you want to delete all memberships?')) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     setProfileForm(prev => ({ ...prev, memberships: [] }));
     updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: [] });
     showToast('All memberships deleted.');
@@ -1248,6 +1282,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     e?.preventDefault();
     let roleText = newCareerExpInput.trim();
     if (!roleText) return;
+    isLocalCredentialUpdateRef.current = Date.now();
 
     // Strip pre-existing parenthesis from role text to cleanly format
     roleText = roleText.replace(/\(.*?\)/g, '').trim();
@@ -1278,38 +1313,42 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleStartEditCareerExp = (index, fullStr) => {
-    let text = fullStr;
-    let startYear = '';
-    let endYear = '';
-    let isPresent = false;
+    const { text, startYear, endYear, isPresent } = (() => {
+      let text = fullStr;
+      let startYear = '';
+      let endYear = '';
+      let isPresent = false;
 
-    if (fullStr.includes('(') && fullStr.includes(')')) {
-      const match = fullStr.match(/\((.*?)\)/);
-      if (match) {
-        const yearPart = match[1].trim();
-        text = fullStr.replace(/\(.*?\)/, '').trim();
-        if (yearPart.toLowerCase().includes('present')) {
-          isPresent = true;
-          const yMatch = yearPart.match(/(\d{4})/);
-          if (yMatch) startYear = yMatch[1];
-        } else if (yearPart.includes('-') || yearPart.includes('–')) {
-          const yParts = yearPart.split(/[-–]/).map(s => s.trim());
-          startYear = yParts[0] || '';
-          endYear = yParts[1] || '';
-        } else {
-          startYear = yearPart;
+      if (fullStr.includes('(') && fullStr.includes(')')) {
+        const match = fullStr.match(/\((.*?)\)/);
+        if (match) {
+          const yearPart = match[1].trim();
+          text = fullStr.replace(/\(.*?\)/, '').trim();
+          if (yearPart.toLowerCase().includes('present')) {
+            isPresent = true;
+            const yMatch = yearPart.match(/(\d{4})/);
+            if (yMatch) startYear = yMatch[1];
+          } else if (yearPart.includes('-') || yearPart.includes('–')) {
+            const yParts = yearPart.split(/[-–]/).map(s => s.trim());
+            startYear = yParts[0] || '';
+            endYear = yParts[1] || '';
+          } else {
+            startYear = yearPart;
+          }
         }
+      } else if (fullStr.toLowerCase().includes('present')) {
+        isPresent = true;
+        text = fullStr.replace(/present/i, '').replace(/[-–()]/g, '').trim();
       }
-    } else if (fullStr.toLowerCase().includes('present')) {
-      isPresent = true;
-      text = fullStr.replace(/present/i, '').replace(/[-–()]/g, '').trim();
-    }
+      return { text, startYear, endYear, isPresent };
+    })();
     setEditingCareerExp({ index, text, startYear, endYear, isPresent });
   };
 
   const handleUpdateCareerExp = (index) => {
     let roleText = (editingCareerExp.text || '').trim();
     if (!roleText) return;
+    isLocalCredentialUpdateRef.current = Date.now();
 
     // Strip pre-existing parenthesis from role text to cleanly format
     roleText = roleText.replace(/\(.*?\)/g, '').trim();
@@ -1337,6 +1376,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleRemoveCareerExp = (index) => {
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
     const updated = current.filter((_, i) => i !== index);
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
@@ -1346,6 +1386,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const handleClearAllCareerExp = () => {
     if (!window.confirm('Are you sure you want to delete all timeline roles?')) return;
+    isLocalCredentialUpdateRef.current = Date.now();
     setProfileForm(prev => ({ ...prev, careerExperience: [] }));
     updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: [] });
     showToast('All timeline roles deleted.');
@@ -1356,6 +1397,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= current.length) return;
+    isLocalCredentialUpdateRef.current = Date.now();
 
     const updated = [...current];
     const [moved] = updated.splice(index, 1);
@@ -1390,6 +1432,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       setDragOverCareerIdx(null);
       return;
     }
+    isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
     const updated = [...current];
     const [moved] = updated.splice(draggedCareerIdx, 1);
@@ -1453,6 +1496,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
     if (isTouchDraggingCareer) {
       if (draggedCareerIdx !== null && dragOverCareerIdx !== null && draggedCareerIdx !== dragOverCareerIdx) {
+        isLocalCredentialUpdateRef.current = Date.now();
         const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
         const updated = [...current];
         const [moved] = updated.splice(draggedCareerIdx, 1);
