@@ -1818,18 +1818,22 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const handleSlotDurationChange = async (durationMinutes) => {
-    setProfileForm(prev => ({ ...prev, slotDuration: durationMinutes }));
+    const durNum = Number(durationMinutes) || 20;
+    const currentDur = Number(profileForm?.slotDuration) || 20;
+    if (currentDur === durNum) {
+      return; // Already set to this duration; no-op to prevent false popups or redundant updates
+    }
+    setProfileForm(prev => ({ ...prev, slotDuration: durNum }));
     const docId = activeDoctor?.id || activeDoctor?._id;
     if (docId) {
       await updateDoctor(docId, {
-        slotDuration: durationMinutes,
+        slotDuration: durNum,
         availableSlots: profileForm.availableSlots,
         dayWiseSlots: profileForm.dayWiseSlots,
         dateWiseSlots: profileForm.dateWiseSlots,
         scheduleDays: profileForm.scheduleDays
       });
     }
-    showToast(`Slot duration set to ${durationMinutes} minutes`);
   };
 
   const handleSaveSchedule = async () => {
