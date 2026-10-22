@@ -133,8 +133,18 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('patient_token');
+    localStorage.removeItem('patient_user');
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      if (u.role === 'user' || !u.role) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    } catch {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
     setUser(null);
     window.location.href = '/';
   };

@@ -34,7 +34,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Mail,
-  Send
+  Send,
+  History
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
@@ -46,6 +47,8 @@ import FaqFormModal, { FAQ_ICON_OPTIONS } from './FaqFormModal';
 import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
+import DoctorHistoryModal from './DoctorHistoryModal';
+import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import logoImg from '../../assets/images/logo.png';
 import styles from './AdminPanel.module.css';
 
@@ -90,7 +93,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     specialitiesProcedures,
     addSpecialityProcedure,
     updateSpecialityProcedure,
-    deleteSpecialityProcedure
+    deleteSpecialityProcedure,
+    refreshDoctors,
+    refreshHospitals
   } = useData();
 
   // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'content' | 'branding' | 'faqs' | 'reviews' | 'specialities'
@@ -121,6 +126,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   // Modals state
   const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
   const [doctorToEdit, setDoctorToEdit] = useState(null);
+  const [selectedDoctorForHistory, setSelectedDoctorForHistory] = useState(null);
 
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
@@ -297,20 +303,67 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     }
   }, [activeTab, fetchStorageStats]);
 
+  // Live real-time background synchronization for Doctors and Hospitals
+  useEffect(() => {
+    const handleLiveSync = () => {
+      if (activeTab === 'doctors') {
+        refreshDoctors?.();
+      } else if (activeTab === 'hospitals') {
+        refreshHospitals?.();
+      }
+    };
+
+    window.addEventListener('focus', handleLiveSync);
+    window.addEventListener('sehat_doctors_updated', handleLiveSync);
+    window.addEventListener('sehat_db_change', handleLiveSync);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handleLiveSync();
+    });
+
+    const livePollTimer = setInterval(handleLiveSync, 3500);
+
+    return () => {
+      window.removeEventListener('focus', handleLiveSync);
+      window.removeEventListener('sehat_doctors_updated', handleLiveSync);
+      window.removeEventListener('sehat_db_change', handleLiveSync);
+      clearInterval(livePollTimer);
+    };
+  }, [activeTab, refreshDoctors, refreshHospitals]);
+
+  // Real-time verified rating and review counter strictly synchronized with Doctor Profile
+  const getDoctorDisplayRating = useCallback((doc) => {
+    if (!doc) return { score: '0', count: '0' };
+
+    const verifiedReviews = getDoctorVerifiedReviews(doc, reviews);
+    const count = verifiedReviews.length;
+
+    let score = '0';
+    if (count > 0) {
+      const total = verifiedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+      score = (total / count).toFixed(1);
+    }
+
+    return {
+      score,
+      count: `${count}`
+    };
+  }, [reviews]);
+
   // Filtered Doctors
   const filteredDoctors = (doctors || []).filter(doc => {
     const q = doctorSearch.toLowerCase().trim();
+    const docSpec = (doc.specialty || doc.specialization || '').toLowerCase();
     const matchesSearch = !q ||
       (doc.name || '').toLowerCase().includes(q) ||
-      (doc.specialty || '').toLowerCase().includes(q) ||
+      docSpec.includes(q) ||
       (doc.hospital || '').toLowerCase().includes(q);
     const matchesSpecialty =
-      doctorSpecialtyFilter === 'all' || (doc.specialty || '').toLowerCase() === doctorSpecialtyFilter.toLowerCase();
+      doctorSpecialtyFilter === 'all' || docSpec === doctorSpecialtyFilter.toLowerCase();
     return matchesSearch && matchesSpecialty;
   });
 
   // Unique specialties for filter dropdown
-  const uniqueSpecialties = Array.from(new Set((doctors || []).map(d => d.specialty).filter(Boolean)));
+  const uniqueSpecialties = Array.from(new Set((doctors || []).map(d => d.specialty || d.specialization).filter(Boolean)));
 
   // Filtered Hospitals
   const filteredHospitals = (hospitals || []).filter(hosp => {
@@ -447,8 +500,18 @@ const AdminPanel = ({ onExit, onNavigate }) => {
           <button 
             className={styles.logoutBtn} 
             onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
+              localStorage.removeItem('admin_token');
+              localStorage.removeItem('admin_user');
+              try {
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                if (u.role === 'admin' || !u.role) {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                }
+              } catch {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+              }
               window.location.reload();
             }}
           >
@@ -716,13 +779,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.mongodb ? storageData.mongodb.remainingMB : '511.22'}
+                          {storageData?.mongodb?.remainingMB ?? '511.22'}
                         </span>
                         <span className={styles.storageHeroUnit}>MB</span>
                       </div>
                       <span className={styles.storageHeroLabel}>Remaining Free Space</span>
                       <span className={styles.storageHeroSub}>
-                        512 MB total limit • {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB (${storageData.mongodb.percentUsed}%) used` : '0 MB used'}
+                        512 MB total limit • {storageData?.mongodb ? `${storageData.mongodb.usedMB ?? 0} MB (${storageData.mongodb.percentUsed ?? 0}%) used` : '0 MB used'}
                       </span>
                     </div>
 
@@ -733,9 +796,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           className={`${styles.progressBarFill} ${styles.progressMongo}`}
                           style={{
                             width: `${getVisualProgressPercent(
-                              storageData?.mongodb?.usedMB,
-                              storageData?.mongodb?.totalLimitMB,
-                              storageData?.mongodb?.percentUsed
+                              storageData?.mongodb?.usedMB ?? 0,
+                              storageData?.mongodb?.totalLimitMB ?? 512,
+                              storageData?.mongodb?.percentUsed ?? 0
                             )}%`
                           }}
                         >
@@ -747,10 +810,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarLabels}>
                         <span className={styles.progressActiveBadgeMongo}>
                           <span className={styles.statusDotGreen}></span>
-                          {storageData?.mongodb ? `${storageData.mongodb.usedMB} MB Used (${storageData.mongodb.percentUsed}%)` : '0 MB Used (0%)'}
+                          {storageData?.mongodb ? `${storageData.mongodb.usedMB ?? 0} MB Used (${storageData.mongodb.percentUsed ?? 0}%)` : '0 MB Used (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB Free of 512 MB` : '512 MB Total'}
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB ?? 512} MB Free of 512 MB` : '512 MB Total'}
                         </span>
                       </div>
                     </div>
@@ -759,22 +822,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageDetailsGrid}>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Total Space</span>
-                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.totalLimitMB} MB` : '512 MB'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.totalLimitMB ?? 512} MB` : '512 MB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Used Space</span>
-                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.usedMB} MB` : '0 MB'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.mongodb ? `${storageData.mongodb.usedMB ?? 0} MB` : '0 MB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Space</span>
                         <span className={`${styles.detailPillVal} ${styles.textEmerald}`}>
-                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB} MB` : '512 MB'}
+                          {storageData?.mongodb ? `${storageData.mongodb.remainingMB ?? 512} MB` : '512 MB'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Total Documents</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.mongodb ? `${storageData.mongodb.objects} records` : '0 records'}
+                          {storageData?.mongodb ? `${storageData.mongodb.objects ?? 0} records` : '0 records'}
                         </span>
                       </div>
                     </div>
@@ -782,10 +845,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     {/* Storage Breakdown Footer */}
                     <div className={styles.storageFooterRow}>
                       <span title={`Database: ${storageData?.mongodb?.databaseName || 'thesehatbuddy'}`}>
-                        <Layers size={13} /> {storageData?.mongodb ? `${storageData.mongodb.collections} Collections` : '10 Collections'}
+                        <Layers size={13} /> {storageData?.mongodb ? `${storageData.mongodb.collections ?? 10} Collections` : '10 Collections'}
                       </span>
                       <span title="Data and index breakdown">
-                        Data: {storageData?.mongodb ? storageData.mongodb.dataSizeMB : '0.04'} MB • Index: {storageData?.mongodb ? storageData.mongodb.indexSizeMB : '0.47'} MB
+                        Data: {storageData?.mongodb?.dataSizeMB ?? '0.04'} MB • Index: {storageData?.mongodb?.indexSizeMB ?? '0.47'} MB
                       </span>
                     </div>
                   </div>
@@ -817,13 +880,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.cloudinary ? storageData.cloudinary.remainingGB : '24.8'}
+                          {storageData?.cloudinary?.remainingGB ?? '24.8'}
                         </span>
                         <span className={styles.storageHeroUnit}>GB</span>
                       </div>
                       <span className={styles.storageHeroLabel}>Remaining Free Space</span>
                       <span className={styles.storageHeroSub}>
-                        25 GB total limit • {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB (${storageData.cloudinary.percentUsed}%) used` : '0 MB used'}
+                        25 GB total limit • {storageData?.cloudinary ? `${storageData.cloudinary.usedMB ?? 0} MB (${storageData.cloudinary.percentUsed ?? 0}%) used` : '0 MB used'}
                       </span>
                     </div>
 
@@ -834,9 +897,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           className={`${styles.progressBarFill} ${styles.progressCld}`}
                           style={{
                             width: `${getVisualProgressPercent(
-                              storageData?.cloudinary?.usedMB,
+                              storageData?.cloudinary?.usedMB ?? 0,
                               (storageData?.cloudinary?.totalLimitGB || 25) * 1024,
-                              storageData?.cloudinary?.percentUsed
+                              storageData?.cloudinary?.percentUsed ?? 0
                             )}%`
                           }}
                         >
@@ -848,10 +911,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarLabels}>
                         <span className={styles.progressActiveBadgeCld}>
                           <span className={styles.statusDotBlue}></span>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB Used (${storageData.cloudinary.percentUsed}%)` : '0 MB Used (0%)'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.usedMB ?? 0} MB Used (${storageData.cloudinary.percentUsed ?? 0}%)` : '0 MB Used (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB Free of 25 GB` : '25 GB Total'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB ?? 25} GB Free of 25 GB` : '25 GB Total'}
                         </span>
                       </div>
                     </div>
@@ -860,22 +923,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageDetailsGrid}>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Total Space</span>
-                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB} GB` : '25 GB'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.totalLimitGB ?? 25} GB` : '25 GB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Used Space</span>
-                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.usedMB} MB` : '0 MB'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.cloudinary ? `${storageData.cloudinary.usedMB ?? 0} MB` : '0 MB'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Space</span>
                         <span className={`${styles.detailPillVal} ${styles.textSky}`}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB} GB` : '25 GB'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.remainingGB ?? 25} GB` : '25 GB'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Hosted Assets</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.cloudinary ? `${storageData.cloudinary.objects} files` : '0 files'}
+                          {storageData?.cloudinary ? `${storageData.cloudinary.objects ?? 0} files` : '0 files'}
                         </span>
                       </div>
                     </div>
@@ -883,10 +946,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     {/* Storage Breakdown Footer */}
                     <div className={styles.storageFooterRow}>
                       <span title="Cloudinary monthly account credits">
-                        <ImageIcon size={13} /> {storageData?.cloudinary ? `${storageData.cloudinary.credits.remaining} / ${storageData.cloudinary.credits.total} Credits` : '24.7 / 25 Credits'}
+                        <ImageIcon size={13} /> {`${storageData?.cloudinary?.credits?.remaining ?? 24.7} / ${storageData?.cloudinary?.credits?.total ?? 25} Credits`}
                       </span>
                       <span title="Monthly bandwidth used">
-                        Bandwidth: {storageData?.cloudinary ? storageData.cloudinary.bandwidthMB : '0'} MB
+                        Bandwidth: {storageData?.cloudinary ? (storageData.cloudinary.bandwidthMB ?? '0') : '0'} MB
                       </span>
                     </div>
                   </div>
@@ -918,13 +981,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageHeroMetric}>
                       <div className={styles.storageHeroRemaining}>
                         <span className={styles.storageHeroNum}>
-                          {storageData?.brevo ? storageData.brevo.remainingToday : '300'}
+                          {storageData?.brevo?.remainingToday ?? '300'}
                         </span>
                         <span className={styles.storageHeroUnit}>Emails</span>
                       </div>
                       <span className={styles.storageHeroLabel}>Remaining Daily Quota</span>
                       <span className={styles.storageHeroSub}>
-                        300 daily limit • {storageData?.brevo ? `${storageData.brevo.sentToday} sent (${storageData.brevo.percentUsed}%) today` : '0 sent (0%) today'}
+                        300 daily limit • {storageData?.brevo ? `${storageData.brevo.sentToday ?? 0} sent (${storageData.brevo.percentUsed ?? 0}%) today` : '0 sent (0%) today'}
                       </span>
                     </div>
 
@@ -935,9 +998,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           className={`${styles.progressBarFill} ${styles.progressBrevo}`}
                           style={{
                             width: `${getVisualProgressPercent(
-                              storageData?.brevo?.sentToday,
+                              storageData?.brevo?.sentToday ?? 0,
                               storageData?.brevo?.totalLimit || 300,
-                              storageData?.brevo?.percentUsed
+                              storageData?.brevo?.percentUsed ?? 0
                             )}%`
                           }}
                         >
@@ -949,10 +1012,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div className={styles.progressBarLabels}>
                         <span className={styles.progressActiveBadgeBrevo}>
                           <span className={styles.statusDotCyan}></span>
-                          {storageData?.brevo ? `${storageData.brevo.sentToday} Sent Today (${storageData.brevo.percentUsed}%)` : '0 Sent Today (0%)'}
+                          {storageData?.brevo ? `${storageData.brevo.sentToday ?? 0} Sent Today (${storageData.brevo.percentUsed ?? 0}%)` : '0 Sent Today (0%)'}
                         </span>
                         <span className={styles.progressCapacityLabel}>
-                          {storageData?.brevo ? `${storageData.brevo.remainingToday} Free of 300 Daily` : '300 Daily Total'}
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday ?? 300} Free of 300 Daily` : '300 Daily Total'}
                         </span>
                       </div>
                     </div>
@@ -961,22 +1024,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <div className={styles.storageDetailsGrid}>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Total Quota</span>
-                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.totalLimit} emails` : '300 emails'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.totalLimit ?? 300} emails` : '300 emails'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Sent Today</span>
-                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.sentToday} emails` : '0 emails'}</span>
+                        <span className={styles.detailPillVal}>{storageData?.brevo ? `${storageData.brevo.sentToday ?? 0} emails` : '0 emails'}</span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Remaining Today</span>
                         <span className={`${styles.detailPillVal} ${styles.textTeal}`}>
-                          {storageData?.brevo ? `${storageData.brevo.remainingToday} emails` : '300 emails'}
+                          {storageData?.brevo ? `${storageData.brevo.remainingToday ?? 300} emails` : '300 emails'}
                         </span>
                       </div>
                       <div className={styles.storageDetailPill}>
                         <span className={styles.detailPillLabel}>Sent This Month</span>
                         <span className={styles.detailPillVal}>
-                          {storageData?.brevo ? `${storageData.brevo.sentMonth} emails` : '0 emails'}
+                          {storageData?.brevo ? `${storageData.brevo.sentMonth ?? 0} emails` : '0 emails'}
                         </span>
                       </div>
                     </div>
@@ -1161,7 +1224,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       {filteredDoctors.map(doc => (
                         <tr key={doc.id || doc._id}>
                           <td>
-                            <div className={styles.tableDocProfile}>
+                            <div
+                              className={`${styles.tableDocProfile} ${styles.tableDocProfileClickable}`}
+                              onClick={() => setSelectedDoctorForHistory(doc)}
+                              title="Click to view patient consultations history & public profile"
+                            >
                               <img
                                 src={doc.image}
                                 alt={doc.name}
@@ -1172,13 +1239,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               />
                               <div>
                                 <span className={styles.tableDocName}>{doc.name}</span>
-                                {doc.degree && <span className={styles.tableDocDegree}>{doc.degree}</span>}
+                                {(doc.degree || doc.qualifications) && (
+                                  <span className={styles.tableDocDegree}>{doc.degree || doc.qualifications}</span>
+                                )}
                               </div>
                             </div>
                           </td>
                           <td>
-                            <span className={styles.specialtyBadge}>{doc.specialty}</span>
-                            <div className={styles.tableSubText}>{doc.experience}</div>
+                            <span className={styles.specialtyBadge}>{doc.specialty || doc.specialization || 'General Physician'}</span>
+                            <div className={styles.tableSubText}>
+                              {typeof doc.experience === 'number' || (!isNaN(Number(doc.experience)) && String(doc.experience).trim() !== '') ? `${doc.experience} Years Experience` : (doc.experience || 'Experienced')}
+                            </div>
                           </td>
                           <td>
                             <div className={styles.tableHospitalCell}>
@@ -1190,19 +1261,64 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                             <span className={styles.priceHighlight}>₹{doc.price}</span>
                           </td>
                           <td>
-                            <div className={styles.ratingBadge}>
-                              <Star size={13} fill="#FACC15" color="#FACC15" />
-                              <span>{doc.rating}</span>
-                              <small>({doc.reviews})</small>
-                            </div>
+                            {(() => {
+                              const liveRating = getDoctorDisplayRating(doc);
+                              const cNum = Number(liveRating.count) || 0;
+                              return (
+                                <div className={styles.ratingBadge}>
+                                  <Star size={13} fill={cNum > 0 ? "#FACC15" : "#E2E8F0"} color={cNum > 0 ? "#FACC15" : "#CBD5E1"} />
+                                  <span>{liveRating.score}</span>
+                                  <small>({cNum} {cNum === 1 ? 'review' : 'reviews'})</small>
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td>
-                            <span className={styles.availabilityText}>
-                              {doc.availableDays || 'Mon - Sat'}
-                            </span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span
+                                  style={{
+                                    display: 'inline-block',
+                                    width: '7px',
+                                    height: '7px',
+                                    borderRadius: '50%',
+                                    backgroundColor: doc.available === false || doc.availabilityStatus === 'On Leave'
+                                      ? '#ef4444'
+                                      : doc.availabilityStatus === 'Busy'
+                                      ? '#f59e0b'
+                                      : '#10b981',
+                                    boxShadow: `0 0 6px ${doc.available === false || doc.availabilityStatus === 'On Leave' ? '#ef4444' : doc.availabilityStatus === 'Busy' ? '#f59e0b' : '#10b981'}`,
+                                    flexShrink: 0
+                                  }}
+                                />
+                                <span style={{
+                                  fontSize: '0.73rem',
+                                  fontWeight: 700,
+                                  color: doc.available === false || doc.availabilityStatus === 'On Leave'
+                                    ? '#dc2626'
+                                    : doc.availabilityStatus === 'Busy'
+                                    ? '#b45309'
+                                    : '#059669',
+                                  letterSpacing: '0.02em',
+                                  textTransform: 'uppercase'
+                                }}>
+                                  {doc.available === false || doc.availabilityStatus === 'On Leave' ? 'On Leave' : (doc.availabilityStatus === 'Busy' ? 'In Surgery / Busy' : 'Available')}
+                                </span>
+                              </div>
+                              <span className={styles.availabilityText} style={{ fontSize: '0.79rem', color: '#475569' }}>
+                                {doc.availableDays || 'Mon - Sat (10am - 4pm)'}
+                              </span>
+                            </div>
                           </td>
                           <td style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
+                              <button
+                                className={styles.historyActionBtn}
+                                onClick={() => setSelectedDoctorForHistory(doc)}
+                                title="View Patient Consultation History & Public Profile"
+                              >
+                                <History size={14} /> History
+                              </button>
                               <button
                                 className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}
                                 onClick={(e) => handleToggleStarDoctor(doc, e)}
@@ -1985,6 +2101,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             }
             setIsSpecModalOpen(false);
           }}
+        />
+      )}
+
+      {selectedDoctorForHistory && (
+        <DoctorHistoryModal
+          doctor={selectedDoctorForHistory}
+          onClose={() => setSelectedDoctorForHistory(null)}
         />
       )}
 

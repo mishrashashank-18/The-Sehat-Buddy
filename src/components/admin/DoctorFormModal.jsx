@@ -43,8 +43,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         hospital: doctorToEdit.hospital || '',
         experienceYears: expNum,
         price: doctorToEdit.price || 500,
-        rating: doctorToEdit.rating || 4.8,
-        reviews: doctorToEdit.reviews || '100+',
+        rating: doctorToEdit.rating !== undefined ? doctorToEdit.rating : 0,
+        reviews: doctorToEdit.reviews !== undefined ? doctorToEdit.reviews : '0',
         degree: doctorToEdit.degree || 'MBBS',
         phone: doctorToEdit.phone || '',
         email: doctorToEdit.email || '',
@@ -67,8 +67,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       hospital: hospitals[0]?.name || '',
       experienceYears: 8,
       price: 700,
-      rating: 4.8,
-      reviews: '250+',
+      rating: 0,
+      reviews: '0',
       degree: 'MBBS, MD',
       phone: '+91 ',
       email: '',
@@ -236,8 +236,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       experienceText: `${parseInt(formData.experienceYears, 10) || 5}+ Years Experience`,
       price: parseInt(formData.price, 10) || 500,
       fees: parseInt(formData.price, 10) || 500,
-      rating: parseFloat(formData.rating) || 4.8,
-      reviews: formData.reviews || '50+',
+      rating: parseFloat(formData.rating) || 0,
+      reviews: formData.reviews || '0',
       hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
       degree: formData.degree,
       phone: formData.phone,
@@ -269,7 +269,14 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     };
 
     if (doctorToEdit) {
-      updateDoctor(doctorToEdit.id || doctorToEdit._id, payload);
+      const docId = doctorToEdit._id || doctorToEdit.id;
+      const fullPayload = {
+        ...payload,
+        _id: doctorToEdit._id || doctorToEdit.id,
+        id: doctorToEdit.id || doctorToEdit._id,
+        email: doctorToEdit.email || payload.email
+      };
+      updateDoctor(docId, fullPayload);
     } else {
       addDoctor(payload);
     }
@@ -433,21 +440,22 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
             <div className={styles.grid2}>
               <div className={styles.formGroup}>
-                <label>Rating (1 - 5)</label>
+                <label>Rating (0 for new)</label>
                 <input
                   type="number"
                   step="0.1"
-                  min="1"
+                  min="0"
                   max="5"
+                  placeholder="0"
                   value={formData.rating}
                   onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
                 />
               </div>
               <div className={styles.formGroup}>
-                <label>Reviews</label>
+                <label>Reviews Count (0 for new)</label>
                 <input
                   type="text"
-                  placeholder="e.g. 500+"
+                  placeholder="0"
                   value={formData.reviews}
                   onChange={(e) => setFormData({ ...formData, reviews: e.target.value })}
                 />

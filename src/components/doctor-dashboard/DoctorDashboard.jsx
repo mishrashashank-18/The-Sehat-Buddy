@@ -274,6 +274,8 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Active doctor selection: strictly locks to the authenticated doctor's account
   const storedUser = React.useMemo(() => {
     try {
+      const docUser = localStorage.getItem('doctor_user');
+      if (docUser) return JSON.parse(docUser);
       return JSON.parse(localStorage.getItem('user') || '{}');
     } catch {
       return {};
@@ -299,10 +301,10 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   const verifiedReviewsCount = doctorVerifiedReviews.length;
   const verifiedAvgRating = React.useMemo(() => {
-    if (doctorVerifiedReviews.length === 0) return (activeDoctor.rating || 4.8);
+    if (doctorVerifiedReviews.length === 0) return '0';
     const total = doctorVerifiedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
     return (total / doctorVerifiedReviews.length).toFixed(1);
-  }, [doctorVerifiedReviews, activeDoctor.rating]);
+  }, [doctorVerifiedReviews]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState(() => {
@@ -579,6 +581,15 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [previewReelError, setPreviewReelError] = useState(false);
 
   const initialDoctorIdRef = React.useRef(null);
+  const isEditingAvailableDaysRef = React.useRef(false);
+  const knownAppointmentFingerprintsRef = React.useRef(new Set());
+  const isInitialAppointmentsLoadedRef = React.useRef(false);
+
+  // Reset appointment notification tracking when active doctor switches
+  React.useEffect(() => {
+    isInitialAppointmentsLoadedRef.current = false;
+    knownAppointmentFingerprintsRef.current = new Set();
+  }, [activeDoctor?.id, activeDoctor?._id]);
 
   // Fetch remote appointments from database in real time
   const fetchRemoteAppointments = React.useCallback(() => {
@@ -663,11 +674,60 @@ const DoctorDashboard = ({ onNavigate }) => {
 
           const allIncoming = dedupeAppointments([...remoteMapped, ...userBookings]);
 
-          // Check for new incoming appointments to trigger notification toast
-          const existingIds = new Set((prev || []).map(p => String(p.id || p._id)));
-          const newIncoming = allIncoming.filter(r => !existingIds.has(String(r.id || r._id)));
-          if (newIncoming.length > 0 && prev && prev.length > 0) {
-            showToast(`🔔 New patient booking: ${newIncoming[0].patientName} (${newIncoming[0].time})`);
+          // Strict new booking notification: Only alert for genuinely new appointments booked in real time
+          if (!isInitialAppointmentsLoadedRef.current) {
+            // First run on mount: register all existing appointments as known so no false alert fires
+            allIncoming.forEach(apt => {
+              if (apt.id) knownAppointmentFingerprintsRef.current.add(String(apt.id));
+              if (apt._id) knownAppointmentFingerprintsRef.current.add(String(apt._id));
+              const pName = (apt.patientName || apt.userData?.name || '').toLowerCase().trim();
+              const dStr = String(apt.slotDate || apt.dateStr || apt.date || '').trim();
+              const tStr = String(apt.slotTime || apt.time || '').trim();
+              knownAppointmentFingerprintsRef.current.add(`${pName}_${dStr}_${tStr}`);
+            });
+            isInitialAppointmentsLoadedRef.current = true;
+          } else {
+            // Subsequent polling or sync: find items that are genuinely new and created recently (< 90 seconds)
+            const now = Date.now();
+            const genuinelyNew = allIncoming.filter(apt => {
+              if (!apt || isMockPatientAppointment(apt)) return false;
+              const strId = String(apt.id || apt._id || '');
+              const strMongoId = String(apt._id || '');
+              const pName = (apt.patientName || apt.userData?.name || '').toLowerCase().trim();
+              const dStr = String(apt.slotDate || apt.dateStr || apt.date || '').trim();
+              const tStr = String(apt.slotTime || apt.time || '').trim();
+              const fingerprint = `${pName}_${dStr}_${tStr}`;
+
+              // Check if already known by ID, _id, or fingerprint
+              if (strId && knownAppointmentFingerprintsRef.current.has(strId)) return false;
+              if (strMongoId && knownAppointmentFingerprintsRef.current.has(strMongoId)) return false;
+              if (fingerprint && knownAppointmentFingerprintsRef.current.has(fingerprint)) return false;
+
+              // Must be created very recently (within last 90 seconds) to prevent any historical DB records from alerting
+              const createdTimestamp = new Date(apt.createdAt || apt.bookedAt || 0).getTime();
+              if (isNaN(createdTimestamp) || (now - createdTimestamp > 90000)) {
+                // Register as known so it won't be checked again
+                if (strId) knownAppointmentFingerprintsRef.current.add(strId);
+                if (strMongoId) knownAppointmentFingerprintsRef.current.add(strMongoId);
+                if (fingerprint) knownAppointmentFingerprintsRef.current.add(fingerprint);
+                return false;
+              }
+
+              return true;
+            });
+
+            if (genuinelyNew.length > 0) {
+              const newest = genuinelyNew[0];
+              showToast(`🔔 New patient booking: ${newest.patientName} (${newest.time})`);
+              genuinelyNew.forEach(apt => {
+                if (apt.id) knownAppointmentFingerprintsRef.current.add(String(apt.id));
+                if (apt._id) knownAppointmentFingerprintsRef.current.add(String(apt._id));
+                const pName = (apt.patientName || apt.userData?.name || '').toLowerCase().trim();
+                const dStr = String(apt.slotDate || apt.dateStr || apt.date || '').trim();
+                const tStr = String(apt.slotTime || apt.time || '').trim();
+                knownAppointmentFingerprintsRef.current.add(`${pName}_${dStr}_${tStr}`);
+              });
+            }
           }
 
           // Real database appointments are the authoritative source of truth
@@ -698,6 +758,16 @@ const DoctorDashboard = ({ onNavigate }) => {
         }
       }
       setAppointments(loadedApts || []);
+      if (loadedApts && loadedApts.length > 0) {
+        loadedApts.forEach(apt => {
+          if (apt.id) knownAppointmentFingerprintsRef.current.add(String(apt.id));
+          if (apt._id) knownAppointmentFingerprintsRef.current.add(String(apt._id));
+          const pName = (apt.patientName || apt.userData?.name || '').toLowerCase().trim();
+          const dStr = String(apt.slotDate || apt.dateStr || apt.date || '').trim();
+          const tStr = String(apt.slotTime || apt.time || '').trim();
+          knownAppointmentFingerprintsRef.current.add(`${pName}_${dStr}_${tStr}`);
+        });
+      }
 
       let loadedRx = null;
       for (const key of keys) {
@@ -876,7 +946,11 @@ const DoctorDashboard = ({ onNavigate }) => {
           changed = true;
         }
       }
-      if (activeDoctor.availableDays && activeDoctor.availableDays !== prev.availableDays) {
+      if (
+        activeDoctor.availableDays &&
+        activeDoctor.availableDays !== prev.availableDays &&
+        !isEditingAvailableDaysRef.current
+      ) {
         next.availableDays = activeDoctor.availableDays;
         changed = true;
       }
@@ -1770,11 +1844,64 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('Profile photo removed!');
   };
 
+  // Helper to verify if profile form has any unsaved modifications
+  const isProfileFormDirty = () => {
+    if (!activeDoctor || !profileForm) return false;
+    const textFields = [
+      'name', 'specialty', 'specialization', 'phone', 'contact_number',
+      'licenseNumber', 'hospital', 'jobTitle', 'about', 'availableDays'
+    ];
+    for (const f of textFields) {
+      if (profileForm[f] !== undefined && activeDoctor[f] !== undefined) {
+        if (String(profileForm[f] || '').trim() !== String(activeDoctor[f] || '').trim()) {
+          return true;
+        }
+      }
+    }
+    const formPrice = Number(profileForm.price ?? profileForm.fees);
+    const docPrice = Number(activeDoctor.price ?? activeDoctor.fees);
+    if (!isNaN(formPrice) && !isNaN(docPrice) && formPrice !== docPrice) {
+      return true;
+    }
+    const formExp = parseInt(profileForm.experience, 10);
+    const docExp = parseInt(activeDoctor.experience, 10);
+    if (!isNaN(formExp) && !isNaN(docExp) && formExp !== docExp) {
+      return true;
+    }
+    const formDur = Number(profileForm.slotDuration);
+    const docDur = Number(activeDoctor.slotDuration);
+    if (!isNaN(formDur) && !isNaN(docDur) && formDur !== docDur) {
+      return true;
+    }
+    if (JSON.stringify(profileForm.scheduleDays || []) !== JSON.stringify(activeDoctor.scheduleDays || [])) return true;
+    if (JSON.stringify(profileForm.availableSlots || []) !== JSON.stringify(activeDoctor.availableSlots || [])) return true;
+    if (JSON.stringify(profileForm.dayWiseSlots || {}) !== JSON.stringify(activeDoctor.dayWiseSlots || {})) return true;
+    if (JSON.stringify(profileForm.dateWiseSlots || {}) !== JSON.stringify(activeDoctor.dateWiseSlots || {})) return true;
+    if (JSON.stringify(profileForm.tags || []) !== JSON.stringify(activeDoctor.tags || [])) return true;
+    if (JSON.stringify(profileForm.awards || []) !== JSON.stringify(activeDoctor.awards || [])) return true;
+
+    return false;
+  };
+
   // Save All Profile Settings
-  const handleSaveAllProfileSettings = async (e) => {
+  const handleSaveAllProfileSettings = async (e, options = {}) => {
     e?.preventDefault?.();
+    const isExplicitUserSave = options.explicit === true || (e && (e.type === 'click' || e.type === 'submit'));
     const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
+
+    const isDirty = isProfileFormDirty();
+
+    // If nothing changed and this was an automatic trigger (e.g. onBlur), do nothing
+    if (!isDirty && !isExplicitUserSave) {
+      return;
+    }
+
+    // If user clicked Save Settings but no changes were made
+    if (!isDirty && isExplicitUserSave) {
+      showToast('Profile is already up to date!');
+      return;
+    }
 
     const payload = {
       ...profileForm,
@@ -1808,12 +1935,15 @@ const DoctorDashboard = ({ onNavigate }) => {
     await updateDoctor(docId, payload);
     // Update localStorage user object so about (and other fields) survive refresh
     try {
-      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
+      const stored = rawStored ? JSON.parse(rawStored) : {};
       if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
         stored.about = payload.about;
         stored.name = payload.name;
         stored.specialization = payload.specialization;
         stored.specialty = payload.specialty;
+        stored.role = 'doctor';
+        localStorage.setItem('doctor_user', JSON.stringify(stored));
         localStorage.setItem('user', JSON.stringify(stored));
       }
     } catch {}
@@ -1834,9 +1964,12 @@ const DoctorDashboard = ({ onNavigate }) => {
       });
       // Update localStorage user object so it survives refresh
       try {
-        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
+        const stored = rawStored ? JSON.parse(rawStored) : {};
         if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
           stored.about = aboutText;
+          stored.role = 'doctor';
+          localStorage.setItem('doctor_user', JSON.stringify(stored));
           localStorage.setItem('user', JSON.stringify(stored));
         }
       } catch {}
@@ -2531,8 +2664,18 @@ const DoctorDashboard = ({ onNavigate }) => {
               Website
             </button>
             <button className={styles.navLinkBtn} style={{ color: '#dc2626', fontWeight: 600 }} onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('user');
+              localStorage.removeItem('doctor_token');
+              localStorage.removeItem('doctor_user');
+              try {
+                const u = JSON.parse(localStorage.getItem('user') || '{}');
+                if (u.role === 'doctor' || !u.role) {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                }
+              } catch {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+              }
               window.location.href = '/doctor';
             }}>
               Logout
@@ -2702,7 +2845,7 @@ const DoctorDashboard = ({ onNavigate }) => {
             <div>
               <span className={styles.kpiLabel}>Patient Satisfaction</span>
               <div className={styles.kpiValue}>{verifiedAvgRating} ★</div>
-              <span className={styles.kpiSub}>{verifiedReviewsCount}+ reviews</span>
+              <span className={styles.kpiSub}>{verifiedReviewsCount} {verifiedReviewsCount === 1 ? 'review' : 'reviews'}</span>
             </div>
           </div>
 
@@ -3794,8 +3937,21 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <input
                     type="text"
                     value={profileForm.availableDays || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, availableDays: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    onFocus={() => {
+                      isEditingAvailableDaysRef.current = true;
+                    }}
+                    onChange={(e) => {
+                      isEditingAvailableDaysRef.current = true;
+                      setProfileForm({ ...profileForm, availableDays: e.target.value });
+                    }}
+                    onBlur={(e) => {
+                      isEditingAvailableDaysRef.current = false;
+                      handleSaveAllProfileSettings(e);
+                    }}
+                    style={{
+                      fontVariantNumeric: 'tabular-nums',
+                      fontFeatureSettings: '"tnum"',
+                    }}
                   />
                 </div>
               </form>
@@ -5386,14 +5542,26 @@ const DoctorDashboard = ({ onNavigate }) => {
                       type="text"
                       placeholder="e.g. Mon - Sat (10am - 4pm)"
                       value={profileForm.availableDays || ''}
-                      onChange={(e) => setProfileForm({ ...profileForm, availableDays: e.target.value })}
+                      onFocus={() => {
+                        isEditingAvailableDaysRef.current = true;
+                      }}
+                      onChange={(e) => {
+                        isEditingAvailableDaysRef.current = true;
+                        setProfileForm({ ...profileForm, availableDays: e.target.value });
+                      }}
+                      onBlur={(e) => {
+                        isEditingAvailableDaysRef.current = false;
+                        handleSaveAllProfileSettings(e);
+                      }}
                       style={{
                         width: '100%',
                         padding: '7px 10px',
                         borderRadius: '6px',
                         border: '1px solid #cbd5e1',
                         fontSize: '0.82rem',
-                        boxSizing: 'border-box'
+                        boxSizing: 'border-box',
+                        fontVariantNumeric: 'tabular-nums',
+                        fontFeatureSettings: '"tnum"',
                       }}
                     />
                   </div>

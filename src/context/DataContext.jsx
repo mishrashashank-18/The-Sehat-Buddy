@@ -318,6 +318,9 @@ export const DataProvider = ({ children }) => {
         specialization: resolvedSpecialty,
         price: resolvedPrice,
         fees: resolvedPrice,
+        rating: d.rating !== undefined ? d.rating : existing?.rating,
+        reviews: d.reviews !== undefined ? d.reviews : (existing?.reviews || '50+'),
+        availabilityStatus: d.availabilityStatus || existing?.availabilityStatus || 'Available',
         experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
         licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
         awards: (Array.isArray(d.awards) && d.awards.length > 0) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
@@ -508,10 +511,71 @@ export const DataProvider = ({ children }) => {
             // Instant targeted update based on modified collection
             if (collection === 'doctors') {
               if (payload.docId && payload.fullDocument) {
+                const docData = payload.fullDocument;
+                const spec = docData.specialty || docData.specialization;
+                const deg = docData.degree || docData.qualifications;
+                const pr = docData.price ?? docData.fees;
+                const exp = docData.experience !== undefined ? docData.experience : undefined;
+                const hosp = docData.hospital;
+                const nm = docData.name;
+                const rtg = docData.rating !== undefined ? parseFloat(docData.rating) || docData.rating : undefined;
+                const revs = docData.reviews !== undefined ? docData.reviews : undefined;
+                const avDays = docData.availableDays !== undefined ? docData.availableDays : undefined;
+                const avStatus = docData.availabilityStatus !== undefined ? docData.availabilityStatus : undefined;
+                const avBool = docData.available !== undefined ? docData.available : undefined;
+
                 setDoctors(prev => {
-                  const updated = prev.map(d => matchesId(d, payload.docId) ? { ...d, ...payload.fullDocument } : d);
+                  let found = false;
+                  const updated = prev.map(d => {
+                    if (matchesId(d, payload.docId) || (d.email && docData.email && d.email.toLowerCase().trim() === docData.email.toLowerCase().trim())) {
+                      found = true;
+                      return {
+                        ...d,
+                        ...docData,
+                        id: d.id || docData.id || docData._id,
+                        _id: docData._id || d._id || docData.id,
+                        name: nm ? String(nm).trim() : d.name,
+                        specialty: spec || d.specialty || d.specialization,
+                        specialization: spec || d.specialization || d.specialty,
+                        hospital: hosp !== undefined ? hosp : d.hospital,
+                        experience: exp !== undefined ? exp : d.experience,
+                        degree: deg || d.degree || d.qualifications,
+                        qualifications: deg || d.qualifications || d.degree,
+                        price: pr !== undefined ? pr : (d.price ?? d.fees),
+                        fees: pr !== undefined ? pr : (d.fees ?? d.price),
+                        rating: rtg !== undefined ? rtg : d.rating,
+                        reviews: revs !== undefined ? revs : d.reviews,
+                        availableDays: avDays !== undefined ? avDays : d.availableDays,
+                        availabilityStatus: avStatus !== undefined ? avStatus : d.availabilityStatus,
+                        available: avBool !== undefined ? avBool : d.available,
+                        scheduleDays: docData.scheduleDays !== undefined ? docData.scheduleDays : d.scheduleDays,
+                        availableSlots: docData.availableSlots !== undefined ? docData.availableSlots : d.availableSlots,
+                        slotDuration: docData.slotDuration !== undefined ? docData.slotDuration : d.slotDuration,
+                        dayWiseSlots: docData.dayWiseSlots !== undefined ? docData.dayWiseSlots : d.dayWiseSlots,
+                        dateWiseSlots: docData.dateWiseSlots !== undefined ? docData.dateWiseSlots : d.dateWiseSlots
+                      };
+                    }
+                    return d;
+                  });
+                  if (!found && (payload.operation === 'insert' || payload.operation === 'create')) {
+                    updated.push({
+                      ...docData,
+                      specialty: spec || 'General Physician',
+                      specialization: spec || 'General Physician',
+                      degree: deg || '',
+                      qualifications: deg || '',
+                      price: pr || 500,
+                      fees: pr || 500,
+                      rating: rtg !== undefined ? rtg : 0,
+                      reviews: revs !== undefined ? revs : '0',
+                      availableDays: avDays || 'Mon - Sat (10am - 4pm)',
+                      availabilityStatus: avStatus || 'Available',
+                      available: avBool !== undefined ? avBool : true
+                    });
+                  }
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+                    broadcastSync(STORAGE_KEY_DOCTORS, updated);
                   } catch {}
                   return updated;
                 });
@@ -691,8 +755,8 @@ export const DataProvider = ({ children }) => {
     const newDoctor = {
       ...doctorData,
       id: Date.now(),
-      rating: parseFloat(doctorData.rating) || 4.5,
-      reviews: doctorData.reviews ? `${doctorData.reviews}` : '10+',
+      rating: doctorData.rating !== undefined && !isNaN(parseFloat(doctorData.rating)) ? parseFloat(doctorData.rating) : 0,
+      reviews: doctorData.reviews !== undefined ? `${doctorData.reviews}` : '0',
       price: parseInt(doctorData.price, 10) || 500,
     };
     setDoctors(prev => {
@@ -721,6 +785,10 @@ export const DataProvider = ({ children }) => {
           mergedDoctor = {
             ...doc,
             ...updatedData,
+            name: updatedData.name ? String(updatedData.name).trim() : doc.name,
+            hospital: updatedData.hospital !== undefined ? updatedData.hospital : doc.hospital,
+            degree: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
+            qualifications: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
             available: resolvedAvailable,
             id: doc.id || updatedData.id || doc._id,
             _id: doc._id || updatedData._id || doc.id,
@@ -730,6 +798,8 @@ export const DataProvider = ({ children }) => {
             fees: resolvedPrice,
             experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
+            reviews: updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews,
+            availabilityStatus: updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus,
             awards: updatedData.awards !== undefined ? updatedData.awards : doc.awards,
             certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
             memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
@@ -768,15 +838,27 @@ export const DataProvider = ({ children }) => {
             if (matchesId(doc, id)) {
               const resSpecialty = res.specialization ?? res.specialty ?? doc.specialty;
               const resPrice = res.fees ?? res.price ?? doc.price;
+              const resDegree = res.degree ?? res.qualifications ?? doc.degree;
+              const resHospital = res.hospital ?? doc.hospital;
+              const resName = res.name ?? doc.name;
               return {
                 ...doc,
                 ...res,
                 id: doc.id || res.id || res._id,
                 _id: res._id || doc._id || res.id,
+                name: resName,
+                hospital: resHospital,
+                degree: resDegree,
+                qualifications: resDegree,
                 specialty: resSpecialty,
                 specialization: resSpecialty,
                 price: resPrice,
                 fees: resPrice,
+                rating: res.rating !== undefined ? parseFloat(res.rating) || doc.rating : (updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating),
+                reviews: res.reviews !== undefined ? res.reviews : (updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews),
+                availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays),
+                availabilityStatus: res.availabilityStatus !== undefined ? res.availabilityStatus : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus),
+                available: res.available !== undefined ? res.available : (updatedData.available !== undefined ? updatedData.available : doc.available),
                 experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (parseInt(String(res.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
                 awards: Array.isArray(res.awards) ? res.awards : doc.awards,
                 certifications: Array.isArray(res.certifications) ? res.certifications : doc.certifications,

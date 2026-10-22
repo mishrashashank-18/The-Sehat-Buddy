@@ -7,8 +7,26 @@ export const resolveApiBase = () => {
 
 export const API_BASE = resolveApiBase();
 
+export const getActiveAuthToken = () => {
+  try {
+    const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
+    if (path.startsWith('/doctor')) {
+      return localStorage.getItem('doctor_token') || localStorage.getItem('token');
+    }
+    if (path.startsWith('/admin')) {
+      return localStorage.getItem('admin_token') || localStorage.getItem('token');
+    }
+    if (path.startsWith('/hospital')) {
+      return localStorage.getItem('hospital_token') || localStorage.getItem('token');
+    }
+    return localStorage.getItem('token') || localStorage.getItem('patient_token');
+  } catch {
+    return localStorage.getItem('token');
+  }
+};
+
 const getAuthHeaders = (isFormData = false) => {
-  const token = localStorage.getItem('token');
+  const token = getActiveAuthToken();
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (!isFormData) headers['Content-Type'] = 'application/json';
@@ -54,9 +72,12 @@ export const api = {
   async updateDoctor(id, doctorData) {
     let role = null;
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const user = JSON.parse(localStorage.getItem('admin_user') || localStorage.getItem('user') || '{}');
       role = user.role;
     } catch {}
+    if (!role && typeof window !== 'undefined' && (window.location.pathname || '').startsWith('/admin')) {
+      role = 'admin';
+    }
 
     const payload = { ...doctorData };
     if (payload.experience !== undefined) {
@@ -420,7 +441,7 @@ export const api = {
   async uploadImage(fileOrBase64, folder = 'sehatbuddy') {
     let body;
     let headers = {};
-    const token = localStorage.getItem('token');
+    const token = getActiveAuthToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
@@ -444,7 +465,7 @@ export const api = {
 
   // Delete Media / Image completely from Cloudinary
   async deleteImage(urlOrPublicId, resourceType = 'image') {
-    const token = localStorage.getItem('token');
+    const token = getActiveAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -466,7 +487,7 @@ export const api = {
     formData.append('video', fileOrBlob);
     formData.append('folder', folder);
 
-    const token = localStorage.getItem('token');
+    const token = getActiveAuthToken();
 
     if (onProgress && typeof onProgress === 'function') {
       return new Promise((resolve, reject) => {

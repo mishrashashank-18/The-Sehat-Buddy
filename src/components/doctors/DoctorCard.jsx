@@ -12,10 +12,12 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
   }, [doctor, reviews]);
 
   const avgRating = React.useMemo(() => {
-    if (doctorReviews.length === 0) return doctor.rating || '4.8';
+    if (doctorReviews.length === 0) return '0';
     const total = doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
     return (total / doctorReviews.length).toFixed(1);
-  }, [doctorReviews, doctor.rating]);
+  }, [doctorReviews]);
+
+  const reviewCount = doctorReviews.length;
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -56,9 +58,9 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
         </p>
         
         <div className={styles.rating}>
-          <Star size={14} className={styles.starIcon} fill="#FACC15" color="#FACC15" />
+          <Star size={14} className={styles.starIcon} fill={reviewCount > 0 ? '#FACC15' : '#E2E8F0'} color={reviewCount > 0 ? '#FACC15' : '#CBD5E1'} />
           <span className={styles.score}>{avgRating}</span>
-          <span className={styles.reviews}>({doctorReviews.length}+ reviews)</span>
+          <span className={styles.reviews}>({reviewCount} {reviewCount === 1 ? 'review' : 'reviews'})</span>
         </div>
         
         <div className={styles.priceRow}>

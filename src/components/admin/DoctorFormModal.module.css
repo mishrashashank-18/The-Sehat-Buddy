@@ -193,6 +193,8 @@
   border: 1px solid #d9e2e6;
   font-size: 0.9rem;
   font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
   color: var(--color-heading);
   background-color: #fff;
   transition: border-color 0.2s, box-shadow 0.2s;

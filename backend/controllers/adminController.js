@@ -125,7 +125,7 @@ export const addDoctor = async (req, res) => {
 
     const doctor = await Doctor.create({
       name, email, password: password || 'password123', specialization, experience, about, fees, address: parsedAddress, image, reels: reels || [], youtube_videos: youtube_videos || [], instagram, facebook,
-      rating: rating || 4.8, reviews: reviews || '50+', hospital, qualifications, contact_number, available: available !== undefined ? available : true
+      rating: rating !== undefined && !isNaN(Number(rating)) ? Number(rating) : 0, reviews: reviews !== undefined ? String(reviews) : '0', hospital, qualifications, contact_number, available: available !== undefined ? available : true
     });
     broadcastDbChange('doctors', 'insert', doctor._id, doctor);
     res.status(201).json({ success: true, message: 'Doctor added', data: doctor });
@@ -188,16 +188,65 @@ export const updateDoctor = async (req, res) => {
         doctor.markModified('id');
       }
 
-      if (req.body.experience !== undefined) {
-        const expNum = parseInt(req.body.experience, 10);
+      if (req.body.name !== undefined) {
+        doctor.name = String(req.body.name).trim();
+        doctor.markModified('name');
+      }
+
+      if (req.body.specialty !== undefined || req.body.specialization !== undefined) {
+        const spec = req.body.specialty || req.body.specialization;
+        doctor.specialty = spec;
+        doctor.specialization = spec;
+        doctor.markModified('specialty');
+        doctor.markModified('specialization');
+      }
+
+      if (req.body.hospital !== undefined) {
+        doctor.hospital = req.body.hospital;
+        doctor.markModified('hospital');
+      }
+
+      if (req.body.degree !== undefined || req.body.qualifications !== undefined) {
+        const deg = req.body.degree || req.body.qualifications;
+        doctor.degree = deg;
+        doctor.qualifications = deg;
+        doctor.markModified('degree');
+        doctor.markModified('qualifications');
+      }
+
+      if (req.body.experience !== undefined || req.body.experienceYears !== undefined) {
+        const expNum = parseInt(req.body.experience ?? req.body.experienceYears, 10);
         doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
         doctor.markModified('experience');
+      }
+
+      if (req.body.rating !== undefined) {
+        const rNum = parseFloat(req.body.rating);
+        doctor.rating = !isNaN(rNum) ? rNum : 0;
+        doctor.markModified('rating');
+      }
+
+      if (req.body.reviews !== undefined) {
+        doctor.reviews = String(req.body.reviews).trim();
+        doctor.markModified('reviews');
+      }
+
+      if (req.body.available !== undefined) {
+        doctor.available = Boolean(req.body.available);
+        doctor.markModified('available');
+      }
+
+      if (req.body.availabilityStatus !== undefined) {
+        doctor.availabilityStatus = req.body.availabilityStatus;
+        doctor.markModified('availabilityStatus');
       }
 
       if (req.body.fees !== undefined || req.body.price !== undefined) {
         const feesNum = Number(req.body.fees ?? req.body.price);
         doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
+        doctor.price = doctor.fees;
         doctor.markModified('fees');
+        doctor.markModified('price');
       }
 
       if (req.body.isStarDoctor !== undefined) {

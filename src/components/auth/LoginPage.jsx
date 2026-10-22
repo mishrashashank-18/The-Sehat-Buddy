@@ -5,6 +5,29 @@ import logoImg from '../../assets/images/logo.png';
 import { API_BASE } from '../../services/api';
 import styles from './LoginPage.module.css';
 
+export const saveAuthSession = (sessionRole, token, rawUser) => {
+  if (!token) return;
+  // Always update general keys for backwards compatibility
+  localStorage.setItem('token', token);
+  const normalizedUser = rawUser ? { ...rawUser, role: rawUser.role || sessionRole } : { role: sessionRole };
+  localStorage.setItem('user', JSON.stringify(normalizedUser));
+
+  // Role-isolated session storage
+  if (sessionRole === 'doctor') {
+    localStorage.setItem('doctor_token', token);
+    localStorage.setItem('doctor_user', JSON.stringify({ ...normalizedUser, role: 'doctor' }));
+  } else if (sessionRole === 'admin') {
+    localStorage.setItem('admin_token', token);
+    localStorage.setItem('admin_user', JSON.stringify({ ...normalizedUser, role: 'admin' }));
+  } else if (sessionRole === 'hospital') {
+    localStorage.setItem('hospital_token', token);
+    localStorage.setItem('hospital_user', JSON.stringify({ ...normalizedUser, role: 'hospital' }));
+  } else if (sessionRole === 'user') {
+    localStorage.setItem('patient_token', token);
+    localStorage.setItem('patient_user', JSON.stringify({ ...normalizedUser, role: 'user' }));
+  }
+};
+
 const LoginPage = ({ role, setView }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [name, setName] = useState('');
@@ -140,10 +163,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('doctor', data.token, data.user);
         window.location.href = '/doctor';
       } else {
         setError(data.message || 'Failed to set password. Please try again.');
@@ -171,10 +191,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('doctor', data.token, data.user);
         window.location.href = '/doctor';
       } else {
         setError(data.message || 'Invalid password. Please try again.');
@@ -290,10 +307,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('doctor', data.token, data.user);
         window.location.href = '/doctor';
       } else {
         setError(data.message || 'Failed to reset password. Please try again.');
@@ -370,10 +384,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('hospital', data.token, data.user);
         window.location.href = '/hospital';
       } else {
         setError(data.message || 'Failed to set password. Please try again.');
@@ -401,10 +412,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('hospital', data.token, data.user);
         window.location.href = '/hospital';
       } else if (data.isFirstLogin) {
         setHospStep('set-password');
@@ -522,10 +530,7 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        localStorage.setItem('token', data.token);
-        if (data.user) {
-          localStorage.setItem('user', JSON.stringify(data.user));
-        }
+        saveAuthSession('hospital', data.token, data.user);
         window.location.href = '/hospital';
       } else {
         setError(data.message || 'Failed to reset password. Please try again.');
@@ -553,11 +558,8 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
         const userData = data.user || data.data || data.admin;
-        if (userData) {
-          localStorage.setItem('user', JSON.stringify(userData));
-        }
+        saveAuthSession(role, data.token, userData);
         const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
         window.location.href = targetPath;
       } else {
@@ -594,11 +596,8 @@ const LoginPage = ({ role, setView }) => {
           setShowOtp(true);
           setError('');
         } else {
-          localStorage.setItem('token', data.token);
           const userData = data.user || data.data || data.admin;
-          if (userData) {
-            localStorage.setItem('user', JSON.stringify(userData));
-          }
+          saveAuthSession(role, data.token, userData);
           const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
           window.location.href = targetPath;
         }
@@ -626,11 +625,8 @@ const LoginPage = ({ role, setView }) => {
       const data = await response.json();
 
       if (response.ok) {
-        localStorage.setItem('token', data.token);
         const userData = data.user || data.data || data.admin;
-        if (userData) {
-          localStorage.setItem('user', JSON.stringify(userData));
-        }
+        saveAuthSession('user', data.token, userData);
         const targetPath = `/${roleRedirects[role] === 'home' ? '' : roleRedirects[role]}`;
         window.location.href = targetPath;
       } else {

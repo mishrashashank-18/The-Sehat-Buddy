@@ -650,8 +650,18 @@ const HospitalDashboard = ({ onNavigate }) => {
             <button
               className={`${styles.navLinkBtn} ${styles.navLinkLogout}`}
               onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
+                localStorage.removeItem('hospital_token');
+                localStorage.removeItem('hospital_user');
+                try {
+                  const u = JSON.parse(localStorage.getItem('user') || '{}');
+                  if (u.role === 'hospital' || !u.role) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                  }
+                } catch {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                }
                 window.location.href = '/hospital';
               }}
               title="Sign out of hospital account"

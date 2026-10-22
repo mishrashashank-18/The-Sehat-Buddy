@@ -853,6 +853,23 @@
   gap: 12px;
 }
 
+.tableDocProfileClickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
+}
+
+.tableDocProfileClickable:hover {
+  background: #f1f5f9;
+}
+
+.tableDocProfileClickable:hover .tableDocName {
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
 .tableDocAvatar {
   width: 44px;
   height: 44px;
@@ -936,6 +953,29 @@
   justify-content: flex-end;
   gap: 6px;
   white-space: nowrap;
+}
+
+.historyActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.historyActionBtn:hover {
+  background: #1d4ed8;
+  color: #ffffff;
+  border-color: #1d4ed8;
+  box-shadow: 0 2px 6px rgba(29, 78, 216, 0.25);
 }
 
 .editActionBtn {

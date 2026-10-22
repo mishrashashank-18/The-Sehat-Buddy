@@ -165,9 +165,8 @@ const makeCircularFavicon = (imageUrl) => {
   });
 };
 
-const getSessionRole = () => {
-  const token = localStorage.getItem('token');
-  if (!token) return null;
+const parseJwtPayload = (token) => {
+  if (!token || typeof token !== 'string') return null;
   try {
     const parts = token.split('.');
     if (parts.length === 3) {
@@ -179,19 +178,103 @@ const getSessionRole = () => {
           .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
           .join('')
       );
-      const parsed = JSON.parse(jsonPayload);
-      if (parsed.exp && parsed.exp * 1000 < Date.now()) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        return null;
-      }
-      if (parsed.role) return parsed.role;
+      return JSON.parse(jsonPayload);
     }
   } catch {}
+  return null;
+};
+
+export const getRoleToken = (role) => {
   try {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    // 1. Role-specific isolated token
+    const roleToken = localStorage.getItem(`${role}_token`);
+    if (roleToken) {
+      const payload = parseJwtPayload(roleToken);
+      if (payload && payload.exp && payload.exp * 1000 < Date.now()) {
+        localStorage.removeItem(`${role}_token`);
+        localStorage.removeItem(`${role}_user`);
+      } else {
+        return roleToken;
+      }
+    }
+
+    // 2. Fallback to general token with self-healing migration
+    const generalToken = localStorage.getItem('token');
+    if (generalToken) {
+      const payload = parseJwtPayload(generalToken);
+      if (payload) {
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          // expired
+        } else if (payload.role === role) {
+          localStorage.setItem(`${role}_token`, generalToken);
+          return generalToken;
+        }
+      }
+    }
+
+    // 3. Fallback to user object in localStorage
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      if (u && u.role === role && generalToken) {
+        localStorage.setItem(`${role}_token`, generalToken);
+        localStorage.setItem(`${role}_user`, JSON.stringify(u));
+        return generalToken;
+      }
+    } catch {}
+
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+export const getRoleUser = (role) => {
+  try {
+    const specific = localStorage.getItem(`${role}_user`);
+    if (specific) return JSON.parse(specific);
+
+    const general = localStorage.getItem('user');
+    if (general) {
+      const parsed = JSON.parse(general);
+      if (parsed.role === role) {
+        localStorage.setItem(`${role}_user`, general);
+        return parsed;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const getSessionRole = (targetRole) => {
+  const token = targetRole ? getRoleToken(targetRole) : localStorage.getItem('token');
+  if (!token) {
+    const roleUser = targetRole ? getRoleUser(targetRole) : null;
+    if (roleUser && roleUser.role) return roleUser.role;
+    return null;
+  }
+
+  const payload = parseJwtPayload(token);
+  if (payload) {
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      if (targetRole) {
+        localStorage.removeItem(`${targetRole}_token`);
+        localStorage.removeItem(`${targetRole}_user`);
+      } else {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+      return null;
+    }
+    if (payload.role) return payload.role;
+  }
+
+  try {
+    const user = targetRole ? getRoleUser(targetRole) : JSON.parse(localStorage.getItem('user') || '{}');
     if (user && user.role) return user.role;
   } catch {}
+
   return null;
 };
 
@@ -308,21 +391,27 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const token = localStorage.getItem('token');
-  const sessionRole = getSessionRole();
+  const adminToken = getRoleToken('admin');
+  const adminRole = getSessionRole('admin');
+
+  const doctorToken = getRoleToken('doctor');
+  const doctorRole = getSessionRole('doctor');
+
+  const hospitalToken = getRoleToken('hospital');
+  const hospitalRole = getSessionRole('hospital');
 
   if (currentView === 'admin') {
-    if (!token || sessionRole !== 'admin') return <LoginPage role="admin" setView={navigateTo} />;
+    if (!adminToken || adminRole !== 'admin') return <LoginPage role="admin" setView={navigateTo} />;
     return <AdminPanel onExit={() => navigateTo('site')} onNavigate={navigateTo} />;
   }
 
   if (currentView === 'doctor') {
-    if (!token || sessionRole !== 'doctor') return <LoginPage role="doctor" setView={navigateTo} />;
+    if (!doctorToken || doctorRole !== 'doctor') return <LoginPage role="doctor" setView={navigateTo} />;
     return <DoctorDashboard onNavigate={navigateTo} />;
   }
 
   if (currentView === 'hospital') {
-    if (!token || sessionRole !== 'hospital') return <LoginPage role="hospital" setView={navigateTo} />;
+    if (!hospitalToken || hospitalRole !== 'hospital') return <LoginPage role="hospital" setView={navigateTo} />;
     return <HospitalDashboard onNavigate={navigateTo} />;
   }
 

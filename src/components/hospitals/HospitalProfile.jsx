@@ -35,6 +35,7 @@ import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
+import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import { API_BASE } from '../../services/api';
 import styles from './HospitalProfile.module.css';
 
@@ -766,10 +767,18 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   <div className={styles.docCardBody}>
                     <div className={styles.docNameRow}>
                       <h3 className={styles.docName}>{doc.name}</h3>
-                      <div className={styles.docRating}>
-                        <Star size={12} fill="#EAB308" color="#EAB308" />
-                        <span>{doc.rating || 4.8}</span>
-                      </div>
+                      {(() => {
+                        const docRevs = getDoctorVerifiedReviews(doc, reviews);
+                        const score = docRevs.length > 0
+                          ? (docRevs.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / docRevs.length).toFixed(1)
+                          : (Number(doc.rating) > 0 ? Number(doc.rating).toFixed(1) : '0');
+                        return (
+                          <div className={styles.docRating}>
+                            <Star size={12} fill={docRevs.length > 0 ? "#EAB308" : "#E2E8F0"} color={docRevs.length > 0 ? "#EAB308" : "#CBD5E1"} />
+                            <span>{score}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <span className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Medical Specialist'}</span>

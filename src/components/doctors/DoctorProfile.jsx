@@ -224,113 +224,24 @@ const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) =>
 // Helper for authentic, verified patient reviews (shared in real-time with Doctor Dashboard)
 export const getDoctorVerifiedReviews = (doc, liveReviews) => {
   if (!doc) return [];
-  const docDisplayName = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'the doctor';
   const cleanDocName = (doc.name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
-  const dId = String(doc.id || doc._id || '');
+  const dId = String(doc.id || '');
+  const dMongoId = String(doc._id || '');
 
-  // 1. Check live reviews from data context
+  // 1. Strictly real-time verified patient reviews from data context
   const matched = (liveReviews || []).filter(r => {
     if (r.targetType === 'doctor' && r.status !== 'rejected') {
       const cleanTargetName = (r.targetName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
       const rTargetId = String(r.targetId || '');
       return (
-        (rTargetId && rTargetId === dId) ||
+        (rTargetId && (rTargetId === dId || (dMongoId && rTargetId === dMongoId))) ||
         (cleanTargetName && cleanDocName && (cleanTargetName.includes(cleanDocName) || cleanDocName.includes(cleanTargetName)))
       );
     }
     return false;
   });
 
-  const spec = doc.specialty || doc.specialization || 'Clinical Care';
-  const hosp = doc.hospital || 'Apollo Hospitals';
-
-  // 2. Default verified reviews ensuring every doctor has 5 rich reviews
-  const default5 = [
-    {
-      id: `verified-rev-1-${dId || 'doc'}`,
-      patientName: 'Kavita Sundaram',
-      patientCity: 'Bengaluru',
-      targetType: 'doctor',
-      targetName: docDisplayName,
-      rating: 5,
-      title: 'Painless Procedure & Compassionate Guidance',
-      comment: `${docDisplayName} detected my clinical condition during a preventive screening. His calm explanation and precise medical management avoided unnecessary panic. True gentleman and top-notch specialist!`,
-      isVerified: true,
-      status: 'approved',
-      treatment: `${spec} Consultation & Care`,
-      insuranceUsed: 'Star Health',
-      createdAt: '2026-10-14T11:30:00.000Z'
-    },
-    {
-      id: `verified-rev-2-${dId || 'doc'}`,
-      patientName: 'Sunil Rao',
-      patientCity: 'Bengaluru',
-      targetType: 'doctor',
-      targetName: docDisplayName,
-      rating: 5,
-      title: 'Outstanding clinical expertise and instant cashless approval',
-      comment: `Visited ${docDisplayName} at ${hosp} for my father's persistent discomfort. He immediately ordered diagnostic tests and guided our cashless TPA paperwork without delay. Highly recommended!`,
-      isVerified: true,
-      status: 'approved',
-      treatment: 'Emergency Clinical Assessment',
-      insuranceUsed: 'HDFC ERGO',
-      createdAt: '2026-10-10T09:15:00.000Z'
-    },
-    {
-      id: `verified-rev-3-${dId || 'doc'}`,
-      patientName: 'Rajiv Malhotra',
-      patientCity: 'Bengaluru',
-      targetType: 'doctor',
-      targetName: docDisplayName,
-      rating: 5,
-      title: 'Life-saving diagnosis & exceptional interventional care',
-      comment: `${docDisplayName} is an exceptional medical specialist. He immediately identified the root cause of my father's severe distress and performed treatment with zero complications. The cashless TPA desk at ${hosp} handled everything in 30 minutes!`,
-      isVerified: true,
-      status: 'approved',
-      treatment: `Advanced ${spec} Intervention`,
-      insuranceUsed: 'Star Health (100% Cashless)',
-      createdAt: '2026-10-06T14:20:00.000Z'
-    },
-    {
-      id: `verified-rev-4-${dId || 'doc'}`,
-      patientName: 'Ananya Deshmukh',
-      patientCity: 'Bengaluru',
-      targetType: 'doctor',
-      targetName: docDisplayName,
-      rating: 5,
-      title: 'Clear communication and compassionate treatment',
-      comment: `I visited ${docDisplayName} for persistent symptoms. Instead of ordering unnecessary diagnostic tests, he patiently walked me through lifestyle adjustments and targeted therapy. Truly patient-centric approach.`,
-      isVerified: true,
-      status: 'approved',
-      treatment: `Specialist ${spec} Consultation`,
-      insuranceUsed: 'HDFC ERGO',
-      createdAt: '2026-09-28T16:45:00.000Z'
-    },
-    {
-      id: `verified-rev-5-${dId || 'doc'}`,
-      patientName: 'Col. Sanjeev Kapoor (Retd.)',
-      patientCity: 'Bengaluru',
-      targetType: 'doctor',
-      targetName: docDisplayName,
-      rating: 5,
-      title: 'Highest standard of medical ethics and clinical precision',
-      comment: `One of the finest doctors I have encountered in my life. Extremely thorough in evaluating symptoms, transparent about treatment alternatives, and humble. The clinic staff and booking experience were equally seamless.`,
-      isVerified: true,
-      status: 'approved',
-      treatment: 'Comprehensive Health Evaluation',
-      insuranceUsed: 'ICICI Lombard',
-      createdAt: '2026-09-18T10:10:00.000Z'
-    }
-  ];
-
-  // Combine all real live reviews first, then append verified baseline reviews without duplicate patient names
-  const combined = [...matched];
-  for (const item of default5) {
-    if (!combined.some(c => (c.patientName || '').toLowerCase().trim() === item.patientName.toLowerCase().trim())) {
-      combined.push(item);
-    }
-  }
-  return combined;
+  return matched;
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
@@ -975,10 +886,15 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   }, [doctor, reviews]);
 
   const avgRating = React.useMemo(() => {
-    if (doctorReviews.length === 0) return (doctor.rating || '4.8');
+    if (doctorReviews.length === 0) return '0';
     const total = doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
     return (total / doctorReviews.length).toFixed(1);
-  }, [doctorReviews, doctor.rating]);
+  }, [doctorReviews]);
+
+  const displayReviewsText = React.useMemo(() => {
+    const count = doctorReviews.length;
+    return `${count} patient review${count === 1 ? '' : 's'}`;
+  }, [doctorReviews.length]);
 
   return (
     <div className={styles.pageWrapper}>
@@ -1080,7 +996,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     <span className={styles.heroRatingVal}>{avgRating}</span>
                     <span className={styles.heroRatingDivider}>|</span>
                     <span className={styles.heroReviewsCount}>
-                      {doctorReviews.length}+ patient reviews
+                      {displayReviewsText}
                     </span>
                   </div>
                 </div>
@@ -2274,16 +2190,21 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     <div className={styles.ratingScoreBig}>
                       {doctorReviews.length > 0
                         ? (doctorReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / doctorReviews.length).toFixed(1)
-                        : (doctor.rating || '4.9')}
+                        : '0'}
                     </div>
                     <div>
                       <div className={styles.starsRow}>
                         {[1, 2, 3, 4, 5].map((s) => (
-                          <Star key={s} size={16} fill="currentColor" color="currentColor" />
+                          <Star
+                            key={s}
+                            size={16}
+                            fill={doctorReviews.length > 0 && s <= Math.round(Number(avgRating)) ? 'currentColor' : '#e2e8f0'}
+                            color={doctorReviews.length > 0 && s <= Math.round(Number(avgRating)) ? 'currentColor' : '#cbd5e1'}
+                          />
                         ))}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>
-                        Based on {doctorReviews.length} verified patient ratings
+                        {doctorReviews.length > 0 ? `Based on ${doctorReviews.length} verified patient ratings` : 'No patient ratings yet'}
                       </div>
                     </div>
                   </div>
