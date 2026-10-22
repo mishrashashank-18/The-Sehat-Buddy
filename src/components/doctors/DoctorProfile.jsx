@@ -936,7 +936,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             'DeAA8evMsBS': 'DXpDWdoDKai',
             'DdrR6vApDBK': 'DZdBbmoM1tn',
             'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
-            'C9_K5qXMO9e': 'DWGyY03lWc2'
+            'C-U4Xo9MvjQ': 'DWGyY03lWc2',
+            'C9_K5qXMO9e': 'DWGyY03lWc2',
+            'DcOgyeMvU0r': 'DerD2HwAeAU'
           };
           if (brokenMap[shortcode]) {
             shortcode = brokenMap[shortcode];
@@ -1845,7 +1847,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     'DdrR6vApDBK': 'DZdBbmoM1tn',
                     'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
                     'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-                    'C9_K5qXMO9e': 'DWGyY03lWc2'
+                    'C9_K5qXMO9e': 'DWGyY03lWc2',
+                    'DcOgyeMvU0r': 'DerD2HwAeAU'
                   };
                   if (brokenMap[shortcode]) {
                     shortcode = brokenMap[shortcode];

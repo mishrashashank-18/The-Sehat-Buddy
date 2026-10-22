@@ -278,7 +278,8 @@ export const DataProvider = ({ children }) => {
       'DdrR6vApDBK': 'DZdBbmoM1tn',
       'DdmEKEvTVC5': 'C-U4Xo9MvjQ',
       'C-U4Xo9MvjQ': 'DWGyY03lWc2',
-      'C9_K5qXMO9e': 'DWGyY03lWc2'
+      'C9_K5qXMO9e': 'DWGyY03lWc2',
+      'DcOgyeMvU0r': 'DerD2HwAeAU'
     };
     return reelsList.map(r => {
       if (!r) return null;
