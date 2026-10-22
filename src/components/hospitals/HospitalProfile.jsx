@@ -593,6 +593,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [preselectedDept, setPreselectedDept] = useState(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [showReviewLoginPrompt, setShowReviewLoginPrompt] = useState(false);
 
   const handleOpenBooking = (dept = null) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
@@ -609,6 +610,21 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     }
     setPreselectedDept(dept);
     setIsBookingModalOpen(true);
+  };
+
+  const handleOpenWriteReview = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    let userObj = null;
+    try {
+      const u = localStorage.getItem('user');
+      if (u) userObj = JSON.parse(u);
+    } catch {}
+
+    if (!token && !userObj && !user) {
+      setShowReviewLoginPrompt(true);
+      return;
+    }
+    setIsWriteReviewModalOpen(true);
   };
 
   // About facility expansion state
@@ -1548,7 +1564,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             <button
               type="button"
               className={styles.writeReviewBtn}
-              onClick={() => setIsWriteReviewModalOpen(true)}
+              onClick={handleOpenWriteReview}
               style={{
                 background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
                 color: '#ffffff',
@@ -1611,7 +1627,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               <p style={{ margin: '0 0 12px', fontSize: '0.95rem' }}>No patient reviews yet for {hospital.name}.</p>
               <button
                 type="button"
-                onClick={() => setIsWriteReviewModalOpen(true)}
+                onClick={handleOpenWriteReview}
                 style={{
                   background: '#2563eb',
                   color: '#ffffff',
@@ -1900,7 +1916,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         />
       )}
 
-      {/* Login Prompt Dialog Modal */}
+      {/* Booking Login Prompt Dialog Modal */}
       {showLoginPrompt && (
         <div style={{
           position: 'fixed',
@@ -1980,6 +1996,100 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 }}
               >
                 Log In / Sign Up
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review Login Suggestion Prompt Modal */}
+      {showReviewLoginPrompt && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(5px)',
+          zIndex: 11000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '440px',
+            width: '100%',
+            padding: '26px',
+            textAlign: 'center',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: '#fef3c7',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              border: '1px solid #fde68a'
+            }}>
+              <Star size={28} color="#d97706" fill="#fde68a" />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>
+              Please Log In to Write a Review
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 20px', lineHeight: 1.5 }}>
+              To ensure all patient ratings, hospital experiences, and cashless feedback are genuine and trustworthy, please log in or register before posting a review for <strong>{hospital.name}</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowReviewLoginPrompt(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReviewLoginPrompt(false);
+                  try {
+                    localStorage.setItem('open_write_review', 'true');
+                    localStorage.setItem('redirect_after_login', `/hospitals/${hospital.id || hospital._id}`);
+                  } catch (e) {
+                    console.warn(e);
+                  }
+                  if (onNavigate) {
+                    onNavigate('user-login', { view: 'hospital-profile', param: hospital.id || hospital._id });
+                  } else {
+                    window.location.href = '/login';
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+                }}
+              >
+                Log In to Review
               </button>
             </div>
           </div>
