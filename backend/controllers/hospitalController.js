@@ -1056,6 +1056,7 @@ export const updateDoctorFaqsByHospital = async (req, res) => {
     doctor.faqs = Array.isArray(faqs) ? faqs : [];
     doctor.markModified('faqs');
     const updated = await doctor.save();
+    broadcastDbChange('doctors', 'update', updated._id, updated);
 
     return res.json({
       success: true,
