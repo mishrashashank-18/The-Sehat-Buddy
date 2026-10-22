@@ -864,7 +864,7 @@ export const DataProvider = ({ children }) => {
     });
 
     try {
-      const res = await api.updateDoctor(id, mergedDoctor || updatedData);
+      const res = await api.updateDoctor(id, updatedData);
       if (res && (res._id || res.id)) {
         setDoctors(prev => {
           const updated = prev.map(doc => {

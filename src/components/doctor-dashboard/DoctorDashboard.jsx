@@ -1821,7 +1821,13 @@ const DoctorDashboard = ({ onNavigate }) => {
     setProfileForm(prev => ({ ...prev, slotDuration: durationMinutes }));
     const docId = activeDoctor?.id || activeDoctor?._id;
     if (docId) {
-      await updateDoctor(docId, { slotDuration: durationMinutes });
+      await updateDoctor(docId, {
+        slotDuration: durationMinutes,
+        availableSlots: profileForm.availableSlots,
+        dayWiseSlots: profileForm.dayWiseSlots,
+        dateWiseSlots: profileForm.dateWiseSlots,
+        scheduleDays: profileForm.scheduleDays
+      });
     }
     showToast(`Slot duration set to ${durationMinutes} minutes`);
   };
@@ -5566,7 +5572,11 @@ const DoctorDashboard = ({ onNavigate }) => {
                           <button
                             key={dur}
                             type="button"
-                            onClick={() => handleSlotDurationChange(dur)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleSlotDurationChange(dur);
+                            }}
                             style={{
                               padding: '5px 10px',
                               borderRadius: '6px',
