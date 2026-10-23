@@ -183,9 +183,16 @@ export const getBioSentences = (doc) => {
   // 1. If doctor has custom about text from dashboard/database, split into sentences cleanly at punctuation boundaries
   if (doc.about && doc.about.trim().length > 0) {
     const rawAbout = doc.about.trim();
-    const sentenceMatches = rawAbout.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+    // Protect common abbreviations (Dr., Prof., Mr., MD., etc.) so they do not trigger premature sentence splits
+    const protectedText = rawAbout
+      .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Sr|Jr)\./gi, '$1___DOT___')
+      .replace(/\b(e\.g|i\.e)\./gi, '$1___DOT___');
+
+    const sentenceMatches = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
     if (sentenceMatches && sentenceMatches.length > 0) {
-      const cleaned = sentenceMatches.map(s => s.trim()).filter(Boolean);
+      const cleaned = sentenceMatches
+        .map(s => s.replace(/___DOT___/g, '.').trim())
+        .filter(Boolean);
       if (cleaned.length > 0) {
         return cleaned;
       }
@@ -738,10 +745,103 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const leftColRef = React.useRef(null);
   const bookingColRef = React.useRef(null);
   const aboutTextRef = React.useRef(null);
+  const aboutParasWrapRef = React.useRef(null);
+  const readMoreBtnRef = React.useRef(null);
+  const measureContainerRef = React.useRef(null);
 
   const allBioSentences = React.useMemo(() => {
     return getBioSentences(doctor);
   }, [doctor]);
+
+  // Dynamic vertical balancing: adjusts biography sentence count so left profile height aligns with right booking panel
+  const updateBalancedBio = React.useCallback(() => {
+    // Retain natural vertical stacking and disable desktop-specific height balancing on mobile/tablet widths
+    if (typeof window === 'undefined' || window.innerWidth <= 992) {
+      return;
+    }
+
+    if (!bookingColRef.current || !leftColRef.current || !measureContainerRef.current) {
+      return;
+    }
+
+    const bookingHeight = bookingColRef.current.offsetHeight;
+    const leftTotalHeight = leftColRef.current.offsetHeight;
+    const currentBioHeight = aboutParasWrapRef.current ? aboutParasWrapRef.current.offsetHeight : 0;
+    const readMoreHeight = readMoreBtnRef.current ? readMoreBtnRef.current.offsetHeight : 0;
+
+    // Fixed height of the left profile (doctor header, highlights, section headings, and bottom information cards)
+    const fixedLeftHeight = leftTotalHeight - currentBioHeight - readMoreHeight;
+    const availableBioHeight = bookingHeight - fixedLeftHeight;
+
+    const sentenceEls = Array.from(measureContainerRef.current.children);
+    if (sentenceEls.length === 0) return;
+
+    let bestCount = 1;
+    let accumulatedHeight = 0;
+
+    for (let i = 0; i < sentenceEls.length; i++) {
+      const elHeight = sentenceEls[i].offsetHeight || 0;
+      accumulatedHeight += elHeight;
+      if (i > 0) {
+        accumulatedHeight += 8; // flex gap between paragraphs in .aboutParasWrap
+      }
+
+      const isLast = i === sentenceEls.length - 1;
+      const moreBtnReserve = isLast ? 0 : 30; // height reserve for More button
+      const totalCandidateHeight = accumulatedHeight + moreBtnReserve;
+
+      // Fit within availableBioHeight with small tolerance to prevent awkward truncation
+      if (totalCandidateHeight <= availableBioHeight + 12 || i === 0) {
+        bestCount = i + 1;
+      } else {
+        break;
+      }
+    }
+
+    setVisibleSentenceCount((prev) => (prev !== bestCount ? bestCount : prev));
+  }, []);
+
+  // ResizeObserver on bookingColRef only (detects changes in the booking panel's rendered height without feedback loop)
+  React.useEffect(() => {
+    if (!bookingColRef.current) return;
+
+    let rafId = null;
+    const observer = new ResizeObserver(() => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        updateBalancedBio();
+      });
+    });
+
+    observer.observe(bookingColRef.current);
+
+    const t = setTimeout(() => {
+      updateBalancedBio();
+    }, 60);
+
+    return () => {
+      observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+      clearTimeout(t);
+    };
+  }, [updateBalancedBio]);
+
+  // Recalculate whenever appointment slots change, the selected date changes, or the biography changes
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      updateBalancedBio();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [currentDaySlots, selectedDateIdx, doctor, allBioSentences, updateBalancedBio]);
+
+  // Viewport resize listener with proper cleanup
+  React.useEffect(() => {
+    const handleResize = () => {
+      updateBalancedBio();
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [updateBalancedBio]);
 
   React.useEffect(() => {
     // Check if there's a pending booking after login
@@ -1200,13 +1300,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
                     return (
                       <>
-                        <div className={styles.aboutParasWrap}>
+                        <div className={styles.aboutParasWrap} ref={aboutParasWrapRef}>
                           {displayedSentences.map((sentence, sIdx) => (
                             <p key={sIdx}>{sentence}</p>
                           ))}
                         </div>
                         {(hasMore || isAboutExpanded) && allBioSentences.length > 1 && (
                           <button
+                            ref={readMoreBtnRef}
                             type="button"
                             className={styles.readMoreBtn}
                             onClick={() => setIsAboutExpanded(!isAboutExpanded)}
@@ -1223,6 +1324,13 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     );
                   })()}
                 </div>
+              </div>
+
+              {/* Hidden off-screen container to measure exact sentence heights */}
+              <div className={styles.measureContainer} ref={measureContainerRef} aria-hidden="true">
+                {allBioSentences.map((sentence, sIdx) => (
+                  <p key={sIdx} className={styles.measureSentence}>{sentence}</p>
+                ))}
               </div>
 
               {/* Verified Clinical Credentials & Practice Standard (Anchored dynamically to balance column height) */}
