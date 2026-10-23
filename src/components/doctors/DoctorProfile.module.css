@@ -31,7 +31,7 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
   display: grid;
   grid-template-columns: 1fr 380px;
-  align-items: start;
+  align-items: stretch;
   overflow: hidden;
   margin-bottom: 28px;
 }
@@ -42,6 +42,8 @@
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
 }
 
 .unifiedAboutSection {
@@ -50,7 +52,30 @@
   margin-top: 2px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
   gap: 12px;
+  position: relative;
+}
+
+.measureContainer {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+  top: 0;
+  left: -9999px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: -1;
+}
+
+.measureSentence {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.68;
+  color: #334155;
 }
 
 .unifiedBookingCol {
@@ -431,7 +456,7 @@
 }
 
 .aboutMetaFooter {
-  margin-top: 0;
+  margin-top: auto;
   padding-top: 12px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -2101,6 +2126,7 @@
 @media (max-width: 992px) {
   .unifiedDoctorCard {
     grid-template-columns: 1fr;
+    align-items: start;
   }
   .unifiedBookingCol {
     border-left: none;
@@ -2109,6 +2135,13 @@
   }
   .unifiedMainCol {
     padding: 22px 20px;
+    height: auto;
+  }
+  .unifiedAboutSection {
+    flex: none;
+  }
+  .aboutMetaFooter {
+    margin-top: 14px;
   }
   .topSectionGrid {
     grid-template-columns: 1fr;

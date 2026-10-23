@@ -173,32 +173,37 @@ export const formatDoctorExperience = (exp) => {
 };
 
 // Helper to extract biography content (custom doctor about or fallback) for responsive display
-export const getBioItems = (doc) => {
+export const getBioSentences = (doc) => {
   if (!doc) return [];
   const name = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'The Doctor';
   const spec = doc.specialty || doc.specialization || 'Consultant Specialist';
   const exp = formatDoctorExperience(doc.experience);
   const hosp = doc.hospital || 'Apollo Hospital & Heart Center';
 
-  // 1. If doctor has custom about text from dashboard/database, preserve and use their exact paragraphs
+  // 1. If doctor has custom about text from dashboard/database, split into sentences cleanly at punctuation boundaries
   if (doc.about && doc.about.trim().length > 0) {
-    const customParas = doc.about.trim().split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
-    if (customParas.length > 0) {
-      return customParas;
+    const rawAbout = doc.about.trim();
+    const sentenceMatches = rawAbout.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+    if (sentenceMatches && sentenceMatches.length > 0) {
+      const cleaned = sentenceMatches.map(s => s.trim()).filter(Boolean);
+      if (cleaned.length > 0) {
+        return cleaned;
+      }
     }
   }
 
-  // 2. Default fallback clinical paragraphs when no custom about is set
+  // 2. Default fallback clinical sentences when no custom about is set
   return [
     `${name} is a Senior Consultant in ${spec} with over ${exp} of clinical practice at ${hosp}, recognized for diagnostic precision and compassionate patient care.`,
     `Specializing in personalized therapeutic regimens, preventative screening, and minimally invasive clinical interventions, ${name} is dedicated to empowering patients through transparent medical guidance.`,
     `With extensive expertise in managing complex clinical cases, ${name} integrates evidence-based protocols with tailored treatment plans to ensure optimal long-term health outcomes.`,
-    `${name} maintains active privileges across leading healthcare institutions, participating in advanced medical forums and clinical research to bring modern treatment methodologies to everyday practice.`
+    `${name} maintains active privileges across leading healthcare institutions, participating in advanced medical forums and clinical research to bring modern treatment methodologies to everyday practice.`,
+    `Committed to comprehensive post-consultation care and patient advocacy, ${name} regularly conducts preventive wellness seminars and continues clinical research in contemporary healthcare delivery.`
   ];
 };
 
-export const getBioSentences = (doc) => getBioItems(doc);
-export const getComprehensiveBio = (doc) => getBioItems(doc);
+export const getBioItems = (doc) => getBioSentences(doc);
+export const getComprehensiveBio = (doc) => getBioSentences(doc);
 
 // Dedicated Timeline Symbol Icon (Vertical connected milestone track)
 const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) => (
