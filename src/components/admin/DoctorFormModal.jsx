@@ -105,10 +105,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   });
 
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const validate = () => {
     const newErrors = {};
     if (!formData.name.trim()) newErrors.name = 'Doctor name is required';
+    if (!formData.email.trim()) {
+      newErrors.email = 'Doctor email address is required (for login credentials)';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      newErrors.email = 'Please enter a valid email address';
+    }
     if (formData.specialty === 'Other' && !formData.customSpecialty.trim()) {
       newErrors.customSpecialty = 'Please specify specialty';
     }
@@ -220,71 +227,82 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setSubmitError('');
     if (!validate()) return;
 
-    const finalSpecialty = formData.specialty === 'Other' ? formData.customSpecialty.trim() : formData.specialty;
-    const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
+    setIsSubmitting(true);
+    try {
+      const finalSpecialty = formData.specialty === 'Other' ? formData.customSpecialty.trim() : formData.specialty;
+      const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
 
-    const payload = {
-      name: formData.name.trim(),
-      specialty: finalSpecialty,
-      specialization: finalSpecialty,
-      experienceYears: parseInt(formData.experienceYears, 10) || 5,
-      experience: parseInt(formData.experienceYears, 10) || 5,
-      experienceText: `${parseInt(formData.experienceYears, 10) || 5}+ Years Experience`,
-      price: parseInt(formData.price, 10) || 500,
-      fees: parseInt(formData.price, 10) || 500,
-      rating: parseFloat(formData.rating) || 0,
-      reviews: formData.reviews || '0',
-      hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
-      degree: formData.degree,
-      phone: formData.phone,
-      email: formData.email,
-      availableDays: formData.availableDays,
-      about: formData.about,
-      image: finalImage,
-      instagram: formData.instagram,
-      facebook: formData.facebook,
-      reels: formData.reels
-        .map(r => {
-          if (typeof r === 'string') return r.trim();
-          if (r && typeof r === 'object') {
-            const url = (r.url || '').trim();
-            const coverPhoto = (r.coverPhoto || '').trim();
-            if (!url && !coverPhoto) return null;
-            if (coverPhoto) return { url, coverPhoto };
-            return url;
-          }
-          return null;
-        })
-        .filter(Boolean),
-      youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
-      qualifications: formData.degree,
-      contact_number: formData.phone,
-      available: formData.available,
-      isStarDoctor: Boolean(formData.isStarDoctor),
-      faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== '')
-    };
-
-    if (doctorToEdit) {
-      const docId = doctorToEdit._id || doctorToEdit.id;
-      const fullPayload = {
-        ...payload,
-        _id: doctorToEdit._id || doctorToEdit.id,
-        id: doctorToEdit.id || doctorToEdit._id,
-        email: doctorToEdit.email || payload.email
+      const payload = {
+        name: formData.name.trim(),
+        specialty: finalSpecialty,
+        specialization: finalSpecialty,
+        experienceYears: parseInt(formData.experienceYears, 10) || 5,
+        experience: parseInt(formData.experienceYears, 10) || 5,
+        experienceText: `${parseInt(formData.experienceYears, 10) || 5}+ Years Experience`,
+        price: parseInt(formData.price, 10) || 500,
+        fees: parseInt(formData.price, 10) || 500,
+        rating: parseFloat(formData.rating) || 0,
+        reviews: formData.reviews || '0',
+        hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
+        degree: formData.degree,
+        phone: formData.phone,
+        email: formData.email.trim().toLowerCase(),
+        availableDays: formData.availableDays,
+        about: formData.about,
+        image: finalImage,
+        instagram: formData.instagram,
+        facebook: formData.facebook,
+        reels: formData.reels
+          .map(r => {
+            if (typeof r === 'string') return r.trim();
+            if (r && typeof r === 'object') {
+              const url = (r.url || '').trim();
+              const coverPhoto = (r.coverPhoto || '').trim();
+              if (!url && !coverPhoto) return null;
+              if (coverPhoto) return { url, coverPhoto };
+              return url;
+            }
+            return null;
+          })
+          .filter(Boolean),
+        youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
+        qualifications: formData.degree,
+        contact_number: formData.phone,
+        available: formData.available,
+        isStarDoctor: Boolean(formData.isStarDoctor),
+        faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== '')
       };
-      updateDoctor(docId, fullPayload);
-    } else {
-      addDoctor(payload);
-    }
 
-    if (onSuccess) {
-      onSuccess(doctorToEdit ? 'Doctor updated successfully!' : 'New doctor added successfully!');
+      if (doctorToEdit) {
+        const docId = doctorToEdit._id || doctorToEdit.id;
+        const fullPayload = {
+          ...payload,
+          _id: doctorToEdit._id || doctorToEdit.id,
+          id: doctorToEdit.id || doctorToEdit._id,
+          email: doctorToEdit.email || payload.email
+        };
+        await updateDoctor(docId, fullPayload);
+        if (onSuccess) {
+          onSuccess('Doctor updated successfully!');
+        }
+      } else {
+        await addDoctor(payload);
+        if (onSuccess) {
+          onSuccess('New doctor added successfully and temporary password sent to their email!');
+        }
+      }
+      onClose();
+    } catch (err) {
+      console.error('Failed to save doctor:', err);
+      setSubmitError(err.message || 'Failed to save doctor. Please check email and details.');
+    } finally {
+      setIsSubmitting(false);
     }
-    onClose();
   };
 
   return (
@@ -417,13 +435,22 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Email Address</label>
+              <label>Doctor Email Address <span className={styles.req}>*</span></label>
               <input
                 type="email"
                 placeholder="doctor@example.com"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value });
+                  if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                }}
+                className={errors.email ? styles.inputError : ''}
+                required
               />
+              {errors.email && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.email}</span>}
+              <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '4px', display: 'block' }}>
+                Temporary clinical login credentials will be sent to this email address automatically.
+              </small>
             </div>
           </div>
 
@@ -1038,12 +1065,20 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           </div>
         </div>
 
+        {submitError && (
+          <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', fontSize: '0.84rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', margin: '0 24px 14px 24px' }}>
+            <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+            <span>{submitError}</span>
+          </div>
+        )}
+
         <div className={styles.footer}>
-          <button type="button" className={styles.cancelBtn} onClick={onClose}>
+          <button type="button" className={styles.cancelBtn} onClick={onClose} disabled={isSubmitting}>
             Cancel
           </button>
-          <button type="submit" className={styles.submitBtn}>
-            {doctorToEdit ? 'Save Changes' : 'Add Doctor'}
+          <button type="submit" className={styles.submitBtn} disabled={isSubmitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            {isSubmitting && <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />}
+            <span>{isSubmitting ? (doctorToEdit ? 'Saving Changes...' : 'Adding Doctor...') : (doctorToEdit ? 'Save Changes' : 'Add Doctor')}</span>
           </button>
         </div>
       </form>
@@ -1057,7 +1092,7 @@ const DoctorFormModal = ({ isOpen, onClose, doctorToEdit, onSuccess }) => {
   return (
     <div className={styles.overlay} onClick={onClose}>
       <DoctorFormContent
-        key={doctorToEdit ? doctorToEdit.id : 'new'}
+        key={doctorToEdit ? (doctorToEdit.id || doctorToEdit._id) : 'new'}
         doctorToEdit={doctorToEdit}
         onClose={onClose}
         onSuccess={onSuccess}

@@ -483,9 +483,13 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Schedule & Time Slots Management state (persisted across refresh)
   const [slotConfigMode, setSlotConfigModeState] = useState(() => {
     try {
-      return localStorage.getItem('sehat_doctor_slot_mode') || 'all';
+      const saved = localStorage.getItem('sehat_doctor_slot_mode');
+      if (saved && ['day', 'date', 'leave'].includes(saved)) {
+        return saved;
+      }
+      return 'day';
     } catch {
-      return 'all';
+      return 'day';
     }
   });
 
@@ -1593,26 +1597,24 @@ const DoctorDashboard = ({ onNavigate }) => {
     Sun: 'Sunday'
   };
 
+  // Helper to get slots for a specific day
+  const getDaySlots = (dayKey) => {
+    if (!dayKey) return [];
+    const dayConfig = profileForm.dayWiseSlots?.[dayKey];
+    if (dayConfig === 'off' || dayConfig?.isOff === true) return [];
+    if (Array.isArray(dayConfig)) return dayConfig;
+    if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
+    // Default fallback to configured availableSlots
+    return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
+  };
+
   const selectDayForSlots = (dayKey) => {
     setSelectedScheduleDay(dayKey);
     setSlotConfigMode('day');
   };
 
-  // Helper to get slots for current mode (All / Day / Date)
+  // Helper to get slots for current mode (Day / Date)
   const getCurrentModeSlots = () => {
-    if (slotConfigMode === 'all') {
-      return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
-    }
-    if (slotConfigMode === 'day') {
-      const dayConfig = profileForm.dayWiseSlots?.[selectedScheduleDay];
-      const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(selectedScheduleDay) && dayConfig === undefined)) {
-        return [];
-      }
-      if (Array.isArray(dayConfig)) return dayConfig;
-      if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
-      return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
-    }
     if (slotConfigMode === 'date') {
       const dateConfig = profileForm.dateWiseSlots?.[selectedScheduleDate];
       if (dateConfig === 'off' || dateConfig?.isOff === true) return [];
@@ -1620,16 +1622,10 @@ const DoctorDashboard = ({ onNavigate }) => {
       if (Array.isArray(dateConfig?.slots)) return dateConfig.slots;
       // Inherited from day-wise or default
       const dayOfWeekShort = new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-      const dayConfig = profileForm.dayWiseSlots?.[dayOfWeekShort];
-      const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(dayOfWeekShort) && dayConfig === undefined)) {
-        return [];
-      }
-      if (Array.isArray(dayConfig)) return dayConfig;
-      if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
-      return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
+      return getDaySlots(dayOfWeekShort);
     }
-    return [];
+    // Default is day mode
+    return getDaySlots(selectedScheduleDay);
   };
 
   const isDayOff = (day) => {
@@ -1642,9 +1638,6 @@ const DoctorDashboard = ({ onNavigate }) => {
   };
 
   const isCurrentModeOff = () => {
-    if (slotConfigMode === 'day') {
-      return isDayOff(selectedScheduleDay);
-    }
     if (slotConfigMode === 'date') {
       const dateConfig = profileForm.dateWiseSlots?.[selectedScheduleDate];
       if (dateConfig === 'off' || dateConfig?.isOff === true) return true;
@@ -1654,7 +1647,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
       return false;
     }
-    return false;
+    return isDayOff(selectedScheduleDay);
   };
 
   const handleAddSlot = async (customSlot) => {
@@ -1668,105 +1661,127 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
 
     if (!slot) return;
-    const currentSlots = getCurrentModeSlots();
-    if (currentSlots.includes(slot)) {
-      showToast(`Slot "${slot}" already exists!`);
-      return;
-    }
-
-    const updated = [...currentSlots, slot];
     const docId = activeDoctor?._id || activeDoctor?.id;
 
-    if (slotConfigMode === 'all') {
-      setProfileForm(prev => ({ ...prev, availableSlots: updated }));
-      if (docId) await updateDoctor(docId, { availableSlots: updated });
-      showToast(`General time slot "${slot}" added and saved!`);
-    } else if (slotConfigMode === 'day') {
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: updated };
-      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (!newScheduleDays.includes(selectedScheduleDay)) {
-        newScheduleDays.push(selectedScheduleDay);
+    if (slotConfigMode === 'date') {
+      const currentSlots = getCurrentModeSlots();
+      if (currentSlots.includes(slot)) {
+        showToast(`Slot "${slot}" already exists for date ${selectedScheduleDate}!`);
+        return;
       }
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
-      showToast(`Slot "${slot}" added for ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}!`);
-    } else if (slotConfigMode === 'date') {
+      const updated = [...currentSlots, slot];
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
       if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
-      showToast(`Slot "${slot}" added for ${selectedScheduleDate}!`);
+      showToast(`Slot "${slot}" added for date ${selectedScheduleDate}!`);
+    } else {
+      // Day mode: Adds strictly to the selected day!
+      const targetDay = selectedScheduleDay;
+      const currentSlots = getDaySlots(targetDay);
+      if (currentSlots.includes(slot)) {
+        showToast(`Slot "${slot}" already exists for ${DAY_NAME_MAP[targetDay] || targetDay}!`);
+        return;
+      }
+      const updated = [...currentSlots, slot];
+      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: updated };
+      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (!newScheduleDays.includes(targetDay)) {
+        newScheduleDays.push(targetDay);
+      }
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+      showToast(`Slot "${slot}" added to ${DAY_NAME_MAP[targetDay] || targetDay}!`);
     }
     setNewSlotTime('');
   };
 
   const handleDeleteSlot = async (slotToRemove) => {
-    const currentSlots = getCurrentModeSlots();
-    const updated = currentSlots.filter(s => s !== slotToRemove);
     const docId = activeDoctor?._id || activeDoctor?.id;
 
-    if (slotConfigMode === 'all') {
-      setProfileForm(prev => ({ ...prev, availableSlots: updated }));
-      if (docId) await updateDoctor(docId, { availableSlots: updated });
-      showToast(`Slot "${slotToRemove}" removed from General Schedule`);
-    } else if (slotConfigMode === 'day') {
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: updated };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
-      showToast(`Slot "${slotToRemove}" removed from ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}`);
-    } else if (slotConfigMode === 'date') {
+    if (slotConfigMode === 'date') {
+      const currentSlots = getCurrentModeSlots();
+      const updated = currentSlots.filter(s => s !== slotToRemove);
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
       if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
-      showToast(`Slot "${slotToRemove}" removed from ${selectedScheduleDate}`);
+      showToast(`Slot "${slotToRemove}" removed from date ${selectedScheduleDate}`);
+    } else {
+      // Day mode: Removes strictly from the selected day!
+      const targetDay = selectedScheduleDay;
+      const currentSlots = getDaySlots(targetDay);
+      const updated = currentSlots.filter(s => s !== slotToRemove);
+      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: updated };
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+      showToast(`Slot "${slotToRemove}" removed from ${DAY_NAME_MAP[targetDay] || targetDay}.`);
     }
   };
 
   const handleApplySlotPreset = async (presetSlots, presetTitle) => {
     const docId = activeDoctor?._id || activeDoctor?.id;
 
-    if (slotConfigMode === 'all') {
-      setProfileForm(prev => ({ ...prev, availableSlots: presetSlots }));
-      if (docId) await updateDoctor(docId, { availableSlots: presetSlots });
-      showToast(`Applied "${presetTitle}" to General Schedule (${presetSlots.length} slots)`);
-    } else if (slotConfigMode === 'day') {
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: presetSlots };
-      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (!newScheduleDays.includes(selectedScheduleDay)) {
-        newScheduleDays.push(selectedScheduleDay);
-      }
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
-      showToast(`Applied "${presetTitle}" to ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} (${presetSlots.length} slots)`);
-    } else if (slotConfigMode === 'date') {
+    if (slotConfigMode === 'date') {
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: presetSlots };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
       if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
       showToast(`Applied "${presetTitle}" to date ${selectedScheduleDate} (${presetSlots.length} slots)`);
+    } else {
+      // Day mode: Applies strictly to the selected day!
+      const targetDay = selectedScheduleDay;
+      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: presetSlots };
+      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      if (!newScheduleDays.includes(targetDay)) {
+        newScheduleDays.push(targetDay);
+      }
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+      showToast(`Applied "${presetTitle}" to ${DAY_NAME_MAP[targetDay] || targetDay} (${presetSlots.length} slots)!`);
     }
   };
 
   const handleClearAllSlots = async () => {
-    const targetDesc = slotConfigMode === 'all' 
-      ? 'all general appointment time slots' 
-      : (slotConfigMode === 'day' ? `slots for ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}` : `slots for ${selectedScheduleDate}`);
-    if (!window.confirm(`Are you sure you want to clear ${targetDesc}?`)) return;
-
     const docId = activeDoctor?._id || activeDoctor?.id;
-    if (slotConfigMode === 'all') {
-      setProfileForm(prev => ({ ...prev, availableSlots: [] }));
-      if (docId) await updateDoctor(docId, { availableSlots: [] });
-      showToast('All general appointment slots cleared');
-    } else if (slotConfigMode === 'day') {
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [selectedScheduleDay]: [] };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
-      showToast(`All slots cleared for ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}`);
-    } else if (slotConfigMode === 'date') {
+
+    if (slotConfigMode === 'date') {
+      if (!window.confirm(`Are you sure you want to clear all slots for date ${selectedScheduleDate}?`)) return;
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: [] };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
       if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
-      showToast(`All slots cleared for ${selectedScheduleDate}`);
+      showToast(`Cleared all slots for date ${selectedScheduleDate}.`);
+    } else {
+      const targetDay = selectedScheduleDay;
+      if (!window.confirm(`Are you sure you want to clear all slots for ${DAY_NAME_MAP[targetDay] || targetDay}?`)) return;
+      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: [] };
+      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
+      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+      showToast(`Cleared all slots for ${DAY_NAME_MAP[targetDay] || targetDay}.`);
     }
+  };
+
+  const handleCopyDaySlotsToAll = async (sourceDay) => {
+    const sourceSlots = getDaySlots(sourceDay);
+    if (!sourceSlots || sourceSlots.length === 0) {
+      showToast(`No slots configured on ${DAY_NAME_MAP[sourceDay] || sourceDay} to copy!`);
+      return;
+    }
+    if (!window.confirm(`Copy ${DAY_NAME_MAP[sourceDay] || sourceDay}'s slots (${sourceSlots.length} slots) to all active working days?`)) return;
+    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
+    let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    // Apply to all active days
+    DAYS_LIST.forEach(d => {
+      if (!isDayOff(d)) {
+        newDayWise[d] = [...sourceSlots];
+        if (!newScheduleDays.includes(d)) newScheduleDays.push(d);
+      }
+    });
+
+    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays, availableSlots: sourceSlots }));
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (docId) {
+      await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays, availableSlots: sourceSlots });
+    }
+    showToast(`Copied ${sourceSlots.length} slots from ${DAY_NAME_MAP[sourceDay] || sourceDay} to all active days!`);
   };
 
   // Day-wise specific helpers
@@ -4369,57 +4384,59 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* UNIFIED SCHEDULE SELECTOR: BASELINE | 7 DAY BUTTONS | DATE OVERRIDE */}
+                {/* SCHEDULE MODE SWITCHER: WEEKLY (DAY-BY-DAY) | SPECIFIC DATE OVERRIDE | DAYS OFF & LEAVES */}
                 <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <CalendarDays size={18} color="#2563eb" />
-                      <span>Select Day to View & Customize Slots:</span>
+                      <span>Doctor Consultation Schedule Management:</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <button
                         type="button"
-                        onClick={() => setSlotConfigMode('all')}
+                        onClick={() => setSlotConfigMode('day')}
                         style={{
-                          padding: '7px 12px',
+                          padding: '7px 14px',
                           borderRadius: '8px',
-                          border: slotConfigMode === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: slotConfigMode === 'all' ? '#eff6ff' : '#ffffff',
-                          color: slotConfigMode === 'all' ? '#1d4ed8' : '#475569',
+                          border: slotConfigMode === 'day' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          background: slotConfigMode === 'day' ? '#eff6ff' : '#ffffff',
+                          color: slotConfigMode === 'day' ? '#1d4ed8' : '#475569',
                           fontWeight: 700,
-                          fontSize: '0.8rem',
+                          fontSize: '0.82rem',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
+                          boxShadow: slotConfigMode === 'day' ? '0 2px 4px rgba(37,99,235,0.15)' : 'none',
                           transition: 'all 0.15s ease'
                         }}
                       >
-                        <Clock size={14} color={slotConfigMode === 'all' ? '#2563eb' : '#64748b'} />
-                        <span>🌐 Baseline (All Days)</span>
+                        <Clock size={15} color={slotConfigMode === 'day' ? '#2563eb' : '#64748b'} />
+                        <span>📅 Weekly Schedule (Day-by-Day)</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setSlotConfigMode('date')}
                         style={{
-                          padding: '7px 12px',
+                          padding: '7px 14px',
                           borderRadius: '8px',
                           border: slotConfigMode === 'date' ? '2px solid #d97706' : '1px solid #cbd5e1',
                           background: slotConfigMode === 'date' ? '#fffbeb' : '#ffffff',
                           color: slotConfigMode === 'date' ? '#b45309' : '#475569',
                           fontWeight: 700,
-                          fontSize: '0.8rem',
+                          fontSize: '0.82rem',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
+                          boxShadow: slotConfigMode === 'date' ? '0 2px 4px rgba(217,119,6,0.15)' : 'none',
                           transition: 'all 0.15s ease'
                         }}
                       >
-                        <Calendar size={14} color={slotConfigMode === 'date' ? '#d97706' : '#64748b'} />
-                        <span>📅 Specific Date Override</span>
+                        <Calendar size={15} color={slotConfigMode === 'date' ? '#d97706' : '#64748b'} />
+                        <span>🗓️ Specific Date Override</span>
                         {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
                           <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 800 }}>
                             {Object.keys(profileForm.dateWiseSlots || {}).length}
@@ -4431,21 +4448,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                         type="button"
                         onClick={() => setSlotConfigMode('leave')}
                         style={{
-                          padding: '7px 12px',
+                          padding: '7px 14px',
                           borderRadius: '8px',
                           border: slotConfigMode === 'leave' ? '2px solid #ef4444' : '1px solid #cbd5e1',
                           background: slotConfigMode === 'leave' ? '#fff1f2' : '#ffffff',
                           color: slotConfigMode === 'leave' ? '#b91c1c' : '#475569',
                           fontWeight: 700,
-                          fontSize: '0.8rem',
+                          fontSize: '0.82rem',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
+                          boxShadow: slotConfigMode === 'leave' ? '0 2px 4px rgba(239,68,68,0.15)' : 'none',
                           transition: 'all 0.15s ease'
                         }}
                       >
-                        <AlertTriangle size={14} color={slotConfigMode === 'leave' ? '#ef4444' : '#64748b'} />
+                        <AlertTriangle size={15} color={slotConfigMode === 'leave' ? '#ef4444' : '#64748b'} />
                         <span>🏖️ Mark Days Off & Leave</span>
                         {(DAYS_LIST.filter(d => isDayOff(d)).length > 0 || Object.values(profileForm.dateWiseSlots || {}).filter(v => v === 'off' || v?.isOff === true).length > 0) && (
                           <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '1px 7px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 800 }}>
@@ -4456,257 +4474,102 @@ const DoctorDashboard = ({ onNavigate }) => {
                     </div>
                   </div>
 
-                  {/* 7 Day Tabs: Mon, Tue, Wed, Thu, Fri, Sat, Sun */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '8px' }}>
-                    {DAYS_LIST.map(dayKey => {
-                      const isSelected = slotConfigMode === 'day' && selectedScheduleDay === dayKey;
-                      const dayConfig = profileForm.dayWiseSlots?.[dayKey];
-                      const isDayOffVal = isDayOff(dayKey);
-                      const hasCustomSlots = !isDayOffVal && (Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots));
-                      const slotCount = isDayOffVal
-                        ? 0
-                        : (hasCustomSlots 
-                            ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) 
-                            : (profileForm.availableSlots?.length || 0));
+                  {/* 7 Day Bar - Always Visible in 'day' Mode */}
+                  {slotConfigMode === 'day' && (
+                    <div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>👉 Click any day to view, add, or edit time slots specifically for that day:</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '8px' }}>
+                        {DAYS_LIST.map(dayKey => {
+                          const isSelected = selectedScheduleDay === dayKey;
+                          const daySlots = getDaySlots(dayKey);
+                          const isDayOffVal = isDayOff(dayKey);
+                          const slotCount = isDayOffVal ? 0 : daySlots.length;
 
-                      return (
-                        <button
-                          key={dayKey}
-                          type="button"
-                          onClick={() => selectDayForSlots(dayKey)}
-                          style={{
-                            padding: '10px 8px',
-                            borderRadius: '10px',
-                            cursor: 'pointer',
-                            textAlign: 'center',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '4px',
-                            border: isSelected 
-                              ? '2px solid #2563eb' 
-                              : (isDayOffVal ? '1.5px solid #f87171' : (hasCustomSlots ? '1.5px solid #93c5fd' : '1px solid #e2e8f0')),
-                            background: isSelected 
-                              ? '#eff6ff' 
-                              : (isDayOffVal ? '#fff1f2' : (hasCustomSlots ? '#f8faff' : '#ffffff')),
-                            color: isSelected ? '#1d4ed8' : '#1e293b',
-                            boxShadow: isSelected ? '0 3px 8px rgba(37,99,235,0.18)' : '0 1px 2px rgba(0,0,0,0.02)',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontWeight: 800, fontSize: '0.86rem' }}>
-                              {DAY_NAME_MAP[dayKey] || dayKey}
-                            </span>
-                          </div>
-                          <span style={{
-                            fontSize: '0.7rem',
-                            fontWeight: 700,
-                            padding: '2px 7px',
-                            borderRadius: '6px',
-                            background: isDayOffVal ? '#fee2e2' : (hasCustomSlots ? '#dbeafe' : '#f1f5f9'),
-                            color: isDayOffVal ? '#b91c1c' : (hasCustomSlots ? '#1d4ed8' : '#64748b')
-                          }}>
-                            {isDayOffVal ? 'Closed / Off' : (hasCustomSlots ? `⚡ ${slotCount} custom` : `${slotCount} slots`)}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* MODE 1: ALL WORKING DAYS */}
-                {slotConfigMode === 'all' && (
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-                      <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                        Active Working Days & Quick Day-Slot Selection:
-                      </label>
-                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        Click any day below to configure its slots specifically
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-                      {DAYS_LIST.map(day => {
-                        const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                        const dayConfig = profileForm.dayWiseSlots?.[day];
-                        const isOff = dayConfig === 'off' || dayConfig?.isOff === true || (!currentDays.includes(day) && dayConfig === undefined);
-                        const hasCustom = Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots);
-                        const count = isOff ? 0 : (hasCustom ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) : (profileForm.availableSlots?.length || 0));
-
-                        return (
-                          <div
-                            key={day}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              padding: '8px 12px',
-                              borderRadius: '8px',
-                              border: !isOff ? '1.5px solid #bfdbfe' : '1px solid #e2e8f0',
-                              background: !isOff ? '#ffffff' : '#f8fafc',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
+                          return (
                             <button
+                              key={dayKey}
                               type="button"
-                              onClick={() => handleToggleScheduleDay(day)}
-                              title={!isOff ? 'Click to mark day Closed' : 'Click to mark day Open'}
+                              onClick={() => setSelectedScheduleDay(dayKey)}
                               style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                background: 'transparent',
-                                border: 'none',
+                                padding: '12px 8px',
+                                borderRadius: '10px',
                                 cursor: 'pointer',
-                                padding: 0,
-                                fontWeight: 700,
-                                fontSize: '0.82rem',
-                                color: !isOff ? '#1e3a8a' : '#94a3b8'
+                                textAlign: 'center',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '5px',
+                                border: isSelected 
+                                  ? '2.5px solid #2563eb' 
+                                  : (isDayOffVal ? '1.5px solid #fca5a5' : '1px solid #cbd5e1'),
+                                background: isSelected 
+                                  ? '#eff6ff' 
+                                  : (isDayOffVal ? '#fff1f2' : '#ffffff'),
+                                color: isSelected ? '#1d4ed8' : '#1e293b',
+                                boxShadow: isSelected ? '0 3px 10px rgba(37,99,235,0.22)' : '0 1px 2px rgba(0,0,0,0.02)',
+                                transform: isSelected ? 'translateY(-1px)' : 'none',
+                                transition: 'all 0.15s ease'
                               }}
                             >
-                              {!isOff ? <Check size={16} color="#2563eb" /> : <X size={16} color="#94a3b8" />}
-                              <span>{DAY_NAME_MAP[day]}</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => selectDayForSlots(day)}
-                              title={`Configure slots specifically for ${DAY_NAME_MAP[day]}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                background: hasCustom ? '#dbeafe' : (!isOff ? '#eff6ff' : '#f1f5f9'),
-                                color: hasCustom ? '#1d4ed8' : (!isOff ? '#2563eb' : '#64748b'),
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '4px 8px',
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ fontWeight: 800, fontSize: '0.88rem' }}>
+                                  {DAY_NAME_MAP[dayKey] || dayKey}
+                                </span>
+                              </div>
+                              <span style={{
                                 fontSize: '0.72rem',
                                 fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              <span>{isOff ? 'Closed' : `${count} slots`}</span>
-                              <span>⚙️</span>
+                                padding: '2px 8px',
+                                borderRadius: '6px',
+                                background: isDayOffVal ? '#fee2e2' : (isSelected ? '#dbeafe' : '#f1f5f9'),
+                                color: isDayOffVal ? '#b91c1c' : (isSelected ? '#1d4ed8' : '#475569')
+                              }}>
+                                {isDayOffVal ? '🔴 Closed' : `🟢 ${slotCount} slots`}
+                              </span>
                             </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div style={{ marginTop: '10px', fontSize: '0.76rem', color: '#64748b' }}>
-                      💡 These baseline slots apply to all active days. Click on any specific day (e.g. <strong>Monday</strong>) above or beside to set custom morning/evening timings for that day.
-                    </div>
-                  </div>
-                )}
-
-                {/* MODE 2: DAY-WISE (WEEKLY) SELECTOR */}
-                {slotConfigMode === 'day' && (
-                  <div style={{ background: '#f8fafc', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.92rem', fontWeight: 800, color: '#1e3a8a', margin: 0 }}>
-                          🗓️ {DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s Consultation Schedule
-                        </label>
-                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                          Set custom morning/evening slots for {DAY_NAME_MAP[selectedScheduleDay]}s or mark it as doctor off day.
-                        </span>
+                          );
+                        })}
                       </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setSlotConfigMode('all')}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #cbd5e1',
-                          color: '#475569',
-                          padding: '5px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.76rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <span>← Back to General Baseline</span>
-                      </button>
                     </div>
+                  )}
+                </div>
 
-                    {/* Day selector pills */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-                      {DAYS_LIST.map(dayKey => {
-                        const isSelected = selectedScheduleDay === dayKey;
-                        const dayConfig = profileForm.dayWiseSlots?.[dayKey];
-                        const isOff = isDayOff(dayKey);
-                        const hasCustomSlots = !isOff && (Array.isArray(dayConfig) || Array.isArray(dayConfig?.slots));
-                        const slotCount = isOff 
-                          ? 0 
-                          : (hasCustomSlots 
-                              ? (Array.isArray(dayConfig) ? dayConfig.length : dayConfig.slots.length) 
-                              : (profileForm.availableSlots?.length || 0));
-
-                        return (
-                          <button
-                            key={dayKey}
-                            type="button"
-                            onClick={() => setSelectedScheduleDay(dayKey)}
-                            style={{
-                              flex: '1 1 100px',
-                              padding: '10px 12px',
-                              borderRadius: '8px',
-                              cursor: 'pointer',
-                              border: isSelected ? '2px solid #2563eb' : (isOff ? '1px dashed #fca5a5' : '1px solid #cbd5e1'),
-                              background: isSelected ? '#ffffff' : (isOff ? '#fff1f2' : (hasCustomSlots ? '#eff6ff' : '#ffffff')),
-                              color: isSelected ? '#1e40af' : '#334155',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              gap: '4px',
-                              boxShadow: isSelected ? '0 2px 6px rgba(37,99,235,0.2)' : 'none',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            <span style={{ fontWeight: 800, fontSize: '0.86rem' }}>{DAY_NAME_MAP[dayKey] || dayKey}</span>
-                            <span style={{
-                              fontSize: '0.7rem',
-                              fontWeight: 700,
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: isOff ? '#fee2e2' : (hasCustomSlots ? '#dbeafe' : '#f1f5f9'),
-                              color: isOff ? '#b91c1c' : (hasCustomSlots ? '#1d4ed8' : '#64748b')
-                            }}>
-                              {isOff ? 'Closed / Off' : (hasCustomSlots ? `${slotCount} Custom` : `General (${slotCount})`)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Selected Day Toolbar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
-                          🗓️ {DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s Status:
-                        </span>
+                {/* MODE 1: DAY-WISE (WEEKLY) SELECTED DAY SLOTS PANEL */}
+                {slotConfigMode === 'day' && (
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '1.5px solid #bfdbfe',
+                    borderRadius: '12px',
+                    padding: '18px 20px',
+                    marginBottom: '20px',
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.05)'
+                  }}>
+                    {/* Header Bar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <Clock size={18} color="#2563eb" />
+                          <span>🗓️ {DAY_NAME_MAP[selectedScheduleDay]}'s Consultation Slots</span>
+                        </div>
                         <span style={{
                           fontSize: '0.76rem',
                           fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: isDayOff(selectedScheduleDay) ? '#fee2e2' : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? '#dbeafe' : '#f1f5f9'),
-                          color: isDayOff(selectedScheduleDay) ? '#b91c1c' : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? '#1d4ed8' : '#475569')
+                          padding: '3px 10px',
+                          borderRadius: '8px',
+                          background: isDayOff(selectedScheduleDay) ? '#fee2e2' : '#dbeafe',
+                          color: isDayOff(selectedScheduleDay) ? '#b91c1c' : '#1d4ed8'
                         }}>
                           {isDayOff(selectedScheduleDay)
-                            ? 'Marked OFF / Clinic Closed'
-                            : (Array.isArray(profileForm.dayWiseSlots?.[selectedScheduleDay]) ? 'Custom Schedule Active' : 'Using General Default Slots')}
+                            ? '🔴 Clinic Closed on this day'
+                            : `🟢 ${getDaySlots(selectedScheduleDay).length} slots configured`}
                         </span>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        {/* Day Status Toggle */}
                         <button
                           type="button"
                           onClick={() => handleToggleDayOff(selectedScheduleDay)}
@@ -4716,7 +4579,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             border: 'none',
                             padding: '6px 12px',
                             borderRadius: '6px',
-                            fontSize: '0.76rem',
+                            fontSize: '0.78rem',
                             fontWeight: 700,
                             cursor: 'pointer',
                             display: 'inline-flex',
@@ -4724,43 +4587,47 @@ const DoctorDashboard = ({ onNavigate }) => {
                             gap: '4px'
                           }}
                         >
-                          {isDayOff(selectedScheduleDay) ? <Check size={12} /> : <X size={12} />}
-                          {isDayOff(selectedScheduleDay) ? `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Open` : `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Off / Closed`}
+                          {isDayOff(selectedScheduleDay) ? <Check size={13} /> : <X size={13} />}
+                          {isDayOff(selectedScheduleDay) ? `Reopen ${DAY_NAME_MAP[selectedScheduleDay]}` : `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Closed`}
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={handleCopyDayToAllDays}
-                          title="Copy this day's slot schedule to Monday-Sunday"
-                          style={{
-                            background: '#eff6ff',
-                            color: '#1d4ed8',
-                            border: '1px solid #bfdbfe',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '0.76rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Copy size={12} />
-                          Copy to All 7 Days
-                        </button>
-
-                        {profileForm.dayWiseSlots?.[selectedScheduleDay] !== undefined && (
+                        {/* Copy to All Working Days */}
+                        {!isDayOff(selectedScheduleDay) && getDaySlots(selectedScheduleDay).length > 0 && (
                           <button
                             type="button"
-                            onClick={handleResetDayToDefault}
+                            onClick={() => handleCopyDaySlotsToAll(selectedScheduleDay)}
+                            title={`Replicate ${DAY_NAME_MAP[selectedScheduleDay]}'s slots across all open working days`}
                             style={{
-                              background: '#f8fafc',
-                              color: '#64748b',
-                              border: '1px solid #cbd5e1',
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
                               padding: '6px 12px',
                               borderRadius: '6px',
-                              fontSize: '0.76rem',
+                              fontSize: '0.78rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px'
+                            }}
+                          >
+                            <Copy size={13} />
+                            <span>Copy to All Working Days</span>
+                          </button>
+                        )}
+
+                        {/* Clear Day Slots */}
+                        {!isDayOff(selectedScheduleDay) && getDaySlots(selectedScheduleDay).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleClearAllSlots}
+                            style={{
+                              background: '#fff1f2',
+                              border: '1px solid #fecdd3',
+                              color: '#e11d48',
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              fontSize: '0.78rem',
                               fontWeight: 600,
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -4768,12 +4635,273 @@ const DoctorDashboard = ({ onNavigate }) => {
                               gap: '4px'
                             }}
                           >
-                            <RotateCcw size={12} />
-                            Reset to General
+                            <Trash2 size={13} />
+                            <span>Clear {DAY_NAME_MAP[selectedScheduleDay]}'s Slots</span>
                           </button>
                         )}
                       </div>
                     </div>
+
+                    {/* Day Content */}
+                    {isDayOff(selectedScheduleDay) ? (
+                      <div style={{ background: '#fff1f2', border: '1.5px dashed #f87171', borderRadius: '10px', padding: '20px', textAlign: 'center', margin: '8px 0' }}>
+                        <AlertTriangle size={28} color="#ef4444" style={{ marginBottom: '8px' }} />
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#991b1b', marginBottom: '4px' }}>
+                          {DAY_NAME_MAP[selectedScheduleDay]} is Marked Closed / Off
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#b91c1c', maxWidth: '520px', margin: '0 auto 14px' }}>
+                          Patients booking on {DAY_NAME_MAP[selectedScheduleDay]}s will see "Clinic Closed" and cannot book appointments.
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDayOff(selectedScheduleDay)}
+                          style={{
+                            background: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 18px',
+                            fontSize: '0.82rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(16,185,129,0.25)'
+                          }}
+                        >
+                          <Check size={14} />
+                          <span>Mark {DAY_NAME_MAP[selectedScheduleDay]} Open & Add Slots</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Explanatory subtitle */}
+                        <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '10px' }}>
+                          Slots configured below apply <strong>strictly to {DAY_NAME_MAP[selectedScheduleDay]}s</strong>. Modifying these slots will not affect other days.
+                        </div>
+
+                        {/* Active Slots Chips */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '16px', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                          {getDaySlots(selectedScheduleDay).length > 0 ? (
+                            getDaySlots(selectedScheduleDay).map((slot, sIdx) => (
+                              <div
+                                key={sIdx}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '8px',
+                                  background: '#eff6ff',
+                                  border: '1.5px solid #93c5fd',
+                                  borderRadius: '8px',
+                                  padding: '6px 12px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  color: '#1e3a8a',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                }}
+                              >
+                                <Clock size={12} color="#2563eb" />
+                                <span>{slot}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSlot(slot)}
+                                  title={`Remove ${slot} from ${DAY_NAME_MAP[selectedScheduleDay]}`}
+                                  style={{
+                                    background: '#fee2e2',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    borderRadius: '50%',
+                                    width: '18px',
+                                    height: '18px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    padding: 0
+                                  }}
+                                >
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '6px 0' }}>
+                              No time slots configured for {DAY_NAME_MAP[selectedScheduleDay]}. Add custom slots below or choose an OPD preset.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add Slot Form */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
+                          <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
+                            ➕ Add Slot to {DAY_NAME_MAP[selectedScheduleDay]}:
+                          </span>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <select
+                              value={slotHour}
+                              onChange={(e) => setSlotHour(e.target.value)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            >
+                              {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
+                                <option key={h} value={h}>{h}</option>
+                              ))}
+                            </select>
+                            <span>:</span>
+                            <select
+                              value={slotMin}
+                              onChange={(e) => setSlotMin(e.target.value)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            >
+                              {['00', '15', '20', '30', '40', '45', '50'].map(m => (
+                                <option key={m} value={m}>{m}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={slotPeriod}
+                              onChange={(e) => setSlotPeriod(e.target.value)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddSlot(`${slotHour}:${slotMin} ${slotPeriod}`)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: '#2563eb',
+                              color: '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '7px 16px',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                            }}
+                          >
+                            <Plus size={14} />
+                            <span>Add Slot</span>
+                          </button>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                            <input
+                              type="text"
+                              placeholder="Or custom (e.g. 06:15 PM)"
+                              value={newSlotTime}
+                              onChange={(e) => setNewSlotTime(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleAddSlot(newSlotTime);
+                                }
+                              }}
+                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '180px' }}
+                            />
+                            {newSlotTime && (
+                              <button
+                                type="button"
+                                onClick={() => handleAddSlot(newSlotTime)}
+                                style={{
+                                  background: '#10b981',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '6px',
+                                  padding: '6px 12px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Add
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Quick Presets for this Day */}
+                        <div>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                            ⚡ Quick Slot Presets for {DAY_NAME_MAP[selectedScheduleDay]}:
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots')}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                padding: '6px 11px',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                color: '#334155'
+                              }}
+                            >
+                              Standard 4 Slots (04:00 PM - 05:30 PM)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApplySlotPreset(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD')}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                padding: '6px 11px',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                color: '#334155'
+                              }}
+                            >
+                              Morning OPD (09:00 AM - 01:00 PM)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD')}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                padding: '6px 11px',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                color: '#334155'
+                              }}
+                            >
+                              Evening OPD (04:00 PM - 08:00 PM)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApplySlotPreset([
+                                '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+                                '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
+                              ], 'Full Day OPD')}
+                              style={{
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                padding: '6px 11px',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                color: '#334155'
+                              }}
+                            >
+                              Full Day OPD (Morning + Evening)
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -5390,21 +5518,17 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 )}
 
-                {/* SUBSECTION: TIME SLOTS EDITOR FOR ACTIVE MODE */}
-                {slotConfigMode !== 'leave' && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+                {/* SUBSECTION: TIME SLOTS EDITOR FOR SPECIFIC DATE OVERRIDE */}
+                {slotConfigMode === 'date' && (
+                <div style={{ background: '#f8fafc', border: '1px solid #fde68a', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
                     <div>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                        <Clock size={15} color="#2563eb" />
-                        {slotConfigMode === 'all' && `General Consultation Time Slots (${getCurrentModeSlots().length} configured)`}
-                        {slotConfigMode === 'day' && `${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s Consultation Slots (${getCurrentModeSlots().length} configured)`}
-                        {slotConfigMode === 'date' && `Consultation Slots for ${selectedScheduleDate} (${getCurrentModeSlots().length} configured)`}
+                        <Clock size={15} color="#d97706" />
+                        Consultation Slots for {selectedScheduleDate} ({getCurrentModeSlots().length} configured)
                       </label>
                       <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        {slotConfigMode === 'all' && 'These baseline time slots apply across all active working days.'}
-                        {slotConfigMode === 'day' && `These exact slots will be available when patients book appointments on ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}s.`}
-                        {slotConfigMode === 'date' && `These slots will specifically override the booking panel for ${selectedScheduleDate}.`}
+                        These slots will specifically override the booking panel for {selectedScheduleDate}.
                       </span>
                     </div>
 
@@ -5513,7 +5637,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                           ))
                         ) : (
                           <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '10px 0' }}>
-                            No time slots configured for this {slotConfigMode === 'all' ? 'schedule' : (slotConfigMode === 'day' ? 'day' : 'date')}. Choose a preset below or add custom slots.
+                            No time slots configured for date {selectedScheduleDate}. Choose a preset below or add custom slots.
                           </div>
                         )}
                       </div>
@@ -5521,7 +5645,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       {/* Add Slot Form */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px' }}>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                          Add Slot {slotConfigMode === 'day' ? `(${selectedScheduleDay})` : (slotConfigMode === 'date' ? `(${selectedScheduleDate})` : '')}:
+                          Add Slot to {selectedScheduleDate}:
                         </span>
                         
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -5613,7 +5737,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       {/* One-Click Presets */}
                       <div style={{ marginTop: '14px' }}>
                         <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                          ⚡ Quick Slot Schedule Presets ({slotConfigMode === 'day' ? DAY_NAME_MAP[selectedScheduleDay] : (slotConfigMode === 'date' ? selectedScheduleDate : 'General')}):
+                          ⚡ Quick Slot Schedule Presets for {selectedScheduleDate}:
                         </span>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                           <button

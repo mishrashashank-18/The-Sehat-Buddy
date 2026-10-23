@@ -175,8 +175,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   useEffect(() => {
     fetchAppointments();
-    const handleAptChanged = () => {
-      fetchAppointments();
+    const handleAptChanged = (e) => {
+      if (e?.type === 'sehat_appointments_changed' || e?.detail?.collection === 'appointments') {
+        fetchAppointments();
+      }
     };
     window.addEventListener('sehat_appointments_changed', handleAptChanged);
     window.addEventListener('sehat_db_change', handleAptChanged);
@@ -480,9 +482,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     }
   }, [activeTab, fetchStorageStats]);
 
-  // Live real-time background synchronization for Doctors and Hospitals
+  // Background synchronization on tab focus and visibility
   useEffect(() => {
-    const handleLiveSync = () => {
+    const handleFocusSync = () => {
       if (activeTab === 'doctors') {
         refreshDoctors?.();
       } else if (activeTab === 'hospitals') {
@@ -490,20 +492,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       }
     };
 
-    window.addEventListener('focus', handleLiveSync);
-    window.addEventListener('sehat_doctors_updated', handleLiveSync);
-    window.addEventListener('sehat_db_change', handleLiveSync);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') handleLiveSync();
-    });
-
-    const livePollTimer = setInterval(handleLiveSync, 3500);
+    window.addEventListener('focus', handleFocusSync);
+    window.addEventListener('sehat_doctors_updated', handleFocusSync);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleFocusSync();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
-      window.removeEventListener('focus', handleLiveSync);
-      window.removeEventListener('sehat_doctors_updated', handleLiveSync);
-      window.removeEventListener('sehat_db_change', handleLiveSync);
-      clearInterval(livePollTimer);
+      window.removeEventListener('focus', handleFocusSync);
+      window.removeEventListener('sehat_doctors_updated', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [activeTab, refreshDoctors, refreshHospitals]);
 

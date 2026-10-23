@@ -286,6 +286,28 @@ export const notifyStorageChanged = (source = 'mutation') => {
 export const realtimeEvents = new EventEmitter();
 realtimeEvents.setMaxListeners(500);
 
+const recentRealtimeEvents = new Map();
+export const emitRealtimeDbChange = (payload) => {
+  const coll = (payload.collection || '').toLowerCase();
+  const op = payload.operation || '';
+  const docId = payload.docId ? String(payload.docId) : '';
+  const key = `${coll}:${op}:${docId}`;
+  const now = Date.now();
+
+  // If identical event was dispatched in the last 1200ms, suppress duplicate emission
+  if (docId && recentRealtimeEvents.has(key) && (now - recentRealtimeEvents.get(key) < 1200)) {
+    return;
+  }
+  recentRealtimeEvents.set(key, now);
+  if (recentRealtimeEvents.size > 300) {
+    for (const [k, v] of recentRealtimeEvents) {
+      if (now - v > 5000) recentRealtimeEvents.delete(k);
+    }
+  }
+
+  realtimeEvents.emit('db_change', payload);
+};
+
 export const broadcastDbChange = (collection, operation = 'update', docId = null, fullDocument = null) => {
   const payload = {
     collection: (collection || '').toLowerCase(),
@@ -294,7 +316,7 @@ export const broadcastDbChange = (collection, operation = 'update', docId = null
     fullDocument,
     timestamp: Date.now()
   };
-  realtimeEvents.emit('db_change', payload);
+  emitRealtimeDbChange(payload);
   notifyStorageChanged(`mutation:${collection}:${operation}`);
 };
 
@@ -316,8 +338,8 @@ export const initMongoDBChangeStream = () => {
         const docId = change.documentKey?._id?.toString() || null;
         const fullDocument = change.fullDocument || null;
 
-        // Broadcast to all connected website visitors & dashboards in real-time
-        realtimeEvents.emit('db_change', {
+        // Broadcast to all connected website visitors & dashboards in real-time (deduplicated)
+        emitRealtimeDbChange({
           collection,
           operation,
           docId,

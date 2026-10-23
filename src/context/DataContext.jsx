@@ -594,8 +594,10 @@ export const DataProvider = ({ children }) => {
                     return d;
                   });
                   if (!found && (payload.operation === 'insert' || payload.operation === 'create')) {
-                    updated.push({
+                    const newEntry = {
                       ...docData,
+                      id: docData._id || docData.id,
+                      _id: docData._id || docData.id,
                       specialty: spec || 'General Physician',
                       specialization: spec || 'General Physician',
                       degree: deg || '',
@@ -607,7 +609,8 @@ export const DataProvider = ({ children }) => {
                       availableDays: avDays || 'Mon - Sat (10am - 4pm)',
                       availabilityStatus: avStatus || 'Available',
                       available: avBool !== undefined ? avBool : true
-                    });
+                    };
+                    updated.unshift(newEntry);
                   }
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
@@ -787,24 +790,42 @@ export const DataProvider = ({ children }) => {
 
 
   // Doctor CRUD operations
-  const addDoctor = (doctorData) => {
-    const newDoctor = {
+  const addDoctor = async (doctorData) => {
+    const cleanEmail = (doctorData.email || '').toLowerCase().trim();
+    if (!cleanEmail) {
+      throw new Error('Doctor email address is required.');
+    }
+
+    // Call backend API to create doctor in MongoDB Atlas
+    const serverResult = await api.addDoctor(doctorData);
+    const resolvedId = serverResult?._id || serverResult?.id || Date.now();
+    const createdDoctor = {
       ...doctorData,
-      id: Date.now(),
-      rating: doctorData.rating !== undefined && !isNaN(parseFloat(doctorData.rating)) ? parseFloat(doctorData.rating) : 0,
-      reviews: doctorData.reviews !== undefined ? `${doctorData.reviews}` : '0',
-      price: parseInt(doctorData.price, 10) || 500,
+      ...(serverResult || {}),
+      id: resolvedId,
+      _id: resolvedId,
+      email: cleanEmail,
+      rating: doctorData.rating !== undefined && !isNaN(parseFloat(doctorData.rating)) ? parseFloat(doctorData.rating) : (serverResult?.rating || 0),
+      reviews: doctorData.reviews !== undefined ? `${doctorData.reviews}` : (serverResult?.reviews || '0'),
+      price: parseInt(doctorData.price, 10) || serverResult?.price || serverResult?.fees || 500,
+      fees: parseInt(doctorData.price, 10) || serverResult?.fees || serverResult?.price || 500,
+      available: doctorData.available !== undefined ? doctorData.available : true
     };
+
     setDoctors(prev => {
-      const updated = [newDoctor, ...prev];
+      // Check if already in list (by ID or clean email)
+      const exists = prev.some(d => matchesId(d, createdDoctor) || (d.email && d.email.toLowerCase().trim() === cleanEmail));
+      const updated = exists
+        ? prev.map(d => (matchesId(d, createdDoctor) || (d.email && d.email.toLowerCase().trim() === cleanEmail)) ? { ...d, ...createdDoctor } : d)
+        : [createdDoctor, ...prev];
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
       } catch {}
       return updated;
     });
-    api.addDoctor(newDoctor).catch(() => {});
-    return newDoctor;
+
+    return createdDoctor;
   };
 
   const updateDoctor = async (id, updatedData) => {
