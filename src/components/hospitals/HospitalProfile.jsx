@@ -617,10 +617,16 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     let userObj = null;
     try {
       const u = localStorage.getItem('user');
-      if (u) userObj = JSON.parse(u);
+      if (u) {
+        const parsed = JSON.parse(u);
+        if (parsed && (parsed.name || parsed.email || parsed._id || parsed.id)) {
+          userObj = parsed;
+        }
+      }
     } catch {}
 
-    if (!token && !userObj && !user) {
+    const isUserAuth = Boolean(token && (userObj || user));
+    if (!isUserAuth) {
       setShowReviewLoginPrompt(true);
       return;
     }
@@ -637,7 +643,10 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       localStorage.removeItem('autoOpenHospitalBooking');
     }
     if (localStorage.getItem('open_write_review') === 'true') {
-      setIsWriteReviewModalOpen(true);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+      if (token) {
+        setIsWriteReviewModalOpen(true);
+      }
       localStorage.removeItem('open_write_review');
     }
   }, [hospitalId]);
