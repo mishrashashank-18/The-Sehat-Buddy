@@ -259,12 +259,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   });
 
   // Sync heroPresets when heroContent loads from MongoDB Atlas
+  const heroPresetsSerialized = JSON.stringify(heroContent?.heroPresets || []);
   React.useEffect(() => {
     if (Array.isArray(heroContent?.heroPresets)) {
       const sanitized = sanitizePresets(heroContent.heroPresets);
       setHeroPresets(sanitized);
     }
-  }, [heroContent?.heroPresets]);
+  }, [heroPresetsSerialized]);
   const [customHeroImage, setCustomHeroImage] = useState(() => {
     return localStorage.getItem('sehat_custom_hero_image') || '';
   });

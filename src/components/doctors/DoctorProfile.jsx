@@ -4,12 +4,13 @@ import {
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
-  History, Milestone, CalendarClock, ExternalLink
+  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
+import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import { api, API_BASE } from '../../services/api';
 import styles from './DoctorProfile.module.css';
 
@@ -172,41 +173,70 @@ export const formatDoctorExperience = (exp) => {
   return `${!isNaN(num) && num > 0 ? num : 15}+ Years`;
 };
 
-// Helper to extract biography content (custom doctor about or fallback) for responsive display
+// Helper to extract biography content (custom doctor about only)
 export const getBioSentences = (doc) => {
   if (!doc) return [];
-  const name = doc.name ? (doc.name.startsWith('Dr.') ? doc.name : `Dr. ${doc.name}`) : 'The Doctor';
-  const spec = doc.specialty || doc.specialization || 'Consultant Specialist';
-  const exp = formatDoctorExperience(doc.experience);
-  const hosp = doc.hospital || 'Apollo Hospital & Heart Center';
 
-  // 1. If doctor has custom about text from dashboard/database, split into sentences cleanly at punctuation boundaries
-  if (doc.about && doc.about.trim().length > 0) {
+  // If doctor has custom about text from dashboard/database, split into sentences/paragraphs cleanly
+  if (doc.about && typeof doc.about === 'string' && doc.about.trim().length > 0) {
     const rawAbout = doc.about.trim();
-    // Protect common abbreviations (Dr., Prof., Mr., MD., etc.) so they do not trigger premature sentence splits
-    const protectedText = rawAbout
-      .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Sr|Jr)\./gi, '$1___DOT___')
-      .replace(/\b(e\.g|i\.e)\./gi, '$1___DOT___');
+    
+    // Split first by line breaks so explicit paragraphs / lines are preserved as separate units
+    const rawParagraphs = rawAbout.split(/\r?\n+/).map(p => p.trim()).filter(Boolean);
 
-    const sentenceMatches = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
-    if (sentenceMatches && sentenceMatches.length > 0) {
-      const cleaned = sentenceMatches
-        .map(s => s.replace(/___DOT___/g, '.').trim())
-        .filter(Boolean);
-      if (cleaned.length > 0) {
-        return cleaned;
+    const sentences = [];
+
+    // Helper to split any unusually long run-on string (e.g. > 130 chars with no punctuation) into readable clause/line chunks
+    const chunkLongText = (text, maxLen = 130) => {
+      if (text.length <= maxLen) return [text];
+      const words = text.split(/\s+/);
+      const chunks = [];
+      let currentChunk = '';
+      for (const word of words) {
+        if (!currentChunk) {
+          currentChunk = word;
+        } else if ((currentChunk + ' ' + word).length <= maxLen) {
+          currentChunk += ' ' + word;
+        } else {
+          chunks.push(currentChunk);
+          currentChunk = word;
+        }
+      }
+      if (currentChunk) chunks.push(currentChunk);
+      return chunks.length > 0 ? chunks : [text];
+    };
+
+    for (const paragraph of rawParagraphs) {
+      // Protect common abbreviations (Dr., Prof., Mr., MD., etc.) so they do not trigger premature sentence splits
+      const protectedText = paragraph
+        .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Sr|Jr)\./gi, '$1___DOT___')
+        .replace(/\b(e\.g|i\.e)\./gi, '$1___DOT___');
+
+      // Match sentences ending in ., !, ? or the end of the paragraph
+      const sentenceMatches = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+      if (sentenceMatches && sentenceMatches.length > 0) {
+        for (const rawMatch of sentenceMatches) {
+          const cleaned = rawMatch.replace(/___DOT___/g, '.').trim();
+          if (cleaned) {
+            // If the sentence is excessively long without punctuation (e.g. run-on text or test strings > 130 chars), chunk it
+            const chunks = chunkLongText(cleaned, 130);
+            sentences.push(...chunks);
+          }
+        }
+      } else {
+        const chunks = chunkLongText(paragraph, 130);
+        sentences.push(...chunks);
       }
     }
+
+    if (sentences.length > 0) {
+      return sentences;
+    }
+    return [rawAbout];
   }
 
-  // 2. Default fallback clinical sentences when no custom about is set
-  return [
-    `${name} is a Senior Consultant in ${spec} with over ${exp} of clinical practice at ${hosp}, recognized for diagnostic precision and compassionate patient care.`,
-    `Specializing in personalized therapeutic regimens, preventative screening, and minimally invasive clinical interventions, ${name} is dedicated to empowering patients through transparent medical guidance.`,
-    `With extensive expertise in managing complex clinical cases, ${name} integrates evidence-based protocols with tailored treatment plans to ensure optimal long-term health outcomes.`,
-    `${name} maintains active privileges across leading healthcare institutions, participating in advanced medical forums and clinical research to bring modern treatment methodologies to everyday practice.`,
-    `Committed to comprehensive post-consultation care and patient advocacy, ${name} regularly conducts preventive wellness seminars and continues clinical research in contemporary healthcare delivery.`
-  ];
+  // If no about is written or about is blank in dashboard, do not invent or show placeholder about text
+  return [];
 };
 
 export const getBioItems = (doc) => getBioSentences(doc);
@@ -343,18 +373,18 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
           transition: 'opacity 0.25s ease'
         }}>
           <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+            width: '46px',
+            height: '46px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.25) 0%, rgba(247, 119, 55, 0.25) 100%)',
+            border: '1px solid rgba(225, 48, 108, 0.35)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ffffff',
-            boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+            color: '#f43f5e',
             marginBottom: '12px'
           }}>
-            <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+            <SocialInstagramIcon size={22} />
           </div>
           <span style={{
             color: '#ffffff',
@@ -400,28 +430,31 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
         <SocialInstagramIcon size={14} />
         <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
-
-      <div
-        className={`${styles.reelPlayOverlay} ${isPlaying ? styles.reelPlayingOverlayHidden : ''}`}
-        style={{ zIndex: 3 }}
-      >
-        <div className={styles.reelPlayBtn}>
-          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-        </div>
-      </div>
-
-      {isPlaying && (
-        <div className={styles.reelHoverPlayingIndicator}>
-          <span className={styles.reelPulseDot} />
-          <span>Playing on hover</span>
-        </div>
-      )}
     </div>
   );
 };
 
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, refreshReviews, faqs } = useData();
+  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, refreshReviews, deleteReview, faqs } = useData();
+  const [deletingReviewId, setDeletingReviewId] = useState(null);
+
+  const handleDeleteReview = async (rev) => {
+    const revId = rev._id || rev.id;
+    if (!window.confirm(`Are you sure you want to permanently delete this review by ${rev.patientName || 'this patient'}?`)) {
+      return;
+    }
+    try {
+      setDeletingReviewId(revId);
+      await deleteReview(rev);
+      if (typeof refreshReviews === 'function') {
+        refreshReviews();
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete review');
+    } finally {
+      setDeletingReviewId(null);
+    }
+  };
 
   const fallbackDoctor = React.useMemo(() => {
     try {
@@ -578,41 +611,52 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [isWriteReviewOpen, setIsWriteReviewOpen] = useState(false);
+  const [showReviewLoginPrompt, setShowReviewLoginPrompt] = useState(false);
   const [isAboutExpanded, setIsAboutExpanded] = useState(false);
 
   // Auto-open write review modal if arriving from login redirect
   React.useEffect(() => {
     if (localStorage.getItem('open_write_review') === 'true') {
-      setIsWriteReviewOpen(true);
+      const { isLoggedIn } = getAuthenticatedPatient();
+      if (isLoggedIn) {
+        setIsWriteReviewOpen(true);
+      }
       localStorage.removeItem('open_write_review');
     }
   }, [doctorId]);
 
+  const handleOpenWriteReview = () => {
+    // Strict authentication check: no patient can write or publish review without login
+    const { isLoggedIn } = getAuthenticatedPatient();
+
+    if (!isLoggedIn) {
+      setShowReviewLoginPrompt(true);
+      return;
+    }
+
+    setIsWriteReviewOpen(true);
+  };
+
   // Booking interaction states
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
+  const [dateWindowStart, setDateWindowStart] = useState(0);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState('04:00 PM');
 
 
 
-  // Modal patient inputs
+  // Modal patient inputs - only prefill if actively logged in as a patient
   const [patientName, setPatientName] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.name || '' : '';
-    } catch { return ''; }
+    const { user } = getAuthenticatedPatient();
+    return user?.name || '';
   });
   const [patientEmail, setPatientEmail] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.email || '' : '';
-    } catch { return ''; }
+    const { user } = getAuthenticatedPatient();
+    return user?.email || '';
   });
   const [patientPhone, setPatientPhone] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.phone || '' : '';
-    } catch { return ''; }
+    const { user } = getAuthenticatedPatient();
+    return user?.phone || '';
   });
   const [symptoms, setSymptoms] = useState('');
   const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
@@ -672,17 +716,28 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     };
   }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
 
-  // Dynamic 3 upcoming appointment days with real live available slot count
+  // Dynamic appointment days strictly from current date till end of current month (not beyond)
   const dateOptions = React.useMemo(() => {
-    const dates = [
-      new Date(),
-      new Date(Date.now() + 86400000),
-      new Date(Date.now() + 172800000)
-    ];
+    const dates = [];
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const startDay = today.getDate();
+    const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
 
-    return dates.map((d, index) => {
+    for (let dayNum = startDay; dayNum <= totalDaysInMonth; dayNum++) {
+      const d = new Date(currentYear, currentMonth, dayNum);
+      dates.push(d);
+    }
+
+    return dates.map((d) => {
       const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayLabel = index === 0 ? 'Today' : (index === 1 ? 'Tomorrow' : dayNameShort);
+      const isToday = d.toDateString() === today.toDateString();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const isTomorrow = d.toDateString() === tomorrow.toDateString();
+
+      const dayLabel = isToday ? 'Today' : (isTomorrow ? 'Tomorrow' : dayNameShort);
       const dateStr = getLocalDateString(d);
       
       const resolved = resolveSlotsForDate(d);
@@ -713,6 +768,33 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     });
   }, [resolveSlotsForDate, doctor?.slots_booked]);
 
+  // Navigate through dates 3 at a time across the month, stopping strictly at month bounds
+  const handleNextDates = () => {
+    if (dateWindowStart + 3 >= dateOptions.length) {
+      return; // Do not go beyond end of current month
+    }
+    setDateWindowStart((prev) => {
+      const nextStart = Math.min(prev + 3, Math.max(0, dateOptions.length - 3));
+      setSelectedDateIdx(nextStart);
+      return nextStart;
+    });
+  };
+
+  const handlePrevDates = () => {
+    if (dateWindowStart === 0) {
+      return; // Do not go before current date (today)
+    }
+    setDateWindowStart((prev) => {
+      const prevStart = Math.max(prev - 3, 0);
+      setSelectedDateIdx(prevStart);
+      return prevStart;
+    });
+  };
+
+  const currentVisibleDates = React.useMemo(() => {
+    return dateOptions.slice(dateWindowStart, dateWindowStart + 3);
+  }, [dateOptions, dateWindowStart]);
+
   // Current day's slots with booked status
   const currentDaySlots = React.useMemo(() => {
     const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
@@ -741,13 +823,19 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
   // Stable bio sentence management with clean More/Less toggle (flicker-free)
   const [visibleSentenceCount, setVisibleSentenceCount] = useState(2);
+  const [targetBookingHeight, setTargetBookingHeight] = useState(0);
 
   const leftColRef = React.useRef(null);
   const bookingColRef = React.useRef(null);
+  const heroTopRowRef = React.useRef(null);
+  const heroHighlightsRowRef = React.useRef(null);
+  const aboutHeadingRef = React.useRef(null);
   const aboutTextRef = React.useRef(null);
   const aboutParasWrapRef = React.useRef(null);
   const readMoreBtnRef = React.useRef(null);
+  const metaFooterRef = React.useRef(null);
   const measureContainerRef = React.useRef(null);
+  const lastBookingHeightRef = React.useRef(0);
 
   const allBioSentences = React.useMemo(() => {
     return getBioSentences(doctor);
@@ -757,24 +845,38 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const updateBalancedBio = React.useCallback(() => {
     // Retain natural vertical stacking and disable desktop-specific height balancing on mobile/tablet widths
     if (typeof window === 'undefined' || window.innerWidth <= 992) {
+      setTargetBookingHeight((prev) => (prev !== 0 ? 0 : prev));
       return;
     }
 
-    if (!bookingColRef.current || !leftColRef.current || !measureContainerRef.current) {
+    if (!bookingColRef.current || !measureContainerRef.current) {
       return;
     }
 
-    const bookingHeight = bookingColRef.current.offsetHeight;
-    const leftTotalHeight = leftColRef.current.offsetHeight;
-    const currentBioHeight = aboutParasWrapRef.current ? aboutParasWrapRef.current.offsetHeight : 0;
-    const readMoreHeight = readMoreBtnRef.current ? readMoreBtnRef.current.offsetHeight : 0;
+    const currentBookingHeight = Math.round(bookingColRef.current.getBoundingClientRect().height);
+    if (!currentBookingHeight) return;
 
-    // Fixed height of the left profile (doctor header, highlights, section headings, and bottom information cards)
-    const fixedLeftHeight = leftTotalHeight - currentBioHeight - readMoreHeight;
-    const availableBioHeight = bookingHeight - fixedLeftHeight;
+    // Check if booking height actually changed significantly to avoid any oscillation
+    const heightDiff = Math.abs(currentBookingHeight - lastBookingHeightRef.current);
+    if (heightDiff < 4 && lastBookingHeightRef.current !== 0) {
+      return;
+    }
+    lastBookingHeightRef.current = currentBookingHeight;
+    setTargetBookingHeight((prev) => (prev !== currentBookingHeight ? currentBookingHeight : prev));
+
+    // Measure the actual fixed content height of left column items directly
+    const heroH = heroTopRowRef.current ? heroTopRowRef.current.offsetHeight : 155;
+    const highlightsH = heroHighlightsRowRef.current ? heroHighlightsRowRef.current.offsetHeight : 65;
+    const headingH = aboutHeadingRef.current ? aboutHeadingRef.current.offsetHeight : 28;
+    const footerH = metaFooterRef.current ? metaFooterRef.current.offsetHeight : 80;
+    const fixedLeftHeight = heroH + highlightsH + headingH + footerH + 120;
+    const availableBioHeight = currentBookingHeight - fixedLeftHeight;
 
     const sentenceEls = Array.from(measureContainerRef.current.children);
-    if (sentenceEls.length === 0) return;
+    if (sentenceEls.length === 0) {
+      setVisibleSentenceCount(0);
+      return;
+    }
 
     let bestCount = 1;
     let accumulatedHeight = 0;
@@ -791,7 +893,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       const totalCandidateHeight = accumulatedHeight + moreBtnReserve;
 
       // Fit within availableBioHeight with small tolerance to prevent awkward truncation
-      if (totalCandidateHeight <= availableBioHeight + 12 || i === 0) {
+      if (totalCandidateHeight <= availableBioHeight + 14 || i === 0) {
         bestCount = i + 1;
       } else {
         break;
@@ -829,6 +931,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   // Recalculate whenever appointment slots change, the selected date changes, or the biography changes
   React.useEffect(() => {
     const t = setTimeout(() => {
+      lastBookingHeightRef.current = 0; // force fresh measurement on slot change
       updateBalancedBio();
     }, 60);
     return () => clearTimeout(t);
@@ -837,6 +940,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   // Viewport resize listener with proper cleanup
   React.useEffect(() => {
     const handleResize = () => {
+      lastBookingHeightRef.current = 0;
       updateBalancedBio();
     };
     window.addEventListener('resize', handleResize);
@@ -1002,23 +1106,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     }
   };
 
-  if (!doctor) {
-    return (
-      <div className={styles.pageWrapper}>
-        <Container>
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <h2>Doctor Not Found</h2>
-            <button onClick={() => onNavigate('find-doctors')} className={styles.backBtn}>
-              Back to Doctors
-            </button>
-          </div>
-        </Container>
-      </div>
-    );
-  }
-
   // Generate procedure / qualification tags matching the design
   const getDoctorTags = (doc) => {
+    if (!doc) return [];
     if (Array.isArray(doc?.tags) && doc.tags.length > 0) {
       return Array.from(new Set(doc.tags.filter(Boolean)));
     }
@@ -1111,6 +1201,21 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     return `${count} patient review${count === 1 ? '' : 's'}`;
   }, [doctorReviews.length]);
 
+  if (!doctor) {
+    return (
+      <div className={styles.pageWrapper}>
+        <Container>
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <h2>Doctor Not Found</h2>
+            <button onClick={() => onNavigate('find-doctors')} className={styles.backBtn}>
+              Back to Doctors
+            </button>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.pageWrapper}>
       <Container>
@@ -1122,8 +1227,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         {/* UNIFIED DOCTOR MASTER CARD: Merges Doctor Profile, Highlights, About & Booking into One Cohesive Card */}
         <div className={styles.unifiedDoctorCard}>
           {/* LEFT: Main Profile, Highlights & About */}
-          <div className={styles.unifiedMainCol} ref={leftColRef}>
-            <div className={styles.heroTopRow}>
+          <div 
+            className={styles.unifiedMainCol} 
+            ref={leftColRef}
+            style={
+              targetBookingHeight && !isAboutExpanded && typeof window !== 'undefined' && window.innerWidth > 992 
+                ? { minHeight: `${targetBookingHeight}px` } 
+                : {}
+            }
+          >
+            <div className={styles.heroTopRow} ref={heroTopRowRef}>
               <div className={styles.heroAvatarCol}>
                 <div className={styles.heroAvatarWrap}>
                   <img 
@@ -1240,7 +1353,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             </div>
 
             {/* Bottom 3-Column Highlights Row */}
-            <div className={styles.heroHighlightsRow}>
+            <div className={styles.heroHighlightsRow} ref={heroHighlightsRowRef}>
               <div className={styles.heroHighlightItem}>
                 <div className={styles.heroHighlightIconWrap}>
                   <Briefcase size={18} />
@@ -1283,48 +1396,48 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
             {/* Integrated About Section with Rich Clinical Bio & Credentials Footer */}
             <div className={styles.unifiedAboutSection}>
-              <div className={styles.aboutTopBlock} style={{ position: 'relative' }}>
-                <h3 className={styles.sectionHeading}>
-                  About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
-                </h3>
-                <div className={styles.aboutTextContent} ref={aboutTextRef}>
-                  {(() => {
-                    if (allBioSentences.length === 0) return null;
+              {allBioSentences.length > 0 && (
+                <div className={styles.aboutTopBlock} style={{ position: 'relative' }}>
+                  <h3 className={styles.sectionHeading} ref={aboutHeadingRef}>
+                    About {doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`}
+                  </h3>
+                  <div className={styles.aboutTextContent} ref={aboutTextRef}>
+                    {(() => {
+                      const countToShow = isAboutExpanded
+                        ? allBioSentences.length
+                        : Math.min(allBioSentences.length, Math.max(1, visibleSentenceCount || 1));
 
-                    const countToShow = isAboutExpanded
-                      ? allBioSentences.length
-                      : Math.min(allBioSentences.length, Math.max(1, visibleSentenceCount || 1));
+                      const displayedSentences = allBioSentences.slice(0, countToShow);
+                      const hasMore = allBioSentences.length > countToShow;
 
-                    const displayedSentences = allBioSentences.slice(0, countToShow);
-                    const hasMore = allBioSentences.length > countToShow;
-
-                    return (
-                      <>
-                        <div className={styles.aboutParasWrap} ref={aboutParasWrapRef}>
-                          {displayedSentences.map((sentence, sIdx) => (
-                            <p key={sIdx}>{sentence}</p>
-                          ))}
-                        </div>
-                        {(hasMore || isAboutExpanded) && allBioSentences.length > 1 && (
-                          <button
-                            ref={readMoreBtnRef}
-                            type="button"
-                            className={styles.readMoreBtn}
-                            onClick={() => setIsAboutExpanded(!isAboutExpanded)}
-                            aria-expanded={isAboutExpanded}
-                          >
-                            <span>{isAboutExpanded ? 'Less' : 'More'}</span>
-                            <ChevronDown
-                              size={14}
-                              className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
-                            />
-                          </button>
-                        )}
-                      </>
-                    );
-                  })()}
+                      return (
+                        <>
+                          <div className={styles.aboutParasWrap} ref={aboutParasWrapRef}>
+                            {displayedSentences.map((sentence, sIdx) => (
+                              <p key={sIdx}>{sentence}</p>
+                            ))}
+                          </div>
+                          {(hasMore || (isAboutExpanded && allBioSentences.length > 1)) && (
+                            <button
+                              ref={readMoreBtnRef}
+                              type="button"
+                              className={styles.readMoreBtn}
+                              onClick={() => setIsAboutExpanded(!isAboutExpanded)}
+                              aria-expanded={isAboutExpanded}
+                            >
+                              <span>{isAboutExpanded ? 'Less' : 'More'}</span>
+                              <ChevronDown
+                                size={14}
+                                className={`${styles.readMoreChevron} ${isAboutExpanded ? styles.readMoreChevronOpen : ''}`}
+                              />
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Hidden off-screen container to measure exact sentence heights */}
               <div className={styles.measureContainer} ref={measureContainerRef} aria-hidden="true">
@@ -1334,7 +1447,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               </div>
 
               {/* Verified Clinical Credentials & Practice Standard (Anchored dynamically to balance column height) */}
-              <div className={styles.aboutMetaFooter}>
+              <div className={styles.aboutMetaFooter} ref={metaFooterRef}>
                 <div className={styles.aboutMetaItem}>
                   <div className={styles.aboutMetaIcon}>
                     <GraduationCap size={15} />
@@ -1426,22 +1539,64 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
             {/* Select Date & Time */}
             <div className={styles.bookingSection}>
-              <label className={styles.bookingSectionLabel}>Select Appointment Date</label>
-              <div className={styles.dateSlotsGroup}>
-                {dateOptions.map((opt, idx) => (
-                  <button 
-                    key={idx} 
-                    type="button"
-                    className={`${styles.dateSlotCard} ${selectedDateIdx === idx ? styles.dateSlotCardActive : ''}`}
-                    onClick={() => setSelectedDateIdx(idx)}
-                  >
-                    <span className={styles.dateSlotDayName}>{opt.day}</span>
-                    <span className={styles.dateSlotDateNum}>{opt.date}</span>
-                    <span className={`${styles.dateSlotPill} ${selectedDateIdx === idx ? styles.dateSlotPillActive : ''}`}>
-                      {opt.slots}
+              <div className={styles.dateSelectorHeaderRow}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label className={styles.bookingSectionLabel} style={{ margin: 0 }}>
+                    Select Appointment Date
+                  </label>
+                  <div className={styles.dateMonthIndicator} style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px' }}>
+                    <span>
+                      {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                     </span>
-                  </button>
-                ))}
+                  </div>
+                </div>
+                <div className={styles.dateNavCounter}>
+                  {dateWindowStart + 1}–{Math.min(dateWindowStart + 3, dateOptions.length)} of {dateOptions.length}
+                </div>
+              </div>
+
+              <div className={styles.dateCarouselWrapper}>
+                <button
+                  type="button"
+                  className={styles.dateStripArrowBtn}
+                  onClick={handlePrevDates}
+                  disabled={dateWindowStart === 0}
+                  title="Previous Dates"
+                  aria-label="Previous Dates"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+
+                <div className={styles.dateSlotsGroup}>
+                  {currentVisibleDates.map((opt, vIdx) => {
+                    const actualIdx = dateWindowStart + vIdx;
+                    return (
+                      <button 
+                        key={actualIdx} 
+                        type="button"
+                        className={`${styles.dateSlotCard} ${selectedDateIdx === actualIdx ? styles.dateSlotCardActive : ''}`}
+                        onClick={() => setSelectedDateIdx(actualIdx)}
+                      >
+                        <span className={styles.dateSlotDayName}>{opt.day}</span>
+                        <span className={styles.dateSlotDateNum}>{opt.date}</span>
+                        <span className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}>
+                          {opt.slots}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="button"
+                  className={styles.dateStripArrowBtn}
+                  onClick={handleNextDates}
+                  disabled={dateWindowStart + 3 >= dateOptions.length}
+                  title="Next Dates"
+                  aria-label="Next Dates"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
 
               <div className={styles.timeSlotsHeader}>
@@ -1552,7 +1707,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
                 if (typeof text === 'object' && text !== null) {
                   title = text.title || text.name || '';
-                  subtitle = text.organization || text.subtitle || '';
+                  subtitle = text.recognition || text.subtitle || text.organization || '';
                   tag = text.year || text.tag || '';
                 }
 
@@ -1592,19 +1747,49 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               };
 
               const parseCertItem = (text) => {
-                let title = text;
+                if (typeof text === 'object' && text !== null) {
+                  const title = text.title || text.name || '';
+                  const subtitle = text.board || text.subtitle || text.authority || 'Accredited Medical Board';
+                  const tag = text.tag || text.status || 'Certified';
+                  return { title, subtitle, tag };
+                }
+                let title = String(text || '').trim();
                 let tag = 'Certified';
-                if (text.includes('(') && text.includes(')')) {
-                  const match = text.match(/\((.*?)\)/);
-                  if (match) {
-                    tag = match[1].trim();
-                    title = text.replace(/\(.*?\)/, '').trim();
+                let subtitle = 'Accredited Medical Board';
+                if (typeof text === 'string') {
+                  if (text.includes(' - ')) {
+                    const parts = text.split(' - ');
+                    title = parts[0].trim();
+                    subtitle = parts.slice(1).join(' - ').trim();
+                  }
+                  if (subtitle.includes('(') && subtitle.includes(')')) {
+                    const match = subtitle.match(/\((.*?)\)/);
+                    if (match) {
+                      tag = match[1].trim();
+                      subtitle = subtitle.replace(/\(.*?\)/, '').trim();
+                    }
+                  } else if (title.includes('(') && title.includes(')')) {
+                    const match = title.match(/\((.*?)\)/);
+                    if (match) {
+                      tag = match[1].trim();
+                      title = title.replace(/\(.*?\)/, '').trim();
+                    }
                   }
                 }
-                return { title, subtitle: 'Accredited Medical Board', tag };
+                return { title, subtitle: subtitle || 'Accredited Medical Board', tag };
               };
 
-              const parseMembershipItem = (text) => {
+              const parseMembershipItem = (item) => {
+                if (!item) return { title: '', subtitle: 'Official Medical Council', tag: '' };
+                if (typeof item === 'object') {
+                  const title = item.title || item.name || '';
+                  const subtitle = item.council || item.subtitle || 'Official Medical Council';
+                  const tag = (item.showStatus === false || item.showStatus === 'false')
+                    ? ''
+                    : (item.status || item.tag || 'Active Member');
+                  return { title, subtitle, tag };
+                }
+                const text = String(item).trim();
                 let title = text;
                 let tag = 'Active Member';
                 if (text.includes(' - ')) {
@@ -1616,12 +1801,32 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               };
 
               const parseTimelineItem = (text) => {
-                const isPresent = text.toLowerCase().includes('present');
-                let title = text;
+                if (typeof text === 'object' && text !== null) {
+                  const isPresent = !!text.isPresent || (typeof text.endYear === 'string' && text.endYear.toLowerCase().includes('present'));
+                  const title = text.role || text.title || '';
+                  const hospital = text.hospital || doctor.hospital || 'Apollo Hospital';
+                  let years = 'Present';
+                  if (isPresent) {
+                    years = text.startYear ? `${text.startYear} – Present` : 'Present';
+                  } else if (text.startYear && text.endYear) {
+                    years = `${text.startYear} – ${text.endYear}`;
+                  } else if (text.startYear) {
+                    years = `${text.startYear}`;
+                  } else if (text.endYear) {
+                    years = `${text.endYear}`;
+                  } else if (text.years) {
+                    years = text.years;
+                  }
+                  return { title, hospital, years, isPresent };
+                }
+
+                const str = String(text || '').trim();
+                const isPresent = str.toLowerCase().includes('present');
+                let title = str;
                 let hospital = doctor.hospital || 'Apollo Hospital';
                 let years = '2018 – Present';
-                if (text.includes(' - ')) {
-                  const parts = text.split(' - ');
+                if (str.includes(' - ')) {
+                  const parts = str.split(' - ');
                   title = parts[0].trim();
                   const rest = parts.slice(1).join(' - ').trim();
                   if (rest.includes('(')) {
@@ -1631,6 +1836,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   } else {
                     hospital = rest;
                   }
+                } else if (str.includes('(')) {
+                  const idx = str.indexOf('(');
+                  title = str.slice(0, idx).trim();
+                  years = str.slice(idx).replace(/[()]/g, '').trim();
                 }
                 return { title, hospital, years, isPresent };
               };
@@ -1777,7 +1986,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           ) : (
                             timelineList.map((item, idx) => {
                             const parsed = parseTimelineItem(item);
-                            const isPresent = parsed.isPresent || (idx === 0 && !timelineList.some(t => t.toLowerCase().includes('present')));
+                            const checkIsItemPresent = (t) => {
+                              if (typeof t === 'object' && t !== null) return !!t.isPresent || (typeof t.endYear === 'string' && t.endYear.toLowerCase().includes('present'));
+                              return typeof t === 'string' && t.toLowerCase().includes('present');
+                            };
+                            const isPresent = parsed.isPresent || (idx === 0 && !timelineList.some(checkIsItemPresent));
                             const getTimelineCardIcon = (i, isPres) => {
                               if (isPres || i === 0) return <Clock size={16} />;
                               if (i === 1) return <Milestone size={16} />;
@@ -1793,7 +2006,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                                     className={`${styles.timelineLineTop} ${
                                       idx === 0
                                         ? styles.timelineLineHidden
-                                        : idx === 1 && timelineList[0]?.toLowerCase().includes('present')
+                                        : idx === 1 && checkIsItemPresent(timelineList[0])
                                         ? styles.timelineLineSolid
                                         : styles.timelineLineDotted
                                     }`}
@@ -2198,7 +2411,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   <button
                     type="button"
                     className={styles.writeReviewBtn}
-                    onClick={() => setIsWriteReviewOpen(true)}
+                    onClick={handleOpenWriteReview}
                   >
                     <Star size={16} fill="currentColor" />
                     <span>Write a Review</span>
@@ -2257,6 +2470,33 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           </span>
                         )}
                       </div>
+
+                      {isAdmin && (
+                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteReview(rev)}
+                            disabled={deletingReviewId === (rev._id || rev.id)}
+                            style={{
+                              background: '#fef2f2',
+                              border: '1px solid #fecaca',
+                              borderRadius: '6px',
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: '#dc2626',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Delete this review permanently as Administrator"
+                          >
+                            <Trash2 size={13} />
+                            {deletingReviewId === (rev._id || rev.id) ? 'Deleting...' : 'Delete Review (Admin)'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2274,7 +2514,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   <button
                     type="button"
                     className={styles.writeReviewBtn}
-                    onClick={() => setIsWriteReviewOpen(true)}
+                    onClick={handleOpenWriteReview}
                   >
                     <Star size={16} fill="currentColor" />
                     <span>Write the First Review</span>
@@ -2495,6 +2735,107 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Review Login Prompt Modal */}
+      {showReviewLoginPrompt && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            padding: '32px 28px',
+            maxWidth: '440px',
+            width: '100%',
+            textAlign: 'center',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+            border: '1px solid #e2e8f0'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              background: '#fef3c7',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              border: '1px solid #fde68a'
+            }}>
+              <Star size={28} color="#d97706" fill="#fde68a" />
+            </div>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>
+              Please Log In to Write a Review
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: '#64748b', margin: '0 0 20px', lineHeight: 1.5 }}>
+              To ensure all patient ratings, clinical feedback, and recovery stories are genuine and verified, please log in or register before posting a review for <strong>{doctor?.name || 'this doctor'}</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setShowReviewLoginPrompt(false)}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '8px',
+                  background: '#ffffff',
+                  color: '#334155',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReviewLoginPrompt(false);
+                  const docTargetId = doctor?._id || doctor?.id || doctorId;
+                  try {
+                    localStorage.setItem('open_write_review', 'true');
+                    if (docTargetId) {
+                      localStorage.setItem('redirect_after_login', `/doctors/${docTargetId}`);
+                    }
+                  } catch (e) {}
+                  if (onNavigate) {
+                    onNavigate('user-login', {
+                      view: 'doctor-profile',
+                      param: docTargetId
+                    });
+                  } else {
+                    window.location.href = `/login?redirect=/doctors/${docTargetId}&action=review`;
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#0284c7',
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(2, 132, 199, 0.3)'
+                }}
+              >
+                Log In / Register
+              </button>
+            </div>
           </div>
         </div>
       )}

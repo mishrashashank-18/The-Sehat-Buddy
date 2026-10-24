@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   LayoutDashboard,
   Stethoscope,
@@ -41,7 +41,9 @@ import {
   Users,
   UserCheck,
   CalendarDays,
-  Check
+  Check,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
@@ -351,25 +353,73 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     item: null
   });
 
-  // Toast feedback
+  // Toast feedback with collision-safe timeout reference
   const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
+  const toastTimeoutRef = useRef(null);
 
-  const showToast = (msg) => {
+  const dismissToast = useCallback(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToastMessage('');
+  }, []);
+
+  const showToast = useCallback((msg, type = 'success', duration = 4200) => {
+    if (!msg) return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
     setToastMessage(msg);
-    setTimeout(() => {
+    setToastType(type);
+    toastTimeoutRef.current = setTimeout(() => {
       setToastMessage('');
-    }, 3500);
-  };
+      toastTimeoutRef.current = null;
+    }, duration);
+  }, []);
 
-  const handleToggleStarDoctor = (doc, e) => {
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // In-flight guard for star doctor toggling to prevent double-clicks / racing requests
+  const [starTogglingDoctors, setStarTogglingDoctors] = useState(() => new Set());
+
+  const handleToggleStarDoctor = async (doc, e) => {
+    e?.preventDefault?.();
     e?.stopPropagation?.();
-    const nextVal = !doc.isStarDoctor;
-    updateDoctor(doc.id || doc._id, { isStarDoctor: nextVal });
+    const docId = doc._id || doc.id;
+    if (!docId || starTogglingDoctors.has(docId)) return;
+
+    setStarTogglingDoctors(prev => new Set(prev).add(docId));
+    const nextVal = !Boolean(doc.isStarDoctor);
+
+    // Provide immediate, crisp toast feedback so user gets instant confirmation without lag
     showToast(
       nextVal
         ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
-        : `Removed ${doc.name} from Star Doctors.`
+        : `Removed ${doc.name} from Star Doctors.`,
+      'success',
+      4500
     );
+
+    try {
+      await updateDoctor(docId, { isStarDoctor: nextVal });
+    } catch (err) {
+      showToast(err.message || 'Failed to update star doctor status', 'error', 5000);
+    } finally {
+      setStarTogglingDoctors(prev => {
+        const next = new Set(prev);
+        next.delete(docId);
+        return next;
+      });
+    }
   };
 
   // Realtime Cloud Quota & Storage Stats (MongoDB, Cloudinary & Brevo)
@@ -377,6 +427,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [loadingStorage, setLoadingStorage] = useState(false);
   const [storageError, setStorageError] = useState(null);
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+
+  const storageDataRef = useRef(storageData);
+  useEffect(() => {
+    storageDataRef.current = storageData;
+  }, [storageData]);
 
   const fetchStorageStats = useCallback(async (isSilent = false) => {
     try {
@@ -478,7 +533,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   useEffect(() => {
     if (activeTab === 'overview') {
-      fetchStorageStats(false);
+      fetchStorageStats(Boolean(storageDataRef.current));
     }
   }, [activeTab, fetchStorageStats]);
 
@@ -506,56 +561,117 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     };
   }, [activeTab, refreshDoctors, refreshHospitals]);
 
+  // Pre-calculate doctor ratings map for zero-lag O(1) lookups
+  const doctorRatingsMap = useMemo(() => {
+    const map = new Map();
+    (doctors || []).forEach(doc => {
+      const key = String(doc._id || doc.id);
+      const verifiedReviews = getDoctorVerifiedReviews(doc, reviews);
+      const count = verifiedReviews.length;
+      let score = '0';
+      if (count > 0) {
+        const total = verifiedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
+        score = (total / count).toFixed(1);
+      }
+      map.set(key, { score, count: `${count}` });
+    });
+    return map;
+  }, [doctors, reviews]);
+
   // Real-time verified rating and review counter strictly synchronized with Doctor Profile
   const getDoctorDisplayRating = useCallback((doc) => {
     if (!doc) return { score: '0', count: '0' };
-
-    const verifiedReviews = getDoctorVerifiedReviews(doc, reviews);
-    const count = verifiedReviews.length;
-
-    let score = '0';
-    if (count > 0) {
-      const total = verifiedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
-      score = (total / count).toFixed(1);
-    }
-
-    return {
-      score,
-      count: `${count}`
-    };
-  }, [reviews]);
+    const key = String(doc._id || doc.id);
+    return doctorRatingsMap.get(key) || { score: '0', count: '0' };
+  }, [doctorRatingsMap]);
 
   // Filtered Doctors
-  const filteredDoctors = (doctors || []).filter(doc => {
+  const filteredDoctors = useMemo(() => {
     const q = doctorSearch.toLowerCase().trim();
-    const docSpec = (doc.specialty || doc.specialization || '').toLowerCase();
-    const matchesSearch = !q ||
-      (doc.name || '').toLowerCase().includes(q) ||
-      docSpec.includes(q) ||
-      (doc.hospital || '').toLowerCase().includes(q);
-    const matchesSpecialty =
-      doctorSpecialtyFilter === 'all' || docSpec === doctorSpecialtyFilter.toLowerCase();
-    return matchesSearch && matchesSpecialty;
-  });
+    return (doctors || []).filter(doc => {
+      const docSpec = (doc.specialty || doc.specialization || '').toLowerCase();
+      const matchesSearch = !q ||
+        (doc.name || '').toLowerCase().includes(q) ||
+        docSpec.includes(q) ||
+        (doc.hospital || '').toLowerCase().includes(q);
+      const matchesSpecialty =
+        doctorSpecialtyFilter === 'all' || docSpec === doctorSpecialtyFilter.toLowerCase();
+      return matchesSearch && matchesSpecialty;
+    });
+  }, [doctors, doctorSearch, doctorSpecialtyFilter]);
 
   // Unique specialties for filter dropdown
-  const uniqueSpecialties = Array.from(new Set((doctors || []).map(d => d.specialty || d.specialization).filter(Boolean)));
+  const uniqueSpecialties = useMemo(() => {
+    return Array.from(new Set((doctors || []).map(d => d.specialty || d.specialization).filter(Boolean)));
+  }, [doctors]);
 
   // Filtered Hospitals
-  const filteredHospitals = (hospitals || []).filter(hosp => {
+  const filteredHospitals = useMemo(() => {
     const q = hospitalSearch.toLowerCase().trim();
-    const matchesSearch = !q ||
-      (hosp.name || '').toLowerCase().includes(q) ||
-      (hosp.city || '').toLowerCase().includes(q) ||
-      (Array.isArray(hosp.specialties) && hosp.specialties.some(s => (s || '').toLowerCase().includes(q)));
-    const matchesCity =
-      hospitalCityFilter === 'all' || (hosp.city || '').toLowerCase() === hospitalCityFilter.toLowerCase();
-    const matchesEmergency = !emergencyOnly || hosp.emergency24x7;
-    return matchesSearch && matchesCity && matchesEmergency;
-  });
+    return (hospitals || []).filter(hosp => {
+      const matchesSearch = !q ||
+        (hosp.name || '').toLowerCase().includes(q) ||
+        (hosp.city || '').toLowerCase().includes(q) ||
+        (Array.isArray(hosp.specialties) && hosp.specialties.some(s => (s || '').toLowerCase().includes(q)));
+      const matchesCity =
+        hospitalCityFilter === 'all' || (hosp.city || '').toLowerCase() === hospitalCityFilter.toLowerCase();
+      const matchesEmergency = !emergencyOnly || hosp.emergency24x7;
+      return matchesSearch && matchesCity && matchesEmergency;
+    });
+  }, [hospitals, hospitalSearch, hospitalCityFilter, emergencyOnly]);
 
   // Unique cities for hospital filter
-  const uniqueCities = Array.from(new Set(hospitals.map(h => h.city).filter(Boolean)));
+  const uniqueCities = useMemo(() => {
+    return Array.from(new Set(hospitals.map(h => h.city).filter(Boolean)));
+  }, [hospitals]);
+
+  // FAQ Category counts lookup map
+  const faqCategoryCounts = useMemo(() => {
+    const counts = {};
+    (faqs || []).forEach(f => {
+      if (f.category) {
+        counts[f.category] = (counts[f.category] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [faqs]);
+
+  // Filtered FAQs
+  const filteredFaqs = useMemo(() => {
+    const q = faqSearch.toLowerCase().trim();
+    return (faqs || []).filter(f => {
+      const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
+      const matchSearch = !q ||
+        (f.question || '').toLowerCase().includes(q) ||
+        (f.answer || '').toLowerCase().includes(q);
+      return matchCat && matchSearch;
+    });
+  }, [faqs, faqCategoryFilter, faqSearch]);
+
+  // Filtered Reviews
+  const filteredReviews = useMemo(() => {
+    const q = reviewSearch.toLowerCase().trim();
+    return (reviews || []).filter(r => {
+      const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
+      const matchSearch = !q ||
+        (r.patientName || '').toLowerCase().includes(q) ||
+        (r.targetName || '').toLowerCase().includes(q) ||
+        (r.comment || '').toLowerCase().includes(q);
+      return matchStatus && matchSearch;
+    });
+  }, [reviews, reviewStatusFilter, reviewSearch]);
+
+  // Filtered Specialities & Procedures
+  const filteredSpecialitiesProcedures = useMemo(() => {
+    const q = specSearch.toLowerCase().trim();
+    return (specialitiesProcedures || []).filter(sp => {
+      const matchType = specTypeFilter === 'all' || sp.type === specTypeFilter;
+      const matchSearch = !q ||
+        (sp.name || '').toLowerCase().includes(q) ||
+        (sp.description || '').toLowerCase().includes(q);
+      return matchType && matchSearch;
+    });
+  }, [specialitiesProcedures, specTypeFilter, specSearch]);
 
   // Handlers for Doctor actions
   const handleOpenAddDoctor = () => {
@@ -600,10 +716,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deleteModalState.type === 'doctor' && deleteModalState.item) {
-      deleteDoctor(deleteModalState.item.id || deleteModalState.item._id);
-      showToast(`Doctor "${deleteModalState.item.name}" deleted successfully.`);
+      try {
+        await deleteDoctor(deleteModalState.item);
+        showToast(`Doctor "${deleteModalState.item.name || 'Doctor'}" deleted permanently from database.`);
+      } catch (err) {
+        showToast(err.message || 'Failed to delete doctor from database', 'error');
+      }
     } else if (deleteModalState.type === 'hospital' && deleteModalState.item) {
       deleteHospital(deleteModalState.item.id || deleteModalState.item._id);
       showToast(`Hospital "${deleteModalState.item.name}" deleted successfully.`);
@@ -611,8 +731,12 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
       showToast('FAQ deleted successfully.');
     } else if (deleteModalState.type === 'review' && deleteModalState.item) {
-      deleteReview(deleteModalState.item.id || deleteModalState.item._id);
-      showToast('Review deleted successfully.');
+      try {
+        await deleteReview(deleteModalState.item._id || deleteModalState.item.id || deleteModalState.item);
+        showToast(`Review by "${deleteModalState.item.patientName || 'Patient'}" deleted permanently.`);
+      } catch (err) {
+        showToast(err.message || 'Failed to delete review', 'error');
+      }
     } else if (deleteModalState.type === 'speciality' && deleteModalState.item) {
       deleteSpecialityProcedure(deleteModalState.item.id || deleteModalState.item._id);
       showToast('Speciality / Surgery deleted successfully.');
@@ -626,9 +750,35 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     <div className={styles.adminContainer}>
       {/* Toast Notification */}
       {toastMessage && (
-        <div className={styles.toast}>
-          <CheckCircle2 size={18} />
+        <div
+          className={`${styles.toast} ${toastType === 'error' ? styles.toastError : ''}`}
+          role="status"
+          aria-live="polite"
+          onMouseEnter={() => {
+            if (toastTimeoutRef.current) {
+              clearTimeout(toastTimeoutRef.current);
+              toastTimeoutRef.current = null;
+            }
+          }}
+          onMouseLeave={() => {
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+            toastTimeoutRef.current = setTimeout(() => {
+              setToastMessage('');
+              toastTimeoutRef.current = null;
+            }, 2500);
+          }}
+        >
+          {toastType === 'error' ? <AlertCircle size={18} /> : <CheckCircle2 size={18} />}
           <span>{toastMessage}</span>
+          <button
+            type="button"
+            className={styles.toastDismiss}
+            onClick={dismissToast}
+            title="Dismiss notification"
+            aria-label="Dismiss notification"
+          >
+            <X size={15} />
+          </button>
         </div>
       )}
 
@@ -1414,13 +1564,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <table className={styles.dataTable}>
                     <thead>
                       <tr>
-                        <th>Doctor</th>
-                        <th>Specialty & Experience</th>
-                        <th>Affiliated Hospital</th>
-                        <th>Consultation Fee</th>
-                        <th>Rating</th>
-                        <th>Availability</th>
-                        <th style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
+                        <th style={{ minWidth: '220px' }}>Doctor</th>
+                        <th style={{ minWidth: '165px' }}>Specialty & Experience</th>
+                        <th style={{ minWidth: '190px' }}>Affiliated Hospital</th>
+                        <th style={{ minWidth: '110px' }}>Consultation Fee</th>
+                        <th style={{ minWidth: '125px' }}>Rating</th>
+                        <th style={{ minWidth: '165px' }}>Availability</th>
+                        <th style={{ minWidth: '320px', width: '320px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1440,7 +1590,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                   e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
                                 }}
                               />
-                              <div>
+                              <div className={styles.tableDocInfo}>
                                 <span className={styles.tableDocName}>{doc.name}</span>
                                 {(doc.degree || doc.qualifications) && (
                                   <span className={styles.tableDocDegree}>{doc.degree || doc.qualifications}</span>
@@ -1449,14 +1599,16 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                             </div>
                           </td>
                           <td>
-                            <span className={styles.specialtyBadge}>{doc.specialty || doc.specialization || 'General Physician'}</span>
-                            <div className={styles.tableSubText}>
-                              {typeof doc.experience === 'number' || (!isNaN(Number(doc.experience)) && String(doc.experience).trim() !== '') ? `${doc.experience} Years Experience` : (doc.experience || 'Experienced')}
+                            <div className={styles.tableSpecialtyCell}>
+                              <span className={styles.specialtyBadge}>{doc.specialty || doc.specialization || 'General Physician'}</span>
+                              <div className={styles.tableSubText}>
+                                {typeof doc.experience === 'number' || (!isNaN(Number(doc.experience)) && String(doc.experience).trim() !== '') ? `${doc.experience} Years Experience` : (doc.experience || 'Experienced')}
+                              </div>
                             </div>
                           </td>
                           <td>
                             <div className={styles.tableHospitalCell}>
-                              <Building2 size={14} />
+                              <Building2 size={15} />
                               <span>{doc.hospital || 'Private Clinic'}</span>
                             </div>
                           </td>
@@ -1513,7 +1665,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </span>
                             </div>
                           </td>
-                          <td style={{ textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
+                          <td style={{ minWidth: '320px', width: '320px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
                               <button
                                 className={styles.historyActionBtn}
@@ -1525,24 +1677,27 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               <button
                                 className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}
                                 onClick={(e) => handleToggleStarDoctor(doc, e)}
+                                style={starTogglingDoctors.has(doc._id || doc.id) ? { opacity: 0.75, cursor: 'wait' } : undefined}
                                 title={doc.isStarDoctor ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
                               >
-                                <Star size={15} fill={doc.isStarDoctor ? "#F59E0B" : "none"} color={doc.isStarDoctor ? "#D97706" : "#64748B"} />
-                                <span>{doc.isStarDoctor ? "Starred" : "Star"}</span>
+                                <span className={styles.starIconWrapper}>
+                                  <Star size={15} fill={doc.isStarDoctor ? "#F59E0B" : "none"} color={doc.isStarDoctor ? "#D97706" : "#64748B"} />
+                                </span>
+                                <span className={styles.starTextWrapper}>{doc.isStarDoctor ? "Starred" : "Star"}</span>
                               </button>
                               <button
                                 className={styles.editActionBtn}
                                 onClick={() => handleOpenEditDoctor(doc)}
                                 title="Edit Doctor"
                               >
-                                <Edit3 size={16} /> Edit
+                                <Edit3 size={15} /> Edit
                               </button>
                               <button
                                 className={styles.deleteActionBtn}
                                 onClick={() => handleDeleteDoctorClick(doc)}
                                 title="Delete Doctor"
                               >
-                                <Trash2 size={16} />
+                                <Trash2 size={15} />
                               </button>
                             </div>
                           </td>
@@ -2072,13 +2227,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               <table className={styles.dataTable}>
                 <thead>
                   <tr>
-                    <th>Token / ID</th>
-                    <th>Type</th>
-                    <th>Medical Center / Specialist</th>
-                    <th>Patient Details</th>
-                    <th>Schedule Slot</th>
-                    <th>Status</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
+                    <th style={{ minWidth: '120px' }}>Token / ID</th>
+                    <th style={{ minWidth: '140px' }}>Type</th>
+                    <th style={{ minWidth: '220px' }}>Medical Center / Specialist</th>
+                    <th style={{ minWidth: '220px' }}>Patient Details</th>
+                    <th style={{ minWidth: '150px' }}>Schedule Slot</th>
+                    <th style={{ minWidth: '110px' }}>Status</th>
+                    <th style={{ minWidth: '130px', textAlign: 'right' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2290,7 +2445,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   >
                     <option value="all">All Categories ({faqs.length})</option>
                     {faqFilterCategories.map(cat => {
-                      const count = faqs.filter(f => f.category === cat).length;
+                      const count = faqCategoryCounts[cat] || 0;
                       return (
                         <option key={cat} value={cat}>
                           {cat} {count > 0 ? `(${count})` : ''}
@@ -2303,16 +2458,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* FAQ Cards */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px' }}>
-                {(faqs || [])
-                  .filter(f => {
-                    const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
-                    const q = faqSearch.toLowerCase().trim();
-                    const matchSearch = !q ||
-                      (f.question || '').toLowerCase().includes(q) ||
-                      (f.answer || '').toLowerCase().includes(q);
-                    return matchCat && matchSearch;
-                  })
-                  .map((faq) => (
+                {filteredFaqs.map((faq) => (
                     <div
                       key={faq.id || faq._id}
                       style={{
@@ -2508,17 +2654,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Reviews List */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {(reviews || [])
-                  .filter(r => {
-                    const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
-                    const q = reviewSearch.toLowerCase().trim();
-                    const matchSearch = !q ||
-                      (r.patientName || '').toLowerCase().includes(q) ||
-                      (r.targetName || '').toLowerCase().includes(q) ||
-                      (r.comment || '').toLowerCase().includes(q);
-                    return matchStatus && matchSearch;
-                  })
-                  .map((rev) => (
+                {filteredReviews.map((rev) => (
                     <div
                       key={rev.id || rev._id}
                       style={{
@@ -2604,8 +2740,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                 item: { ...rev, name: rev.patientName + "'s review" }
                               });
                             }}
-                            style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', color: '#ef4444', cursor: 'pointer' }}
+                            style={{
+                              background: '#fef2f2',
+                              border: '1px solid #fee2e2',
+                              borderRadius: '6px',
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Delete this review permanently"
                           >
+                            <Trash2 size={13} />
                             Delete
                           </button>
                         </div>
@@ -2663,16 +2813,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
               {/* Cards Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {(specialitiesProcedures || [])
-                  .filter(sp => {
-                    const matchType = specTypeFilter === 'all' || sp.type === specTypeFilter;
-                    const q = specSearch.toLowerCase().trim();
-                    const matchSearch = !q ||
-                      (sp.name || '').toLowerCase().includes(q) ||
-                      (sp.description || '').toLowerCase().includes(q);
-                    return matchType && matchSearch;
-                  })
-                  .map((sp) => (
+                {filteredSpecialitiesProcedures.map((sp) => (
                     <div
                       key={sp.id || sp._id}
                       style={{
@@ -2767,7 +2908,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       <DoctorFormModal
         isOpen={isDoctorModalOpen}
         onClose={() => setIsDoctorModalOpen(false)}
-        doctorToEdit={doctorToEdit}
+        doctorToEdit={doctorToEdit ? (doctors.find(d => String(d._id || d.id) === String(doctorToEdit._id || doctorToEdit.id)) || doctorToEdit) : null}
         onSuccess={showToast}
       />
 

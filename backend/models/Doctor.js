@@ -25,6 +25,7 @@ const doctorSchema = new mongoose.Schema({
   qualifications: { type: String },
   degree: { type: String },
   contact_number: { type: String },
+  phone: { type: String },
   instagram: { type: String },
   facebook: { type: String },
   linkedin: { type: String },

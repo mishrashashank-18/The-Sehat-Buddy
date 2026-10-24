@@ -21,6 +21,7 @@ import {
   Lock
 } from 'lucide-react';
 import { API_BASE, api } from '../../services/api';
+import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import styles from './HospitalBookingModal.module.css';
 
 const VISIT_TYPES = [
@@ -138,32 +139,20 @@ const HospitalBookingModal = ({
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState(TIME_SLOTS[1] || '10:00 AM');
 
-  // Pre-fill user details if logged in
+  // Pre-fill user details strictly only if logged in as a patient
   const [patientName, setPatientName] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.name || '' : '';
-    } catch {
-      return '';
-    }
+    const { user } = getAuthenticatedPatient();
+    return user?.name || '';
   });
 
   const [patientPhone, setPatientPhone] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.phone || '' : '';
-    } catch {
-      return '';
-    }
+    const { user } = getAuthenticatedPatient();
+    return user?.phone || '';
   });
 
   const [patientEmail, setPatientEmail] = useState(() => {
-    try {
-      const u = localStorage.getItem('user');
-      return u ? JSON.parse(u)?.email || '' : '';
-    } catch {
-      return '';
-    }
+    const { user } = getAuthenticatedPatient();
+    return user?.email || '';
   });
 
   const [symptoms, setSymptoms] = useState('');

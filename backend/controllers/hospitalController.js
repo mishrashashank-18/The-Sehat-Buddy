@@ -813,21 +813,49 @@ export const updateHospital = async (req, res) => {
                 const { exec } = await import('child_process');
                 const { promisify } = await import('util');
                 const execPromise = promisify(exec);
-                const { stdout } = await execPromise(`python -m yt_dlp -g "${rUrl}"`, { timeout: 15000 });
-                const directMp4 = stdout.trim().split('\n')[0].trim();
-                if (directMp4 && directMp4.startsWith('http')) {
-                  const { getCloudinary } = await import('../routes/uploadRoutes.js');
-                  const cld = getCloudinary();
-                  const cldRes = await cld.uploader.upload(directMp4, {
-                    resource_type: 'video',
-                    folder: 'sehatbuddy/reels'
-                  });
-                  if (cldRes && cldRes.secure_url) {
-                    updatedReels[i] = {
-                      url: cldRes.secure_url,
-                      coverPhoto: cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')
-                    };
-                    changed = true;
+                const os = await import('os');
+                const path = await import('path');
+                const fs = await import('fs');
+
+                const tempFilePath = path.join(os.tmpdir(), `sehat_bg_reel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+
+                const commands = [
+                  `py -m yt_dlp -o "${tempFilePath}" "${rUrl}"`,
+                  `yt-dlp -o "${tempFilePath}" "${rUrl}"`,
+                  `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -o "${tempFilePath}" "${rUrl}"`,
+                  `python -m yt_dlp -o "${tempFilePath}" "${rUrl}"`
+                ];
+                let downloaded = false;
+                for (const cmd of commands) {
+                  try {
+                    await execPromise(cmd, { timeout: 35000 });
+                    if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
+                      downloaded = true;
+                      break;
+                    }
+                  } catch {}
+                }
+                if (downloaded && fs.existsSync(tempFilePath)) {
+                  try {
+                    const { getCloudinary } = await import('../routes/uploadRoutes.js');
+                    const cld = getCloudinary();
+                    const cldRes = await cld.uploader.upload(tempFilePath, {
+                      resource_type: 'video',
+                      folder: 'sehatbuddy/reels'
+                    });
+                    if (cldRes && cldRes.secure_url) {
+                      updatedReels[i] = {
+                        url: cldRes.secure_url,
+                        coverPhoto: cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')
+                      };
+                      changed = true;
+                    }
+                  } finally {
+                    try {
+                      if (fs.existsSync(tempFilePath)) {
+                        fs.unlinkSync(tempFilePath);
+                      }
+                    } catch {}
                   }
                 }
               }

@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { DataContext } from './context';
 import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
-import { initialDoctors } from '../data/doctors';
 import { initialHospitals } from '../data/hospitals';
 
-const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v2';
+const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
 const STORAGE_KEY_HERO = 'sehat_buddy_hero_v4';
 const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
@@ -141,10 +140,14 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_DOCTORS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Keep only authentic doctors with database ObjectIds (filter out legacy numeric mocks)
+          const valid = parsed.filter(d => d && (d._id || (d.id && String(d.id).length > 5)));
+          if (valid.length > 0) return valid;
+        }
       }
     } catch {}
-    return initialDoctors;
+    return [];
   });
 
   // 2. Hospitals State (Fetched directly from DB / cached)
@@ -321,15 +324,21 @@ export const DataProvider = ({ children }) => {
 
   // Helper mapping functions - strictly database-driven with safe merge
   const mapDoctorList = (docList, prevDoctors = []) => {
+    if (!Array.isArray(docList) || docList.length === 0) {
+      return prevDoctors;
+    }
     const mapped = docList.map(d => {
       const existing = prevDoctors.find(p => matchesId(p, d));
       const resolvedSpecialty = d.specialization || d.specialty || existing?.specialty || existing?.specialization || 'General Physician';
       const resolvedPrice = d.fees ?? d.price ?? existing?.price ?? existing?.fees ?? 500;
+      const resolvedPhone = d.phone || d.contact_number || existing?.phone || existing?.contact_number || '';
       return {
         ...existing,
         ...d,
         id: d._id || d.id || existing?._id || existing?.id,
         _id: d._id || existing?._id || d.id,
+        phone: resolvedPhone,
+        contact_number: resolvedPhone,
         specialty: resolvedSpecialty,
         specialization: resolvedSpecialty,
         price: resolvedPrice,
@@ -352,13 +361,13 @@ export const DataProvider = ({ children }) => {
         slotDuration: d.slotDuration || existing?.slotDuration || 20,
         dayWiseSlots: (d.dayWiseSlots && typeof d.dayWiseSlots === 'object') ? d.dayWiseSlots : (existing?.dayWiseSlots || {}),
         dateWiseSlots: (d.dateWiseSlots && typeof d.dateWiseSlots === 'object') ? d.dateWiseSlots : (existing?.dateWiseSlots || {}),
-        slots_booked: { ...(existing?.slots_booked || {}), ...(d.slots_booked || {}) }
+        slots_booked: { ...(existing?.slots_booked || {}), ...(d.slots_booked || {}) },
+        isStarDoctor: d.isStarDoctor !== undefined ? Boolean(d.isStarDoctor) : Boolean(existing?.isStarDoctor)
       };
     });
 
-    // Retain any locally modified or newly created doctors not in docList
-    const notInApi = prevDoctors.filter(prevDoc => !docList.some(d => matchesId(prevDoc, d)));
-    return [...mapped, ...notInApi];
+    // Database is authoritative: never retain mock or deleted doctors
+    return mapped;
   };
 
   const mapHospitalList = (hospList, prevHospitals = []) => {
@@ -406,10 +415,10 @@ export const DataProvider = ({ children }) => {
   };
 
   // Modular real-time refresh operations directly from MongoDB Atlas
-  const refreshDoctors = async () => {
+  const refreshDoctors = useCallback(async () => {
     try {
       const data = await api.getDoctors();
-      if (Array.isArray(data)) {
+      if (Array.isArray(data) && data.length > 0) {
         setDoctors(prev => {
           const mapped = mapDoctorList(data, prev);
           try {
@@ -420,9 +429,9 @@ export const DataProvider = ({ children }) => {
         });
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshHospitals = async () => {
+  const refreshHospitals = useCallback(async () => {
     try {
       const data = await api.getHospitals();
       if (Array.isArray(data)) {
@@ -436,9 +445,9 @@ export const DataProvider = ({ children }) => {
         });
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshContent = async () => {
+  const refreshContent = useCallback(async () => {
     try {
       const data = await api.getContent();
       if (data) {
@@ -464,36 +473,36 @@ export const DataProvider = ({ children }) => {
         if (Array.isArray(cList)) setCorporateTieups(cList);
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshFaqs = async () => {
+  const refreshFaqs = useCallback(async () => {
     try {
       const data = await api.getFaqs();
       if (Array.isArray(data)) {
         setFaqs(data.map(f => ({ ...f, id: f._id || f.id })));
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshReviews = async () => {
+  const refreshReviews = useCallback(async () => {
     try {
       const data = await api.getReviews();
       if (Array.isArray(data)) {
         setReviews(data.map(r => ({ ...r, id: r._id || r.id })));
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshSpecialities = async () => {
+  const refreshSpecialities = useCallback(async () => {
     try {
       const data = await api.getSpecialitiesProcedures();
       if (Array.isArray(data)) {
         setSpecialitiesProcedures(data.map(s => ({ ...s, id: s._id || s.id })));
       }
     } catch {}
-  };
+  }, []);
 
-  const refreshAll = async () => {
+  const refreshAll = useCallback(async () => {
     await Promise.allSettled([
       refreshDoctors(),
       refreshHospitals(),
@@ -502,7 +511,7 @@ export const DataProvider = ({ children }) => {
       refreshReviews(),
       refreshSpecialities()
     ]);
-  };
+  }, [refreshDoctors, refreshHospitals, refreshContent, refreshFaqs, refreshReviews, refreshSpecialities]);
 
   // Zero-latency real-time synchronization via Server-Sent Events (SSE)
   useEffect(() => {
@@ -538,7 +547,16 @@ export const DataProvider = ({ children }) => {
 
             // Instant targeted update based on modified collection
             if (collection === 'doctors') {
-              if (payload.docId && payload.fullDocument) {
+              if (payload.operation === 'delete' && payload.docId) {
+                setDoctors(prev => {
+                  const updated = prev.filter(d => !matchesId(d, payload.docId));
+                  try {
+                    localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
+                    broadcastSync(STORAGE_KEY_DOCTORS, updated);
+                  } catch {}
+                  return updated;
+                });
+              } else if (payload.docId && payload.fullDocument) {
                 const docData = payload.fullDocument;
                 const spec = docData.specialty || docData.specialization;
                 const deg = docData.degree || docData.qualifications;
@@ -551,18 +569,22 @@ export const DataProvider = ({ children }) => {
                 const avDays = docData.availableDays !== undefined ? docData.availableDays : undefined;
                 const avStatus = docData.availabilityStatus !== undefined ? docData.availabilityStatus : undefined;
                 const avBool = docData.available !== undefined ? docData.available : undefined;
+                const ph = docData.phone !== undefined ? docData.phone : (docData.contact_number !== undefined ? docData.contact_number : undefined);
 
                 setDoctors(prev => {
                   let found = false;
                   const updated = prev.map(d => {
                     if (matchesId(d, payload.docId) || (d.email && docData.email && d.email.toLowerCase().trim() === docData.email.toLowerCase().trim())) {
                       found = true;
+                      const resolvedPh = ph !== undefined ? ph : (d.phone || d.contact_number || '');
                       return {
                         ...d,
                         ...docData,
                         id: d.id || docData.id || docData._id,
                         _id: docData._id || d._id || docData.id,
                         name: nm ? String(nm).trim() : d.name,
+                        phone: resolvedPh,
+                        contact_number: resolvedPh,
                         specialty: spec || d.specialty || d.specialization,
                         specialization: spec || d.specialization || d.specialty,
                         hospital: hosp !== undefined ? hosp : d.hospital,
@@ -588,7 +610,8 @@ export const DataProvider = ({ children }) => {
                         memberships: Array.isArray(docData.memberships) ? docData.memberships : d.memberships,
                         careerExperience: Array.isArray(docData.careerExperience) ? docData.careerExperience : d.careerExperience,
                         reels: Array.isArray(docData.reels) ? docData.reels : d.reels,
-                        youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos
+                        youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos,
+                        isStarDoctor: docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor)
                       };
                     }
                     return d;
@@ -608,7 +631,10 @@ export const DataProvider = ({ children }) => {
                       reviews: revs !== undefined ? revs : '0',
                       availableDays: avDays || 'Mon - Sat (10am - 4pm)',
                       availabilityStatus: avStatus || 'Available',
-                      available: avBool !== undefined ? avBool : true
+                      available: avBool !== undefined ? avBool : true,
+                      phone: ph !== undefined ? ph : (docData.phone || docData.contact_number || ''),
+                      contact_number: ph !== undefined ? ph : (docData.contact_number || docData.phone || ''),
+                      isStarDoctor: Boolean(docData.isStarDoctor)
                     };
                     updated.unshift(newEntry);
                   }
@@ -706,8 +732,8 @@ export const DataProvider = ({ children }) => {
       const { type, senderTabId, key, data } = event.data || {};
       if (type !== 'SEHAT_SYNC' || !data || senderTabId === CURRENT_TAB_ID) return;
 
-      if (key === STORAGE_KEY_DOCTORS && Array.isArray(data)) setDoctors(prev => (isSame(prev, data) ? prev : data));
-      else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data)) setHospitals(prev => (isSame(prev, data) ? prev : data));
+      if (key === STORAGE_KEY_DOCTORS && Array.isArray(data) && data.length > 0) setDoctors(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data) && data.length > 0) setHospitals(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_SERVICES && Array.isArray(data)) setServices(prev => (isSame(prev, data) ? prev : data));
@@ -727,8 +753,8 @@ export const DataProvider = ({ children }) => {
       if (!e.key || !e.newValue) return;
       try {
         const parsed = JSON.parse(e.newValue);
-        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed)) setDoctors(prev => (isSame(prev, parsed) ? prev : parsed));
-        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed)) setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
+        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed) && parsed.length > 0) setDoctors(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed) && parsed.length > 0) setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_BRANDING) setBranding(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_HERO) setHeroContent(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_SERVICES && Array.isArray(parsed)) setServices(prev => (isSame(prev, parsed) ? prev : parsed));
@@ -836,10 +862,13 @@ export const DataProvider = ({ children }) => {
         if (matchesId(doc, id)) {
           const resolvedSpecialty = updatedData.specialty || updatedData.specialization || doc.specialty || doc.specialization;
           const resolvedPrice = updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : (updatedData.fees !== undefined ? parseInt(updatedData.fees, 10) || doc.fees : doc.price);
+          const resolvedPhone = updatedData.phone !== undefined ? updatedData.phone : (updatedData.contact_number !== undefined ? updatedData.contact_number : (doc.phone || doc.contact_number || ''));
           mergedDoctor = {
             ...doc,
             ...updatedData,
             name: updatedData.name ? String(updatedData.name).trim() : doc.name,
+            phone: resolvedPhone,
+            contact_number: resolvedPhone,
             hospital: updatedData.hospital !== undefined ? updatedData.hospital : doc.hospital,
             degree: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
             qualifications: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
@@ -871,7 +900,8 @@ export const DataProvider = ({ children }) => {
             tags: updatedData.tags !== undefined ? updatedData.tags : doc.tags,
             slots_booked: updatedData.slots_booked !== undefined ? updatedData.slots_booked : doc.slots_booked,
             image: updatedData.image !== undefined ? updatedData.image : doc.image,
-            about: updatedData.about !== undefined ? updatedData.about : doc.about
+            about: updatedData.about !== undefined ? updatedData.about : doc.about,
+            isStarDoctor: updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor)
           };
           return mergedDoctor;
         }
@@ -896,17 +926,22 @@ export const DataProvider = ({ children }) => {
       if (res && (res._id || res.id)) {
         setDoctors(prev => {
           const updated = prev.map(doc => {
-            if (matchesId(doc, id)) {
+            if (matchesId(doc, id) || (res._id && matchesId(doc, res._id)) || (res.id && matchesId(doc, res.id))) {
               const resSpecialty = res.specialization ?? res.specialty ?? doc.specialty;
               const resPrice = res.fees ?? res.price ?? doc.price;
               const resDegree = res.degree ?? res.qualifications ?? doc.degree;
               const resHospital = res.hospital ?? doc.hospital;
               const resName = res.name ?? doc.name;
+              const resEmail = res.email ? String(res.email).trim().toLowerCase() : (updatedData.email ? String(updatedData.email).trim().toLowerCase() : doc.email);
+              const resPhone = res.phone !== undefined ? res.phone : (res.contact_number !== undefined ? res.contact_number : (updatedData.phone !== undefined ? updatedData.phone : (doc.phone || doc.contact_number || '')));
               return {
                 ...doc,
                 ...res,
                 id: doc.id || res.id || res._id,
                 _id: res._id || doc._id || res.id,
+                email: resEmail,
+                phone: resPhone,
+                contact_number: resPhone,
                 name: resName,
                 hospital: resHospital,
                 degree: resDegree,
@@ -935,7 +970,8 @@ export const DataProvider = ({ children }) => {
                 dateWiseSlots: (res.dateWiseSlots && typeof res.dateWiseSlots === 'object') ? res.dateWiseSlots : (updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {})),
                 availableDays: res.availableDays ?? doc.availableDays,
                 image: res.image || doc.image,
-                about: res.about !== undefined ? res.about : doc.about
+                about: res.about !== undefined ? res.about : doc.about,
+                isStarDoctor: res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor))
               };
             }
             return doc;
@@ -947,16 +983,19 @@ export const DataProvider = ({ children }) => {
             if (docUserStr) {
               const docUser = JSON.parse(docUserStr);
               if (matchesId(docUser, id)) {
-                localStorage.setItem('doctor_user', JSON.stringify({ ...docUser, ...res }));
+                localStorage.setItem('doctor_user', JSON.stringify({ ...docUser, ...res, email: resEmail, phone: resPhone, contact_number: resPhone }));
               }
             }
           } catch {}
           return updated;
         });
+        return res;
       }
     } catch (err) {
       console.warn('Backend updateDoctor failed, local state retained:', err);
+      throw err;
     }
+    return mergedDoctor;
   };
 
   const syncDoctorLocally = useCallback((freshDoc) => {
@@ -1009,10 +1048,40 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const deleteDoctor = async (id) => {
+  const deleteDoctor = async (target) => {
+    let targetDoc = null;
+    let resolvedId = null;
+    let resolvedEmail = null;
+
+    if (target && typeof target === 'object') {
+      targetDoc = target;
+      resolvedId = target._id || target.id;
+      resolvedEmail = target.email;
+    } else {
+      resolvedId = target;
+      if (typeof target === 'string' && target.includes('@')) {
+        resolvedEmail = target;
+      }
+      targetDoc = doctors.find(d => matchesId(d, target) || (d.email && d.email.toLowerCase() === String(target).toLowerCase()));
+      if (targetDoc) {
+        resolvedId = targetDoc._id || targetDoc.id || resolvedId;
+        resolvedEmail = targetDoc.email || resolvedEmail;
+      }
+    }
+
+    // Call backend API to permanently remove doctor & associated data from MongoDB Atlas
+    await api.deleteDoctor(resolvedId, resolvedEmail);
+
+    const cleanId = String(resolvedId || '').toLowerCase();
+    const cleanEmail = String(resolvedEmail || '').toLowerCase();
+
     setDoctors(prev => {
-      const cleanId = String(id).toLowerCase();
-      const updated = prev.filter(doc => !matchesId(doc, id) && (doc.email || '').toLowerCase() !== cleanId);
+      const updated = prev.filter(doc => {
+        if (resolvedId && matchesId(doc, resolvedId)) return false;
+        if (cleanEmail && (doc.email || '').toLowerCase() === cleanEmail) return false;
+        if (cleanId && (doc.email || '').toLowerCase() === cleanId) return false;
+        return true;
+      });
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
@@ -1021,18 +1090,17 @@ export const DataProvider = ({ children }) => {
     });
 
     setHospitals(prev => prev.map(h => {
-      const cleanId = String(id).toLowerCase();
       const newStars = (h.star_doctors || []).filter(sd => {
         const sdId = typeof sd === 'object' ? String(sd._id || sd.id) : String(sd);
-        return sdId.toLowerCase() !== cleanId;
+        return sdId.toLowerCase() !== cleanId && (!cleanEmail || sdId.toLowerCase() !== cleanEmail);
       });
       const newStaffDocs = (h.staff_doctors || []).filter(sd => {
         const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase();
-        return sdEmail !== cleanId;
+        return sdEmail !== cleanEmail && sdEmail !== cleanId;
       });
       const newStaffEmails = (h.staff_emails || []).filter(e => {
         const em = (typeof e === 'string' ? e : e?.email)?.toLowerCase();
-        return em !== cleanId;
+        return em !== cleanEmail && em !== cleanId;
       });
       return {
         ...h,
@@ -1041,12 +1109,6 @@ export const DataProvider = ({ children }) => {
         staff_emails: newStaffEmails
       };
     }));
-
-    try {
-      await api.deleteDoctor(id);
-    } catch (err) {
-      console.warn('Backend deleteDoctor failed:', err);
-    }
   };
 
   // Hospital CRUD operations
@@ -1418,9 +1480,9 @@ export const DataProvider = ({ children }) => {
   };
 
   // Reviews CRUD
-  const addReview = async (reviewData) => {
+  const addReview = async (reviewData, tokenOverride = null) => {
     try {
-      const saved = await api.addReview(reviewData);
+      const saved = await api.addReview(reviewData, tokenOverride);
       if (saved && (saved._id || saved.id)) {
         const item = { ...saved, id: saved._id || saved.id };
         setReviews(prev => {
@@ -1439,25 +1501,34 @@ export const DataProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Failed to add review to server:', err);
-      // Fallback local insertion if offline
-      const fallbackItem = {
-        ...reviewData,
-        id: reviewData.id || reviewData._id || `rev-${Date.now()}`,
-        rating: Number(reviewData.rating) || 5,
-        createdAt: new Date().toISOString(),
-        isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
-        status: reviewData.status || 'approved'
-      };
-      setReviews(prev => {
-        if (prev.some(r => matchesId(r, fallbackItem.id))) return prev;
-        const updated = [fallbackItem, ...prev];
-        try {
-          localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
-          broadcastSync(STORAGE_KEY_REVIEWS, updated);
-        } catch {}
-        return updated;
-      });
-      return fallbackItem;
+      // Strictly do NOT insert locally if the server rejected due to authentication, authorization, or invalid session
+      const status = err?.status || err?.response?.status;
+      const msg = String(err?.message || '').toLowerCase();
+      if (status === 401 || status === 403 || msg.includes('login') || msg.includes('unauthorized') || msg.includes('forbidden') || msg.includes('token')) {
+        throw err;
+      }
+      // Fallback local insertion ONLY if user is genuinely offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        const fallbackItem = {
+          ...reviewData,
+          id: reviewData.id || reviewData._id || `rev-${Date.now()}`,
+          rating: Number(reviewData.rating) || 5,
+          createdAt: new Date().toISOString(),
+          isVerified: reviewData.isVerified !== undefined ? Boolean(reviewData.isVerified) : true,
+          status: reviewData.status || 'approved'
+        };
+        setReviews(prev => {
+          if (prev.some(r => matchesId(r, fallbackItem.id))) return prev;
+          const updated = [fallbackItem, ...prev];
+          try {
+            localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+            broadcastSync(STORAGE_KEY_REVIEWS, updated);
+          } catch {}
+          return updated;
+        });
+        return fallbackItem;
+      }
+      throw err;
     }
   };
 
@@ -1479,9 +1550,10 @@ export const DataProvider = ({ children }) => {
     });
   };
 
-  const deleteReview = async (id) => {
+  const deleteReview = async (target) => {
+    const targetId = (target && typeof target === 'object') ? (target._id || target.id) : target;
     setReviews(prev => {
-      const updated = prev.filter(r => !matchesId(r, id));
+      const updated = prev.filter(r => !matchesId(r, targetId));
       try {
         localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_REVIEWS, updated);
@@ -1489,11 +1561,12 @@ export const DataProvider = ({ children }) => {
       return updated;
     });
     try {
-      await api.deleteReview(id);
+      await api.deleteReview(targetId);
     } catch (err) {
       console.error('Failed to delete review on server:', err);
       // Re-fetch only if server call genuinely failed to roll back
       refreshReviews();
+      throw err;
     }
   };
 
@@ -1590,7 +1663,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Stats calculation
-  const stats = {
+  const stats = useMemo(() => ({
     totalDoctors: doctors.length,
     totalHospitals: hospitals.length,
     totalBeds: hospitals.reduce((sum, h) => sum + (parseInt(h.totalBeds, 10) || 0), 0),
@@ -1598,7 +1671,7 @@ export const DataProvider = ({ children }) => {
       ? Math.round(doctors.reduce((sum, d) => sum + (parseInt(d.price, 10) || 0), 0) / doctors.length)
       : 0,
     emergencyHospitals: hospitals.filter(h => h.emergency24x7).length,
-  };
+  }), [doctors, hospitals]);
 
   return (
     <DataContext.Provider

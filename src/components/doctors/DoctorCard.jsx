@@ -39,7 +39,7 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
 
   return (
     <div className={styles.card} onClick={handleClick} style={{ cursor: 'pointer' }}>
-      <div className={styles.imageWrapper} style={{ position: 'relative' }}>
+      <div className={styles.imageWrapper}>
         <img
           src={doctor.image}
           alt={doctor.name}

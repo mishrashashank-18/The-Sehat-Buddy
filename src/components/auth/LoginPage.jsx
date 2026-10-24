@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { Mail, Lock, Activity, Stethoscope, Building2, ShieldCheck, ArrowLeft, User, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
 import logoImg from '../../assets/images/logo.png';
@@ -7,10 +7,7 @@ import styles from './LoginPage.module.css';
 
 export const saveAuthSession = (sessionRole, token, rawUser) => {
   if (!token) return;
-  // Always update general keys for backwards compatibility
-  localStorage.setItem('token', token);
   const normalizedUser = rawUser ? { ...rawUser, role: rawUser.role || sessionRole } : { role: sessionRole };
-  localStorage.setItem('user', JSON.stringify(normalizedUser));
 
   // Role-isolated session storage
   if (sessionRole === 'doctor') {
@@ -25,6 +22,10 @@ export const saveAuthSession = (sessionRole, token, rawUser) => {
   } else if (sessionRole === 'user') {
     localStorage.setItem('patient_token', token);
     localStorage.setItem('patient_user', JSON.stringify({ ...normalizedUser, role: 'user' }));
+    localStorage.setItem('user_token', token);
+    localStorage.setItem('user_user', JSON.stringify({ ...normalizedUser, role: 'user' }));
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify({ ...normalizedUser, role: 'user' }));
   }
 };
 

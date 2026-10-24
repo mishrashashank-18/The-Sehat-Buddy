@@ -30,7 +30,8 @@ import {
   MessageSquare,
   Plus,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { isDoctorInStarList, matchesId } from '../../context/DataContext';
@@ -39,6 +40,7 @@ import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
 import HospitalBookingModal from './HospitalBookingModal';
 import WriteReviewModal from '../reviews/WriteReviewModal';
+import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import { API_BASE } from '../../services/api';
@@ -358,18 +360,18 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
           transition: 'opacity 0.25s ease'
         }}>
           <div style={{
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.95) 0%, rgba(247, 119, 55, 0.95) 100%)',
+            width: '46px',
+            height: '46px',
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.25) 0%, rgba(247, 119, 55, 0.25) 100%)',
+            border: '1px solid rgba(225, 48, 108, 0.35)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: '#ffffff',
-            boxShadow: '0 8px 24px rgba(225, 48, 108, 0.45)',
+            color: '#f43f5e',
             marginBottom: '12px'
           }}>
-            <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
+            <SocialInstagramIcon size={22} />
           </div>
           <span style={{
             color: '#ffffff',
@@ -424,30 +426,47 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
         <SocialInstagramIcon size={14} />
         <span>{isPlaying ? '▶ Playing' : 'Reel'}</span>
       </div>
-
-      {/* Center Play Button Overlay (visible when paused or hover out) */}
-      <div
-        className={`${styles.reelPlayOverlay} ${isPlaying ? styles.reelPlayingOverlayHidden : ''}`}
-        style={{ zIndex: 3 }}
-      >
-        <div className={styles.reelPlayBtn}>
-          <Play size={24} fill="#ffffff" color="#ffffff" style={{ marginLeft: '3px' }} />
-        </div>
-      </div>
-
-      {/* Floating Status Indicator on Hover */}
-      {isPlaying && (
-        <div className={styles.reelHoverPlayingIndicator} style={{ zIndex: 4 }}>
-          <span className={styles.reelPulseDot} />
-          <span>Autoplay on hover</span>
-        </div>
-      )}
     </div>
   );
 };
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors, reviews, faqs, user } = useData();
+  const { hospitals, doctors, reviews, refreshReviews, deleteReview, faqs, user } = useData();
+
+  const isAdmin = useMemo(() => {
+    try {
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.role === 'admin' || u.isAdmin || u.type === 'admin') return true;
+      }
+      if (localStorage.getItem('admin_logged_in') === 'true') return true;
+      if (localStorage.getItem('admin_token')) return true;
+    } catch {
+      return false;
+    }
+    return false;
+  }, []);
+
+  const [deletingReviewId, setDeletingReviewId] = useState(null);
+
+  const handleDeleteReview = async (rev) => {
+    const revId = rev._id || rev.id;
+    if (!window.confirm(`Are you sure you want to permanently delete this review by ${rev.patientName || 'this patient'}?`)) {
+      return;
+    }
+    try {
+      setDeletingReviewId(revId);
+      await deleteReview(rev);
+      if (typeof refreshReviews === 'function') {
+        refreshReviews();
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete review');
+    } finally {
+      setDeletingReviewId(null);
+    }
+  };
   const [activeReel, setActiveReel] = useState(null);
   const [reelVideoError, setReelVideoError] = useState(false);
   const [activeVideo, setActiveVideo] = useState(null);
@@ -614,20 +633,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
   };
 
   const handleOpenWriteReview = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    let userObj = null;
-    try {
-      const u = localStorage.getItem('user');
-      if (u) {
-        const parsed = JSON.parse(u);
-        if (parsed && (parsed.name || parsed.email || parsed._id || parsed.id)) {
-          userObj = parsed;
-        }
-      }
-    } catch {}
-
-    const isUserAuth = Boolean(token && (userObj || user));
-    if (!isUserAuth) {
+    const { isLoggedIn } = getAuthenticatedPatient();
+    if (!isLoggedIn) {
       setShowReviewLoginPrompt(true);
       return;
     }
@@ -644,8 +651,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       localStorage.removeItem('autoOpenHospitalBooking');
     }
     if (localStorage.getItem('open_write_review') === 'true') {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-      if (token) {
+      const { isLoggedIn } = getAuthenticatedPatient();
+      if (isLoggedIn) {
         setIsWriteReviewModalOpen(true);
       }
       localStorage.removeItem('open_write_review');
@@ -1703,6 +1710,33 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>
                       <ShieldCheck size={13} />
                       <span>Cashless via {rev.insuranceUsed}</span>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteReview(rev)}
+                        disabled={deletingReviewId === (rev._id || rev.id)}
+                        style={{
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          borderRadius: '6px',
+                          padding: '5px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                          color: '#dc2626',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Delete this review permanently as Administrator"
+                      >
+                        <Trash2 size={13} />
+                        {deletingReviewId === (rev._id || rev.id) ? 'Deleting...' : 'Delete Review (Admin)'}
+                      </button>
                     </div>
                   )}
                 </div>

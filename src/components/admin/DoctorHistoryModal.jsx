@@ -188,7 +188,8 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
   const [appointments, setAppointments] = useState(initialDoctorData.appointments);
   const [prescriptions, setPrescriptions] = useState(initialDoctorData.prescriptions);
 
-  // Sync internal state if initialDoctorData changes
+  // Sync internal state if target doctor changes
+  const targetDocId = doctor?._id || doctor?.id;
   useEffect(() => {
     if (initialDoctorData.appointments.length > 0) {
       setAppointments(initialDoctorData.appointments);
@@ -196,7 +197,7 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
     if (initialDoctorData.prescriptions.length > 0) {
       setPrescriptions(initialDoctorData.prescriptions);
     }
-  }, [initialDoctorData]);
+  }, [targetDocId]);
 
   // Load all consultations & prescriptions for this doctor
   const loadDoctorData = async (forceShowSpinner = false) => {

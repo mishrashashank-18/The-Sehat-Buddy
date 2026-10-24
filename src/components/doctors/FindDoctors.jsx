@@ -1,11 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
 import DoctorCard from './DoctorCard';
 import styles from './FindDoctors.module.css';
 
 const FindDoctors = ({ onNavigate }) => {
-  const { doctors } = useData();
+  const { doctors, refreshDoctors } = useData();
+
+  React.useEffect(() => {
+    if (!doctors || doctors.length === 0) {
+      refreshDoctors?.();
+    }
+  }, [doctors, refreshDoctors]);
   
   // Read any initial query params passed from SearchBar / URL
   const queryParams = new URLSearchParams(window.location.search);
@@ -41,50 +47,63 @@ const FindDoctors = ({ onNavigate }) => {
   };
 
   // Get unique specialties for the dropdown
-  const uniqueSpecialties = Array.from(new Set(
-    doctors
-      .filter(d => d.available !== false || isProtectedDoctor(d))
-      .map(d => d.specialty || d.specialization)
-      .filter(Boolean)
-  ));
+  const uniqueSpecialties = useMemo(() => {
+    return Array.from(new Set(
+      doctors
+        .filter(d => d.available !== false || isProtectedDoctor(d))
+        .map(d => d.specialty || d.specialization)
+        .filter(Boolean)
+    ));
+  }, [doctors]);
 
   // Filter for active/listed doctors and apply search criteria
-  const activeDoctors = doctors.filter(doc => {
-    // Only filter out doctors explicitly de-listed by admin, never core doctor Dr. Rahul Verma
-    if (!isProtectedDoctor(doc) && doc.available === false) return false;
-    
-    // Keyword match (name, specialty, degree, about, or treatments)
-    if (searchName) {
-      const q = searchName.toLowerCase().trim();
-      const nameMatch = doc.name && doc.name.toLowerCase().includes(q);
-      const specMatch = (doc.specialty && doc.specialty.toLowerCase().includes(q)) ||
-                        (doc.specialization && doc.specialization.toLowerCase().includes(q));
-      const hospMatch = doc.hospital && doc.hospital.toLowerCase().includes(q);
-      const degreeMatch = doc.degree && doc.degree.toLowerCase().includes(q);
-      const aboutMatch = doc.about && doc.about.toLowerCase().includes(q);
-      if (!nameMatch && !specMatch && !hospMatch && !degreeMatch && !aboutMatch) return false;
-    }
-    
-    // Location match (check hospital, address.line1, address.line2, address.city)
-    if (searchLocation) {
-      const locQ = searchLocation.toLowerCase().trim();
-      const locMatch = (doc.hospital && doc.hospital.toLowerCase().includes(locQ)) ||
-                       (doc.address && typeof doc.address === 'string' && doc.address.toLowerCase().includes(locQ)) ||
-                       (doc.address?.city && doc.address.city.toLowerCase().includes(locQ)) ||
-                       (doc.address?.line1 && doc.address.line1.toLowerCase().includes(locQ)) ||
-                       (doc.address?.line2 && doc.address.line2.toLowerCase().includes(locQ));
-      if (!locMatch) return false;
-    }
-    
-    // Specialty match
-    if (searchSpecialty) {
-      const specQ = searchSpecialty.toLowerCase().trim();
-      const docSpec = (doc.specialty || doc.specialization || '').toLowerCase().trim();
-      if (!docSpec.includes(specQ) && !specQ.includes(docSpec)) return false;
-    }
-    
-    return true;
-  });
+  const activeDoctors = useMemo(() => {
+    return doctors.filter(doc => {
+      // Only filter out doctors explicitly de-listed by admin, never core doctor Dr. Rahul Verma
+      if (!isProtectedDoctor(doc) && doc.available === false) return false;
+      
+      // Keyword match (name, specialty, degree, about, or treatments)
+      if (searchName) {
+        const q = searchName.toLowerCase().trim();
+        const nameMatch = doc.name && doc.name.toLowerCase().includes(q);
+        const specMatch = (doc.specialty && doc.specialty.toLowerCase().includes(q)) ||
+                          (doc.specialization && doc.specialization.toLowerCase().includes(q));
+        const hospMatch = doc.hospital && doc.hospital.toLowerCase().includes(q);
+        const degreeMatch = doc.degree && doc.degree.toLowerCase().includes(q);
+        const aboutMatch = doc.about && doc.about.toLowerCase().includes(q);
+        if (!nameMatch && !specMatch && !hospMatch && !degreeMatch && !aboutMatch) return false;
+      }
+      
+      // Location match (check hospital, address.line1, address.line2, address.city)
+      if (searchLocation) {
+        const locQ = searchLocation.toLowerCase().trim();
+        const locMatch = (doc.hospital && doc.hospital.toLowerCase().includes(locQ)) ||
+                         (doc.address && typeof doc.address === 'string' && doc.address.toLowerCase().includes(locQ)) ||
+                         (doc.address?.city && doc.address.city.toLowerCase().includes(locQ)) ||
+                         (doc.address?.line1 && doc.address.line1.toLowerCase().includes(locQ)) ||
+                         (doc.address?.line2 && doc.address.line2.toLowerCase().includes(locQ));
+        if (!locMatch) return false;
+      }
+      
+      // Specialty match
+      if (searchSpecialty) {
+        const specQ = searchSpecialty.toLowerCase().trim();
+        const docSpec = (doc.specialty || doc.specialization || '').toLowerCase().trim();
+        if (!docSpec.includes(specQ) && !specQ.includes(docSpec)) return false;
+      }
+      
+      return true;
+    });
+  }, [doctors, searchName, searchLocation, searchSpecialty]);
+
+  // Prioritize Star / Popular doctors at the top
+  const sortedDoctors = useMemo(() => {
+    return [...activeDoctors].sort((a, b) => {
+      if (Boolean(a.isStarDoctor) && !Boolean(b.isStarDoctor)) return -1;
+      if (!Boolean(a.isStarDoctor) && Boolean(b.isStarDoctor)) return 1;
+      return 0;
+    });
+  }, [activeDoctors]);
 
   return (
     <div className={styles.pageWrapper}>
@@ -121,14 +140,14 @@ const FindDoctors = ({ onNavigate }) => {
           </select>
         </div>
 
-        {activeDoctors.length === 0 ? (
+        {sortedDoctors.length === 0 ? (
           <div className={styles.emptyState}>
             <h3>No doctors found</h3>
             <p>Try adjusting your search filters to find what you're looking for.</p>
           </div>
         ) : (
           <div className={styles.grid}>
-            {activeDoctors.map((doctor) => (
+            {sortedDoctors.map((doctor) => (
               <DoctorCard 
                 key={doctor.id || doctor._id} 
                 doctor={doctor} 

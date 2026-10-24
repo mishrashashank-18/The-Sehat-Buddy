@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import logoImg from '../../assets/images/logo.png';
 import { API_BASE } from '../../services/api';
 import Container from './Container';
@@ -32,11 +33,13 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   const [isCityOpen, setIsCityOpen] = useState(false);
   const [isCareOpen, setIsCareOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const { user: authedUser } = getAuthenticatedPatient();
+    return authedUser;
+  });
 
   const cityDropdownRef = useRef(null);
   const careDropdownRef = useRef(null);
-  const token = localStorage.getItem('token');
 
   // Compute active tab from currentView
   const getActiveTab = () => {
@@ -56,9 +59,13 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   }, [currentView]);
 
   useEffect(() => {
-    if (token) {
+    const { token: patientToken, user: authedUser } = getAuthenticatedPatient();
+    if (patientToken) {
+      if (authedUser && !user) {
+        setUser(authedUser);
+      }
       fetch(`${API_BASE}/user/profile`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${patientToken}` }
       })
         .then((res) => res.json())
         .then((data) => {
@@ -67,8 +74,10 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
           }
         })
         .catch(() => {});
+    } else {
+      setUser(null);
     }
-  }, [token]);
+  }, [currentView]);
 
   // Click outside listener for dropdowns
   useEffect(() => {
@@ -135,6 +144,8 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   const handleLogout = () => {
     localStorage.removeItem('patient_token');
     localStorage.removeItem('patient_user');
+    localStorage.removeItem('user_token');
+    localStorage.removeItem('user_user');
     try {
       const u = JSON.parse(localStorage.getItem('user') || '{}');
       if (u.role === 'user' || !u.role) {

@@ -315,29 +315,60 @@ router.post('/instagram-reel', protect, async (req, res) => {
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
     const execPromise = promisify(exec);
+    const os = await import('os');
+    const path = await import('path');
+    const fs = await import('fs');
 
-    // Extract direct video stream using yt-dlp
-    const cmd = `python -m yt_dlp -g "${url}"`;
-    const { stdout } = await execPromise(cmd, { timeout: 15000 });
-    const directMp4 = stdout.trim().split('\n')[0].trim();
-    if (!directMp4 || !directMp4.startsWith('http')) {
-      return res.status(400).json({ success: false, message: 'Could not extract reel stream' });
+    const tempFilePath = path.join(os.tmpdir(), `sehat_reel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+
+    // Download reel locally using yt-dlp across available Python / yt-dlp environments
+    const commands = [
+      `py -m yt_dlp -o "${tempFilePath}" "${url}"`,
+      `yt-dlp -o "${tempFilePath}" "${url}"`,
+      `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -o "${tempFilePath}" "${url}"`,
+      `python -m yt_dlp -o "${tempFilePath}" "${url}"`
+    ];
+
+    let downloaded = false;
+    let lastErr = null;
+    for (const cmd of commands) {
+      try {
+        await execPromise(cmd, { timeout: 40000 });
+        if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
+          downloaded = true;
+          break;
+        }
+      } catch (e) {
+        lastErr = e;
+      }
     }
 
-    const cld = getCloudinary();
-    const uploadResult = await cld.uploader.upload(directMp4, {
-      resource_type: 'video',
-      folder
-    });
+    if (!downloaded || !fs.existsSync(tempFilePath)) {
+      return res.status(400).json({ success: false, message: lastErr ? lastErr.message : 'Could not download reel video locally' });
+    }
 
-    notifyStorageChanged('cloudinary:video');
-    return res.json({
-      success: true,
-      url: uploadResult.secure_url || uploadResult.url,
-      coverPhoto: (uploadResult.secure_url || uploadResult.url).replace(/\.[^/.]+$/, '.jpg'),
-      public_id: uploadResult.public_id,
-      duration: uploadResult.duration
-    });
+    try {
+      const cld = getCloudinary();
+      const uploadResult = await cld.uploader.upload(tempFilePath, {
+        resource_type: 'video',
+        folder
+      });
+
+      notifyStorageChanged('cloudinary:video');
+      return res.json({
+        success: true,
+        url: uploadResult.secure_url || uploadResult.url,
+        coverPhoto: (uploadResult.secure_url || uploadResult.url).replace(/\.[^/.]+$/, '.jpg'),
+        public_id: uploadResult.public_id,
+        duration: uploadResult.duration
+      });
+    } finally {
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+        }
+      } catch {}
+    }
   } catch (err) {
     console.error('Instagram reel conversion error:', err);
     return res.status(500).json({ success: false, message: err.message || 'Failed to convert reel to Cloudinary' });

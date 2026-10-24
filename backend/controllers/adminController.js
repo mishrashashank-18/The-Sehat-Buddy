@@ -113,7 +113,38 @@ export const registerAdmin = async (req, res) => {
 
 export const addDoctor = async (req, res) => {
   try {
-    const { name, email, specialization, experience, about, fees, address, reels, youtube_videos, instagram, facebook, rating, reviews, hospital, qualifications, contact_number, available, isStarDoctor } = req.body;
+    const {
+      name,
+      email,
+      specialization,
+      specialty,
+      experience,
+      experienceYears,
+      about,
+      fees,
+      price,
+      address,
+      reels,
+      youtube_videos,
+      instagram,
+      facebook,
+      rating,
+      reviews,
+      hospital,
+      qualifications,
+      degree,
+      contact_number,
+      phone,
+      available,
+      availableDays,
+      isStarDoctor,
+      faqs,
+      awards,
+      certifications,
+      memberships,
+      careerExperience
+    } = req.body;
+
     let image = req.body.image || '';
     if (req.file) {
       image = req.file.path;
@@ -135,32 +166,81 @@ export const addDoctor = async (req, res) => {
     }
 
     const temporaryPassword = generateTemporaryPassword();
+    const newDocId = new mongoose.Types.ObjectId();
+    const docSpecialty = specialization || specialty || 'General Medicine';
+    const docExp = Number(experience) || Number(experienceYears) || 5;
+    const docFee = Number(fees) || Number(price) || 500;
+    const docDegree = qualifications || degree || '';
+    const docPhone = contact_number || phone || '';
 
     const doctor = await Doctor.create({
-      name,
+      _id: newDocId,
+      id: newDocId.toString(),
+      name: (name || '').trim(),
       email: cleanEmail,
       password: temporaryPassword,
       isFirstLogin: true,
       passwordSet: false,
-      specialization: specialization || 'General Medicine',
-      experience: Number(experience) || 5,
+      specialization: docSpecialty,
+      specialty: docSpecialty,
+      experience: docExp,
       about: about || '',
-      fees: Number(fees) || 500,
-      price: Number(fees) || 500,
+      fees: docFee,
+      price: docFee,
       address: parsedAddress,
       image,
-      reels: reels || [],
-      youtube_videos: youtube_videos || [],
+      reels: Array.isArray(reels) ? reels : [],
+      youtube_videos: Array.isArray(youtube_videos) ? youtube_videos : [],
       instagram: instagram || '',
       facebook: facebook || '',
       rating: rating !== undefined && !isNaN(Number(rating)) ? Number(rating) : 0,
       reviews: reviews !== undefined ? String(reviews) : '0',
       hospital: hospital || '',
-      qualifications: qualifications || '',
-      contact_number: contact_number || '',
+      qualifications: docDegree,
+      degree: docDegree,
+      contact_number: docPhone,
+      phone: docPhone,
       available: available !== undefined ? available : true,
-      isStarDoctor: Boolean(isStarDoctor)
+      availableDays: availableDays || 'Mon - Sat (10am - 4pm)',
+      isStarDoctor: Boolean(isStarDoctor),
+      faqs: Array.isArray(faqs) ? faqs : [],
+      awards: Array.isArray(awards) ? awards.filter(Boolean) : [],
+      certifications: Array.isArray(certifications) ? certifications.filter(Boolean) : [],
+      memberships: Array.isArray(memberships) ? memberships.filter(Boolean) : [],
+      careerExperience: Array.isArray(careerExperience) ? careerExperience.filter(Boolean) : []
     });
+
+    // Sync hospital staff roster if hospital is specified
+    if (hospital && typeof hospital === 'string' && hospital.trim()) {
+      try {
+        const cleanHosp = hospital.trim();
+        const hospitalFilter = mongoose.Types.ObjectId.isValid(cleanHosp)
+          ? { $or: [{ _id: cleanHosp }, { name: { $regex: new RegExp(`^${cleanHosp}$`, 'i') } }] }
+          : { name: { $regex: new RegExp(`^${cleanHosp}$`, 'i') } };
+
+        const hospDoc = await Hospital.findOne(hospitalFilter);
+        if (hospDoc) {
+          if (!Array.isArray(hospDoc.staff_emails)) hospDoc.staff_emails = [];
+          if (!hospDoc.staff_emails.includes(cleanEmail)) {
+            hospDoc.staff_emails.push(cleanEmail);
+          }
+          if (!Array.isArray(hospDoc.staff_doctors)) hospDoc.staff_doctors = [];
+          if (!hospDoc.staff_doctors.some(d => d.email === cleanEmail)) {
+            hospDoc.staff_doctors.push({ name: doctor.name, email: cleanEmail });
+          }
+          if (Boolean(isStarDoctor)) {
+            if (!Array.isArray(hospDoc.star_doctors)) hospDoc.star_doctors = [];
+            if (!hospDoc.star_doctors.some(id => String(id) === String(doctor._id))) {
+              hospDoc.star_doctors.push(doctor._id);
+            }
+          }
+          await hospDoc.save();
+          broadcastDbChange('hospitals', 'update', hospDoc._id, hospDoc);
+        }
+      } catch (hospSyncErr) {
+        console.warn('Failed to sync doctor to hospital in MongoDB:', hospSyncErr.message);
+      }
+    }
 
     // Send temporary password credentials email to the doctor
     sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName: hospital });
@@ -168,7 +248,7 @@ export const addDoctor = async (req, res) => {
     broadcastDbChange('doctors', 'insert', doctor._id, doctor);
     res.status(201).json({
       success: true,
-      message: 'Doctor added successfully and temporary password sent to their email',
+      message: 'Doctor added successfully and saved to database',
       data: doctor,
       temporaryPassword
     });
@@ -224,7 +304,60 @@ export const updateDoctor = async (req, res) => {
       doctor = await Doctor.findOne({ email: reqId.toLowerCase() });
     }
     if (doctor) {
+      const oldEmail = (doctor.email || '').toLowerCase().trim();
+      const newEmail = req.body.email ? String(req.body.email).toLowerCase().trim() : null;
+      let emailChanged = false;
+      let temporaryPassword = null;
+
+      if (newEmail && newEmail !== oldEmail) {
+        // Ensure no duplicate doctor account with this email
+        const duplicateDoctor = await Doctor.findOne({
+          email: newEmail,
+          _id: { $ne: doctor._id }
+        });
+        if (duplicateDoctor) {
+          return res.status(400).json({
+            success: false,
+            message: `Email ${newEmail} is already registered to another doctor (${duplicateDoctor.name}).`
+          });
+        }
+
+        // Generate temporary password for newly registered/changed email
+        temporaryPassword = generateTemporaryPassword();
+        doctor.email = newEmail;
+        doctor.password = temporaryPassword;
+        doctor.isFirstLogin = true;
+        doctor.passwordSet = false;
+        doctor.failedLoginAttempts = 0;
+        doctor.lockUntil = null;
+        doctor.markModified('email');
+        doctor.markModified('password');
+        doctor.markModified('isFirstLogin');
+        doctor.markModified('passwordSet');
+        emailChanged = true;
+
+        // Keep hospital staff rosters in sync
+        if (oldEmail) {
+          await Hospital.updateMany(
+            { 'staff_doctors.email': oldEmail },
+            {
+              $set: { 'staff_doctors.$.email': newEmail },
+              $pull: { staff_emails: oldEmail }
+            }
+          ).catch(() => {});
+          if (doctor.hospital) {
+            await Hospital.updateMany(
+              { name: doctor.hospital },
+              { $addToSet: { staff_emails: newEmail } }
+            ).catch(() => {});
+          }
+        }
+      }
+
       Object.assign(doctor, req.body);
+      if (emailChanged) {
+        doctor.email = newEmail;
+      }
 
       if (!doctor.id && reqId) {
         doctor.id = reqId;
@@ -255,6 +388,14 @@ export const updateDoctor = async (req, res) => {
         doctor.qualifications = deg;
         doctor.markModified('degree');
         doctor.markModified('qualifications');
+      }
+
+      if (req.body.phone !== undefined || req.body.contact_number !== undefined) {
+        const ph = String(req.body.phone !== undefined ? req.body.phone : req.body.contact_number).trim();
+        doctor.phone = ph;
+        doctor.contact_number = ph;
+        doctor.markModified('phone');
+        doctor.markModified('contact_number');
       }
 
       if (req.body.experience !== undefined || req.body.experienceYears !== undefined) {
@@ -390,8 +531,29 @@ export const updateDoctor = async (req, res) => {
         doctor.image = incomingImage;
       }
       const updatedDoctor = await doctor.save();
+
+      if (emailChanged && temporaryPassword) {
+        try {
+          await sendDoctorWelcomeEmail({
+            doctor: updatedDoctor,
+            temporaryPassword,
+            hospitalName: updatedDoctor.hospital || req.body.hospital || 'The Sehat Buddy Network'
+          });
+        } catch (emailErr) {
+          console.error('Failed to send credential email to updated doctor email:', emailErr.message);
+        }
+      }
+
       broadcastDbChange('doctors', 'update', updatedDoctor._id, updatedDoctor);
-      res.json({ success: true, message: 'Doctor updated', data: updatedDoctor });
+      res.json({
+        success: true,
+        message: emailChanged
+          ? `Doctor email updated to ${updatedDoctor.email} and temporary password sent successfully!`
+          : 'Doctor updated successfully',
+        data: updatedDoctor,
+        temporaryPassword: temporaryPassword || undefined,
+        emailChanged
+      });
     } else {
       res.status(404).json({ success: false, message: 'Doctor not found' });
     }
@@ -402,27 +564,101 @@ export const updateDoctor = async (req, res) => {
 
 export const deleteDoctor = async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
-    if (doctor) {
-      const docId = doctor._id;
-      // Permanently remove doctor image from Cloudinary
-      if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
-        const publicId = extractCloudinaryPublicId(doctor.image);
-        if (publicId) {
-          try {
-            const cld = getCloudinary();
-            await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
-          } catch (cldErr) {
-            console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
+    const rawId = (req.params.id || '').trim();
+    let doctor = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      doctor = await Doctor.findById(rawId);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: rawId });
+    }
+    if (!doctor && rawId) {
+      const decodedEmail = decodeURIComponent(rawId).toLowerCase().trim();
+      doctor = await Doctor.findOne({ email: decodedEmail });
+    }
+
+    if (!doctor) {
+      // Check if this might be a staff doctor email referenced in hospitals without standalone Doctor record
+      const cleanEmail = decodeURIComponent(rawId).toLowerCase().trim();
+      if (cleanEmail && cleanEmail.includes('@')) {
+        await Hospital.updateMany(
+          {},
+          {
+            $pull: {
+              staff_doctors: { email: cleanEmail },
+              staff_emails: cleanEmail
+            }
           }
+        );
+        broadcastDbChange('hospitals', 'update', null);
+        return res.json({ success: true, message: 'Hospital staff doctor removed successfully' });
+      }
+      return res.status(404).json({ success: false, message: 'Doctor not found in database' });
+    }
+
+    if (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))) {
+      return res.status(400).json({
+        success: false,
+        message: 'System protection: Dr. Rahul Verma cannot be deleted.'
+      });
+    }
+
+    const docId = doctor._id;
+    const docEmail = (doctor.email || '').toLowerCase().trim();
+
+    // Permanently remove doctor image from Cloudinary
+    if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+      const publicId = extractCloudinaryPublicId(doctor.image);
+      if (publicId) {
+        try {
+          const cld = getCloudinary();
+          await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+        } catch (cldErr) {
+          console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
         }
       }
-      await doctor.deleteOne();
-      broadcastDbChange('doctors', 'delete', docId);
-      res.json({ success: true, message: 'Doctor deleted permanently' });
-    } else {
-      res.status(404).json({ success: false, message: 'Doctor not found' });
     }
+
+    // Permanently remove doctor from MongoDB Doctor collection
+    await doctor.deleteOne();
+
+    // Permanently remove doctor references from all hospitals (star_doctors, staff_doctors, staff_emails)
+    try {
+      await Hospital.updateMany(
+        {},
+        {
+          $pull: {
+            star_doctors: docId,
+            staff_doctors: { email: docEmail },
+            staff_emails: docEmail
+          }
+        }
+      );
+      broadcastDbChange('hospitals', 'update', null);
+    } catch (hospErr) {
+      console.warn('Failed to clean up doctor from hospital references in MongoDB:', hospErr.message);
+    }
+
+    // Permanently remove or cancel associated appointments in database
+    try {
+      await Appointment.deleteMany({
+        $or: [
+          { doctorId: docId },
+          { doctorId: docId.toString() },
+          ...(doctor.id ? [{ doctorId: doctor.id }] : []),
+          { 'doctor.email': docEmail },
+          { 'doctor.id': docId.toString() },
+          ...(doctor.id ? [{ 'doctor.id': doctor.id }] : [])
+        ]
+      });
+      broadcastDbChange('appointments', 'delete', null);
+    } catch (aptErr) {
+      console.warn('Failed to clean up appointments for deleted doctor:', aptErr.message);
+    }
+
+    broadcastDbChange('doctors', 'delete', docId);
+    res.json({ success: true, message: 'Doctor and all associated database records deleted permanently' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

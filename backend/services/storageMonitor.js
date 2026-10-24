@@ -329,8 +329,8 @@ export const initMongoDBChangeStream = () => {
 
   try {
     if (mongoose.connection && mongoose.connection.readyState === 1) {
-      // Watch all collections across the database
-      changeStream = mongoose.connection.watch([], { fullDocument: 'default' });
+      // Watch all collections across the database with fullDocument on updates
+      changeStream = mongoose.connection.watch([], { fullDocument: 'updateLookup' });
       
       changeStream.on('change', (change) => {
         const collection = (change.ns?.coll || '').toLowerCase();

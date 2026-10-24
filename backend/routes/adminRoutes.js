@@ -13,6 +13,7 @@ import {
   updateAppointmentStatus,
   deleteAppointment
 } from '../controllers/adminController.js';
+import { deleteReview } from '../controllers/reviewController.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
 
@@ -55,5 +56,7 @@ router.put('/appointments/:id/status', adminProtect, updateAppointmentStatus);
 router.delete('/appointments/:id', adminProtect, deleteAppointment);
 router.get('/storage-stats', adminProtect, getStorageStats);
 router.get('/storage-stream', streamStorageStats);
+router.delete('/reviews/:id', adminProtect, deleteReview);
+router.delete('/delete-review/:id', adminProtect, deleteReview);
 
 export default router;

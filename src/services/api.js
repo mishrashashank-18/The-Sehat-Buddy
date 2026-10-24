@@ -1,11 +1,16 @@
 export const resolveApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
-  if (!envUrl) {
-    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
-      return 'http://127.0.0.1:5000/api';
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (!envUrl) {
+      return isLocal ? 'http://127.0.0.1:5000/api' : `http://${window.location.hostname}:5000/api`;
     }
-    return 'http://localhost:5000/api';
+    // If envUrl points to localhost but the page is accessed via LAN IP
+    if (!isLocal && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+      return `http://${window.location.hostname}:5000/api`;
+    }
   }
+  if (!envUrl) return 'http://localhost:5000/api';
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 };
@@ -14,19 +19,26 @@ export const API_BASE = resolveApiBase();
 
 export const getActiveAuthToken = () => {
   try {
+    let storedUser = null;
+    try {
+      storedUser = JSON.parse(localStorage.getItem('user') || '{}');
+    } catch {}
+
     const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
-    if (path.startsWith('/doctor')) {
-      return localStorage.getItem('doctor_token') || localStorage.getItem('token');
-    }
-    if (path.startsWith('/admin')) {
+    const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+
+    if (storedUser?.role === 'admin' || path.startsWith('/admin') || hash.includes('admin') || localStorage.getItem('admin_logged_in') === 'true') {
       return localStorage.getItem('admin_token') || localStorage.getItem('token');
     }
-    if (path.startsWith('/hospital')) {
+    if (storedUser?.role === 'doctor' || path.startsWith('/doctor') || hash.includes('doctor')) {
+      return localStorage.getItem('doctor_token') || localStorage.getItem('token');
+    }
+    if (storedUser?.role === 'hospital' || path.startsWith('/hospital') || hash.includes('hospital')) {
       return localStorage.getItem('hospital_token') || localStorage.getItem('token');
     }
-    return localStorage.getItem('token') || localStorage.getItem('patient_token');
+    return localStorage.getItem('admin_token') || localStorage.getItem('token') || localStorage.getItem('hospital_token') || localStorage.getItem('doctor_token') || localStorage.getItem('patient_token');
   } catch {
-    return localStorage.getItem('token');
+    return localStorage.getItem('admin_token') || localStorage.getItem('token');
   }
 };
 
@@ -49,9 +61,51 @@ const handleResponse = async (res) => {
 export const api = {
   // Doctors
   async getDoctors() {
-    const res = await fetch(`${API_BASE}/doctors/list`);
-    const data = await handleResponse(res);
-    return data.data || data;
+    const fetchOptions = {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/doctors/list`, fetchOptions);
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        if (Array.isArray(list) && (list.length > 0 || data?.success)) return list;
+      }
+    } catch (e) {
+      console.warn('GET /doctors/list failed, attempting fallback:', e.message);
+    }
+
+    try {
+      const res2 = await fetch(`${API_BASE}/doctors`, fetchOptions);
+      if (res2.ok) {
+        const data2 = await res2.json();
+        const list2 = Array.isArray(data2) ? data2 : (data2?.data || []);
+        if (Array.isArray(list2) && (list2.length > 0 || data2?.success)) return list2;
+      }
+    } catch (e2) {
+      console.warn('GET /doctors failed, attempting fallback:', e2.message);
+    }
+
+    try {
+      const res3 = await fetch(`${API_BASE}/admin/all-doctors`, {
+        ...fetchOptions,
+        headers: {
+          ...fetchOptions.headers,
+          ...getAuthHeaders()
+        }
+      });
+      if (res3.ok) {
+        const data3 = await res3.json();
+        const list3 = Array.isArray(data3) ? data3 : (data3?.data || []);
+        if (Array.isArray(list3)) return list3;
+      }
+    } catch {}
+
+    return [];
   },
 
   async getDoctorById(id) {
@@ -113,9 +167,16 @@ export const api = {
         });
         if (res.ok) {
           const data = await res.json();
-          return data.data || data;
+          return { ...(data.data || data), emailChanged: data.emailChanged, temporaryPassword: data.temporaryPassword };
+        } else if (res.status === 400 || res.status === 409 || res.status === 422) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to update doctor details');
         }
-      } catch {}
+      } catch (adminErr) {
+        if (adminErr.message && !adminErr.message.includes('HTTP error') && !adminErr.message.includes('Failed to fetch')) {
+          throw adminErr;
+        }
+      }
     }
 
     try {
@@ -126,9 +187,16 @@ export const api = {
       });
       if (res.ok) {
         const data = await res.json();
-        return data.data || data;
+        return { ...(data.data || data), emailChanged: data.emailChanged, temporaryPassword: data.temporaryPassword };
+      } else if (res.status === 400 || res.status === 409 || res.status === 422) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to update doctor profile');
       }
-    } catch {}
+    } catch (docErr) {
+      if (docErr.message && !docErr.message.includes('HTTP error') && !docErr.message.includes('Failed to fetch')) {
+        throw docErr;
+      }
+    }
 
     try {
       const res2 = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
@@ -256,20 +324,64 @@ export const api = {
     return { faqs };
   },
 
-  async deleteDoctor(id) {
-    try {
-      const res = await fetch(`${API_BASE}/doctors/${id}`, { 
-        method: 'DELETE',
-        headers: getAuthHeaders()
-      });
-      if (res.ok) return handleResponse(res);
-    } catch {}
+  async deleteDoctor(id, email) {
+    const rawId = (id && typeof id === 'object') ? (id._id || id.id || id.email) : id;
+    const rawEmail = email || (id && typeof id === 'object' ? id.email : null);
+    const cleanId = String(rawId || '').trim();
+    const cleanEmail = rawEmail ? String(rawEmail).trim().toLowerCase() : null;
+    let lastError = null;
 
-    const res2 = await fetch(`${API_BASE}/admin/delete-doctor/${id}`, { 
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    return handleResponse(res2);
+    if (cleanId) {
+      const encodedId = encodeURIComponent(cleanId);
+      // 1. Try admin delete-doctor endpoint
+      try {
+        const res = await fetch(`${API_BASE}/admin/delete-doctor/${encodedId}`, { 
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res.ok) return await handleResponse(res);
+        const data = await res.json().catch(() => ({}));
+        if (data && data.message) lastError = new Error(data.message);
+      } catch (err) {
+        lastError = err;
+      }
+
+      // 2. Fallback to /doctors endpoint
+      try {
+        const res2 = await fetch(`${API_BASE}/doctors/${encodedId}`, { 
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res2.ok) return await handleResponse(res2);
+        const data2 = await res2.json().catch(() => ({}));
+        if (data2 && data2.message) lastError = new Error(data2.message);
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    // 3. If email is provided and differs from cleanId, try deleting by email
+    if (cleanEmail && cleanEmail !== cleanId.toLowerCase()) {
+      const encodedEmail = encodeURIComponent(cleanEmail);
+      try {
+        const res3 = await fetch(`${API_BASE}/admin/delete-doctor/${encodedEmail}`, { 
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res3.ok) return await handleResponse(res3);
+      } catch {}
+
+      try {
+        const res4 = await fetch(`${API_BASE}/doctors/${encodedEmail}`, { 
+          method: 'DELETE',
+          headers: getAuthHeaders()
+        });
+        if (res4.ok) return await handleResponse(res4);
+      } catch {}
+    }
+
+    if (lastError) throw lastError;
+    throw new Error('Failed to delete doctor from database');
   },
 
   // Hospitals
@@ -658,10 +770,31 @@ export const api = {
     return data.data || [];
   },
 
-  async addReview(reviewData) {
+  async addReview(reviewData, tokenOverride = null) {
+    let token = tokenOverride;
+    if (!token) {
+      const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
+      if (path.startsWith('/admin')) {
+        token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+      } else {
+        const patientToken = localStorage.getItem('patient_token') || localStorage.getItem('user_token');
+        if (patientToken) {
+          token = patientToken;
+        } else {
+          try {
+            const u = JSON.parse(localStorage.getItem('user') || '{}');
+            if (u && u.role === 'user') token = localStorage.getItem('token');
+          } catch {}
+        }
+      }
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const res = await fetch(`${API_BASE}/reviews`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers,
       body: JSON.stringify(reviewData)
     });
     const data = await handleResponse(res);
@@ -679,11 +812,48 @@ export const api = {
   },
 
   async deleteReview(id) {
-    const res = await fetch(`${API_BASE}/reviews/${id}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    });
-    return handleResponse(res);
+    const rawId = (id && typeof id === 'object') ? (id._id || id.id) : id;
+    const cleanId = String(rawId || '').trim();
+    const encodedId = encodeURIComponent(cleanId);
+    let lastError = null;
+
+    // 1. Try /api/admin/reviews/:id
+    try {
+      const resAdmin = await fetch(`${API_BASE}/admin/reviews/${encodedId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (resAdmin.ok) return await handleResponse(resAdmin);
+      const dataAdmin = await resAdmin.json().catch(() => ({}));
+      if (dataAdmin?.message) lastError = new Error(dataAdmin.message);
+    } catch (err) {
+      lastError = err;
+    }
+
+    // 2. Try /api/reviews/:id
+    try {
+      const res = await fetch(`${API_BASE}/reviews/${encodedId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (res.ok) return await handleResponse(res);
+      const data = await res.json().catch(() => ({}));
+      if (data?.message) lastError = new Error(data.message);
+    } catch (err) {
+      lastError = err;
+    }
+
+    // 3. Fallback /api/admin/delete-review/:id
+    try {
+      const res3 = await fetch(`${API_BASE}/admin/delete-review/${encodedId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+      });
+      if (res3.ok) return await handleResponse(res3);
+    } catch {}
+
+    if (lastError) throw lastError;
+    throw new Error('Failed to delete review from database');
   },
 
   // Specialities & Procedures API

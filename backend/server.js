@@ -250,8 +250,23 @@ app.get('/api/reel-video', async (req, res) => {
       const { exec } = await import('child_process');
       const { promisify } = await import('util');
       const execPromise = promisify(exec);
-      const { stdout } = await execPromise(`python -m yt_dlp -g "${targetReelUrl}"`, { timeout: 12000 });
-      const directMp4 = stdout.trim().split('\n')[0].trim();
+      const commands = [
+        `py -m yt_dlp -g "${targetReelUrl}"`,
+        `yt-dlp -g "${targetReelUrl}"`,
+        `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -g "${targetReelUrl}"`,
+        `python -m yt_dlp -g "${targetReelUrl}"`
+      ];
+      let directMp4 = null;
+      for (const cmd of commands) {
+        try {
+          const { stdout } = await execPromise(cmd, { timeout: 15000 });
+          const lines = stdout.trim().split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
+          if (lines.length > 0) {
+            directMp4 = lines[0];
+            break;
+          }
+        } catch {}
+      }
       if (directMp4 && directMp4.startsWith('http')) {
         if (req.query.json === 'true') {
           return res.json({ success: true, videoUrl: directMp4 });

@@ -247,7 +247,26 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [activeTab, setActiveTab] = useState('general');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const saveSuccessTimeoutRef = useRef(null);
   const [errorMessage, setErrorMessage] = useState('');
+
+  const triggerSaveSuccess = useCallback((duration = 3500) => {
+    if (saveSuccessTimeoutRef.current) {
+      clearTimeout(saveSuccessTimeoutRef.current);
+      saveSuccessTimeoutRef.current = null;
+    }
+    setSaveSuccess(true);
+    saveSuccessTimeoutRef.current = setTimeout(() => {
+      setSaveSuccess(false);
+      saveSuccessTimeoutRef.current = null;
+    }, duration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveSuccessTimeoutRef.current) clearTimeout(saveSuccessTimeoutRef.current);
+    };
+  }, []);
 
   // Hospital-level Preview Modals State
   const [previewMediaItem, setPreviewMediaItem] = useState(null);
@@ -825,8 +844,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           ...formData,
           star_doctors: nextList
         });
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        triggerSaveSuccess(3500);
       } catch (err) {
         console.warn('Auto-save star doctor failed:', err);
       }
@@ -858,9 +876,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const handleConfirmDeleteDoctor = async () => {
     const doc = deleteDoctorModalState.doctor;
     if (!doc) return;
-    const docId = doc.id || doc._id;
     try {
-      await deleteDoctor(docId);
+      await deleteDoctor(doc);
       setFormData(prev => ({
         ...prev,
         star_doctors: prev.star_doctors.filter(sd => !isDoctorInStarList(doc, [sd]))
@@ -987,8 +1004,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           ...formData,
           reels: updatedReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
         });
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        triggerSaveSuccess(3500);
       } catch (err) {
         console.warn('Auto-save reel deletion error:', err);
       }
@@ -1028,8 +1044,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           ...formData,
           youtube_videos: updatedVideos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim())))
         });
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
+        triggerSaveSuccess(3500);
       } catch (err) {
         console.warn('Auto-save video deletion error:', err);
       }
@@ -1255,11 +1270,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
       const targetHospId = hospital?._id || hospitalId || hospital?.id;
       await updateHospital(targetHospId, payload);
-      setSaveSuccess(true);
+      triggerSaveSuccess(5000);
       if (typeof refreshHospitals === 'function') {
         refreshHospitals();
       }
-      setTimeout(() => setSaveSuccess(false), 5000);
     } catch (err) {
       console.error('Error updating hospital profile:', err);
       setErrorMessage(err.message || 'Failed to update hospital. Please check backend connection.');

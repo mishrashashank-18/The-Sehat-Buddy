@@ -432,11 +432,16 @@ export const addDoctorByHospital = async (req, res) => {
     } else {
       const docName = name && name.trim() ? name.trim() : ('Dr. ' + cleanEmail.split('@')[0].replace(/[._-]/g, ' '));
       const temporaryPassword = generateTemporaryPassword();
+      const newDocId = new mongoose.Types.ObjectId();
+      const docSpec = specialization || req.body.specialty || 'General Medicine';
       doctor = await Doctor.create({
+        _id: newDocId,
+        id: newDocId.toString(),
         name: docName,
         email: cleanEmail,
         password: temporaryPassword,
-        specialization: specialization || 'General Medicine',
+        specialization: docSpec,
+        specialty: docSpec,
         experience: Number(experience) || 5,
         fees: Number(fees) || 500,
         price: Number(fees) || 500,
@@ -485,6 +490,7 @@ export const addDoctorByHospital = async (req, res) => {
 
 export const getDoctors = async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     const doctors = await Doctor.find({}).select('-password -slots_booked');
     res.json({ success: true, data: doctors });
   } catch (error) {
@@ -494,6 +500,7 @@ export const getDoctors = async (req, res) => {
 
 export const getDoctorById = async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     let doctor = null;
     const reqId = String(req.params.id).trim();
     if (mongoose.Types.ObjectId.isValid(reqId)) {
@@ -793,10 +800,55 @@ export const updateDoctorProfile = async (req, res) => {
       });
     }
 
+    // Handle Doctor Email update
+    let emailChanged = false;
+    let temporaryPassword = null;
+    if (req.body.email) {
+      const oldEmail = (doctor.email || '').toLowerCase().trim();
+      const newEmail = String(req.body.email).toLowerCase().trim();
+      if (newEmail && newEmail !== oldEmail) {
+        const duplicate = await Doctor.findOne({ email: newEmail, _id: { $ne: doctor._id } });
+        if (duplicate) {
+          return res.status(400).json({
+            success: false,
+            message: `Email ${newEmail} is already registered to another doctor (${duplicate.name}).`
+          });
+        }
+        temporaryPassword = generateTemporaryPassword();
+        doctor.email = newEmail;
+        doctor.password = temporaryPassword;
+        doctor.isFirstLogin = true;
+        doctor.passwordSet = false;
+        doctor.failedLoginAttempts = 0;
+        doctor.lockUntil = null;
+        doctor.markModified('email');
+        doctor.markModified('password');
+        doctor.markModified('isFirstLogin');
+        doctor.markModified('passwordSet');
+        emailChanged = true;
+
+        if (oldEmail) {
+          await Hospital.updateMany(
+            { 'staff_doctors.email': oldEmail },
+            {
+              $set: { 'staff_doctors.$.email': newEmail },
+              $pull: { staff_emails: oldEmail }
+            }
+          ).catch(() => {});
+          if (doctor.hospital) {
+            await Hospital.updateMany(
+              { name: doctor.hospital },
+              { $addToSet: { staff_emails: newEmail } }
+            ).catch(() => {});
+          }
+        }
+      }
+    }
+
     // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
     const allowedFields = [
       'name', 'specialization', 'specialty', 'experience', 'jobTitle', 'about', 'fees', 'price',
-      'address', 'hospital', 'qualifications', 'degree', 'contact_number', 'instagram',
+      'address', 'hospital', 'qualifications', 'degree', 'contact_number', 'phone', 'instagram',
       'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus',
       'licenseNumber', 'awards', 'certifications', 'memberships',
       'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews', 'isStarDoctor',
@@ -823,6 +875,10 @@ export const updateDoctorProfile = async (req, res) => {
           doctor.specialty = req.body.specialty || req.body.specialization;
         } else if (field === 'image') {
           doctor.image = req.body.image;
+        } else if (field === 'phone' || field === 'contact_number') {
+          const ph = String(req.body.phone !== undefined ? req.body.phone : req.body.contact_number).trim();
+          doctor.phone = ph;
+          doctor.contact_number = ph;
         } else if (field === 'slotDuration') {
           const durNum = Number(req.body.slotDuration);
           doctor.slotDuration = !isNaN(durNum) ? durNum : (doctor.slotDuration || 20);
@@ -948,8 +1004,28 @@ export const updateDoctorProfile = async (req, res) => {
     delete docObj.otpExpires;
     delete docObj.otpAttempts;
 
+    if (emailChanged && temporaryPassword) {
+      try {
+        await sendDoctorWelcomeEmail({
+          doctor: updated,
+          temporaryPassword,
+          hospitalName: updated.hospital || req.body.hospital || 'The Sehat Buddy Network'
+        });
+      } catch (emailErr) {
+        console.error('Failed to send credential email to updated doctor email:', emailErr.message);
+      }
+    }
+
     broadcastDbChange('doctors', 'update', docObj._id, docObj);
-    return res.json({ success: true, message: 'Doctor profile updated', data: docObj });
+    return res.json({
+      success: true,
+      message: emailChanged
+        ? `Doctor email updated to ${docObj.email} and temporary password sent successfully!`
+        : 'Doctor profile updated',
+      data: docObj,
+      temporaryPassword: temporaryPassword || undefined,
+      emailChanged
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -1045,6 +1121,23 @@ export const deleteDoctorProfile = async (req, res) => {
       broadcastDbChange('hospitals', 'update', null);
     } catch (hospErr) {
       console.warn('Could not clean up doctor from hospital references:', hospErr.message);
+    }
+
+    // Permanently remove associated appointments from database
+    try {
+      await Appointment.deleteMany({
+        $or: [
+          { doctorId: docId },
+          { doctorId: docId.toString() },
+          ...(doctor.id ? [{ doctorId: doctor.id }] : []),
+          { 'doctor.email': docEmail },
+          { 'doctor.id': docId.toString() },
+          ...(doctor.id ? [{ 'doctor.id': doctor.id }] : [])
+        ]
+      });
+      broadcastDbChange('appointments', 'delete', null);
+    } catch (aptErr) {
+      console.warn('Could not clean up appointments for deleted doctor:', aptErr.message);
     }
 
     broadcastDbChange('doctors', 'delete', docId);

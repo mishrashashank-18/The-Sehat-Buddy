@@ -1,5 +1,6 @@
 import Review from '../models/Review.js';
 import Hospital from '../models/Hospital.js';
+import Doctor from '../models/Doctor.js';
 import mongoose from 'mongoose';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 
@@ -34,9 +35,68 @@ export const syncHospitalRating = async (targetId, targetName) => {
       hospital.rating = newRating;
       hospital.reviews = newReviews;
       broadcastDbChange('hospitals', 'update', hospital._id, hospital);
+    } else {
+      await Hospital.updateOne(
+        { _id: hospital._id },
+        { $set: { rating: 4.5, reviews: '0 Reviews' } }
+      );
+      hospital.rating = 4.5;
+      hospital.reviews = '0 Reviews';
+      broadcastDbChange('hospitals', 'update', hospital._id, hospital);
     }
   } catch (err) {
     console.error('Error syncing hospital rating:', err);
+  }
+};
+
+// Helper to keep Doctor aggregate rating & review count synced with verified reviews
+export const syncDoctorRating = async (targetId, targetName) => {
+  try {
+    let doctor = null;
+    if (targetId && mongoose.Types.ObjectId.isValid(targetId)) {
+      doctor = await Doctor.findById(targetId);
+    }
+    if (!doctor && targetId) {
+      doctor = await Doctor.findOne({ id: String(targetId) });
+    }
+    if (!doctor && targetName) {
+      const cleanName = targetName.trim().replace(/^dr\.?\s+/i, '');
+      doctor = await Doctor.findOne({ name: new RegExp(cleanName, 'i') });
+    }
+    if (!doctor) return;
+
+    const docReviews = await Review.find({
+      targetType: 'doctor',
+      status: { $ne: 'rejected' },
+      $or: [
+        { targetId: String(doctor._id) },
+        ...(doctor.id ? [{ targetId: String(doctor.id) }] : []),
+        { targetName: new RegExp(doctor.name.replace(/^dr\.?\s+/i, '').trim(), 'i') }
+      ]
+    });
+
+    if (docReviews.length > 0) {
+      const avg = docReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / docReviews.length;
+      const newRating = parseFloat(avg.toFixed(1));
+      const newReviews = `${docReviews.length}`;
+      await Doctor.updateOne(
+        { _id: doctor._id },
+        { $set: { rating: newRating, reviews: newReviews } }
+      );
+      doctor.rating = newRating;
+      doctor.reviews = newReviews;
+      broadcastDbChange('doctors', 'update', doctor._id, doctor);
+    } else {
+      await Doctor.updateOne(
+        { _id: doctor._id },
+        { $set: { rating: 0, reviews: '0' } }
+      );
+      doctor.rating = 0;
+      doctor.reviews = '0';
+      broadcastDbChange('doctors', 'update', doctor._id, doctor);
+    }
+  } catch (err) {
+    console.error('Error syncing doctor rating:', err);
   }
 };
 
@@ -156,11 +216,27 @@ export const createReview = async (req, res) => {
       });
     }
 
+    // Strict authentication enforcement: No patient can publish review without login
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Login required: You must be logged in to publish a review.'
+      });
+    }
+
+    // Role check: Only registered patients ('user') or system administrators ('admin') can publish reviews
+    if (req.user.role !== 'user' && req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only verified patients can publish reviews.'
+      });
+    }
+
     const review = await Review.create({
-      patientName,
-      patientCity: patientCity || 'Bengaluru',
-      userId: req.user?._id || req.user?.id || '',
-      userEmail: req.user?.email || '',
+      patientName: patientName.trim() || req.user.name || 'Verified Patient',
+      patientCity: patientCity || req.user.city || 'Bengaluru',
+      userId: req.user._id || req.user.id,
+      userEmail: req.user.email,
       targetType: targetType || 'hospital',
       targetId: targetId || '',
       targetName,
@@ -171,13 +247,15 @@ export const createReview = async (req, res) => {
       comment,
       treatment: treatment || '',
       insuranceUsed: insuranceUsed || 'None',
-      isVerified: isVerified !== undefined ? Boolean(isVerified) : true,
+      isVerified: true,
       status: 'approved' // auto-approve for seamless public experience, admin can moderate anytime
     });
 
     broadcastDbChange('reviews', 'insert', review._id, review);
     if (review.targetType === 'hospital') {
       syncHospitalRating(review.targetId, review.targetName).catch(() => {});
+    } else if (review.targetType === 'doctor') {
+      syncDoctorRating(review.targetId || review.doctorId, review.targetName || review.doctorName).catch(() => {});
     }
     res.status(201).json({ success: true, message: 'Review submitted successfully', data: review });
   } catch (error) {
@@ -218,11 +296,26 @@ export const updateReview = async (req, res) => {
 
 export const deleteReview = async (req, res) => {
   try {
-    const review = await Review.findById(req.params.id);
+    const rawId = (req.params.id || '').trim();
+    let review = null;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      review = await Review.findById(rawId);
+    }
     if (!review) {
-      return res.status(404).json({ success: false, message: 'Review not found' });
+      review = await Review.findOne({ id: rawId });
+    }
+    if (!review) {
+      const numId = Number(rawId);
+      if (!isNaN(numId)) {
+        review = await Review.findOne({ id: numId });
+      }
+    }
+    if (!review) {
+      return res.status(404).json({ success: false, message: 'Review not found in database' });
     }
 
+    // Role check: Administrator has global authority to delete any review
     if (req.user && req.user.role === 'hospital') {
       const userHospId = String(req.user.id || req.user.doc?._id || '').toLowerCase();
       const userHospName = (req.user.name || '').toLowerCase();
@@ -239,12 +332,19 @@ export const deleteReview = async (req, res) => {
     const tType = review.targetType;
     const tId = review.targetId;
     const tName = review.targetName;
+
+    // Permanently remove review from MongoDB Review collection
     await review.deleteOne();
     broadcastDbChange('reviews', 'delete', revId);
+
+    // Keep aggregates strictly in sync
     if (tType === 'hospital') {
       syncHospitalRating(tId, tName).catch(() => {});
+    } else if (tType === 'doctor') {
+      syncDoctorRating(tId, tName).catch(() => {});
     }
-    res.json({ success: true, message: 'Review deleted successfully' });
+
+    res.json({ success: true, message: 'Review deleted permanently from database' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

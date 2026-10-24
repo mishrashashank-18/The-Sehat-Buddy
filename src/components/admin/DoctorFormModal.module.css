@@ -405,3 +405,199 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Credentials, Honors & Clinical Experience */
+.credSection {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.credNav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  background: #f1f5f9;
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.credTab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.credTab:hover {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.credTabActive {
+  background: #ffffff !important;
+  color: #2563eb !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.credBadge {
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.credTabActive .credBadge {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.credCardList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.credItem {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transition: all 0.15s ease;
+}
+
+.credItem:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.credItemContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.credItemTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.credItemSub {
+  font-size: 0.8rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.credPill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.credActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.credActionBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition: all 0.15s;
+}
+
+.credActionBtn:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.credActionBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.credActionEdit:hover {
+  background: #dbeafe !important;
+  color: #2563eb !important;
+}
+
+.credActionDelete:hover {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+}
+
+.credEditBox {
+  background: #ffffff;
+  border: 1.5px solid #2563eb;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
+}
+
+.credAddBox {
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.credEmpty {
+  padding: 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.84rem;
+  font-style: italic;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
+}
+
+@media (max-width: 640px) {
+  .credNav {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

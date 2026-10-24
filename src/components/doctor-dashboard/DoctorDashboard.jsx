@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Calendar,
   Clock,
@@ -257,21 +257,29 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Live real-time PC date tracker: always pulls directly from the user's PC
   const [currentPcDate, setCurrentPcDate] = useState(() => new Date());
 
-  React.useEffect(() => {
-    const updateTimeFromPc = () => setCurrentPcDate(new Date());
-    window.addEventListener('focus', updateTimeFromPc);
-    document.addEventListener('visibilitychange', () => {
+  useEffect(() => {
+    const updateTimeFromPc = () => {
+      const now = new Date();
+      setCurrentPcDate((prev) => {
+        if (getLocalDateString(prev) !== getLocalDateString(now)) {
+          return now;
+        }
+        return prev;
+      });
+    };
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') updateTimeFromPc();
-    });
-    const interval = setInterval(updateTimeFromPc, 15000);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    const interval = setInterval(updateTimeFromPc, 30000);
     return () => {
-      window.removeEventListener('focus', updateTimeFromPc);
+      document.removeEventListener('visibilitychange', handleVisibility);
       clearInterval(interval);
     };
   }, []);
 
   const todayDateStr = React.useMemo(() => getLocalDateString(currentPcDate), [currentPcDate]);
-  const { doctors, updateDoctor, deleteDoctor, reviews, refreshReviews } = useData();
+  const { doctors, updateDoctor, deleteDoctor, reviews, refreshReviews, faqs } = useData();
 
   // Active doctor selection: strictly locks to the authenticated doctor's account
   const storedUser = React.useMemo(() => {
@@ -285,16 +293,27 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, []);
 
   const activeDoctor = React.useMemo(() => {
+    let candidate = null;
     if (storedUser && (storedUser._id || storedUser.id)) {
-      const match = doctors.find(d => matchesId(d, storedUser));
-      if (match) return match;
+      candidate = doctors.find(d => matchesId(d, storedUser));
     }
-    if (storedUser && storedUser.email) {
-      const emailMatch = doctors.find(d => (d.email || '').toLowerCase().trim() === storedUser.email.toLowerCase().trim());
-      if (emailMatch) return emailMatch;
+    if (!candidate && storedUser && storedUser.email) {
+      candidate = doctors.find(d => (d.email || '').toLowerCase().trim() === storedUser.email.toLowerCase().trim());
     }
-    if (storedUser && (storedUser.name || storedUser.role === 'doctor')) return storedUser;
-    return doctors[0] || {};
+    if (!candidate && storedUser && (storedUser.name || storedUser.role === 'doctor')) {
+      candidate = storedUser;
+    }
+    if (!candidate) {
+      candidate = doctors[0] || {};
+    }
+
+    const resolvedSpecialty = candidate.specialty || candidate.specialization || storedUser?.specialty || storedUser?.specialization || 'Cardiologist';
+    return {
+      ...candidate,
+      specialty: resolvedSpecialty,
+      specialization: resolvedSpecialty,
+      name: candidate.name || storedUser?.name || 'Doctor'
+    };
   }, [doctors, storedUser]);
 
   // Real-time verified patient reviews & rating calculation (strictly synchronized with public Doctor Profile)
@@ -308,6 +327,45 @@ const DoctorDashboard = ({ onNavigate }) => {
     const total = doctorVerifiedReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
     return (total / doctorVerifiedReviews.length).toFixed(1);
   }, [doctorVerifiedReviews]);
+
+  // Live real-time FAQs for this doctor (syncs immediately without refresh when Admin updates faqs or doctor profile)
+  const doctorLiveFaqs = React.useMemo(() => {
+    const docId = String(activeDoctor?._id || activeDoctor?.id || '');
+    const docName = (activeDoctor?.name || '').toLowerCase().trim();
+
+    // 1. FAQs from platform Admin FAQs manager targeted specifically to this doctor
+    const specificTargeted = (faqs || [])
+      .filter(f => f.isActive !== false && f.targetType === 'doctor' && (
+        (f.targetId && String(f.targetId) === docId) ||
+        (f.targetName && docName && f.targetName.toLowerCase().trim() === docName)
+      ))
+      .map(f => ({
+        q: f.question || f.q,
+        a: f.answer || f.a,
+        source: 'Admin FAQs'
+      }));
+
+    // 2. Embedded FAQs configured directly on the doctor profile by Admin
+    const embedded = (Array.isArray(activeDoctor?.faqs) && activeDoctor.faqs.length > 0)
+      ? activeDoctor.faqs.map(f => ({
+          q: f.q || f.question,
+          a: f.a || f.answer,
+          source: 'Doctor Profile'
+        }))
+      : [];
+
+    const merged = [...specificTargeted, ...embedded];
+    if (merged.length > 0) return merged;
+
+    // 3. Default standard clinical policy FAQs
+    return [
+      { q: `How can I book an appointment with ${activeDoctor.name ? (activeDoctor.name.startsWith('Dr.') ? activeDoctor.name : `Dr. ${activeDoctor.name}`) : 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
+      { q: 'What do I need to show at the clinic?', a: 'Carry a valid government photo ID, health insurance policy e-card (if claiming cashless coverage), and previous doctor prescriptions or test reports.' },
+      { q: 'Is my consultation private with the doctor?', a: 'Yes, 100%. All consultations, patient notes, and medical discussions are strictly confidential.' },
+      { q: 'Can I reschedule my appointment?', a: 'Yes, you can easily reschedule or cancel prior to your slot time through your patient account.' },
+      { q: 'Does the doctor accept health insurance or cashless claims?', a: 'Yes, consultations and hospital procedures qualify for cashless mediclaim pre-authorization with all leading TPAs.' }
+    ];
+  }, [activeDoctor, faqs]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState(() => {
@@ -466,19 +524,26 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isSavingAbout, setIsSavingAbout] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
   const [newAwardInput, setNewAwardInput] = useState('');
+  const [newAwardRecognition, setNewAwardRecognition] = useState('National Healthcare Recognition');
   const [newAwardYear, setNewAwardYear] = useState('');
   const [newCertInput, setNewCertInput] = useState('');
+  const [newCertBoard, setNewCertBoard] = useState('Accredited Medical Board');
+  const [newCertTag, setNewCertTag] = useState('Certified');
   const [newMembershipInput, setNewMembershipInput] = useState('');
+  const [newMembershipCouncil, setNewMembershipCouncil] = useState('Official Medical Council');
+  const [newMembershipStatus, setNewMembershipStatus] = useState('Active Member');
+  const [newMembershipShowStatus, setNewMembershipShowStatus] = useState(true);
   const [newCareerExpInput, setNewCareerExpInput] = useState('');
+  const [newCareerExpHospital, setNewCareerExpHospital] = useState('');
   const [newCareerExpStartYear, setNewCareerExpStartYear] = useState('');
   const [newCareerExpEndYear, setNewCareerExpEndYear] = useState('');
   const [newCareerExpIsPresent, setNewCareerExpIsPresent] = useState(false);
 
   // Inline editing states for modifying existing items
-  const [editingAward, setEditingAward] = useState({ index: null, text: '', year: '' });
-  const [editingCert, setEditingCert] = useState({ index: null, text: '' });
-  const [editingMembership, setEditingMembership] = useState({ index: null, text: '' });
-  const [editingCareerExp, setEditingCareerExp] = useState({ index: null, text: '', startYear: '', endYear: '', isPresent: false });
+  const [editingAward, setEditingAward] = useState({ index: null, text: '', recognition: 'National Healthcare Recognition', year: '' });
+  const [editingCert, setEditingCert] = useState({ index: null, text: '', board: 'Accredited Medical Board', tag: 'Certified' });
+  const [editingMembership, setEditingMembership] = useState({ index: null, title: '', council: 'Official Medical Council', status: 'Active Member', showStatus: true });
+  const [editingCareerExp, setEditingCareerExp] = useState({ index: null, role: '', hospital: '', startYear: '', endYear: '', isPresent: false });
 
   // Schedule & Time Slots Management state (persisted across refresh)
   const [slotConfigMode, setSlotConfigModeState] = useState(() => {
@@ -629,6 +694,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isEarningsBreakdownOpen, setIsEarningsBreakdownOpen] = useState(false);
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+  const scheduleDateInputRef = React.useRef(null);
 
   // Refresh reviews from DB when opening Patient Satisfaction modal
   React.useEffect(() => {
@@ -664,8 +730,12 @@ const DoctorDashboard = ({ onNavigate }) => {
   const currentLoadedDocIdRef = React.useRef(null);
   const isLocalCredentialUpdateRef = React.useRef(0);
   const isEditingAvailableDaysRef = React.useRef(false);
+  const isEditingAboutRef = React.useRef(false);
+  const isAboutDirtyRef = React.useRef(false);
   const knownAppointmentFingerprintsRef = React.useRef(new Set());
   const isInitialAppointmentsLoadedRef = React.useRef(false);
+  const lastSyncedRemoteDocRef = React.useRef(activeDoctor);
+  const isEditingFieldRef = React.useRef(null);
 
   // Reset appointment notification tracking when active doctor switches
   React.useEffect(() => {
@@ -884,17 +954,19 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, [lookupId, activeDocId, fetchRemoteAppointments, applyStatusOverrides]);
 
   // Real-time synchronization listener: broadcasts, storage events, polling & tab switching
-  React.useEffect(() => {
+  useEffect(() => {
     const handleAppointmentsSync = () => {
       fetchRemoteAppointments();
     };
 
-    window.addEventListener('sehat_appointments_changed', handleAppointmentsSync);
-    window.addEventListener('sehat_db_change', (e) => {
+    const handleDbChange = (e) => {
       if (e.detail?.collection === 'appointments') {
         fetchRemoteAppointments();
       }
-    });
+    };
+
+    window.addEventListener('sehat_appointments_changed', handleAppointmentsSync);
+    window.addEventListener('sehat_db_change', handleDbChange);
 
     const handleStorageChange = (e) => {
       const keys = getDoctorStorageKeys(activeDoctor, storedUser);
@@ -903,12 +975,18 @@ const DoctorDashboard = ({ onNavigate }) => {
           const parsed = JSON.parse(e.newValue);
           if (Array.isArray(parsed)) {
             const clean = dedupeAppointments(parsed);
-            setAppointments(applyStatusOverrides(clean));
+            setAppointments(prev => {
+              const next = applyStatusOverrides(clean);
+              return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+            });
           }
         } catch {}
       }
       if (e.key === STATUS_OVERRIDES_KEY && e.newValue) {
-        setAppointments(prev => applyStatusOverrides(prev));
+        setAppointments(prev => {
+          const next = applyStatusOverrides(prev);
+          return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+        });
       }
       if (e.key === 'sehat_buddy_appointments') {
         fetchRemoteAppointments();
@@ -928,7 +1006,10 @@ const DoctorDashboard = ({ onNavigate }) => {
               if (Array.isArray(parsed)) {
                 const clean = dedupeAppointments(parsed);
                 if (clean.length > 0) {
-                  setAppointments(applyStatusOverrides(clean));
+                  setAppointments(prev => {
+                    const next = applyStatusOverrides(clean);
+                    return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+                  });
                   break;
                 }
               }
@@ -939,7 +1020,6 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
     };
     document.addEventListener('visibilitychange', handleTabSwitch);
-    window.addEventListener('focus', handleTabSwitch);
 
     // Fallback polling every 15 seconds to ensure queue & heatmap freshness without aggressive UI flickering
     const pollInterval = setInterval(() => {
@@ -948,9 +1028,9 @@ const DoctorDashboard = ({ onNavigate }) => {
 
     return () => {
       window.removeEventListener('sehat_appointments_changed', handleAppointmentsSync);
+      window.removeEventListener('sehat_db_change', handleDbChange);
       window.removeEventListener('storage', handleStorageChange);
       document.removeEventListener('visibilitychange', handleTabSwitch);
-      window.removeEventListener('focus', handleTabSwitch);
       clearInterval(pollInterval);
     };
   }, [lookupId, activeDocId, fetchRemoteAppointments, applyStatusOverrides]);
@@ -968,6 +1048,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (!isSameDoctor || !profileForm?.name) {
       initialDoctorIdRef.current = String(currentId);
       initialDoctorEmailRef.current = currentEmail;
+      lastSyncedRemoteDocRef.current = activeDoctor;
       setProfileForm({
         ...activeDoctor,
         name: activeDoctor.name || '',
@@ -979,6 +1060,14 @@ const DoctorDashboard = ({ onNavigate }) => {
         hospital: activeDoctor.hospital || '',
         image: activeDoctor.image || '',
         about: activeDoctor.about || '',
+        phone: (() => {
+          const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+          return raw.length > 10 ? raw.slice(-10) : raw;
+        })(),
+        contact_number: (() => {
+          const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+          return raw.length > 10 ? raw.slice(-10) : raw;
+        })(),
         tags: Array.isArray(activeDoctor.tags) && activeDoctor.tags.length > 0
           ? activeDoctor.tags
           : getDefaultDoctorTags(activeDoctor),
@@ -1002,113 +1091,211 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
   }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.email]);
 
-  // Synchronize profileForm.about whenever activeDoctor.about updates from DB, SSE, or DataContext
-  React.useEffect(() => {
+  // Synchronize profileForm whenever activeDoctor updates from Admin Dashboard, DB, or SSE in realtime
+  useEffect(() => {
     if (!activeDoctor) return;
-    setProfileForm(prev => {
-      if (activeDoctor.about !== undefined && prev?.about !== activeDoctor.about && !isSavingAbout) {
-        return { ...prev, about: activeDoctor.about };
-      }
-      return prev;
-    });
-  }, [activeDoctor?.about, isSavingAbout]);
+    const prevRemote = lastSyncedRemoteDocRef.current;
+    lastSyncedRemoteDocRef.current = activeDoctor;
 
-  // Synchronize profileForm schedule & slots whenever activeDoctor updates from DB, SSE, or DataContext
-  React.useEffect(() => {
-    if (!activeDoctor) return;
+    // Skip if initial mount (useState already initialized with activeDoctor)
+    if (!prevRemote) return;
+
     setProfileForm(prev => {
       if (!prev) return activeDoctor;
       let changed = false;
       const next = { ...prev };
 
-      if (Array.isArray(activeDoctor.availableSlots) && activeDoctor.availableSlots.length > 0) {
-        if (JSON.stringify(prev.availableSlots) !== JSON.stringify(activeDoctor.availableSlots)) {
-          next.availableSlots = activeDoctor.availableSlots;
-          changed = true;
-        }
+      // 1. Name
+      if (activeDoctor.name !== prevRemote.name && activeDoctor.name && isEditingFieldRef.current !== 'name') {
+        next.name = activeDoctor.name;
+        changed = true;
       }
-      if (activeDoctor.dayWiseSlots && typeof activeDoctor.dayWiseSlots === 'object') {
-        if (JSON.stringify(prev.dayWiseSlots) !== JSON.stringify(activeDoctor.dayWiseSlots)) {
-          next.dayWiseSlots = activeDoctor.dayWiseSlots;
-          changed = true;
-        }
+
+      // 2. Specialty & Specialization
+      const incomingSpec = activeDoctor.specialization || activeDoctor.specialty || '';
+      const prevRemoteSpec = prevRemote.specialization || prevRemote.specialty || '';
+      if (incomingSpec !== prevRemoteSpec && incomingSpec && isEditingFieldRef.current !== 'specialty') {
+        next.specialty = incomingSpec;
+        next.specialization = incomingSpec;
+        changed = true;
       }
-      if (activeDoctor.dateWiseSlots && typeof activeDoctor.dateWiseSlots === 'object') {
-        if (JSON.stringify(prev.dateWiseSlots) !== JSON.stringify(activeDoctor.dateWiseSlots)) {
-          next.dateWiseSlots = activeDoctor.dateWiseSlots;
-          changed = true;
-        }
+
+      // 3. Job Title
+      if (activeDoctor.jobTitle !== undefined && activeDoctor.jobTitle !== prevRemote.jobTitle && isEditingFieldRef.current !== 'jobTitle') {
+        next.jobTitle = activeDoctor.jobTitle;
+        changed = true;
       }
-      if (Array.isArray(activeDoctor.scheduleDays) && activeDoctor.scheduleDays.length > 0) {
-        if (JSON.stringify(prev.scheduleDays) !== JSON.stringify(activeDoctor.scheduleDays)) {
-          next.scheduleDays = activeDoctor.scheduleDays;
-          changed = true;
-        }
+
+      // 4. Experience
+      const incomingExp = parseInt(activeDoctor.experience ?? activeDoctor.experienceYears, 10);
+      const prevRemoteExp = parseInt(prevRemote.experience ?? prevRemote.experienceYears, 10);
+      if (!isNaN(incomingExp) && incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
+        next.experience = incomingExp;
+        changed = true;
       }
+
+      // 5. Hospital Affiliation
+      if (activeDoctor.hospital !== undefined && activeDoctor.hospital !== prevRemote.hospital && isEditingFieldRef.current !== 'hospital') {
+        next.hospital = activeDoctor.hospital;
+        changed = true;
+      }
+
+      // 6. Degree & Qualifications
+      const incomingDegree = activeDoctor.degree || activeDoctor.qualifications || '';
+      const prevRemoteDegree = prevRemote.degree || prevRemote.qualifications || '';
+      if (incomingDegree !== prevRemoteDegree && incomingDegree && isEditingFieldRef.current !== 'degree') {
+        next.degree = incomingDegree;
+        next.qualifications = incomingDegree;
+        changed = true;
+      }
+
+      // 7. Consultation Fee / Price
+      const incomingPrice = Number(activeDoctor.fees ?? activeDoctor.price);
+      const prevRemotePrice = Number(prevRemote.fees ?? prevRemote.price);
+      if (!isNaN(incomingPrice) && incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
+        next.price = incomingPrice;
+        next.fees = incomingPrice;
+        changed = true;
+      }
+
+      // 8. Contact Phone (10 digits)
+      const rawInPhone = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+      const incomingPhone = rawInPhone.length > 10 ? rawInPhone.slice(-10) : rawInPhone;
+      const rawPrevRemotePhone = String(prevRemote.phone || prevRemote.contact_number || '').replace(/\D/g, '');
+      const prevRemotePhone = rawPrevRemotePhone.length > 10 ? rawPrevRemotePhone.slice(-10) : rawPrevRemotePhone;
+      if (incomingPhone !== prevRemotePhone && incomingPhone && isEditingFieldRef.current !== 'phone') {
+        next.phone = incomingPhone;
+        next.contact_number = incomingPhone;
+        changed = true;
+      }
+
+      // 9. License Number
+      if (activeDoctor.licenseNumber !== undefined && activeDoctor.licenseNumber !== prevRemote.licenseNumber && isEditingFieldRef.current !== 'licenseNumber') {
+        next.licenseNumber = activeDoctor.licenseNumber;
+        changed = true;
+      }
+
+      // 10. Available Days / Hours
       if (
         activeDoctor.availableDays &&
-        activeDoctor.availableDays !== prev.availableDays &&
+        activeDoctor.availableDays !== prevRemote.availableDays &&
         !isEditingAvailableDaysRef.current
       ) {
         next.availableDays = activeDoctor.availableDays;
         changed = true;
       }
-      if (activeDoctor.slotDuration && activeDoctor.slotDuration !== prev.slotDuration) {
+
+      // 11. Profile Photo / Avatar
+      if (activeDoctor.image && activeDoctor.image !== prevRemote.image) {
+        next.image = activeDoctor.image;
+        changed = true;
+      }
+
+      // 12. About
+      if (
+        activeDoctor.about !== undefined &&
+        activeDoctor.about !== prevRemote.about &&
+        !isEditingAboutRef.current &&
+        !isAboutDirtyRef.current &&
+        !isSavingAbout
+      ) {
+        next.about = activeDoctor.about;
+        changed = true;
+      }
+
+      // 13. Social Links
+      if (activeDoctor.instagram !== undefined && activeDoctor.instagram !== prevRemote.instagram && isEditingFieldRef.current !== 'instagram') {
+        next.instagram = activeDoctor.instagram;
+        changed = true;
+      }
+      if (activeDoctor.facebook !== undefined && activeDoctor.facebook !== prevRemote.facebook && isEditingFieldRef.current !== 'facebook') {
+        next.facebook = activeDoctor.facebook;
+        changed = true;
+      }
+      if (activeDoctor.linkedin !== undefined && activeDoctor.linkedin !== prevRemote.linkedin && isEditingFieldRef.current !== 'linkedin') {
+        next.linkedin = activeDoctor.linkedin;
+        changed = true;
+      }
+      if (activeDoctor.twitter !== undefined && activeDoctor.twitter !== prevRemote.twitter && isEditingFieldRef.current !== 'twitter') {
+        next.twitter = activeDoctor.twitter;
+        changed = true;
+      }
+
+      // 14. Reels & YouTube Videos
+      if (Array.isArray(activeDoctor.reels) && JSON.stringify(activeDoctor.reels) !== JSON.stringify(prevRemote.reels)) {
+        next.reels = activeDoctor.reels;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.youtube_videos) && JSON.stringify(activeDoctor.youtube_videos) !== JSON.stringify(prevRemote.youtube_videos)) {
+        next.youtube_videos = activeDoctor.youtube_videos;
+        changed = true;
+      }
+
+      // 15. Availability & Star Doctor
+      if (activeDoctor.available !== undefined && activeDoctor.available !== prevRemote.available) {
+        next.available = activeDoctor.available;
+        changed = true;
+      }
+      if (activeDoctor.isStarDoctor !== undefined && activeDoctor.isStarDoctor !== prevRemote.isStarDoctor) {
+        next.isStarDoctor = activeDoctor.isStarDoctor;
+        changed = true;
+      }
+
+      // 16. FAQs
+      if (Array.isArray(activeDoctor.faqs) && JSON.stringify(activeDoctor.faqs) !== JSON.stringify(prevRemote.faqs)) {
+        next.faqs = activeDoctor.faqs;
+        changed = true;
+      }
+
+      // 17. Schedule & Slots
+      if (Array.isArray(activeDoctor.availableSlots) && JSON.stringify(activeDoctor.availableSlots) !== JSON.stringify(prevRemote.availableSlots)) {
+        next.availableSlots = activeDoctor.availableSlots;
+        changed = true;
+      }
+      if (activeDoctor.dayWiseSlots && JSON.stringify(activeDoctor.dayWiseSlots) !== JSON.stringify(prevRemote.dayWiseSlots)) {
+        next.dayWiseSlots = activeDoctor.dayWiseSlots;
+        changed = true;
+      }
+      if (activeDoctor.dateWiseSlots && JSON.stringify(activeDoctor.dateWiseSlots) !== JSON.stringify(prevRemote.dateWiseSlots)) {
+        next.dateWiseSlots = activeDoctor.dateWiseSlots;
+        changed = true;
+      }
+      if (Array.isArray(activeDoctor.scheduleDays) && JSON.stringify(activeDoctor.scheduleDays) !== JSON.stringify(prevRemote.scheduleDays)) {
+        next.scheduleDays = activeDoctor.scheduleDays;
+        changed = true;
+      }
+      if (activeDoctor.slotDuration && activeDoctor.slotDuration !== prevRemote.slotDuration) {
         next.slotDuration = activeDoctor.slotDuration;
         changed = true;
       }
 
-      return changed ? next : prev;
-    });
-  }, [
-    activeDoctor?.availableSlots,
-    activeDoctor?.dayWiseSlots,
-    activeDoctor?.dateWiseSlots,
-    activeDoctor?.scheduleDays,
-    activeDoctor?.availableDays,
-    activeDoctor?.slotDuration
-  ]);
-
-  // Synchronize profileForm credentials (awards, certs, memberships, timeline, tags) whenever activeDoctor updates
-  React.useEffect(() => {
-    if (!activeDoctor) return;
-    if (Date.now() - isLocalCredentialUpdateRef.current < 2000) return;
-
-    setProfileForm(prev => {
-      if (!prev) return activeDoctor;
-      let changed = false;
-      const next = { ...prev };
-
-      if (Array.isArray(activeDoctor.awards) && JSON.stringify(prev.awards || []) !== JSON.stringify(activeDoctor.awards)) {
-        next.awards = activeDoctor.awards;
-        changed = true;
-      }
-      if (Array.isArray(activeDoctor.certifications) && JSON.stringify(prev.certifications || []) !== JSON.stringify(activeDoctor.certifications)) {
-        next.certifications = activeDoctor.certifications;
-        changed = true;
-      }
-      if (Array.isArray(activeDoctor.memberships) && JSON.stringify(prev.memberships || []) !== JSON.stringify(activeDoctor.memberships)) {
-        next.memberships = activeDoctor.memberships;
-        changed = true;
-      }
-      if (Array.isArray(activeDoctor.careerExperience) && JSON.stringify(prev.careerExperience || []) !== JSON.stringify(activeDoctor.careerExperience)) {
-        next.careerExperience = activeDoctor.careerExperience;
-        changed = true;
-      }
-      if (Array.isArray(activeDoctor.tags) && JSON.stringify(prev.tags || []) !== JSON.stringify(activeDoctor.tags)) {
-        next.tags = activeDoctor.tags;
-        changed = true;
+      // 18. Credentials (Awards, Certifications, Memberships, Career, Tags)
+      if (Date.now() - isLocalCredentialUpdateRef.current >= 2000) {
+        if (Array.isArray(activeDoctor.awards) && JSON.stringify(activeDoctor.awards) !== JSON.stringify(prevRemote.awards)) {
+          next.awards = activeDoctor.awards;
+          changed = true;
+        }
+        if (Array.isArray(activeDoctor.certifications) && JSON.stringify(activeDoctor.certifications) !== JSON.stringify(prevRemote.certifications)) {
+          next.certifications = activeDoctor.certifications;
+          changed = true;
+        }
+        if (Array.isArray(activeDoctor.memberships) && JSON.stringify(activeDoctor.memberships) !== JSON.stringify(prevRemote.memberships)) {
+          next.memberships = activeDoctor.memberships;
+          changed = true;
+        }
+        if (Array.isArray(activeDoctor.careerExperience) && JSON.stringify(activeDoctor.careerExperience) !== JSON.stringify(prevRemote.careerExperience)) {
+          next.careerExperience = activeDoctor.careerExperience;
+          changed = true;
+        }
+        if (Array.isArray(activeDoctor.tags) && JSON.stringify(activeDoctor.tags) !== JSON.stringify(prevRemote.tags)) {
+          next.tags = activeDoctor.tags;
+          changed = true;
+        }
       }
 
       return changed ? next : prev;
     });
-  }, [
-    activeDoctor?.awards,
-    activeDoctor?.certifications,
-    activeDoctor?.memberships,
-    activeDoctor?.careerExperience,
-    activeDoctor?.tags
-  ]);
+  }, [activeDoctor, isSavingAbout]);
 
   // Tags / Badges handlers (reflects instantly in real time)
   const handleAddTag = (e) => {
@@ -1170,24 +1357,52 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('Badges reset to default recommendations!');
   };
 
-  // Helper to parse title and year from award string
+  // Helper to parse title, recognition, and year from award item
   const parseAwardTextAndYear = (raw) => {
-    if (!raw) return { text: '', year: '' };
+    if (!raw) return { text: '', recognition: 'National Healthcare Recognition', year: '' };
+    if (typeof raw === 'object' && raw !== null) {
+      return {
+        text: raw.title || raw.name || '',
+        recognition: raw.organization || raw.subtitle || raw.recognition || 'National Healthcare Recognition',
+        year: (raw.year || raw.tag || '').toString().trim()
+      };
+    }
     let str = String(raw).trim();
     let year = '';
+    let recognition = 'National Healthcare Recognition';
 
-    const parenMatch = str.match(/\(((?:19|20)\d{2})\)/);
-    if (parenMatch) {
-      year = parenMatch[1];
-      str = str.replace(/\(((?:19|20)\d{2})\)/, '').trim();
-    } else {
-      const trailingMatch = str.match(/\b((?:19|20)\d{2})\b$/);
-      if (trailingMatch) {
-        year = trailingMatch[1];
-        str = str.replace(/\b((?:19|20)\d{2})\b$/, '').trim();
+    if (str.includes(' - ')) {
+      const parts = str.split(' - ');
+      str = parts[0].trim();
+      recognition = parts.slice(1).join(' - ').trim();
+    }
+
+    if (recognition.includes('(') && recognition.includes(')')) {
+      const match = recognition.match(/\((.*?)\)/);
+      if (match) {
+        year = match[1].trim();
+        recognition = recognition.replace(/\(.*?\)/, '').trim();
+      }
+    } else if (str.includes('(') && str.includes(')')) {
+      const match = str.match(/\((.*?)\)/);
+      if (match) {
+        year = match[1].trim();
+        str = str.replace(/\(.*?\)/, '').trim();
       }
     }
-    return { text: str, year };
+
+    if (!year) {
+      const yearMatch = (recognition || str).match(/\b((?:19|20)\d{2})\b$/);
+      if (yearMatch) {
+        year = yearMatch[1];
+        if (recognition.match(/\b((?:19|20)\d{2})\b$/)) {
+          recognition = recognition.replace(/\b((?:19|20)\d{2})\b$/, '').trim();
+        } else {
+          str = str.replace(/\b((?:19|20)\d{2})\b$/, '').trim();
+        }
+      }
+    }
+    return { text: str, recognition: recognition || 'National Healthcare Recognition', year };
   };
 
   // Awards handlers
@@ -1196,38 +1411,41 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (!newAwardInput.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
-    const title = newAwardInput.trim();
-    const year = newAwardYear.trim();
-    let finalAward = title;
-    if (year && !title.includes(year)) {
-      finalAward = `${title} (${year})`;
-    }
-    const updated = [...current, finalAward];
+    const newAwardObj = {
+      title: newAwardInput.trim(),
+      organization: (newAwardRecognition.trim() || 'National Healthcare Recognition'),
+      subtitle: (newAwardRecognition.trim() || 'National Healthcare Recognition'),
+      recognition: (newAwardRecognition.trim() || 'National Healthcare Recognition'),
+      year: newAwardYear.trim()
+    };
+    const updated = [...current, newAwardObj];
     setProfileForm(prev => ({ ...prev, awards: updated }));
     setNewAwardInput('');
+    setNewAwardRecognition('National Healthcare Recognition');
     setNewAwardYear('');
     updateDoctor(activeDoctor._id || activeDoctor.id, { awards: updated });
     showToast('Award added and saved!');
   };
 
   const handleStartEditAward = (index, rawAward) => {
-    const { text, year } = parseAwardTextAndYear(rawAward);
-    setEditingAward({ index, text, year });
+    const { text, recognition, year } = parseAwardTextAndYear(rawAward);
+    setEditingAward({ index, text, recognition, year });
   };
 
   const handleUpdateAward = (index) => {
     if (!editingAward.text.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.awards) ? profileForm.awards : [];
-    const title = editingAward.text.trim();
-    const year = (editingAward.year || '').trim();
-    let finalAward = title;
-    if (year && !title.includes(year)) {
-      finalAward = `${title} (${year})`;
-    }
-    const updated = current.map((item, i) => (i === index ? finalAward : item));
+    const updatedAwardObj = {
+      title: editingAward.text.trim(),
+      organization: (editingAward.recognition.trim() || 'National Healthcare Recognition'),
+      subtitle: (editingAward.recognition.trim() || 'National Healthcare Recognition'),
+      recognition: (editingAward.recognition.trim() || 'National Healthcare Recognition'),
+      year: (editingAward.year || '').trim()
+    };
+    const updated = current.map((item, i) => (i === index ? updatedAwardObj : item));
     setProfileForm(prev => ({ ...prev, awards: updated }));
-    setEditingAward({ index: null, text: '', year: '' });
+    setEditingAward({ index: null, text: '', recognition: 'National Healthcare Recognition', year: '' });
     updateDoctor(activeDoctor._id || activeDoctor.id, { awards: updated });
     showToast('Award modified successfully!');
   };
@@ -1249,26 +1467,84 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('All awards deleted.');
   };
 
+  // Helper to parse title, board, and tag from certification item
+  const parseCertTextAndBoard = (raw) => {
+    if (!raw) return { text: '', board: 'Accredited Medical Board', tag: 'Certified' };
+    if (typeof raw === 'object' && raw !== null) {
+      return {
+        text: raw.title || raw.name || '',
+        board: raw.board || raw.subtitle || raw.authority || 'Accredited Medical Board',
+        tag: raw.tag || raw.status || 'Certified'
+      };
+    }
+    let str = String(raw).trim();
+    let tag = 'Certified';
+    let board = 'Accredited Medical Board';
+
+    if (str.includes(' - ')) {
+      const parts = str.split(' - ');
+      str = parts[0].trim();
+      board = parts.slice(1).join(' - ').trim();
+    }
+
+    if (board.includes('(') && board.includes(')')) {
+      const match = board.match(/\((.*?)\)/);
+      if (match) {
+        tag = match[1].trim();
+        board = board.replace(/\(.*?\)/, '').trim();
+      }
+    } else if (str.includes('(') && str.includes(')')) {
+      const match = str.match(/\((.*?)\)/);
+      if (match) {
+        tag = match[1].trim();
+        str = str.replace(/\(.*?\)/, '').trim();
+      }
+    }
+
+    return { text: str, board: board || 'Accredited Medical Board', tag };
+  };
+
   // Certifications handlers
   const handleAddCert = (e) => {
     e?.preventDefault();
     if (!newCertInput.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
-    const updated = [...current, newCertInput.trim()];
+    const newCertObj = {
+      title: newCertInput.trim(),
+      board: (newCertBoard.trim() || 'Accredited Medical Board'),
+      subtitle: (newCertBoard.trim() || 'Accredited Medical Board'),
+      authority: (newCertBoard.trim() || 'Accredited Medical Board'),
+      tag: (newCertTag.trim() || 'Certified')
+    };
+    const updated = [...current, newCertObj];
     setProfileForm(prev => ({ ...prev, certifications: updated }));
     setNewCertInput('');
+    setNewCertBoard('Accredited Medical Board');
+    setNewCertTag('Certified');
     updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: updated });
     showToast('Certificate added and saved!');
+  };
+
+  const handleStartEditCert = (index, rawCert) => {
+    const { text, board, tag } = parseCertTextAndBoard(rawCert);
+    setEditingCert({ index, text, board, tag });
   };
 
   const handleUpdateCert = (index) => {
     if (!editingCert.text.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.certifications) ? profileForm.certifications : [];
-    const updated = current.map((item, i) => (i === index ? editingCert.text.trim() : item));
+    const updatedCertObj = {
+      title: editingCert.text.trim(),
+      board: (editingCert.board.trim() || 'Accredited Medical Board'),
+      subtitle: (editingCert.board.trim() || 'Accredited Medical Board'),
+      authority: (editingCert.board.trim() || 'Accredited Medical Board'),
+      tag: (editingCert.tag.trim() || 'Certified')
+    };
+    const updated = current.map((item, i) => (i === index ? updatedCertObj : item));
     setProfileForm(prev => ({ ...prev, certifications: updated }));
-    setEditingCert({ index: null, text: '' });
+    setEditingCert({ index: null, text: '', board: 'Accredited Medical Board', tag: 'Certified' });
     updateDoctor(activeDoctor._id || activeDoctor.id, { certifications: updated });
     showToast('Certificate modified successfully!');
   };
@@ -1290,26 +1566,77 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('All certificates deleted.');
   };
 
-  // Memberships handlers
+  // Memberships handlers & helpers
+  const formatMembershipForDisplay = (item) => {
+    if (typeof item === 'object' && item !== null) {
+      return {
+        title: item.title || item.name || '',
+        council: item.council || item.subtitle || 'Official Medical Council',
+        status: item.status !== undefined ? item.status : (item.tag || 'Active Member'),
+        showStatus: item.showStatus !== undefined ? item.showStatus : true
+      };
+    }
+    const str = String(item).trim();
+    let title = str;
+    let status = 'Active Member';
+    if (str.includes(' - ')) {
+      const parts = str.split(' - ');
+      title = parts[0].trim();
+      status = parts.slice(1).join(' - ').trim();
+    }
+    return {
+      title,
+      council: 'Official Medical Council',
+      status,
+      showStatus: true
+    };
+  };
+
+  const startEditingMembership = (item, idx) => {
+    const formatted = formatMembershipForDisplay(item);
+    setEditingMembership({
+      index: idx,
+      title: formatted.title,
+      council: formatted.council,
+      status: formatted.status,
+      showStatus: formatted.showStatus
+    });
+  };
+
   const handleAddMembership = (e) => {
     e?.preventDefault();
     if (!newMembershipInput.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
-    const updated = [...current, newMembershipInput.trim()];
+    const newMemObj = {
+      title: newMembershipInput.trim(),
+      council: (newMembershipCouncil.trim() || 'Official Medical Council'),
+      status: (newMembershipStatus.trim() || 'Active Member'),
+      showStatus: !!newMembershipShowStatus
+    };
+    const updated = [...current, newMemObj];
     setProfileForm(prev => ({ ...prev, memberships: updated }));
     setNewMembershipInput('');
+    setNewMembershipCouncil('Official Medical Council');
+    setNewMembershipStatus('Active Member');
+    setNewMembershipShowStatus(true);
     updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: updated });
     showToast('Membership added and saved!');
   };
 
   const handleUpdateMembership = (index) => {
-    if (!editingMembership.text.trim()) return;
+    if (!editingMembership.title.trim()) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.memberships) ? profileForm.memberships : [];
-    const updated = current.map((item, i) => (i === index ? editingMembership.text.trim() : item));
+    const updatedMemObj = {
+      title: editingMembership.title.trim(),
+      council: (editingMembership.council.trim() || 'Official Medical Council'),
+      status: (editingMembership.status.trim() || 'Active Member'),
+      showStatus: !!editingMembership.showStatus
+    };
+    const updated = current.map((item, i) => (i === index ? updatedMemObj : item));
     setProfileForm(prev => ({ ...prev, memberships: updated }));
-    setEditingMembership({ index: null, text: '' });
+    setEditingMembership({ index: null, title: '', council: 'Official Medical Council', status: 'Active Member', showStatus: true });
     updateDoctor(activeDoctor._id || activeDoctor.id, { memberships: updated });
     showToast('Membership modified successfully!');
   };
@@ -1331,34 +1658,115 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('All memberships deleted.');
   };
 
-  // Career experience timeline handlers
+  // Career experience timeline helpers & handlers
+  const formatCareerExpForDisplay = (item, defaultHospital = '') => {
+    if (typeof item === 'object' && item !== null) {
+      const role = (item.role || item.title || '').trim();
+      const hospital = (item.hospital !== undefined ? item.hospital : defaultHospital || '').trim();
+      const startYear = (item.startYear || '').toString().trim();
+      const isPresent = !!item.isPresent;
+      const endYear = isPresent ? '' : (item.endYear || '').toString().trim();
+      let yearText = '';
+      if (isPresent) {
+        yearText = startYear ? `${startYear} - Present` : 'Present';
+      } else if (startYear && endYear) {
+        yearText = `${startYear} - ${endYear}`;
+      } else if (startYear) {
+        yearText = startYear;
+      } else if (endYear) {
+        yearText = endYear;
+      }
+      return { role, hospital, startYear, endYear, isPresent, yearText };
+    }
+
+    const str = String(item || '').trim();
+    let textWithoutYears = str;
+    let startYear = '';
+    let endYear = '';
+    let isPresent = false;
+
+    if (str.includes('(') && str.includes(')')) {
+      const match = str.match(/\((.*?)\)/);
+      if (match) {
+        const yearPart = match[1].trim();
+        textWithoutYears = str.replace(/\(.*?\)/, '').trim();
+        if (yearPart.toLowerCase().includes('present')) {
+          isPresent = true;
+          const yMatch = yearPart.match(/(\d{4})/);
+          if (yMatch) startYear = yMatch[1];
+        } else if (yearPart.includes('-') || yearPart.includes('–')) {
+          const yParts = yearPart.split(/[-–]/).map(s => s.trim());
+          startYear = yParts[0] || '';
+          endYear = yParts[1] || '';
+        } else {
+          startYear = yearPart;
+        }
+      }
+    } else if (str.toLowerCase().includes('present')) {
+      isPresent = true;
+      textWithoutYears = str.replace(/present/i, '').replace(/[-–()]/g, '').trim();
+    }
+
+    let role = textWithoutYears;
+    let hospital = defaultHospital || '';
+    if (textWithoutYears.includes(' - ')) {
+      const parts = textWithoutYears.split(' - ');
+      role = parts[0].trim();
+      hospital = parts.slice(1).join(' - ').trim();
+    }
+
+    let yearText = '';
+    if (isPresent) {
+      yearText = startYear ? `${startYear} - Present` : 'Present';
+    } else if (startYear && endYear) {
+      yearText = `${startYear} - ${endYear}`;
+    } else if (startYear) {
+      yearText = startYear;
+    } else if (endYear) {
+      yearText = endYear;
+    }
+
+    return { role, hospital, startYear, endYear, isPresent, yearText };
+  };
+
+  const handleStartEditCareerExp = (index, item) => {
+    const formatted = formatCareerExpForDisplay(item, activeDoctor?.hospital);
+    setEditingCareerExp({
+      index,
+      role: formatted.role,
+      hospital: formatted.hospital,
+      startYear: formatted.startYear,
+      endYear: formatted.endYear,
+      isPresent: formatted.isPresent
+    });
+  };
+
   const handleAddCareerExp = (e) => {
     e?.preventDefault();
     let roleText = newCareerExpInput.trim();
     if (!roleText) return;
     isLocalCredentialUpdateRef.current = Date.now();
 
-    // Strip pre-existing parenthesis from role text to cleanly format
+    // Clean pre-existing parenthesis if user entered them in role
     roleText = roleText.replace(/\(.*?\)/g, '').trim();
 
-    let finalStr = roleText;
+    const hospitalText = (newCareerExpHospital.trim() || activeDoctor?.hospital || '').trim();
     const startY = newCareerExpStartYear.trim();
     const endY = newCareerExpEndYear.trim();
 
-    if (newCareerExpIsPresent) {
-      finalStr = startY ? `${roleText} (${startY} - Present)` : `${roleText} (Present)`;
-    } else if (startY && endY) {
-      finalStr = `${roleText} (${startY} - ${endY})`;
-    } else if (startY) {
-      finalStr = `${roleText} (${startY})`;
-    } else if (endY) {
-      finalStr = `${roleText} (${endY})`;
-    }
+    const newExpObj = {
+      role: roleText,
+      hospital: hospitalText,
+      startYear: startY,
+      endYear: newCareerExpIsPresent ? '' : endY,
+      isPresent: !!newCareerExpIsPresent
+    };
 
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    const updated = newCareerExpIsPresent ? [finalStr, ...current] : [...current, finalStr];
+    const updated = newCareerExpIsPresent ? [newExpObj, ...current] : [...current, newExpObj];
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
     setNewCareerExpInput('');
+    setNewCareerExpHospital('');
     setNewCareerExpStartYear('');
     setNewCareerExpEndYear('');
     setNewCareerExpIsPresent(false);
@@ -1366,65 +1774,28 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('Hospital timeline role added!');
   };
 
-  const handleStartEditCareerExp = (index, fullStr) => {
-    const { text, startYear, endYear, isPresent } = (() => {
-      let text = fullStr;
-      let startYear = '';
-      let endYear = '';
-      let isPresent = false;
-
-      if (fullStr.includes('(') && fullStr.includes(')')) {
-        const match = fullStr.match(/\((.*?)\)/);
-        if (match) {
-          const yearPart = match[1].trim();
-          text = fullStr.replace(/\(.*?\)/, '').trim();
-          if (yearPart.toLowerCase().includes('present')) {
-            isPresent = true;
-            const yMatch = yearPart.match(/(\d{4})/);
-            if (yMatch) startYear = yMatch[1];
-          } else if (yearPart.includes('-') || yearPart.includes('–')) {
-            const yParts = yearPart.split(/[-–]/).map(s => s.trim());
-            startYear = yParts[0] || '';
-            endYear = yParts[1] || '';
-          } else {
-            startYear = yearPart;
-          }
-        }
-      } else if (fullStr.toLowerCase().includes('present')) {
-        isPresent = true;
-        text = fullStr.replace(/present/i, '').replace(/[-–()]/g, '').trim();
-      }
-      return { text, startYear, endYear, isPresent };
-    })();
-    setEditingCareerExp({ index, text, startYear, endYear, isPresent });
-  };
-
   const handleUpdateCareerExp = (index) => {
-    let roleText = (editingCareerExp.text || '').trim();
+    let roleText = (editingCareerExp.role || '').trim();
     if (!roleText) return;
     isLocalCredentialUpdateRef.current = Date.now();
 
-    // Strip pre-existing parenthesis from role text to cleanly format
     roleText = roleText.replace(/\(.*?\)/g, '').trim();
-
-    let finalStr = roleText;
+    const hospitalText = (editingCareerExp.hospital || '').trim();
     const startY = (editingCareerExp.startYear || '').trim();
     const endY = (editingCareerExp.endYear || '').trim();
 
-    if (editingCareerExp.isPresent) {
-      finalStr = startY ? `${roleText} (${startY} - Present)` : `${roleText} (Present)`;
-    } else if (startY && endY) {
-      finalStr = `${roleText} (${startY} - ${endY})`;
-    } else if (startY) {
-      finalStr = `${roleText} (${startY})`;
-    } else if (endY) {
-      finalStr = `${roleText} (${endY})`;
-    }
+    const updatedExpObj = {
+      role: roleText,
+      hospital: hospitalText,
+      startYear: startY,
+      endYear: editingCareerExp.isPresent ? '' : endY,
+      isPresent: !!editingCareerExp.isPresent
+    };
 
     const current = Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : [];
-    const updated = current.map((item, i) => (i === index ? finalStr : item));
+    const updated = current.map((item, i) => (i === index ? updatedExpObj : item));
     setProfileForm(prev => ({ ...prev, careerExperience: updated }));
-    setEditingCareerExp({ index: null, text: '', startYear: '', endYear: '', isPresent: false });
+    setEditingCareerExp({ index: null, role: '', hospital: '', startYear: '', endYear: '', isPresent: false });
     updateDoctor(activeDoctor._id || activeDoctor.id, { careerExperience: updated });
     showToast('Timeline role modified successfully!');
   };
@@ -2097,6 +2468,8 @@ const DoctorDashboard = ({ onNavigate }) => {
       _id: activeDoctor._id,
       id: activeDoctor.id,
       email: activeDoctor.email,
+      phone: (profileForm.phone !== undefined ? profileForm.phone : (profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || '')),
+      contact_number: (profileForm.phone !== undefined ? profileForm.phone : (profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || '')),
       name: profileForm.name || activeDoctor.name || 'Doctor',
       specialization: profileForm.specialty || profileForm.specialization || 'General Medicine',
       specialty: profileForm.specialty || profileForm.specialization || 'General Medicine',
@@ -2105,14 +2478,18 @@ const DoctorDashboard = ({ onNavigate }) => {
       experience: parseInt(profileForm.experience, 10) || 0,
       jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant',
       licenseNumber: profileForm.licenseNumber || '',
+      hospital: profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || ''),
+      degree: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || 'MBBS',
+      qualifications: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || 'MBBS',
+      image: profileForm.image || activeDoctor.image || '',
       about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
       awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
       certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : (Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : []),
       memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : (Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : []),
       careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : (Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []),
       tags: Array.isArray(profileForm.tags) ? profileForm.tags : (Array.isArray(activeDoctor.tags) ? activeDoctor.tags : []),
-      reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : (Array.isArray(profileForm.reels) ? profileForm.reels : []),
-      youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : (Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : []),
+      reels: Array.isArray(profileForm.reels) ? profileForm.reels : (Array.isArray(activeDoctor.reels) ? activeDoctor.reels : []),
+      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : (Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []),
       availableDays: profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
       scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : (activeDoctor.scheduleDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
       availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : (activeDoctor.availableSlots || []),
@@ -2122,15 +2499,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     };
 
     await updateDoctor(docId, payload);
-    // Update localStorage user object so about (and other fields) survive refresh
+    isAboutDirtyRef.current = false;
+    isEditingAboutRef.current = false;
+    // Update localStorage user object so all fields survive refresh
     try {
       const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
       const stored = rawStored ? JSON.parse(rawStored) : {};
       if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
-        stored.about = payload.about;
-        stored.name = payload.name;
-        stored.specialization = payload.specialization;
-        stored.specialty = payload.specialty;
+        Object.assign(stored, payload);
         stored.role = 'doctor';
         localStorage.setItem('doctor_user', JSON.stringify(stored));
         localStorage.setItem('user', JSON.stringify(stored));
@@ -2141,6 +2517,15 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Save About Section directly
   const handleSaveAbout = async () => {
+    const currentAbout = (profileForm.about || '').trim();
+    const savedAbout = (activeDoctor?.about || '').trim();
+
+    // If no changes have been made, do not perform unnecessary write
+    if (!isAboutDirtyRef.current && currentAbout === savedAbout) {
+      showToast('About section is already up to date!');
+      return;
+    }
+
     setIsSavingAbout(true);
     try {
       const docId = activeDoctor._id || activeDoctor.id;
@@ -2151,6 +2536,8 @@ const DoctorDashboard = ({ onNavigate }) => {
         email: activeDoctor.email,
         about: aboutText
       });
+      isAboutDirtyRef.current = false;
+      isEditingAboutRef.current = false;
       // Update localStorage user object so it survives refresh
       try {
         const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
@@ -2196,6 +2583,8 @@ const DoctorDashboard = ({ onNavigate }) => {
       instagram: '',
       facebook: ''
     };
+    isAboutDirtyRef.current = false;
+    isEditingAboutRef.current = false;
     setProfileForm(prev => ({ ...prev, ...cleared }));
     await updateDoctor(activeDoctor._id || activeDoctor.id, cleared);
     setIsResetModalOpen(false);
@@ -2207,7 +2596,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
     try {
-      await deleteDoctor(docId);
+      await deleteDoctor(activeDoctor);
       setIsDeleteModalOpen(false);
       showToast('Doctor profile deleted successfully.');
       if (storedUser && String(storedUser._id || storedUser.id) === String(docId)) {
@@ -2249,10 +2638,26 @@ const DoctorDashboard = ({ onNavigate }) => {
   });
 
   const [toastMessage, setToastMessage] = useState('');
-  const showToast = (msg) => {
+  const toastTimeoutRef = useRef(null);
+
+  const showToast = useCallback((msg, duration = 3500) => {
+    if (!msg) return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
-  };
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage('');
+      toastTimeoutRef.current = null;
+    }, duration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   // Appointment status actions
   const updateAppointmentStatus = async (id, newStatus) => {
@@ -2810,13 +3215,35 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, [dailyEarningsMap, todayDateStr]);
 
   // Filtered appointments
-  const filteredAppointments = appointments.filter(apt => {
-    if (appointmentFilter === 'all') return true;
-    if (appointmentFilter === 'today') return isTodayAppointment(apt) || apt.date === 'Today';
-    if (appointmentFilter === 'confirmed') return apt.status === 'Confirmed' || apt.status === 'In-Progress';
-    if (appointmentFilter === 'completed') return apt.status === 'Completed';
-    return true;
-  });
+  const filteredAppointments = useMemo(() => {
+    return appointments.filter(apt => {
+      if (appointmentFilter === 'all') return true;
+      if (appointmentFilter === 'today') return isTodayAppointment(apt) || apt.date === 'Today';
+      if (appointmentFilter === 'confirmed') return apt.status === 'Confirmed' || apt.status === 'In-Progress';
+      if (appointmentFilter === 'completed') return apt.status === 'Completed';
+      return true;
+    });
+  }, [appointments, appointmentFilter, isTodayAppointment]);
+
+  // Clinic timing display info
+  const clinicTimingInfo = useMemo(() => {
+    const rawTiming = String(activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)').trim();
+    let daysText = rawTiming;
+    let hoursText = null;
+
+    const parenMatch = rawTiming.match(/^(.*?)\s*\((.*?)\)$/);
+    if (parenMatch) {
+      daysText = parenMatch[1].trim();
+      hoursText = parenMatch[2].trim();
+    } else if (rawTiming.includes(':')) {
+      const parts = rawTiming.split(':');
+      daysText = parts[0].trim();
+      hoursText = parts.slice(1).join(':').trim();
+    }
+
+    const timingSub = hoursText || `${activeDoctor?.slotDuration || 20} mins slot`;
+    return { rawTiming, daysText, timingSub };
+  }, [activeDoctor?.availableDays, activeDoctor?.slotDuration]);
 
   return (
     <div className={styles.dashboardContainer}>
@@ -2931,8 +3358,10 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
             <div className={styles.doctorMeta}>
               <div className={styles.nameRow}>
-                <h2 title={activeDoctor.name || 'Doctor'}>{activeDoctor.name}</h2>
-                <span className={styles.specialtyPill} title={activeDoctor.specialty}>{activeDoctor.specialty}</span>
+                <h2 title={activeDoctor.name || 'Doctor'}>{activeDoctor.name || 'Doctor'}</h2>
+                {activeDoctor.specialty && (
+                  <span className={styles.specialtyPill} title={activeDoctor.specialty}>{activeDoctor.specialty}</span>
+                )}
               </div>
               <p
                 className={styles.degreesText}
@@ -3045,46 +3474,26 @@ const DoctorDashboard = ({ onNavigate }) => {
             </div>
           </div>
 
-          {(() => {
-            const rawTiming = String(activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)').trim();
-            let daysText = rawTiming;
-            let hoursText = null;
-
-            const parenMatch = rawTiming.match(/^(.*?)\s*\((.*?)\)$/);
-            if (parenMatch) {
-              daysText = parenMatch[1].trim();
-              hoursText = parenMatch[2].trim();
-            } else if (rawTiming.includes(':')) {
-              const parts = rawTiming.split(':');
-              daysText = parts[0].trim();
-              hoursText = parts.slice(1).join(':').trim();
-            }
-
-            const timingSub = hoursText || `${activeDoctor.slotDuration || 20} mins slot`;
-
-            return (
-              <div className={styles.kpiCard}>
-                <div className={`${styles.kpiIconWrap} ${styles.kpiPurple}`}>
-                  <Clock size={22} />
-                </div>
-                <div>
-                  <span className={styles.kpiLabel}>Clinic Timings</span>
-                  <div
-                    className={styles.kpiValue}
-                    title={rawTiming}
-                  >
-                    {daysText}
-                  </div>
-                  <span 
-                    className={styles.kpiSub} 
-                    title={`${daysText} (${timingSub}) • OPD Slot: ${activeDoctor.slotDuration || 20} mins`}
-                  >
-                    {timingSub}
-                  </span>
-                </div>
+          <div className={styles.kpiCard}>
+            <div className={`${styles.kpiIconWrap} ${styles.kpiPurple}`}>
+              <Clock size={22} />
+            </div>
+            <div>
+              <span className={styles.kpiLabel}>Clinic Timings</span>
+              <div
+                className={styles.kpiValue}
+                title={clinicTimingInfo.rawTiming}
+              >
+                {clinicTimingInfo.daysText}
               </div>
-            );
-          })()}
+              <span 
+                className={styles.kpiSub} 
+                title={`${clinicTimingInfo.daysText} (${clinicTimingInfo.timingSub}) • OPD Slot: ${activeDoctor.slotDuration || 20} mins`}
+              >
+                {clinicTimingInfo.timingSub}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* REAL-TIME DOCTOR EARNINGS HEATMAP */}
@@ -3557,19 +3966,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                       onClick={() => setSelectedHeatmapCell(null)}
                       style={{
                         position: 'absolute',
-                        top: '10px',
-                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        right: '12px',
+                        width: '26px',
+                        height: '26px',
                         background: '#ffffff',
                         border: '1px solid #bbf7d0',
                         color: '#64748b',
                         cursor: 'pointer',
-                        padding: '4px',
-                        display: 'flex',
+                        padding: 0,
+                        display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderRadius: '6px',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                        transition: 'all 0.15s ease'
+                        transition: 'color 0.15s ease, background 0.15s ease, border-color 0.15s ease'
                       }}
                       onMouseEnter={(e) => {
                         e.currentTarget.style.color = '#ef4444';
@@ -3707,7 +4119,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               ) : (
                 filteredAppointments.map((apt) => (
-                <div key={apt.id} className={styles.appointmentCard}>
+                <div key={apt.id || apt._id || `${apt.patientName}-${apt.time}-${apt.date}`} className={styles.appointmentCard}>
                   <div className={styles.aptTimeCol}>
                     <Clock size={16} className={styles.timeIcon} />
                     <span className={styles.aptTime}>{apt.time}</span>
@@ -3819,7 +4231,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               ) : (
                 prescriptions.map((rx) => (
-                <div key={rx.id} className={styles.rxCard}>
+                <div key={rx.id || rx._id || `${rx.patientName}-${rx.date}`} className={styles.rxCard}>
                   <div className={styles.rxHeader}>
                     <div>
                       <h4>{rx.patientName}</h4>
@@ -4111,11 +4523,11 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="tel"
                     inputMode="numeric"
                     maxLength={10}
-                    placeholder="Enter 10-digit phone number"
-                    value={profileForm.phone || ''}
+                    placeholder="Enter 10-digit mobile number"
+                    value={profileForm.phone || profileForm.contact_number || ''}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setProfileForm({ ...profileForm, phone: digits });
+                      setProfileForm({ ...profileForm, phone: digits, contact_number: digits });
                     }}
                     onBlur={handleSaveAllProfileSettings}
                   />
@@ -4397,77 +4809,56 @@ const DoctorDashboard = ({ onNavigate }) => {
                         type="button"
                         onClick={() => setSlotConfigMode('day')}
                         style={{
-                          padding: '7px 14px',
+                          padding: '8px 16px',
                           borderRadius: '8px',
                           border: slotConfigMode === 'day' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                           background: slotConfigMode === 'day' ? '#eff6ff' : '#ffffff',
                           color: slotConfigMode === 'day' ? '#1d4ed8' : '#475569',
                           fontWeight: 700,
-                          fontSize: '0.82rem',
+                          fontSize: '0.84rem',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
+                          gap: '7px',
                           boxShadow: slotConfigMode === 'day' ? '0 2px 4px rgba(37,99,235,0.15)' : 'none',
                           transition: 'all 0.15s ease'
                         }}
                       >
                         <Clock size={15} color={slotConfigMode === 'day' ? '#2563eb' : '#64748b'} />
-                        <span>📅 Weekly Schedule (Day-by-Day)</span>
+                        <span>🗓️ Weekly Schedule (Regular Hours)</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setSlotConfigMode('date')}
                         style={{
-                          padding: '7px 14px',
+                          padding: '8px 16px',
                           borderRadius: '8px',
-                          border: slotConfigMode === 'date' ? '2px solid #d97706' : '1px solid #cbd5e1',
-                          background: slotConfigMode === 'date' ? '#fffbeb' : '#ffffff',
-                          color: slotConfigMode === 'date' ? '#b45309' : '#475569',
+                          border: slotConfigMode !== 'day' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          background: slotConfigMode !== 'day' ? '#eff6ff' : '#ffffff',
+                          color: slotConfigMode !== 'day' ? '#1d4ed8' : '#475569',
                           fontWeight: 700,
-                          fontSize: '0.82rem',
+                          fontSize: '0.84rem',
                           cursor: 'pointer',
                           display: 'inline-flex',
                           alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: slotConfigMode === 'date' ? '0 2px 4px rgba(217,119,6,0.15)' : 'none',
+                          gap: '7px',
+                          boxShadow: slotConfigMode !== 'day' ? '0 2px 4px rgba(37,99,235,0.15)' : 'none',
                           transition: 'all 0.15s ease'
                         }}
                       >
-                        <Calendar size={15} color={slotConfigMode === 'date' ? '#d97706' : '#64748b'} />
-                        <span>🗓️ Specific Date Override</span>
+                        <Calendar size={15} color={slotConfigMode !== 'day' ? '#2563eb' : '#64748b'} />
+                        <span>📅 Calendar Dates & Leaves</span>
                         {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
-                          <span style={{ background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '8px', fontSize: '0.68rem', fontWeight: 800 }}>
+                          <span style={{
+                            background: '#dbeafe',
+                            color: '#1e40af',
+                            padding: '1px 7px',
+                            borderRadius: '10px',
+                            fontSize: '0.7rem',
+                            fontWeight: 800
+                          }}>
                             {Object.keys(profileForm.dateWiseSlots || {}).length}
-                          </span>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSlotConfigMode('leave')}
-                        style={{
-                          padding: '7px 14px',
-                          borderRadius: '8px',
-                          border: slotConfigMode === 'leave' ? '2px solid #ef4444' : '1px solid #cbd5e1',
-                          background: slotConfigMode === 'leave' ? '#fff1f2' : '#ffffff',
-                          color: slotConfigMode === 'leave' ? '#b91c1c' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          boxShadow: slotConfigMode === 'leave' ? '0 2px 4px rgba(239,68,68,0.15)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <AlertTriangle size={15} color={slotConfigMode === 'leave' ? '#ef4444' : '#64748b'} />
-                        <span>🏖️ Mark Days Off & Leave</span>
-                        {(DAYS_LIST.filter(d => isDayOff(d)).length > 0 || Object.values(profileForm.dateWiseSlots || {}).filter(v => v === 'off' || v?.isOff === true).length > 0) && (
-                          <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '1px 7px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 800 }}>
-                            {DAYS_LIST.filter(d => isDayOff(d)).length + Object.values(profileForm.dateWiseSlots || {}).filter(v => v === 'off' || v?.isOff === true).length} off
                           </span>
                         )}
                       </button>
@@ -4537,13 +4928,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                   )}
                 </div>
 
-                {/* MODE 1: DAY-WISE (WEEKLY) SELECTED DAY SLOTS PANEL */}
+                {/* TAB 1: WEEKLY SCHEDULE DETAILS PANEL */}
                 {slotConfigMode === 'day' && (
                   <div style={{
                     background: '#f8fafc',
                     border: '1.5px solid #bfdbfe',
                     borderRadius: '12px',
-                    padding: '18px 20px',
+                    padding: '20px',
                     marginBottom: '20px',
                     boxShadow: '0 2px 6px rgba(37,99,235,0.05)'
                   }}>
@@ -4636,7 +5027,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             }}
                           >
                             <Trash2 size={13} />
-                            <span>Clear {DAY_NAME_MAP[selectedScheduleDay]}'s Slots</span>
+                            <span>Clear Slots</span>
                           </button>
                         )}
                       </div>
@@ -4826,7 +5217,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                         </div>
 
                         {/* Quick Presets for this Day */}
-                        <div>
+                        <div style={{ marginBottom: '16px' }}>
                           <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
                             ⚡ Quick Slot Presets for {DAY_NAME_MAP[selectedScheduleDay]}:
                           </span>
@@ -4900,407 +5291,464 @@ const DoctorDashboard = ({ onNavigate }) => {
                             </button>
                           </div>
                         </div>
+
+                        {/* Quick Weekly Working Days Presets */}
+                        <div style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                          <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>
+                            💡 Recurring Days Off Shortcuts:
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleApplyWeeklyDaysOffPreset('sunday')}
+                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
+                            >
+                              ☀️ Sunday Off
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApplyWeeklyDaysOffPreset('weekend')}
+                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
+                            >
+                              🏖️ Sat & Sun Off
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApplyWeeklyDaysOffPreset('all_working')}
+                              style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#065f46', cursor: 'pointer' }}
+                            >
+                              💼 All 7 Days Open
+                            </button>
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>
                 )}
 
-                {/* MODE 3: DATE-WISE (SPECIFIC DATES) SELECTOR */}
-                {slotConfigMode === 'date' && (
-                  <div style={{ background: '#f8fafc', border: '1px solid #fde68a', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: '#78350f', margin: 0 }}>
-                          Select Calendar Date for Special Override or Leave
-                        </label>
-                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          Override specific dates (e.g. holiday leave, doctor conference, or weekend special consultation slots).
-                        </span>
+                {/* TAB 2: CALENDAR DATES & LEAVES PANEL */}
+                {slotConfigMode !== 'day' && (
+                  <div style={{
+                    background: '#ffffff',
+                    border: '1.5px solid #bfdbfe',
+                    borderRadius: '12px',
+                    padding: '20px',
+                    marginBottom: '20px',
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.05)'
+                  }}>
+                    {/* SECTION 1: SINGLE DATE PICKER & OVERRIDE */}
+                    <div style={{ marginBottom: '22px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Calendar size={17} color="#2563eb" />
+                            <span>1. Single Calendar Date Management (Overrides & Leaves)</span>
+                          </div>
+                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
+                            Pick a specific date to mark it as leave/closed or configure custom hours for that day.
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Date Picker Input & Quick Date Chips */}
-                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ffffff', border: '1.5px solid #d97706', padding: '6px 12px', borderRadius: '8px' }}>
-                        <Calendar size={16} color="#d97706" />
-                        <input
-                          type="date"
-                          value={selectedScheduleDate}
-                          min={todayDateStr}
-                          onChange={(e) => {
-                            if (e.target.value) setSelectedScheduleDate(e.target.value);
-                          }}
+                      {/* Date Picker Input & Quick Chips */}
+                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+                        <div 
                           style={{
-                            border: 'none',
-                            outline: 'none',
-                            fontSize: '0.84rem',
-                            fontWeight: 700,
-                            color: '#1e293b',
-                            background: 'transparent',
-                            cursor: 'pointer'
-                          }}
-                        />
-                      </div>
-
-                      {/* Quick Chips */}
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {[
-                          { label: 'Today', offset: 0 },
-                          { label: 'Tomorrow', offset: 1 },
-                          { label: '+2 Days', offset: 2 },
-                          { label: '+3 Days', offset: 3 },
-                          { label: '+7 Days', offset: 7 }
-                        ].map(q => {
-                          const targetDate = new Date();
-                          targetDate.setDate(targetDate.getDate() + q.offset);
-                          const dateStr = getLocalDateString(targetDate);
-                          const isPicked = selectedScheduleDate === dateStr;
-
-                          return (
-                            <button
-                              key={q.offset}
-                              type="button"
-                              onClick={() => setSelectedScheduleDate(dateStr)}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: '6px',
-                                border: isPicked ? '1.5px solid #d97706' : '1px solid #cbd5e1',
-                                background: isPicked ? '#fef3c7' : '#ffffff',
-                                color: isPicked ? '#92400e' : '#475569',
-                                fontWeight: isPicked ? 800 : 600,
-                                fontSize: '0.76rem',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              {q.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Selected Date Status & Action Bar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
-                          📅 {new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}:
-                        </span>
-                        <span style={{
-                          fontSize: '0.76rem',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off'
-                            ? '#fee2e2'
-                            : (profileForm.dateWiseSlots?.[selectedScheduleDate] ? '#fef3c7' : '#f1f5f9'),
-                          color: profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off'
-                            ? '#b91c1c'
-                            : (profileForm.dateWiseSlots?.[selectedScheduleDate] ? '#92400e' : '#475569')
-                        }}>
-                          {profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off'
-                            ? 'Doctor On Leave / Clinic Closed'
-                            : (profileForm.dateWiseSlots?.[selectedScheduleDate]
-                                ? `Specific Date Override (${Array.isArray(profileForm.dateWiseSlots[selectedScheduleDate]) ? profileForm.dateWiseSlots[selectedScheduleDate].length : 0} slots)`
-                                : 'Inheriting Standard Day Schedule')}
-                        </span>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={handleToggleDateOff}
-                          style={{
-                            background: profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off' ? '#10b981' : '#fee2e2',
-                            color: profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off' ? '#ffffff' : '#b91c1c',
-                            border: 'none',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '0.76rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
+                            display: 'flex',
                             alignItems: 'center',
-                            gap: '4px'
+                            gap: '8px',
+                            background: '#ffffff',
+                            border: '1.5px solid #2563eb',
+                            padding: '7px 14px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 3px rgba(37,99,235,0.1)'
+                          }}
+                          onClick={() => {
+                            if (scheduleDateInputRef.current) {
+                              if (typeof scheduleDateInputRef.current.showPicker === 'function') {
+                                try {
+                                  scheduleDateInputRef.current.showPicker();
+                                } catch {
+                                  scheduleDateInputRef.current.focus();
+                                }
+                              } else {
+                                scheduleDateInputRef.current.focus();
+                              }
+                            }
                           }}
                         >
-                          {profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off' ? <Check size={12} /> : <X size={12} />}
-                          {profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off' ? 'Cancel Leave / Re-open Date' : 'Mark Date as Leave / Closed'}
-                        </button>
-
-                        {profileForm.dateWiseSlots?.[selectedScheduleDate] !== undefined && (
-                          <button
-                            type="button"
-                            onClick={() => handleResetDateToDaySchedule(selectedScheduleDate)}
-                            style={{
-                              background: '#f8fafc',
-                              color: '#64748b',
-                              border: '1px solid #cbd5e1',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '0.76rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
+                          <Calendar size={16} color="#2563eb" />
+                          <input
+                            ref={scheduleDateInputRef}
+                            type="date"
+                            value={selectedScheduleDate}
+                            min={todayDateStr}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              if (e.target.value) setSelectedScheduleDate(e.target.value);
                             }}
-                          >
-                            <RotateCcw size={12} />
-                            Reset to Normal Day Schedule
-                          </button>
-                        )}
-                      </div>
-                    </div>
+                            style={{
+                              border: 'none',
+                              outline: 'none',
+                              fontSize: '0.84rem',
+                              fontWeight: 700,
+                              color: '#1e293b',
+                              background: 'transparent',
+                              cursor: 'pointer'
+                            }}
+                          />
+                        </div>
 
-                    {/* Configured Date Overrides Chips */}
-                    {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
-                      <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '8px', padding: '10px 12px' }}>
-                        <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#92400e', display: 'block', marginBottom: '6px' }}>
-                          ⚡ Configured Date Exceptions & Leaves:
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {Object.entries(profileForm.dateWiseSlots || {}).map(([dKey, dVal]) => {
-                            const isOff = dVal === 'off' || dVal?.isOff === true;
-                            const count = Array.isArray(dVal) ? dVal.length : (Array.isArray(dVal?.slots) ? dVal.slots.length : 0);
-                            const isCurrentlySelected = selectedScheduleDate === dKey;
+                        {/* Quick Date Shortcuts */}
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {[
+                            { label: 'Today', offset: 0 },
+                            { label: 'Tomorrow', offset: 1 },
+                            { label: '+2 Days', offset: 2 },
+                            { label: '+3 Days', offset: 3 },
+                            { label: '+7 Days', offset: 7 }
+                          ].map(q => {
+                            const targetDate = new Date();
+                            targetDate.setDate(targetDate.getDate() + q.offset);
+                            const dateStr = getLocalDateString(targetDate);
+                            const isPicked = selectedScheduleDate === dateStr;
 
                             return (
-                              <div
-                                key={dKey}
-                                onClick={() => setSelectedScheduleDate(dKey)}
+                              <button
+                                key={q.offset}
+                                type="button"
+                                onClick={() => setSelectedScheduleDate(dateStr)}
                                 style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '4px 10px',
+                                  padding: '6px 11px',
                                   borderRadius: '6px',
-                                  background: isOff ? '#fee2e2' : '#ffffff',
-                                  border: isCurrentlySelected ? '1.5px solid #d97706' : '1px solid #cbd5e1',
-                                  color: isOff ? '#b91c1c' : '#1e293b',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700,
-                                  cursor: 'pointer'
+                                  border: isPicked ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                  background: isPicked ? '#eff6ff' : '#ffffff',
+                                  color: isPicked ? '#1d4ed8' : '#475569',
+                                  fontWeight: isPicked ? 800 : 600,
+                                  fontSize: '0.76rem',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.1s ease'
                                 }}
                               >
-                                <span>{dKey}</span>
-                                <span style={{ opacity: 0.8, fontSize: '0.7rem' }}>
-                                  ({isOff ? 'Leave' : `${count} slots`})
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleResetDateToDaySchedule(dKey);
-                                  }}
-                                  title="Remove override"
-                                  style={{
-                                    background: 'transparent',
-                                    border: 'none',
-                                    color: '#ef4444',
-                                    cursor: 'pointer',
-                                    padding: '0 2px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center'
-                                  }}
-                                >
-                                  <X size={12} />
-                                </button>
-                              </div>
+                                {q.label}
+                              </button>
                             );
                           })}
                         </div>
                       </div>
-                    )}
-                  </div>
-                )}
 
-                {/* MODE 4: DAYS OFF & PLANNED LEAVES MANAGER */}
-                {slotConfigMode === 'leave' && (
-                  <div style={{ background: '#f8fafc', border: '1px solid #fecdd3', borderRadius: '12px', padding: '20px', marginBottom: '20px' }}>
-                    {/* Section Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '18px', paddingBottom: '14px', borderBottom: '1px solid #fecdd3' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '1.2rem' }}>🏖️</span>
-                          <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#991b1b' }}>
-                            Doctor Days Off & Planned Leaves Manager
-                          </h4>
-                          <span style={{ background: '#fee2e2', color: '#b91c1c', padding: '2px 8px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 800 }}>
-                            Live Booking Protection
-                          </span>
-                        </div>
-                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
-                          Mark recurring weekly days off (e.g. Sunday or Weekend), or schedule specific multi-day vacation leaves. When marked off, patients cannot book appointments on those days.
-                        </p>
-                      </div>
+                      {/* Selected Date Card */}
+                      {(() => {
+                        const dateObj = new Date(selectedScheduleDate + 'T00:00:00');
+                        const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+                        const fullDateFormatted = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+                        const dateOverrideVal = profileForm.dateWiseSlots?.[selectedScheduleDate];
+                        const isDateLeave = dateOverrideVal === 'off' || dateOverrideVal?.isOff === true;
+                        const hasCustomSlots = Array.isArray(dateOverrideVal) || Array.isArray(dateOverrideVal?.slots);
+                        const activeSlots = getCurrentModeSlots();
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setSlotConfigMode('day')}
-                          style={{
-                            background: '#ffffff',
-                            border: '1px solid #cbd5e1',
-                            color: '#334155',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '0.76rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <span>← Back to Weekly Slots</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* PART 1: WEEKLY RECURRING DAYS OFF */}
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '18px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                            📅 1. Recurring Weekly Days Off (Fixed Schedule)
-                          </label>
-                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                            Toggle any day of the week to mark it permanently closed or open for consultations.
-                          </span>
-                        </div>
-
-                        {/* Quick Bulk Presets */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>Quick Presets:</span>
-                          <button
-                            type="button"
-                            onClick={() => handleApplyWeeklyDaysOffPreset('sunday')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              fontWeight: 700,
-                              color: '#334155',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ☀️ Sunday Only Off
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplyWeeklyDaysOffPreset('weekend')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              fontWeight: 700,
-                              color: '#334155',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            🏖️ Weekend Off (Sat + Sun)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplyWeeklyDaysOffPreset('all_working')}
-                            style={{
-                              background: '#ecfdf5',
-                              border: '1px solid #a7f3d0',
-                              borderRadius: '6px',
-                              padding: '4px 8px',
-                              fontSize: '0.74rem',
-                              fontWeight: 700,
-                              color: '#065f46',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            💼 All 7 Days Working
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 7 Days Cards */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
-                        {DAYS_LIST.map(dayKey => {
-                          const off = isDayOff(dayKey);
-                          return (
-                            <div
-                              key={dayKey}
-                              style={{
-                                background: off ? '#fff1f2' : '#f0fdf4',
-                                border: off ? '1.5px solid #fca5a5' : '1.5px solid #86efac',
-                                borderRadius: '8px',
-                                padding: '12px 10px',
-                                textAlign: 'center',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '8px',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: off ? '#991b1b' : '#166534' }}>
-                                {DAY_NAME_MAP[dayKey] || dayKey}
-                              </div>
-
-                              <span style={{
-                                fontSize: '0.7rem',
-                                fontWeight: 800,
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                background: off ? '#fee2e2' : '#dcfce7',
-                                color: off ? '#991b1b' : '#15803d'
-                              }}>
-                                {off ? '🔴 Closed / Day Off' : '🟢 Open / Working'}
-                              </span>
-
-                              <button
-                                type="button"
-                                onClick={() => handleToggleDayOff(dayKey)}
-                                style={{
-                                  width: '100%',
-                                  marginTop: '4px',
-                                  background: off ? '#10b981' : '#fee2e2',
-                                  color: off ? '#ffffff' : '#b91c1c',
-                                  border: 'none',
-                                  borderRadius: '6px',
-                                  padding: '5px 8px',
+                        return (
+                          <div style={{
+                            background: isDateLeave ? '#fff1f2' : '#f8fafc',
+                            border: isDateLeave ? '1.5px solid #fca5a5' : '1px solid #cbd5e1',
+                            borderRadius: '10px',
+                            padding: '16px',
+                            marginBottom: '16px'
+                          }}>
+                            {/* Date Status & Controls Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: isDateLeave ? 0 : '14px', paddingBottom: isDateLeave ? 0 : '12px', borderBottom: isDateLeave ? 'none' : '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
+                                  📅 {fullDateFormatted}
+                                </span>
+                                <span style={{
                                   fontSize: '0.74rem',
                                   fontWeight: 700,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '4px'
-                                }}
-                              >
-                                {off ? <Check size={12} /> : <X size={12} />}
-                                {off ? 'Mark Working' : 'Mark Day Off'}
-                              </button>
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
+                                  background: isDateLeave ? '#fee2e2' : (hasCustomSlots ? '#fef3c7' : '#ecfdf5'),
+                                  color: isDateLeave ? '#b91c1c' : (hasCustomSlots ? '#92400e' : '#065f46')
+                                }}>
+                                  {isDateLeave
+                                    ? '🔴 Clinic Closed / Doctor On Leave'
+                                    : (hasCustomSlots
+                                        ? `🟡 Custom Hours (${activeSlots.length} slots)`
+                                        : `🟢 Standard Hours (${activeSlots.length} slots from ${dayOfWeek})`)}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                {isDateLeave ? (
+                                  <button
+                                    type="button"
+                                    onClick={handleToggleDateOff}
+                                    style={{
+                                      background: '#10b981',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      padding: '6px 14px',
+                                      borderRadius: '6px',
+                                      fontSize: '0.78rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      boxShadow: '0 2px 4px rgba(16,185,129,0.2)'
+                                    }}
+                                  >
+                                    <Check size={13} />
+                                    <span>Re-open Date (Restore {dayOfWeek} Hours)</span>
+                                  </button>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleDateOff}
+                                      style={{
+                                        background: '#fff1f2',
+                                        color: '#b91c1c',
+                                        border: '1px solid #fca5a5',
+                                        padding: '6px 12px',
+                                        borderRadius: '6px',
+                                        fontSize: '0.76rem',
+                                        fontWeight: 700,
+                                        cursor: 'pointer',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                      }}
+                                    >
+                                      <X size={12} />
+                                      <span>Mark Date as Leave / Closed</span>
+                                    </button>
+
+                                    {hasCustomSlots && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleResetDateToDaySchedule(selectedScheduleDate)}
+                                        style={{
+                                          background: '#f8fafc',
+                                          color: '#64748b',
+                                          border: '1px solid #cbd5e1',
+                                          padding: '6px 12px',
+                                          borderRadius: '6px',
+                                          fontSize: '0.76rem',
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '4px'
+                                        }}
+                                      >
+                                        <RotateCcw size={12} />
+                                        <span>Reset to Standard {dayOfWeek}</span>
+                                      </button>
+                                    )}
+                                  </>
+                                )}
+                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
+
+                            {/* When NOT on leave: Slots chips, add slot bar, presets */}
+                            {!isDateLeave && (
+                              <div>
+                                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '8px' }}>
+                                  {hasCustomSlots 
+                                    ? `These slots specifically override appointments for ${selectedScheduleDate}:` 
+                                    : `Currently using standard ${dayOfWeek} slots. Modifying or adding slots here will set custom hours for ${selectedScheduleDate} only.`}
+                                </div>
+
+                                {/* Active Slots Chips */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '14px', background: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                  {activeSlots.length > 0 ? (
+                                    activeSlots.map((slot, sIdx) => (
+                                      <div
+                                        key={sIdx}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '8px',
+                                          background: '#eff6ff',
+                                          border: '1.5px solid #93c5fd',
+                                          borderRadius: '8px',
+                                          padding: '5px 10px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 700,
+                                          color: '#1e3a8a'
+                                        }}
+                                      >
+                                        <Clock size={12} color="#2563eb" />
+                                        <span>{slot}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteSlot(slot)}
+                                          title={`Remove slot ${slot}`}
+                                          style={{
+                                            background: '#fee2e2',
+                                            border: 'none',
+                                            color: '#ef4444',
+                                            borderRadius: '50%',
+                                            width: '18px',
+                                            height: '18px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            cursor: 'pointer',
+                                            padding: 0
+                                          }}
+                                        >
+                                          <X size={11} />
+                                        </button>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic', padding: '6px 0' }}>
+                                      No time slots active for {selectedScheduleDate}. Add slots below or pick a preset.
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Add Slot Row */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
+                                    ➕ Add Slot:
+                                  </span>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <select
+                                      value={slotHour}
+                                      onChange={(e) => setSlotHour(e.target.value)}
+                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                                    >
+                                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
+                                        <option key={h} value={h}>{h}</option>
+                                      ))}
+                                    </select>
+                                    <span>:</span>
+                                    <select
+                                      value={slotMin}
+                                      onChange={(e) => setSlotMin(e.target.value)}
+                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                                    >
+                                      {['00', '15', '20', '30', '40', '45', '50'].map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={slotPeriod}
+                                      onChange={(e) => setSlotPeriod(e.target.value)}
+                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                                    >
+                                      <option value="AM">AM</option>
+                                      <option value="PM">PM</option>
+                                    </select>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddSlot(`${slotHour}:${slotMin} ${slotPeriod}`)}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      background: '#2563eb',
+                                      color: '#ffffff',
+                                      border: 'none',
+                                      borderRadius: '6px',
+                                      padding: '6px 14px',
+                                      fontSize: '0.8rem',
+                                      fontWeight: 700,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <Plus size={13} />
+                                    <span>Add</span>
+                                  </button>
+
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                                    <input
+                                      type="text"
+                                      placeholder="Or custom (e.g. 06:15 PM)"
+                                      value={newSlotTime}
+                                      onChange={(e) => setNewSlotTime(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleAddSlot(newSlotTime);
+                                        }
+                                      }}
+                                      style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', width: '170px' }}
+                                    />
+                                    {newSlotTime && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddSlot(newSlotTime)}
+                                        style={{ background: '#10b981', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 10px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
+                                      >
+                                        Add
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Quick Presets */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>Quick Presets:</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots')}
+                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                                  >
+                                    Standard 4 Slots
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApplySlotPreset(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD')}
+                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                                  >
+                                    Morning OPD (9 AM - 1 PM)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD')}
+                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                                  >
+                                    Evening OPD (4 PM - 8 PM)
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApplySlotPreset([
+                                      '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+                                      '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
+                                    ], 'Full Day OPD')}
+                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
+                                  >
+                                    Full Day OPD
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
-                    {/* PART 2: MULTI-DAY VACATION / DATE RANGE LEAVE PLANNER */}
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '18px' }}>
-                      <div style={{ marginBottom: '12px' }}>
-                        <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                          ✈️ 2. Schedule Specific Dates Off / Vacation Leave (Single or Multi-Day)
-                        </label>
+                    {/* SECTION 2: MULTI-DAY VACATION / DATE RANGE LEAVE PLANNER */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+                      <div style={{ marginBottom: '10px' }}>
+                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>✈️ 2. Multi-Day Vacation / Leave Range Planner</span>
+                        </div>
                         <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          Going on a vacation, attending a conference, or taking personal leave? Select start and end dates to block slots automatically.
+                          Going out of town or attending a conference? Quickly block a continuous date range.
                         </span>
                       </div>
 
-                      <form onSubmit={handleApplyDateRangeLeave} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', alignItems: 'flex-end', background: '#f8fafc', padding: '14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                      <form onSubmit={handleApplyDateRangeLeave} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', alignItems: 'flex-end', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
                             From (Start Date):
                           </label>
                           <input
@@ -5308,13 +5756,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                             value={leaveStartDate}
                             min={new Date().toISOString().split('T')[0]}
                             onChange={(e) => setLeaveStartDate(e.target.value)}
-                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
                             required
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
                             To (End Date):
                           </label>
                           <input
@@ -5322,21 +5770,21 @@ const DoctorDashboard = ({ onNavigate }) => {
                             value={leaveEndDate}
                             min={leaveStartDate || new Date().toISOString().split('T')[0]}
                             onChange={(e) => setLeaveEndDate(e.target.value)}
-                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
                             required
                           />
                         </div>
 
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#475569', marginBottom: '4px' }}>
-                            Leave Reason / Note (Optional):
+                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                            Reason / Note (Optional):
                           </label>
                           <input
                             type="text"
-                            placeholder="e.g. Vacation, Medical Conference"
+                            placeholder="e.g. Vacation, Conference"
                             value={leaveNote}
                             onChange={(e) => setLeaveNote(e.target.value)}
-                            style={{ width: '100%', padding: '7px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', background: '#ffffff' }}
+                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
                           />
                         </div>
 
@@ -5349,8 +5797,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: '6px',
-                              padding: '8px 14px',
-                              fontSize: '0.82rem',
+                              padding: '7px 12px',
+                              fontSize: '0.8rem',
                               fontWeight: 700,
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -5361,13 +5809,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                             }}
                           >
                             <CalendarDays size={14} />
-                            <span>Mark Doctor On Leave</span>
+                            <span>Mark On Leave</span>
                           </button>
                         </div>
                       </form>
 
-                      {/* Quick helper buttons for dates */}
-                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                      {/* Quick fill buttons */}
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
                         <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', alignSelf: 'center' }}>Quick Fill:</span>
                         <button
                           type="button"
@@ -5376,7 +5824,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             setLeaveStartDate(today);
                             setLeaveEndDate(today);
                           }}
-                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
                         >
                           Today Only
                         </button>
@@ -5389,7 +5837,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             setLeaveStartDate(tomStr);
                             setLeaveEndDate(tomStr);
                           }}
-                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
                         >
                           Tomorrow Only
                         </button>
@@ -5406,7 +5854,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                             setLeaveStartDate(sat.toISOString().split('T')[0]);
                             setLeaveEndDate(sun.toISOString().split('T')[0]);
                           }}
-                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
                         >
                           Upcoming Weekend
                         </button>
@@ -5419,399 +5867,101 @@ const DoctorDashboard = ({ onNavigate }) => {
                             setLeaveStartDate(d1.toISOString().split('T')[0]);
                             setLeaveEndDate(d2.toISOString().split('T')[0]);
                           }}
-                          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
+                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
                         >
                           Next 7 Days
                         </button>
                       </div>
                     </div>
 
-                    {/* PART 3: ACTIVE SCHEDULED LEAVES & BLOCKED DATES LIST */}
+                    {/* SECTION 3: CONFIGURED DATE EXCEPTIONS & LEAVES OVERVIEW */}
                     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                            📋 3. Currently Configured Specific Leaves & Closed Dates
-                          </label>
-                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                            Dates where your clinic is marked closed. Click the red ✕ to cancel leave and reopen appointments.
+                          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
+                            📋 3. Configured Calendar Leaves & Date Overrides
+                          </div>
+                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                            Overview of all dates with custom hours or marked leaves.
                           </span>
                         </div>
                       </div>
 
-                      {(() => {
-                        const offDates = Object.entries(profileForm.dateWiseSlots || {})
-                          .filter(([_, val]) => val === 'off' || val?.isOff === true)
-                          .map(([d]) => d)
-                          .sort();
-
-                        if (offDates.length === 0) {
-                          return (
-                            <div style={{ textAlign: 'center', padding: '24px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                              <div style={{ fontSize: '1.2rem', marginBottom: '6px' }}>✨</div>
-                              <div style={{ fontSize: '0.86rem', fontWeight: 700, color: '#334155', marginBottom: '2px' }}>
-                                No Date-Specific Leaves Active
-                              </div>
-                              <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                                Your clinic is open and accepting appointments on all your active weekly working days.
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
-                            {offDates.map(dateStr => {
-                              const dObj = new Date(dateStr + 'T00:00:00');
-                              const dayName = dObj.toLocaleDateString('en-US', { weekday: 'short' });
-                              const formattedDate = dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                      {Object.keys(profileForm.dateWiseSlots || {}).length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '18px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                            ✨ No calendar leaves or date overrides configured. All dates follow your regular weekly schedule.
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
+                          {Object.entries(profileForm.dateWiseSlots || {})
+                            .sort(([a], [b]) => a.localeCompare(b))
+                            .map(([dKey, dVal]) => {
+                              const isOff = dVal === 'off' || dVal?.isOff === true;
+                              const count = Array.isArray(dVal) ? dVal.length : (Array.isArray(dVal?.slots) ? dVal.slots.length : 0);
+                              const dObj = new Date(dKey + 'T00:00:00');
+                              const formatted = dObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                              const isCurrentlySelected = selectedScheduleDate === dKey;
 
                               return (
                                 <div
-                                  key={dateStr}
+                                  key={dKey}
+                                  onClick={() => setSelectedScheduleDate(dKey)}
                                   style={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
-                                    background: '#fff1f2',
-                                    border: '1px solid #fecdd3',
+                                    padding: '8px 12px',
                                     borderRadius: '8px',
-                                    padding: '8px 12px'
+                                    background: isOff ? '#fff1f2' : '#eff6ff',
+                                    border: isCurrentlySelected
+                                      ? '2px solid #2563eb'
+                                      : (isOff ? '1px solid #fecdd3' : '1px solid #bfdbfe'),
+                                    cursor: 'pointer',
+                                    transition: 'all 0.1s ease'
                                   }}
                                 >
                                   <div>
-                                    <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#991b1b' }}>
-                                      {formattedDate} ({dayName})
+                                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: isOff ? '#991b1b' : '#1e40af' }}>
+                                      {formatted}
                                     </div>
-                                    <div style={{ fontSize: '0.7rem', color: '#b91c1c', fontWeight: 600 }}>
-                                      Clinic Closed / On Leave
+                                    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: isOff ? '#b91c1c' : '#2563eb' }}>
+                                      {isOff ? '🔴 Closed / Leave' : `🟡 ${count} custom slots`}
                                     </div>
                                   </div>
+
                                   <button
                                     type="button"
-                                    onClick={() => handleRemoveDateOff(dateStr)}
-                                    title={`Cancel leave for ${dateStr} and reopen`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleResetDateToDaySchedule(dKey);
+                                    }}
+                                    title={`Reset ${dKey} to regular hours`}
                                     style={{
-                                      background: '#fee2e2',
-                                      border: '1px solid #fca5a5',
+                                      background: '#ffffff',
+                                      border: isOff ? '1px solid #fca5a5' : '1px solid #bfdbfe',
                                       color: '#ef4444',
                                       borderRadius: '6px',
-                                      padding: '4px 8px',
-                                      fontSize: '0.72rem',
+                                      padding: '3px 7px',
+                                      fontSize: '0.7rem',
                                       fontWeight: 700,
                                       cursor: 'pointer',
                                       display: 'inline-flex',
                                       alignItems: 'center',
-                                      gap: '4px'
+                                      gap: '3px'
                                     }}
                                   >
-                                    <X size={12} />
-                                    <span>Cancel</span>
+                                    <X size={11} />
+                                    <span>Reset</span>
                                   </button>
                                 </div>
                               );
                             })}
-                          </div>
-                        );
-                      })()}
+                        </div>
+                      )}
                     </div>
                   </div>
-                )}
-
-                {/* SUBSECTION: TIME SLOTS EDITOR FOR SPECIFIC DATE OVERRIDE */}
-                {slotConfigMode === 'date' && (
-                <div style={{ background: '#f8fafc', border: '1px solid #fde68a', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-                    <div>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>
-                        <Clock size={15} color="#d97706" />
-                        Consultation Slots for {selectedScheduleDate} ({getCurrentModeSlots().length} configured)
-                      </label>
-                      <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                        These slots will specifically override the booking panel for {selectedScheduleDate}.
-                      </span>
-                    </div>
-
-                    {!isCurrentModeOff() && getCurrentModeSlots().length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleClearAllSlots}
-                        style={{
-                          background: '#fff1f2',
-                          border: '1px solid #fecdd3',
-                          color: '#e11d48',
-                          padding: '4px 10px',
-                          borderRadius: '6px',
-                          fontSize: '0.76rem',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
-                        <Trash2 size={12} />
-                        Clear All Slots
-                      </button>
-                    )}
-                  </div>
-
-                  {/* If mode is Off/Closed */}
-                  {isCurrentModeOff() ? (
-                    <div style={{ background: '#fff1f2', border: '1.5px dashed #f87171', borderRadius: '8px', padding: '16px', textAlign: 'center', margin: '12px 0' }}>
-                      <AlertTriangle size={24} color="#ef4444" style={{ marginBottom: '6px' }} />
-                      <div style={{ fontSize: '0.86rem', fontWeight: 800, color: '#991b1b', marginBottom: '4px' }}>
-                        {slotConfigMode === 'day' ? `${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay} is Marked Closed / Off` : `Date ${selectedScheduleDate} is Marked On Leave / Closed`}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: '#b91c1c', maxWidth: '500px', margin: '0 auto 10px' }}>
-                        Patients booking on this {slotConfigMode === 'day' ? 'day' : 'date'} will see "Doctor On Leave / Clinic Closed" and cannot book slots.
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (slotConfigMode === 'day') {
-                            handleToggleDayOff(selectedScheduleDay);
-                          } else {
-                            handleToggleDateOff();
-                          }
-                        }}
-                        style={{
-                          background: '#10b981',
-                          color: '#ffffff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '6px 14px',
-                          fontSize: '0.8rem',
-                          fontWeight: 700,
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Mark Open & Add Slots
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Active Slots Grid */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '16px' }}>
-                        {getCurrentModeSlots().length > 0 ? (
-                          getCurrentModeSlots().map((slot, sIdx) => (
-                            <div
-                              key={sIdx}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '8px',
-                                background: '#ffffff',
-                                border: '1.5px solid #93c5fd',
-                                borderRadius: '8px',
-                                padding: '6px 12px',
-                                fontSize: '0.82rem',
-                                fontWeight: 700,
-                                color: '#1e3a8a',
-                                boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                              }}
-                            >
-                              <Clock size={12} color="#2563eb" />
-                              <span>{slot}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteSlot(slot)}
-                                title={`Remove slot ${slot}`}
-                                style={{
-                                  background: '#fee2e2',
-                                  border: 'none',
-                                  color: '#ef4444',
-                                  borderRadius: '50%',
-                                  width: '18px',
-                                  height: '18px',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  padding: 0
-                                }}
-                              >
-                                <X size={11} />
-                              </button>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '10px 0' }}>
-                            No time slots configured for date {selectedScheduleDate}. Choose a preset below or add custom slots.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Add Slot Form */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 14px' }}>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                          Add Slot to {selectedScheduleDate}:
-                        </span>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <select
-                            value={slotHour}
-                            onChange={(e) => setSlotHour(e.target.value)}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                          >
-                            {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
-                              <option key={h} value={h}>{h}</option>
-                            ))}
-                          </select>
-                          <span>:</span>
-                          <select
-                            value={slotMin}
-                            onChange={(e) => setSlotMin(e.target.value)}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                          >
-                            {['00', '15', '20', '30', '40', '45', '50'].map(m => (
-                              <option key={m} value={m}>{m}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={slotPeriod}
-                            onChange={(e) => setSlotPeriod(e.target.value)}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                          >
-                            <option value="AM">AM</option>
-                            <option value="PM">PM</option>
-                          </select>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => handleAddSlot(`${slotHour}:${slotMin} ${slotPeriod}`)}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: '#0284c7',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '6px 14px',
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          <Plus size={14} />
-                          Add Slot
-                        </button>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-                          <input
-                            type="text"
-                            placeholder="Or custom (e.g. 06:15 PM)"
-                            value={newSlotTime}
-                            onChange={(e) => setNewSlotTime(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleAddSlot(newSlotTime);
-                              }
-                            }}
-                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '180px' }}
-                          />
-                          {newSlotTime && (
-                            <button
-                              type="button"
-                              onClick={() => handleAddSlot(newSlotTime)}
-                              style={{
-                                background: '#10b981',
-                                color: '#ffffff',
-                                border: 'none',
-                                borderRadius: '6px',
-                                padding: '6px 12px',
-                                fontSize: '0.82rem',
-                                fontWeight: 700,
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Add
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* One-Click Presets */}
-                      <div style={{ marginTop: '14px' }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                          ⚡ Quick Slot Schedule Presets for {selectedScheduleDate}:
-                        </span>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.76rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              color: '#334155'
-                            }}
-                          >
-                            Standard 4 Slots (04:00 PM - 05:30 PM)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplySlotPreset(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.76rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              color: '#334155'
-                            }}
-                          >
-                            Morning OPD (09:00 AM - 01:00 PM)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.76rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              color: '#334155'
-                            }}
-                          >
-                            Evening OPD (04:00 PM - 08:00 PM)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplySlotPreset([
-                              '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-                              '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
-                            ], 'Full Day OPD')}
-                            style={{
-                              background: '#f1f5f9',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.76rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              color: '#334155'
-                            }}
-                          >
-                            Full Day OPD (Morning + Evening)
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
                 )}
 
                 {/* SUBSECTION 3: SLOT DURATION & SUMMARY */}
@@ -5907,7 +6057,10 @@ const DoctorDashboard = ({ onNavigate }) => {
                     {profileForm.about && (
                       <button
                         type="button"
-                        onClick={() => setProfileForm({ ...profileForm, about: '' })}
+                        onClick={() => {
+                          isAboutDirtyRef.current = true;
+                          setProfileForm({ ...profileForm, about: '' });
+                        }}
                         style={{
                           background: '#fff1f2',
                           border: '1px solid #fecdd3',
@@ -5961,7 +6114,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     rows={6}
                     placeholder="Write your professional summary, clinical background, specializations, patient care approach, and institutional privileges here..."
                     value={profileForm.about || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, about: e.target.value })}
+                    onFocus={(e) => {
+                      isEditingAboutRef.current = true;
+                      e.target.style.borderColor = '#2563eb';
+                      e.target.style.background = '#ffffff';
+                    }}
+                    onBlur={(e) => {
+                      isEditingAboutRef.current = false;
+                      e.target.style.borderColor = '#cbd5e1';
+                      e.target.style.background = '#f8fafc';
+                    }}
+                    onChange={(e) => {
+                      const newVal = e.target.value;
+                      isEditingAboutRef.current = true;
+                      isAboutDirtyRef.current = newVal.trim() !== (activeDoctor?.about || '').trim();
+                      setProfileForm({ ...profileForm, about: newVal });
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
@@ -5981,15 +6149,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                       color: '#1e293b',
                       background: '#f8fafc',
                       transition: 'border-color 0.2s, background 0.2s'
-                    }}
-                    onFocus={(e) => {
-                      e.target.style.borderColor = '#2563eb';
-                      e.target.style.background = '#ffffff';
-                    }}
-                    onBlur={(e) => {
-                      e.target.style.borderColor = '#cbd5e1';
-                      e.target.style.background = '#f8fafc';
-                      handleSaveAbout();
                     }}
                   />
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '0.78rem', color: '#64748b' }}>
@@ -6025,95 +6184,167 @@ const DoctorDashboard = ({ onNavigate }) => {
                   Add national, state, or institutional awards. You can modify any award text or delete it.
                 </p>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                   {(profileForm.awards && profileForm.awards.length > 0) ? (
                     profileForm.awards.map((award, idx) => {
-                      const { text: displayTitle, year: displayYear } = parseAwardTextAndYear(award);
-                      return (
-                        <div
-                          key={`award-${idx}-${award}`}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            background: '#fef3c7',
-                            color: '#92400e',
-                            border: '1px solid #fde68a',
-                            padding: '5px 10px',
-                            borderRadius: '8px',
-                            fontSize: '0.82rem',
-                            fontWeight: 600
-                          }}
-                        >
-                          {editingAward.index === idx ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                              <input
-                                type="text"
-                                value={editingAward.text}
-                                onChange={(e) => setEditingAward(prev => ({ ...prev, text: e.target.value }))}
-                                placeholder="Award title"
-                                style={{ padding: '2px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #d97706', outline: 'none', minWidth: '140px' }}
-                                autoFocus
-                              />
-                              <input
-                                type="text"
-                                value={editingAward.year || ''}
-                                onChange={(e) => setEditingAward(prev => ({ ...prev, year: e.target.value }))}
-                                placeholder="Year"
-                                style={{ padding: '2px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #d97706', outline: 'none', width: '65px' }}
-                              />
+                      const { text: displayTitle, recognition: displayRecognition, year: displayYear } = parseAwardTextAndYear(award);
+                      const isEditing = editingAward.index === idx;
+
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={`award-edit-${idx}`}
+                            style={{
+                              width: '100%',
+                              background: '#fffbeb',
+                              border: '1.5px solid #d97706',
+                              borderRadius: '10px',
+                              padding: '14px 16px',
+                              boxShadow: '0 2px 8px rgba(217,119,6,0.08)'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#92400e', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Edit2 size={14} />
+                              <span>Edit Award & Recognition Details</span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Award / Honor Title:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingAward.text}
+                                  onChange={(e) => setEditingAward(prev => ({ ...prev, text: e.target.value }))}
+                                  placeholder="e.g. Best Cardiologist, Medical Excellence Award"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                  autoFocus
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Recognition / Authority (Subtitle):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingAward.recognition}
+                                  onChange={(e) => setEditingAward(prev => ({ ...prev, recognition: e.target.value }))}
+                                  placeholder="e.g. National Healthcare Recognition, AIIMS Honor, DMA Award"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Year (Optional):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingAward.year || ''}
+                                  onChange={(e) => setEditingAward(prev => ({ ...prev, year: e.target.value }))}
+                                  placeholder="e.g. 2024"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateAward(idx)}
-                                style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                                title="Save modification"
+                                style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                               >
-                                <Check size={12} />
+                                <Check size={13} />
+                                <span>Save Changes</span>
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setEditingAward({ index: null, text: '', year: '' })}
-                                style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                                title="Cancel"
+                                onClick={() => setEditingAward({ index: null, text: '', recognition: 'National Healthcare Recognition', year: '' })}
+                                style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
                               >
-                                <X size={12} />
+                                Cancel
                               </button>
                             </div>
-                          ) : (
-                            <>
-                              <Award size={14} color="#d97706" />
-                              <span>{displayTitle || award}</span>
-                              {displayYear && (
-                                <span style={{
-                                  background: '#fffbeb',
-                                  color: '#b45309',
-                                  border: '1px solid #fcd34d',
-                                  borderRadius: '4px',
-                                  padding: '1px 6px',
-                                  fontSize: '0.72rem',
-                                  fontWeight: 700
-                                }}>
-                                  {displayYear}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={`award-${idx}-${displayTitle}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            gap: '12px',
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: '#fef3c7',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#d97706',
+                              flexShrink: 0
+                            }}>
+                              <Award size={18} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#78350f' }}>
+                                  {displayTitle || (typeof award === 'string' ? award : award?.title)}
                                 </span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditAward(idx, award)}
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#b45309', padding: '0 2px', display: 'flex' }}
-                                title="Modify award"
-                              >
-                                <Edit2 size={13} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveAward(idx)}
-                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '0 2px', display: 'flex' }}
-                                title="Delete award"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            </>
-                          )}
+                                {displayYear && (
+                                  <span style={{
+                                    background: '#fef3c7',
+                                    color: '#b45309',
+                                    border: '1px solid #fcd34d',
+                                    borderRadius: '12px',
+                                    padding: '2px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700
+                                  }}>
+                                    {displayYear}
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 500 }}>
+                                {displayRecognition}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditAward(idx, award)}
+                              style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '6px', color: '#b45309', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
+                              title="Edit award & recognition"
+                            >
+                              <Edit2 size={12} />
+                              <span>Edit</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAward(idx)}
+                              style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#ef4444', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
+                              title="Delete award"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })
@@ -6122,27 +6353,63 @@ const DoctorDashboard = ({ onNavigate }) => {
                   )}
                 </div>
 
-                <form onSubmit={handleAddAward} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    placeholder="Award title (e.g. Best Cardiologist, National Medical Excellence Award...)"
-                    value={newAwardInput}
-                    onChange={(e) => setNewAwardInput(e.target.value)}
-                    style={{ flex: '1 1 240px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Year (e.g. 2024)"
-                    value={newAwardYear}
-                    onChange={(e) => setNewAwardYear(e.target.value)}
-                    style={{ width: '130px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
-                  />
-                  <button
-                    type="submit"
-                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}
-                  >
-                    + Add Award
-                  </button>
+                {/* ADD AWARD FORM */}
+                <form onSubmit={handleAddAward} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+                    ➕ Add New Award / Honor
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Award Title:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Best Cardiologist of the Year, Medical Excellence Award"
+                        value={newAwardInput}
+                        onChange={(e) => setNewAwardInput(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Recognition / Authority (Subtitle):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. National Healthcare Recognition, AIIMS Honor, DMA Award"
+                        value={newAwardRecognition}
+                        onChange={(e) => setNewAwardRecognition(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Year (Optional):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2024"
+                        value={newAwardYear}
+                        onChange={(e) => setNewAwardYear(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="submit"
+                      style={{ background: '#d97706', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Plus size={14} />
+                      <span>Add Award</span>
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -6172,93 +6439,232 @@ const DoctorDashboard = ({ onNavigate }) => {
                   Add clinical fellowships and specialized board certifications. Modify or delete at any time.
                 </p>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                   {(profileForm.certifications && profileForm.certifications.length > 0) ? (
-                    profileForm.certifications.map((cert, idx) => (
-                      <div
-                        key={`cert-${idx}-${cert}`}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px solid #bfdbfe',
-                          padding: '5px 10px',
-                          borderRadius: '8px',
-                          fontSize: '0.82rem',
-                          fontWeight: 600
-                        }}
-                      >
-                        {editingCert.index === idx ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <input
-                              type="text"
-                              value={editingCert.text}
-                              onChange={(e) => setEditingCert({ index: idx, text: e.target.value })}
-                              style={{ padding: '2px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #2563eb', outline: 'none' }}
-                              autoFocus
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateCert(idx)}
-                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                              title="Save modification"
-                            >
-                              <Check size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingCert({ index: null, text: '' })}
-                              style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                              title="Cancel"
-                            >
-                              <X size={12} />
-                            </button>
+                    profileForm.certifications.map((cert, idx) => {
+                      const { text: displayTitle, board: displayBoard, tag: displayTag } = parseCertTextAndBoard(cert);
+                      const isEditing = editingCert.index === idx;
+
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={`cert-edit-${idx}`}
+                            style={{
+                              width: '100%',
+                              background: '#eff6ff',
+                              border: '1.5px solid #2563eb',
+                              borderRadius: '10px',
+                              padding: '14px 16px',
+                              boxShadow: '0 2px 8px rgba(37,99,235,0.08)'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e40af', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Edit2 size={14} />
+                              <span>Edit Certificate & Medical Board Details</span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Certificate / Fellowship Title:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingCert.text}
+                                  onChange={(e) => setEditingCert(prev => ({ ...prev, text: e.target.value }))}
+                                  placeholder="e.g. Fellow of American College of Cardiology (FACC)"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                  autoFocus
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Accredited Medical Board / Authority (Subtitle):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingCert.board}
+                                  onChange={(e) => setEditingCert(prev => ({ ...prev, board: e.target.value }))}
+                                  placeholder="e.g. Accredited Medical Board, National Board of Examinations"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Badge / Status Text:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingCert.tag || ''}
+                                  onChange={(e) => setEditingCert(prev => ({ ...prev, tag: e.target.value }))}
+                                  placeholder="e.g. Certified, Board Certified, Fellow"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateCert(idx)}
+                                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                <Check size={13} />
+                                <span>Save Changes</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingCert({ index: null, text: '', board: 'Accredited Medical Board', tag: 'Certified' })}
+                                style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
-                        ) : (
-                          <>
-                            <GraduationCap size={14} color="#2563eb" />
-                            <span>{cert}</span>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={`cert-${idx}-${displayTitle}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            background: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '8px',
+                            padding: '10px 14px',
+                            gap: '12px',
+                            flexWrap: 'wrap'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: '220px' }}>
+                            <div style={{
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '8px',
+                              background: '#dbeafe',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: '#2563eb',
+                              flexShrink: 0
+                            }}>
+                              <GraduationCap size={18} />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e3a8a' }}>
+                                  {displayTitle || (typeof cert === 'string' ? cert : cert?.title)}
+                                </span>
+                                {displayTag && (
+                                  <span style={{
+                                    background: '#dbeafe',
+                                    color: '#1d4ed8',
+                                    border: '1px solid #93c5fd',
+                                    borderRadius: '12px',
+                                    padding: '2px 8px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700
+                                  }}>
+                                    {displayTag}
+                                  </span>
+                                )}
+                              </div>
+                              <span style={{ fontSize: '0.78rem', color: '#3b82f6', fontWeight: 500 }}>
+                                {displayBoard}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                             <button
                               type="button"
-                              onClick={() => setEditingCert({ index: idx, text: cert })}
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2563eb', padding: '0 2px', display: 'flex' }}
-                              title="Modify certificate"
+                              onClick={() => handleStartEditCert(idx, cert)}
+                              style={{ background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', color: '#1d4ed8', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
+                              title="Edit certificate & board"
                             >
-                              <Edit2 size={13} />
+                              <Edit2 size={12} />
+                              <span>Edit</span>
                             </button>
+
                             <button
                               type="button"
                               onClick={() => handleRemoveCert(idx)}
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '0 2px', display: 'flex' }}
+                              style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#ef4444', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
                               title="Delete certificate"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={12} />
                             </button>
-                          </>
-                        )}
-                      </div>
-                    ))
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No certifications added yet.</span>
                   )}
                 </div>
 
-                <form onSubmit={handleAddCert} style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="e.g. Fellow of American College of Cardiology (FACC), ACLS Certified..."
-                    value={newCertInput}
-                    onChange={(e) => setNewCertInput(e.target.value)}
-                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
-                  />
-                  <button
-                    type="submit"
-                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                  >
-                    + Add Certificate
-                  </button>
+                {/* ADD CERTIFICATE FORM */}
+                <form onSubmit={handleAddCert} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+                    ➕ Add New Certificate / Fellowship
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Certificate / Fellowship Title:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Fellow of American College of Cardiology (FACC), ACLS"
+                        value={newCertInput}
+                        onChange={(e) => setNewCertInput(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Accredited Medical Board / Authority (Subtitle):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Accredited Medical Board, National Board of Examinations"
+                        value={newCertBoard}
+                        onChange={(e) => setNewCertBoard(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Badge / Status Text:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Certified, Board Certified, Fellow"
+                        value={newCertTag}
+                        onChange={(e) => setNewCertTag(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button
+                      type="submit"
+                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Plus size={14} />
+                      <span>Add Certificate</span>
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -6288,93 +6694,257 @@ const DoctorDashboard = ({ onNavigate }) => {
                   National and international medical societies and associations.
                 </p>
 
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                   {(profileForm.memberships && profileForm.memberships.length > 0) ? (
-                    profileForm.memberships.map((mem, idx) => (
-                      <div
-                        key={`mem-${idx}-${mem}`}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          background: '#f8fafc',
-                          color: '#334155',
-                          border: '1px solid #cbd5e1',
-                          padding: '5px 10px',
-                          borderRadius: '8px',
-                          fontSize: '0.82rem',
-                          fontWeight: 600
-                        }}
-                      >
-                        {editingMembership.index === idx ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <input
-                              type="text"
-                              value={editingMembership.text}
-                              onChange={(e) => setEditingMembership({ index: idx, text: e.target.value })}
-                              style={{ padding: '2px 6px', fontSize: '0.82rem', borderRadius: '4px', border: '1px solid #475569', outline: 'none' }}
-                              autoFocus
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateMembership(idx)}
-                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                              title="Save modification"
-                            >
-                              <Check size={12} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingMembership({ index: null, text: '' })}
-                              style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '4px', padding: '2px 6px', cursor: 'pointer', fontSize: '0.75rem' }}
-                              title="Cancel"
-                            >
-                              <X size={12} />
-                            </button>
+                    profileForm.memberships.map((mem, idx) => {
+                      const formatted = formatMembershipForDisplay(mem);
+                      const isEditing = editingMembership.index === idx;
+
+                      if (isEditing) {
+                        return (
+                          <div
+                            key={`mem-edit-${idx}`}
+                            style={{
+                              width: '100%',
+                              background: '#f8fafc',
+                              border: '1.5px solid #2563eb',
+                              borderRadius: '10px',
+                              padding: '14px 16px',
+                              boxShadow: '0 2px 8px rgba(37,99,235,0.08)'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#1e40af', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <Edit2 size={14} />
+                              <span>Edit Membership Details</span>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginBottom: '12px' }}>
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Membership / Society Name:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingMembership.title}
+                                  onChange={(e) => setEditingMembership(prev => ({ ...prev, title: e.target.value }))}
+                                  placeholder="e.g. Cardiological Society of India (CSI)"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                  autoFocus
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Medical Council / Authority (Subtitle):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingMembership.council}
+                                  onChange={(e) => setEditingMembership(prev => ({ ...prev, council: e.target.value }))}
+                                  placeholder="e.g. Official Medical Council, Delhi Medical Council"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+
+                              <div>
+                                <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                                  Membership Status (Badge Text):
+                                </label>
+                                <input
+                                  type="text"
+                                  value={editingMembership.status}
+                                  onChange={(e) => setEditingMembership(prev => ({ ...prev, status: e.target.value }))}
+                                  placeholder="e.g. Active Member, Life Member, Fellow"
+                                  style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', background: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!!editingMembership.showStatus}
+                                  onChange={(e) => setEditingMembership(prev => ({ ...prev, showStatus: e.target.checked }))}
+                                  style={{ width: '16px', height: '16px', accentColor: '#2563eb', cursor: 'pointer' }}
+                                />
+                                <span>Show "{editingMembership.status || 'Active Member'}" badge on public profile</span>
+                              </label>
+
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateMembership(idx)}
+                                  style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                >
+                                  <Check size={13} />
+                                  <span>Save Changes</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingMembership({ index: null, title: '', council: 'Official Medical Council', status: 'Active Member', showStatus: true })}
+                                  style={{ background: '#ffffff', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600 }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                        ) : (
-                          <>
-                            <Users size={14} color="#64748b" />
-                            <span>{mem}</span>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={`mem-${idx}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: '10px',
+                            background: '#ffffff',
+                            border: '1.5px solid #e2e8f0',
+                            borderRadius: '10px',
+                            padding: '10px 14px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ecfdf5', border: '1px solid #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#059669', flexShrink: 0 }}>
+                              <CheckCircle2 size={16} />
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#0f172a' }}>
+                                {formatted.title}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1px' }}>
+                                🏛️ {formatted.council}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {formatted.showStatus ? (
+                              <span style={{
+                                background: '#ecfdf5',
+                                color: '#059669',
+                                border: '1px solid #a7f3d0',
+                                borderRadius: '12px',
+                                padding: '3px 9px',
+                                fontSize: '0.72rem',
+                                fontWeight: 700
+                              }}>
+                                {formatted.status}
+                              </span>
+                            ) : (
+                              <span style={{
+                                background: '#f1f5f9',
+                                color: '#64748b',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '12px',
+                                padding: '3px 9px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600
+                              }}>
+                                Badge Hidden
+                              </span>
+                            )}
+
                             <button
                               type="button"
-                              onClick={() => setEditingMembership({ index: idx, text: mem })}
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2563eb', padding: '0 2px', display: 'flex' }}
-                              title="Modify membership"
+                              onClick={() => startEditingMembership(mem, idx)}
+                              style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', color: '#2563eb', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
+                              title="Edit membership details"
                             >
-                              <Edit2 size={13} />
+                              <Edit2 size={12} />
+                              <span>Edit</span>
                             </button>
+
                             <button
                               type="button"
                               onClick={() => handleRemoveMembership(idx)}
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '0 2px', display: 'flex' }}
+                              style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: '6px', color: '#ef4444', padding: '4px 8px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.74rem', fontWeight: 600 }}
                               title="Delete membership"
                             >
-                              <Trash2 size={13} />
+                              <Trash2 size={12} />
                             </button>
-                          </>
-                        )}
-                      </div>
-                    ))
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <span style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic' }}>No memberships added yet.</span>
                   )}
                 </div>
 
-                <form onSubmit={handleAddMembership} style={{ display: 'flex', gap: '8px' }}>
-                  <input
-                    type="text"
-                    placeholder="e.g. Cardiological Society of India (CSI), Indian Medical Association (IMA)..."
-                    value={newMembershipInput}
-                    onChange={(e) => setNewMembershipInput(e.target.value)}
-                    style={{ flex: 1, padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem' }}
-                  />
-                  <button
-                    type="submit"
-                    style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem' }}
-                  >
-                    + Add Membership
-                  </button>
+                {/* ADD MEMBERSHIP FORM */}
+                <form onSubmit={handleAddMembership} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px' }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', marginBottom: '8px' }}>
+                    ➕ Add New Professional Medical Membership
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Membership / Society Name:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Cardiological Society of India (CSI)"
+                        value={newMembershipInput}
+                        onChange={(e) => setNewMembershipInput(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Medical Council / Authority (Subtitle):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Official Medical Council, Delhi Medical Council"
+                        value={newMembershipCouncil}
+                        onChange={(e) => setNewMembershipCouncil(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Status (Badge Text):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Active Member, Life Member, Fellow"
+                        value={newMembershipStatus}
+                        onChange={(e) => setNewMembershipStatus(e.target.value)}
+                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '6px', fontSize: '0.82rem', background: '#fff' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#334155' }}>
+                      <input
+                        type="checkbox"
+                        checked={newMembershipShowStatus}
+                        onChange={(e) => setNewMembershipShowStatus(e.target.checked)}
+                        style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }}
+                      />
+                      <span>Show "{newMembershipStatus || 'Active Member'}" badge on public profile</span>
+                    </label>
+
+                    <button
+                      type="submit"
+                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '7px 16px', borderRadius: '6px', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      <Plus size={14} />
+                      <span>Add Membership</span>
+                    </button>
+                  </div>
                 </form>
               </div>
 
@@ -6429,10 +6999,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                     profileForm.careerExperience.map((expRole, idx) => {
                       const isBeingDragged = draggedCareerIdx === idx;
                       const isHoveredOver = dragOverCareerIdx === idx && draggedCareerIdx !== null && draggedCareerIdx !== idx;
+                      const formatted = formatCareerExpForDisplay(expRole, activeDoctor?.hospital);
+                      const isAnyPresent = (profileForm.careerExperience || []).some(c => formatCareerExpForDisplay(c, activeDoctor?.hospital).isPresent);
+                      const isRolePresent = formatted.isPresent || (idx === 0 && !isAnyPresent);
 
                       return (
                         <div
-                          key={`career-${idx}-${expRole}`}
+                          key={`career-${idx}-${typeof expRole === 'string' ? expRole : `${expRole?.role || ''}-${expRole?.hospital || ''}`}`}
                           data-career-idx={idx}
                           draggable={editingCareerExp.index === null}
                           onDragStart={(e) => handleCareerDragStart(e, idx)}
@@ -6452,7 +7025,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                               : (isHoveredOver 
                                   ? '2px solid #2563eb' 
                                   : '1px solid #e2e8f0'),
-                            padding: '8px 12px',
+                            padding: '10px 12px',
                             borderRadius: '8px',
                             fontSize: '0.85rem',
                             color: '#1e293b',
@@ -6465,64 +7038,99 @@ const DoctorDashboard = ({ onNavigate }) => {
                           }}
                         >
                           {editingCareerExp.index === idx ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', flexWrap: 'wrap' }}>
-                              <input
-                                type="text"
-                                placeholder="Role & Hospital (e.g. Senior Consultant - Apollo Hospital)"
-                                value={editingCareerExp.text}
-                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, text: e.target.value }))}
-                                style={{ flex: '1 1 220px', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1.5px solid #2563eb', outline: 'none' }}
-                                autoFocus
-                              />
-                              <input
-                                type="text"
-                                placeholder="Start Year"
-                                value={editingCareerExp.startYear || ''}
-                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, startYear: e.target.value }))}
-                                style={{ width: '95px', padding: '6px 8px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
-                              />
-                              <input
-                                type="text"
-                                placeholder="End Year"
-                                value={editingCareerExp.isPresent ? 'Present' : (editingCareerExp.endYear || '')}
-                                disabled={!!editingCareerExp.isPresent}
-                                onChange={(e) => setEditingCareerExp(prev => ({ ...prev, endYear: e.target.value }))}
-                                style={{
-                                  width: '95px',
-                                  padding: '6px 8px',
-                                  fontSize: '0.82rem',
-                                  borderRadius: '6px',
-                                  border: '1px solid #cbd5e1',
-                                  outline: 'none',
-                                  background: editingCareerExp.isPresent ? '#f1f5f9' : '#ffffff',
-                                  color: editingCareerExp.isPresent ? '#059669' : '#0f172a',
-                                  fontWeight: editingCareerExp.isPresent ? 700 : 400
-                                }}
-                              />
-                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, color: '#1e293b' }}>
-                                <input
-                                  type="checkbox"
-                                  checked={!!editingCareerExp.isPresent}
-                                  onChange={(e) => setEditingCareerExp(prev => ({ ...prev, isPresent: e.target.checked, endYear: e.target.checked ? '' : prev.endYear }))}
-                                  style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#2563eb' }}
-                                />
-                                <span>Present</span>
-                              </label>
-                              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateCareerExp(idx)}
-                                  style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600 }}
-                                >
-                                  Save
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingCareerExp({ index: null, text: '', startYear: '', endYear: '', isPresent: false })}
-                                  style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '5px 8px', cursor: 'pointer', fontSize: '0.78rem' }}
-                                >
-                                  Cancel
-                                </button>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', background: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1.5px solid #2563eb' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '8px' }}>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>
+                                    Role / Designation:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Senior Consultant Interventional Cardiologist"
+                                    value={editingCareerExp.role}
+                                    onChange={(e) => setEditingCareerExp(prev => ({ ...prev, role: e.target.value }))}
+                                    style={{ width: '100%', padding: '6px 10px', fontSize: '0.84rem', borderRadius: '6px', border: '1.5px solid #cbd5e1', outline: 'none', background: '#fff' }}
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#475569', marginBottom: '2px' }}>
+                                    Hospital / Organization Name:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="e.g. Apollo Hospital, Fortis Healthcare"
+                                    value={editingCareerExp.hospital}
+                                    onChange={(e) => setEditingCareerExp(prev => ({ ...prev, hospital: e.target.value }))}
+                                    style={{ width: '100%', padding: '6px 10px', fontSize: '0.84rem', borderRadius: '6px', border: '1.5px solid #cbd5e1', outline: 'none', background: '#fff' }}
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                                    From:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Start Year"
+                                    value={editingCareerExp.startYear || ''}
+                                    onChange={(e) => setEditingCareerExp(prev => ({ ...prev, startYear: e.target.value }))}
+                                    style={{ width: '100px', padding: '6px 8px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff' }}
+                                  />
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                                    To:
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="End Year"
+                                    value={editingCareerExp.isPresent ? 'Present' : (editingCareerExp.endYear || '')}
+                                    disabled={!!editingCareerExp.isPresent}
+                                    onChange={(e) => setEditingCareerExp(prev => ({ ...prev, endYear: e.target.value }))}
+                                    style={{
+                                      width: '100px',
+                                      padding: '6px 8px',
+                                      fontSize: '0.82rem',
+                                      borderRadius: '6px',
+                                      border: '1px solid #cbd5e1',
+                                      outline: 'none',
+                                      background: editingCareerExp.isPresent ? '#f1f5f9' : '#ffffff',
+                                      color: editingCareerExp.isPresent ? '#059669' : '#0f172a',
+                                      fontWeight: editingCareerExp.isPresent ? 700 : 400
+                                    }}
+                                  />
+                                </div>
+
+                                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, color: '#1e293b' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!editingCareerExp.isPresent}
+                                    onChange={(e) => setEditingCareerExp(prev => ({ ...prev, isPresent: e.target.checked, endYear: e.target.checked ? '' : prev.endYear }))}
+                                    style={{ width: '14px', height: '14px', cursor: 'pointer', accentColor: '#2563eb' }}
+                                  />
+                                  <span>Currently working here (Present)</span>
+                                </label>
+
+                                <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateCareerExp(idx)}
+                                    style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '6px 14px', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700 }}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCareerExp({ index: null, role: '', hospital: '', startYear: '', endYear: '', isPresent: false })}
+                                    style={{ background: '#cbd5e1', color: '#334155', border: 'none', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer', fontSize: '0.78rem' }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ) : (
@@ -6541,7 +7149,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                                 >
                                   <GripVertical size={16} />
                                 </div>
-                                {expRole.toLowerCase().includes('present') || (idx === 0 && !(profileForm.careerExperience || []).some(c => c.toLowerCase().includes('present'))) ? (
+                                {isRolePresent ? (
                                   <div title="Present (Double circle)" style={{ width: '16px', height: '16px', borderRadius: '50%', border: '2px solid #2563eb', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 0 0 2px rgba(37,99,235,0.15)' }}>
                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563eb' }} />
                                   </div>
@@ -6549,9 +7157,45 @@ const DoctorDashboard = ({ onNavigate }) => {
                                   <div title="Past role (Single circle)" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2563eb', border: '1.5px solid #ffffff', boxShadow: '0 0 0 1.5px #60a5fa', flexShrink: 0, margin: '0 3px' }} />
                                 )}
                                 <Briefcase size={14} color="#2563eb" style={{ flexShrink: 0 }} />
-                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {expRole}
-                                </span>
+                                
+                                <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: '2px', flex: 1 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: 700, color: '#0f172a', fontSize: '0.86rem' }}>
+                                      {formatted.role}
+                                    </span>
+                                    {formatted.isPresent ? (
+                                      <span style={{
+                                        background: '#dcfce7',
+                                        color: '#166534',
+                                        border: '1px solid #bbf7d0',
+                                        borderRadius: '12px',
+                                        padding: '2px 8px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 700
+                                      }}>
+                                        ● Present
+                                      </span>
+                                    ) : formatted.yearText ? (
+                                      <span style={{
+                                        background: '#f1f5f9',
+                                        color: '#475569',
+                                        border: '1px solid #cbd5e1',
+                                        borderRadius: '12px',
+                                        padding: '2px 8px',
+                                        fontSize: '0.72rem',
+                                        fontWeight: 600
+                                      }}>
+                                        {formatted.yearText}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  {formatted.hospital && (
+                                    <div style={{ fontSize: '0.78rem', color: '#4f46e5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <span style={{ fontSize: '0.82rem' }}>🏥</span>
+                                      <span>{formatted.hospital}</span>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
 
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, marginLeft: '8px' }}>
@@ -6599,7 +7243,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                                   type="button"
                                   onClick={() => handleStartEditCareerExp(idx, expRole)}
                                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#2563eb', padding: '3px', display: 'flex', borderRadius: '4px' }}
-                                  title="Modify role"
+                                  title="Modify role & hospital"
                                 >
                                   <Edit2 size={14} />
                                 </button>
@@ -6623,42 +7267,77 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
 
                 <form onSubmit={handleAddCareerExp} style={{ display: 'flex', flexDirection: 'column', gap: '10px', background: '#f8fafc', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <input
-                      type="text"
-                      placeholder="Role & Hospital (e.g. Senior Consultant - Apollo Hospital)"
-                      value={newCareerExpInput}
-                      onChange={(e) => setNewCareerExpInput(e.target.value)}
-                      style={{ flex: '1 1 260px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', background: '#ffffff' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Start Year (e.g. 2018)"
-                      value={newCareerExpStartYear}
-                      onChange={(e) => setNewCareerExpStartYear(e.target.value)}
-                      style={{ width: '140px', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.88rem', background: '#ffffff' }}
-                    />
-                    <input
-                      type="text"
-                      placeholder="End Year (e.g. 2024)"
-                      value={newCareerExpIsPresent ? 'Present' : newCareerExpEndYear}
-                      disabled={newCareerExpIsPresent}
-                      onChange={(e) => setNewCareerExpEndYear(e.target.value)}
-                      style={{
-                        width: '140px',
-                        padding: '8px 12px',
-                        border: '1.5px solid #cbd5e1',
-                        borderRadius: '8px',
-                        fontSize: '0.88rem',
-                        background: newCareerExpIsPresent ? '#f1f5f9' : '#ffffff',
-                        color: newCareerExpIsPresent ? '#059669' : '#0f172a',
-                        fontWeight: newCareerExpIsPresent ? 700 : 400
-                      }}
-                    />
+                  <div style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a', marginBottom: '2px' }}>
+                    ➕ Add New Career Experience / Hospital Role
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.84rem', fontWeight: 600, color: '#1e293b', userSelect: 'none' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Role / Clinical Designation:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Senior Consultant Interventional Cardiologist"
+                        value={newCareerExpInput}
+                        onChange={(e) => setNewCareerExpInput(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#ffffff' }}
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
+                        Hospital / Clinic / Organization Name:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder={`e.g. ${activeDoctor?.hospital || 'Apollo Hospital'}`}
+                        value={newCareerExpHospital}
+                        onChange={(e) => setNewCareerExpHospital(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#ffffff' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                        Start Year:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2018"
+                        value={newCareerExpStartYear}
+                        onChange={(e) => setNewCareerExpStartYear(e.target.value)}
+                        style={{ width: '130px', padding: '7px 10px', border: '1.5px solid #cbd5e1', borderRadius: '8px', fontSize: '0.85rem', background: '#ffffff' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <label style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                        End Year:
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 2024"
+                        value={newCareerExpIsPresent ? 'Present' : newCareerExpEndYear}
+                        disabled={newCareerExpIsPresent}
+                        onChange={(e) => setNewCareerExpEndYear(e.target.value)}
+                        style={{
+                          width: '130px',
+                          padding: '7px 10px',
+                          border: '1.5px solid #cbd5e1',
+                          borderRadius: '8px',
+                          fontSize: '0.85rem',
+                          background: newCareerExpIsPresent ? '#f1f5f9' : '#ffffff',
+                          color: newCareerExpIsPresent ? '#059669' : '#0f172a',
+                          fontWeight: newCareerExpIsPresent ? 700 : 400
+                        }}
+                      />
+                    </div>
+
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600, color: '#1e293b', userSelect: 'none' }}>
                       <input
                         type="checkbox"
                         checked={newCareerExpIsPresent}
@@ -6673,10 +7352,10 @@ const DoctorDashboard = ({ onNavigate }) => {
 
                     <button
                       type="submit"
-                      style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 2px rgba(37,99,235,0.2)' }}
+                      style={{ marginLeft: 'auto', background: '#2563eb', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 1px 2px rgba(37,99,235,0.2)' }}
                     >
                       <Plus size={15} />
-                      <span>Add Role</span>
+                      <span>Add Experience Role</span>
                     </button>
                   </div>
                 </form>
@@ -6979,14 +7658,20 @@ const DoctorDashboard = ({ onNavigate }) => {
 
               {/* SECTION: DOCTOR PROFILE FAQS (GOVERNED EXCLUSIVELY BY ADMIN) */}
               <div style={{ marginTop: '28px', borderTop: '1px solid #e2e8f0', paddingTop: '22px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                   <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#0f172a' }}>
                     <HelpCircle size={18} color="#0284c7" />
                     Doctor Profile FAQs (Managed by Admin)
                   </h4>
-                  <span style={{ fontSize: '0.76rem', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
-                    Admin Governed (Read-Only)
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: '#ecfdf5', color: '#059669', padding: '3px 9px', borderRadius: '12px', fontSize: '0.72rem', fontWeight: 700, border: '1px solid #a7f3d0' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                      Real-Time Sync
+                    </span>
+                    <span style={{ fontSize: '0.76rem', background: '#e0f2fe', color: '#0369a1', padding: '3px 8px', borderRadius: '6px', fontWeight: 700 }}>
+                      Admin Governed ({doctorLiveFaqs.length})
+                    </span>
+                  </div>
                 </div>
 
                 <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '10px', padding: '14px 16px', marginBottom: '14px' }}>
@@ -7001,15 +7686,9 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* Display Current Live FAQs */}
+                {/* Display Current Live Real-Time FAQs */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {((activeDoctor.faqs && activeDoctor.faqs.length > 0) ? activeDoctor.faqs : [
-                    { q: `How can I book an appointment with ${activeDoctor.name ? (activeDoctor.name.startsWith('Dr.') ? activeDoctor.name : `Dr. ${activeDoctor.name}`) : 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
-                    { q: 'What do I need to show at the clinic?', a: 'Carry a valid government photo ID, health insurance policy e-card (if claiming cashless coverage), and previous doctor prescriptions or test reports.' },
-                    { q: 'Is my consultation private with the doctor?', a: 'Yes, 100%. All consultations, patient notes, and medical discussions are strictly confidential.' },
-                    { q: 'Can I reschedule my appointment?', a: 'Yes, you can easily reschedule or cancel prior to your slot time through your patient account.' },
-                    { q: 'Does the doctor accept health insurance or cashless claims?', a: 'Yes, consultations and hospital procedures qualify for cashless mediclaim pre-authorization with all leading TPAs.' }
-                  ]).map((faq, idx) => (
+                  {doctorLiveFaqs.map((faq, idx) => (
                     <div
                       key={idx}
                       style={{
@@ -7019,8 +7698,15 @@ const DoctorDashboard = ({ onNavigate }) => {
                         padding: '10px 14px'
                       }}
                     >
-                      <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.86rem', marginBottom: '4px' }}>
-                        Q{idx + 1}: {faq.q || faq.question}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', gap: '8px' }}>
+                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.86rem' }}>
+                          Q{idx + 1}: {faq.q || faq.question}
+                        </div>
+                        {faq.source && (
+                          <span style={{ fontSize: '0.68rem', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: '4px', flexShrink: 0 }}>
+                            {faq.source}
+                          </span>
+                        )}
                       </div>
                       <div style={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.4 }}>
                         {faq.a || faq.answer}

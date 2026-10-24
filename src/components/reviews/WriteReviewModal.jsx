@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { X, Star, ShieldCheck, CheckCircle2, MessageSquare, Building2, User, Stethoscope, LogIn } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { defaultAcceptedInsurances } from '../../data/insurancePartners';
+import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import styles from './WriteReviewModal.module.css';
 
 const WriteReviewModal = ({
@@ -15,25 +16,16 @@ const WriteReviewModal = ({
 }) => {
   const { addReview, hospitals, doctors } = useData();
 
-  // Check authenticated patient login session
-  const { loggedInUser, isLoggedIn } = useMemo(() => {
-    try {
-      const token = localStorage.getItem('token');
-      const userStr = localStorage.getItem('user');
-      if (token && userStr) {
-        const u = JSON.parse(userStr);
-        if (u && (u.name || u.email || u._id || u.id)) {
-          return { loggedInUser: u, isLoggedIn: true };
-        }
-      }
-    } catch {}
-    return { loggedInUser: null, isLoggedIn: false };
+  // Check authenticated patient login session strictly
+  const { loggedInUser, isLoggedIn, token: patientToken } = useMemo(() => {
+    const auth = getAuthenticatedPatient();
+    return { loggedInUser: auth.user, isLoggedIn: auth.isLoggedIn, token: auth.token };
   }, []);
 
   const [rating, setRating] = useState(5);
   const [hoverRating, setHoverRating] = useState(0);
-  const [patientName, setPatientName] = useState(loggedInUser?.name || '');
-  const [patientCity, setPatientCity] = useState(loggedInUser?.city || 'Bengaluru');
+  const [patientName, setPatientName] = useState(isLoggedIn ? (loggedInUser?.name || '') : '');
+  const [patientCity, setPatientCity] = useState(isLoggedIn ? (loggedInUser?.city || 'Bengaluru') : 'Bengaluru');
   const [targetType, setTargetType] = useState(propTargetType || preselectedTarget?.type || 'hospital');
   const [targetName, setTargetName] = useState(propTargetName || preselectedTarget?.name || hospitals[0]?.name || '');
   const [selectedDoctorId, setSelectedDoctorId] = useState('');
@@ -81,6 +73,13 @@ const WriteReviewModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    const activeAuth = getAuthenticatedPatient();
+    if (!activeAuth.isLoggedIn || !activeAuth.token) {
+      alert('You must be logged in as a verified patient to publish a review.');
+      handleGoToLogin();
+      return;
+    }
+
     if (!patientName.trim() || !comment.trim() || !targetName.trim()) {
       alert('Please fill out all required fields: Your Name and Your Review.');
       return;
@@ -97,8 +96,8 @@ const WriteReviewModal = ({
       await addReview({
         patientName: patientName.trim(),
         patientCity: patientCity.trim() || 'Bengaluru',
-        userId: loggedInUser?._id || loggedInUser?.id || '',
-        userEmail: loggedInUser?.email || '',
+        userId: activeAuth.user?._id || activeAuth.user?.id || '',
+        userEmail: activeAuth.user?.email || '',
         targetType,
         targetName: targetName.trim(),
         targetId: propTargetId || preselectedTarget?.id || preselectedTarget?._id || '',
@@ -111,15 +110,13 @@ const WriteReviewModal = ({
         insuranceUsed: insuranceUsed.trim(),
         isVerified: true,
         status: 'approved' // Live immediately for hospital, doctors, admin, and patient community
-      });
+      }, activeAuth.token);
 
       setSubmitted(true);
       if (onSuccess) onSuccess();
     } catch (err) {
       console.error('Error submitting patient review:', err);
-      // Still show success since DataContext performs optimistic local persistence and broadcast
-      setSubmitted(true);
-      if (onSuccess) onSuccess();
+      alert(err.message || 'Failed to submit review. Please ensure you are logged in as a patient.');
     } finally {
       setIsSubmitting(false);
     }
@@ -147,40 +144,110 @@ const WriteReviewModal = ({
               </p>
             </div>
 
-            {!isLoggedIn && (
+            {!isLoggedIn ? (
               <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: '#eff6ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: '8px',
-                padding: '8px 14px',
-                marginBottom: '16px',
-                fontSize: '0.82rem',
-                color: '#1e40af'
+                textAlign: 'center',
+                padding: '28px 20px',
+                background: '#f8fafc',
+                borderRadius: '12px',
+                border: '1px dashed #cbd5e1',
+                margin: '16px 0 10px'
               }}>
-                <span>Posting as Public Patient. Have an account?</span>
-                <button
-                  type="button"
-                  onClick={handleGoToLogin}
-                  style={{
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    padding: '4px 10px',
-                    fontSize: '0.76rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  Sign In
-                </button>
+                <div style={{
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '50%',
+                  background: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 14px'
+                }}>
+                  <LogIn size={26} />
+                </div>
+                <h3 style={{ fontSize: '1.15rem', color: '#0f172a', fontWeight: 700, margin: '0 0 8px' }}>
+                  Login Required to Publish a Review
+                </h3>
+                <p style={{ fontSize: '0.88rem', color: '#64748b', maxWidth: '380px', margin: '0 auto 20px', lineHeight: 1.5 }}>
+                  To ensure authentic and verified patient feedback, you must be logged into your patient account before publishing a review for <strong>{targetName}</strong>.
+                </p>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={handleGoToLogin}
+                    style={{
+                      background: '#0284c7',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '10px 22px',
+                      fontSize: '0.9rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 2px 8px rgba(2, 132, 199, 0.25)'
+                    }}
+                  >
+                    <LogIn size={16} />
+                    <span>Log In to Publish Review</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    style={{
+                      background: '#ffffff',
+                      color: '#64748b',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '10px 18px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            )}
+            ) : (
+              <>
+                {!isLoggedIn && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    marginBottom: '16px',
+                    fontSize: '0.82rem',
+                    color: '#1e40af'
+                  }}>
+                    <span>Posting as Public Patient. Have an account?</span>
+                    <button
+                      type="button"
+                      onClick={handleGoToLogin}
+                      style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '4px 10px',
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Sign In
+                    </button>
+                  </div>
+                )}
 
-            <form onSubmit={handleSubmit} className={styles.form}>
+                <form onSubmit={handleSubmit} className={styles.form}>
               {/* Rating Selector */}
               <div className={styles.ratingRow}>
                 <label className={styles.ratingLabel}>Your Overall Rating *</label>
@@ -363,6 +430,8 @@ const WriteReviewModal = ({
                 {isSubmitting ? 'Publishing Your Review...' : 'Submit Patient Review'}
               </button>
             </form>
+            </>
+            )}
           </div>
         ) : (
           <div className={styles.successState}>
