@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { 
   ArrowLeft, Star, MapPin, Building2, Briefcase, 
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,

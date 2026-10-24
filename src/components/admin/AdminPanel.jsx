@@ -378,16 +378,16 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     };
   }, []);
 
-  // In-flight guard for star doctor toggling to prevent double-clicks / racing requests
-  const [starTogglingDoctors, setStarTogglingDoctors] = useState(() => new Set());
+  // In-flight guard for star doctor toggling to prevent double-clicks / racing requests (Ref-based to avoid unnecessary re-renders)
+  const starTogglingRef = useRef(new Set());
 
   const handleToggleStarDoctor = async (doc, e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
     const docId = doc._id || doc.id;
-    if (!docId || starTogglingDoctors.has(docId)) return;
+    if (!docId || starTogglingRef.current.has(docId)) return;
 
-    setStarTogglingDoctors(prev => new Set(prev).add(docId));
+    starTogglingRef.current.add(docId);
     const nextVal = !Boolean(doc.isStarDoctor);
 
     // Provide immediate, crisp toast feedback so user gets instant confirmation without lag
@@ -396,7 +396,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
         : `Removed ${doc.name} from Star Doctors.`,
       'success',
-      4500
+      3500
     );
 
     try {
@@ -404,11 +404,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     } catch (err) {
       showToast(err.message || 'Failed to update star doctor status', 'error', 5000);
     } finally {
-      setStarTogglingDoctors(prev => {
-        const next = new Set(prev);
-        next.delete(docId);
-        return next;
-      });
+      starTogglingRef.current.delete(docId);
     }
   };
 
@@ -1646,19 +1642,19 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <table className={styles.dataTable}>
                     <thead>
                       <tr>
-                        <th style={{ minWidth: '220px', width: '220px' }}>Doctor</th>
-                        <th style={{ minWidth: '175px', width: '175px' }}>Specialty & Experience</th>
-                        <th style={{ minWidth: '190px', width: '190px' }}>Affiliated Hospital</th>
-                        <th style={{ minWidth: '110px', width: '110px' }}>Consultation Fee</th>
-                        <th style={{ minWidth: '125px', width: '125px' }}>Rating</th>
-                        <th style={{ minWidth: '165px', width: '165px' }}>Availability</th>
-                        <th style={{ minWidth: '320px', width: '320px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
+                        <th style={{ minWidth: '240px' }}>Doctor</th>
+                        <th style={{ minWidth: '175px' }}>Specialty & Experience</th>
+                        <th style={{ minWidth: '190px' }}>Affiliated Hospital</th>
+                        <th style={{ minWidth: '150px' }}>Consultation Fee</th>
+                        <th style={{ minWidth: '130px' }}>Rating</th>
+                        <th style={{ minWidth: '180px' }}>Availability</th>
+                        <th style={{ minWidth: '440px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDoctors.map(doc => (
                         <tr key={doc.id || doc._id}>
-                          <td style={{ minWidth: '220px', width: '220px' }}>
+                          <td style={{ minWidth: '240px' }}>
                             <div
                               className={`${styles.tableDocProfile} ${styles.tableDocProfileClickable}`}
                               onClick={() => setSelectedDoctorForHistory(doc)}
@@ -1680,7 +1676,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ minWidth: '175px', width: '175px' }}>
+                          <td style={{ minWidth: '175px' }}>
                             <div className={styles.tableSpecialtyCell}>
                               <span className={styles.specialtyBadge}>{doc.specialization || doc.specialty || 'General Physician'}</span>
                               <div className={styles.tableSubText}>
@@ -1688,16 +1684,16 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ minWidth: '190px', width: '190px' }}>
+                          <td style={{ minWidth: '190px' }}>
                             <div className={styles.tableHospitalCell}>
                               <Building2 size={15} />
                               <span>{doc.hospital || 'Private Clinic'}</span>
                             </div>
                           </td>
-                          <td style={{ minWidth: '110px', width: '110px' }}>
+                          <td style={{ minWidth: '150px' }}>
                             <span className={styles.priceHighlight}>₹{doc.price}</span>
                           </td>
-                          <td style={{ minWidth: '125px', width: '125px' }}>
+                          <td style={{ minWidth: '130px' }}>
                             {(() => {
                               const liveRating = getDoctorDisplayRating(doc);
                               const cNum = Number(liveRating.count) || 0;
@@ -1710,7 +1706,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               );
                             })()}
                           </td>
-                          <td style={{ minWidth: '165px', width: '165px' }}>
+                          <td style={{ minWidth: '180px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span
@@ -1747,7 +1743,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </span>
                             </div>
                           </td>
-                          <td style={{ minWidth: '420px', width: '420px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
+                          <td style={{ minWidth: '440px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
                               <button
                                 className={styles.historyActionBtn}
@@ -1785,7 +1781,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               <button
                                 className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}
                                 onClick={(e) => handleToggleStarDoctor(doc, e)}
-                                style={starTogglingDoctors.has(doc._id || doc.id) ? { opacity: 0.75, cursor: 'wait' } : undefined}
                                 title={doc.isStarDoctor ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
                               >
                                 <span className={styles.starIconWrapper}>
@@ -2514,12 +2509,12 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
           {/* TAB 6: FAQs MANAGEMENT */}
           <div className={styles.viewSection} style={{ display: activeTab === 'faqs' ? 'block' : 'none' }}>
-              <div className={styles.sectionHeader}>
+              <div className={styles.viewHeader}>
                 <div>
-                  <h2 className={styles.sectionTitle}>Frequently Asked Questions (FAQs)</h2>
-                  <p className={styles.sectionSub}>Add new FAQs or modify existing answers displayed on the public portal.</p>
+                  <h1 className={styles.pageTitle}>Frequently Asked Questions (FAQs)</h1>
+                  <p className={styles.pageSubtitle}>Add new FAQs or modify existing answers displayed on the public portal.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div className={styles.headerBtnGroup}>
                   <button
                     className={styles.primaryActionBtn}
                     onClick={() => {
@@ -2533,7 +2528,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               </div>
 
               {/* FAQ Type Filter Tabs */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2541,11 +2536,15 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     setFaqDoctorFilter('all');
                   }}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: faqTypeFilter === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                     background: faqTypeFilter === 'all' ? '#eff6ff' : '#ffffff',
                     color: faqTypeFilter === 'all' ? '#1d4ed8' : '#64748b'
@@ -2557,20 +2556,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   type="button"
                   onClick={() => setFaqTypeFilter('doctor')}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: faqTypeFilter === 'doctor' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
                     background: faqTypeFilter === 'doctor' ? '#f5f3ff' : '#ffffff',
                     color: faqTypeFilter === 'doctor' ? '#6d28d9' : '#64748b'
                   }}
                 >
-                  <Stethoscope size={14} /> Doctor FAQs ({doctorFaqsCount})
+                  <Stethoscope size={15} /> Doctor FAQs ({doctorFaqsCount})
                 </button>
                 <button
                   type="button"
@@ -2579,20 +2579,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     setFaqDoctorFilter('all');
                   }}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: faqTypeFilter === 'hospital' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                     background: faqTypeFilter === 'hospital' ? '#eff6ff' : '#ffffff',
                     color: faqTypeFilter === 'hospital' ? '#1d4ed8' : '#64748b'
                   }}
                 >
-                  <Building2 size={14} /> Hospital FAQs ({hospitalFaqsCount})
+                  <Building2 size={15} /> Hospital FAQs ({hospitalFaqsCount})
                 </button>
               </div>
 
@@ -2824,12 +2825,12 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
           {/* TAB 7: PUBLIC REVIEWS */}
           <div className={styles.viewSection} style={{ display: activeTab === 'reviews' ? 'block' : 'none' }}>
-              <div className={styles.sectionHeader} style={{ flexWrap: 'wrap', gap: '12px' }}>
+              <div className={styles.viewHeader}>
                 <div>
-                  <h2 className={styles.sectionTitle}>Public Reviews & Patient Testimonials</h2>
-                  <p className={styles.sectionSub}>Add, modify, edit, or delete patient reviews for doctors and hospitals with real-time sync.</p>
+                  <h1 className={styles.pageTitle}>Public Reviews & Patient Testimonials</h1>
+                  <p className={styles.pageSubtitle}>Add, modify, edit, or delete patient reviews for doctors and hospitals with real-time sync.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className={styles.headerBtnGroup}>
                   <button
                     type="button"
                     style={{
@@ -2844,7 +2845,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)'
+                      boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)',
+                      whiteSpace: 'nowrap'
                     }}
                     onClick={() => {
                       setReviewToEdit(null);
@@ -2869,7 +2871,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: '6px',
-                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+                      whiteSpace: 'nowrap'
                     }}
                     onClick={() => {
                       setReviewToEdit(null);
@@ -2884,7 +2887,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               </div>
 
               {/* Category Filter Tabs */}
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
                   onClick={() => {
@@ -2892,11 +2895,15 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     setReviewDoctorFilter('all');
                   }}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: reviewTypeFilter === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                     background: reviewTypeFilter === 'all' ? '#eff6ff' : '#ffffff',
                     color: reviewTypeFilter === 'all' ? '#1d4ed8' : '#64748b'
@@ -2908,20 +2915,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   type="button"
                   onClick={() => setReviewTypeFilter('doctor')}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: reviewTypeFilter === 'doctor' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
                     background: reviewTypeFilter === 'doctor' ? '#f5f3ff' : '#ffffff',
                     color: reviewTypeFilter === 'doctor' ? '#6d28d9' : '#64748b'
                   }}
                 >
-                  <Stethoscope size={14} /> Doctor Reviews ({doctorReviewsCount})
+                  <Stethoscope size={15} /> Doctor Reviews ({doctorReviewsCount})
                 </button>
                 <button
                   type="button"
@@ -2930,20 +2938,21 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     setReviewDoctorFilter('all');
                   }}
                   style={{
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontSize: '0.82rem',
-                    fontWeight: 700,
+                    padding: '8px 18px',
+                    borderRadius: '9999px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
+                    transition: 'all 0.15s ease',
                     border: reviewTypeFilter === 'hospital' ? '2px solid #2563eb' : '1px solid #cbd5e1',
                     background: reviewTypeFilter === 'hospital' ? '#eff6ff' : '#ffffff',
                     color: reviewTypeFilter === 'hospital' ? '#1d4ed8' : '#64748b'
                   }}
                 >
-                  <Building2 size={14} /> Hospital Reviews ({hospitalReviewsCount})
+                  <Building2 size={15} /> Hospital Reviews ({hospitalReviewsCount})
                 </button>
               </div>
 
@@ -3251,20 +3260,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
           {/* TAB 8: SPECIALITIES & SURGERIES */}
           <div className={styles.viewSection} style={{ display: activeTab === 'specialities' ? 'block' : 'none' }}>
-              <div className={styles.sectionHeader}>
+              <div className={styles.viewHeader}>
                 <div>
-                  <h2 className={styles.sectionTitle}>Specialities & Procedures (Surgeries)</h2>
-                  <p className={styles.sectionSub}>Manage clinical departments, surgical procedures, and cashless insurance coverage parameters.</p>
+                  <h1 className={styles.pageTitle}>Specialities & Procedures (Surgeries)</h1>
+                  <p className={styles.pageSubtitle}>Manage clinical departments, surgical procedures, and cashless insurance coverage parameters.</p>
                 </div>
-                <button
-                  className={styles.primaryActionBtn}
-                  onClick={() => {
-                    setSpecToEdit(null);
-                    setIsSpecModalOpen(true);
-                  }}
-                >
-                  <Plus size={16} /> Add Speciality / Surgery
-                </button>
+                <div className={styles.headerBtnGroup}>
+                  <button
+                    className={styles.primaryActionBtn}
+                    onClick={() => {
+                      setSpecToEdit(null);
+                      setIsSpecModalOpen(true);
+                    }}
+                  >
+                    <Plus size={16} /> Add Speciality / Surgery
+                  </button>
+                </div>
               </div>
 
               {/* Filters */}

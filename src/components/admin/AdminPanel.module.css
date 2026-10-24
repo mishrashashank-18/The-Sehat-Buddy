@@ -365,22 +365,27 @@
   gap: 24px;
 }
 
-.viewHeader {
+.viewHeader,
+.sectionHeader {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
+  margin-bottom: 22px;
 }
 
-.pageTitle {
+.pageTitle,
+.sectionTitle {
   font-size: 1.55rem;
   font-weight: 700;
   color: var(--color-heading);
+  letter-spacing: -0.02em;
   margin: 0;
 }
 
-.pageSubtitle {
+.pageSubtitle,
+.sectionSub {
   font-size: 0.9rem;
   color: var(--color-body);
   margin: 4px 0 0 0;
@@ -841,7 +846,7 @@
 
 .dataTable {
   width: 100%;
-  min-width: 1305px;
+  min-width: 1485px;
   border-collapse: collapse;
   text-align: left;
 }
@@ -925,8 +930,10 @@
   display: block;
   font-size: 0.76rem;
   color: #64748b;
-  line-height: 1.25;
-  white-space: nowrap;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
+  max-width: 240px;
 }
 
 .tableSpecialtyCell {
@@ -1103,6 +1110,7 @@
   white-space: nowrap;
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
 }
 
 .starActionBtn:hover {
@@ -1137,6 +1145,7 @@
   width: 48px;
   text-align: left;
   line-height: 1;
+  overflow: hidden;
 }
 
 .starDoctorBadge {

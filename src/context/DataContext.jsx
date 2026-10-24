@@ -613,11 +613,12 @@ export const DataProvider = ({ children }) => {
 
                 setDoctors(prev => {
                   let found = false;
+                  let hasDiff = false;
                   const updated = prev.map(d => {
                     if (matchesId(d, payload.docId) || (d.email && docData.email && d.email.toLowerCase().trim() === docData.email.toLowerCase().trim())) {
                       found = true;
                       const resolvedPh = ph !== undefined ? ph : (d.phone || d.contact_number || '');
-                      return {
+                      const candidate = {
                         ...d,
                         ...docData,
                         id: d.id || docData.id || docData._id,
@@ -654,6 +655,20 @@ export const DataProvider = ({ children }) => {
                         youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos,
                         isStarDoctor: docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor)
                       };
+
+                      const isDifferent = Object.keys(candidate).some(k => {
+                        if (k === 'updatedAt' || k === '__v') return false;
+                        if (typeof candidate[k] === 'object' && candidate[k] !== null) {
+                          return JSON.stringify(candidate[k]) !== JSON.stringify(d[k]);
+                        }
+                        return candidate[k] !== d[k];
+                      });
+
+                      if (isDifferent) {
+                        hasDiff = true;
+                        return candidate;
+                      }
+                      return d;
                     }
                     return d;
                   });
@@ -678,8 +693,14 @@ export const DataProvider = ({ children }) => {
                       contact_number: ph !== undefined ? ph : (docData.contact_number || docData.phone || ''),
                       isStarDoctor: Boolean(docData.isStarDoctor)
                     };
-                    updated.unshift(newEntry);
+                    const updatedWithNew = [newEntry, ...prev];
+                    try {
+                      localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updatedWithNew));
+                      broadcastSync(STORAGE_KEY_DOCTORS, updatedWithNew);
+                    } catch {}
+                    return updatedWithNew;
                   }
+                  if (!hasDiff) return prev;
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
@@ -983,6 +1004,7 @@ export const DataProvider = ({ children }) => {
       const res = await api.updateDoctor(id, updatedData);
       if (res && (res._id || res.id)) {
         setDoctors(prev => {
+          let hasDiff = false;
           const updated = prev.map(doc => {
             if (matchesId(doc, id) || (res._id && matchesId(doc, res._id)) || (res.id && matchesId(doc, res.id))) {
               const rawResSpec = (res.specialization && res.specialization !== 'General Medicine')
@@ -999,7 +1021,7 @@ export const DataProvider = ({ children }) => {
               const resName = res.name ?? doc.name;
               const resEmail = res.email ? String(res.email).trim().toLowerCase() : (updatedData.email ? String(updatedData.email).trim().toLowerCase() : doc.email);
               const resPhone = res.phone !== undefined ? res.phone : (res.contact_number !== undefined ? res.contact_number : (updatedData.phone !== undefined ? updatedData.phone : (doc.phone || doc.contact_number || '')));
-              return {
+              const candidate = {
                 ...doc,
                 ...res,
                 id: doc.id || res.id || res._id,
@@ -1039,9 +1061,24 @@ export const DataProvider = ({ children }) => {
                 about: res.about !== undefined ? res.about : doc.about,
                 isStarDoctor: res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor))
               };
+
+              const isDifferent = Object.keys(candidate).some(k => {
+                if (k === 'updatedAt' || k === '__v') return false;
+                if (typeof candidate[k] === 'object' && candidate[k] !== null) {
+                  return JSON.stringify(candidate[k]) !== JSON.stringify(doc[k]);
+                }
+                return candidate[k] !== doc[k];
+              });
+
+              if (isDifferent) {
+                hasDiff = true;
+                return candidate;
+              }
+              return doc;
             }
             return doc;
           });
+          if (!hasDiff) return prev;
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
             broadcastSync(STORAGE_KEY_DOCTORS, updated);

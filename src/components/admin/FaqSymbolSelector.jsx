@@ -250,12 +250,12 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
       {/* Grid of Default Symbols from Database */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isCompact ? 'repeat(auto-fill, minmax(70px, 1fr))' : 'repeat(auto-fill, minmax(88px, 1fr))',
-        gap: '8px',
-        maxHeight: '220px',
+        gridTemplateColumns: isCompact ? 'repeat(auto-fill, minmax(82px, 1fr))' : 'repeat(auto-fill, minmax(102px, 1fr))',
+        gap: '10px',
+        maxHeight: '235px',
         overflowY: 'auto',
-        padding: '2px',
-        borderRadius: '10px'
+        padding: '4px',
+        borderRadius: '12px'
       }}>
         {faqSymbols.map(symbol => {
           const isSelected = selectedValue === symbol.key || selectedValue === symbol.imageUrl;
@@ -269,31 +269,35 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: '5px',
-                padding: '8px 4px',
-                borderRadius: '10px',
+                justifyContent: 'space-between',
+                height: '86px',
+                minHeight: '86px',
+                padding: '8px 6px 6px 6px',
+                borderRadius: '12px',
                 border: isSelected ? '2px solid #2563eb' : '1.5px solid #e2e8f0',
                 background: isSelected ? '#eff6ff' : '#ffffff',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
-                boxShadow: isSelected ? '0 2px 6px rgba(37,99,235,0.15)' : 'none'
+                boxShadow: isSelected ? '0 0 0 1px #2563eb, 0 2px 6px rgba(37,99,235,0.15)' : 'none',
+                boxSizing: 'border-box'
               }}
               title={symbol.name}
             >
               {isSelected && (
                 <div style={{
                   position: 'absolute',
-                  top: '3px',
-                  right: '3px',
-                  width: '15px',
-                  height: '15px',
+                  top: '4px',
+                  right: '4px',
+                  width: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   background: '#2563eb',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  boxShadow: '0 1px 3px rgba(37,99,235,0.35)',
+                  zIndex: 2
                 }}>
                   <Check size={10} strokeWidth={3} />
                 </div>
@@ -308,7 +312,8 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: isSelected ? '1px solid #bfdbfe' : '1px solid #f1f5f9'
+                border: isSelected ? '1px solid #bfdbfe' : '1px solid #f1f5f9',
+                flexShrink: 0
               }}>
                 {imgSrc ? (
                   <img src={imgSrc} alt={symbol.name} style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
@@ -320,13 +325,17 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
               <span style={{
                 fontSize: '0.68rem',
                 fontWeight: isSelected ? 700 : 600,
-                color: isSelected ? '#1d4ed8' : '#475569',
+                color: isSelected ? '#1d4ed8' : '#334155',
                 textAlign: 'center',
                 lineHeight: 1.15,
-                maxWidth: '80px',
+                width: '100%',
+                maxHeight: '26px',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
+                wordBreak: 'break-word',
+                padding: '0 2px'
               }}>
                 {symbol.name}
               </span>
@@ -365,17 +374,20 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
         <div
           onClick={() => fileInputRef.current?.click()}
           style={{
+            position: 'relative',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            justifyContent: 'center',
-            gap: '5px',
-            padding: '8px 4px',
-            borderRadius: '10px',
+            justifyContent: 'space-between',
+            height: '86px',
+            minHeight: '86px',
+            padding: '8px 6px 6px 6px',
+            borderRadius: '12px',
             border: '1.5px dashed #94a3b8',
             background: isUploading ? '#eff6ff' : '#f8fafc',
             cursor: 'pointer',
-            transition: 'all 0.15s ease'
+            transition: 'all 0.15s ease',
+            boxSizing: 'border-box'
           }}
           title="Upload image directly from local storage to Cloudinary"
         >
@@ -388,11 +400,24 @@ export const FaqSymbolSelector = ({ selectedValue = '', onSelect, isCompact = fa
             alignItems: 'center',
             justifyContent: 'center',
             color: '#2563eb',
-            border: '1px solid #cbd5e1'
+            border: '1px solid #cbd5e1',
+            flexShrink: 0
           }}>
             {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
           </div>
-          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#2563eb', textAlign: 'center', lineHeight: 1.15 }}>
+          <span style={{
+            fontSize: '0.68rem',
+            fontWeight: 700,
+            color: '#2563eb',
+            textAlign: 'center',
+            lineHeight: 1.15,
+            width: '100%',
+            maxHeight: '26px',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden'
+          }}>
             {isUploading ? 'Uploading...' : '+ Upload New'}
           </span>
         </div>
