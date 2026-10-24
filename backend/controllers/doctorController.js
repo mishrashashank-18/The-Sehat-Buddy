@@ -866,6 +866,10 @@ export const updateDoctorProfile = async (req, res) => {
         } else if (field === 'experience') {
           const expNum = parseInt(req.body.experience, 10);
           doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
+        } else if (field === 'qualifications' || field === 'degree') {
+          const deg = req.body.degree || req.body.qualifications || '';
+          doctor.degree = deg;
+          doctor.qualifications = deg;
         } else if (field === 'fees' || field === 'price') {
           const feesNum = Number(req.body.fees ?? req.body.price);
           doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);

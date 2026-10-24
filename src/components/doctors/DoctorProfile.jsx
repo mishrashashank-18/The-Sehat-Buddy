@@ -4,12 +4,13 @@ import {
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
-  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2
+  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
+import ReviewFormModal from '../admin/ReviewFormModal';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import { api, API_BASE } from '../../services/api';
 import styles from './DoctorProfile.module.css';
@@ -297,40 +298,91 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const isHoveredRef = useRef(false);
+  const leaveTimerRef = useRef(null);
+  const [directVideoUrl, setDirectVideoUrl] = useState('');
 
   const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
+  const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+  const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
+  const effectiveCover = coverPhoto || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
 
-  const videoSrc = useMemo(() => {
-    if (!rawUrl) return '';
-    if (rawUrl.endsWith('.mp4') || rawUrl.endsWith('.webm') || rawUrl.includes('res.cloudinary.com')) {
-      return rawUrl;
+  const isDirect = rawUrl && (rawUrl.includes('cloudinary.com') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl));
+
+  useEffect(() => {
+    let active = true;
+    if (!rawUrl) return;
+    if (isDirect) {
+      setDirectVideoUrl(rawUrl);
+      return;
     }
-    return `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`;
-  }, [rawUrl]);
+    fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawUrl)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (active && data.success && data.videoUrl) {
+          setDirectVideoUrl(data.videoUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [rawUrl, isDirect]);
+
+  const videoSrc = directVideoUrl || (isDirect ? rawUrl : `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`);
 
   const handleMouseEnter = () => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+    isHoveredRef.current = true;
     if (videoRef.current && !videoError) {
       setHasStarted(true);
+      if (!isPlaying) {
+        setIsLoading(true);
+      }
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise
-          .then(() => setIsPlaying(true))
+          .then(() => {
+            if (isHoveredRef.current) {
+              setIsPlaying(true);
+            } else if (videoRef.current) {
+              videoRef.current.pause();
+              setIsPlaying(false);
+            }
+          })
           .catch((err) => {
-            console.warn('Doctor reel hover play error:', err);
-            setIsPlaying(false);
+            if (err.name !== 'AbortError') {
+              console.warn('Doctor reel hover play error:', err);
+            }
+          })
+          .finally(() => {
+            setIsLoading(false);
           });
       }
     }
   };
 
   const handleMouseLeave = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
+    if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = setTimeout(() => {
+      isHoveredRef.current = false;
+      if (videoRef.current) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
+    }, 120);
   };
+
+  useEffect(() => {
+    return () => {
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
 
   return (
     <div
@@ -340,72 +392,28 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
       onMouseLeave={handleMouseLeave}
       title="Hover to preview, click to watch in full view"
       style={{
-        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
+        position: 'relative'
       }}
     >
-      {coverPhoto ? (
+      {effectiveCover && (
         <img
-          src={coverPhoto}
-          alt={`Instagram Reel ${idx + 1}`}
+          src={effectiveCover}
+          alt="Instagram Reel"
           className={styles.reelCoverImg}
           loading="lazy"
           style={{
             opacity: isPlaying ? 0 : 1,
-            transition: 'opacity 0.25s ease'
+            transition: 'opacity 0.25s ease',
+            pointerEvents: 'none'
           }}
           onError={(e) => {
             e.target.style.display = 'none';
           }}
         />
-      ) : (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
-          padding: '20px',
-          textAlign: 'center',
-          userSelect: 'none',
-          opacity: isPlaying ? 0 : 1,
-          transition: 'opacity 0.25s ease'
-        }}>
-          <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.25) 0%, rgba(247, 119, 55, 0.25) 100%)',
-            border: '1px solid rgba(225, 48, 108, 0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#f43f5e',
-            marginBottom: '12px'
-          }}>
-            <SocialInstagramIcon size={22} />
-          </div>
-          <span style={{
-            color: '#ffffff',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            letterSpacing: '0.02em',
-            marginBottom: '4px'
-          }}>
-            Reel {idx + 1}
-          </span>
-          <span style={{
-            color: '#94a3b8',
-            fontSize: '0.72rem',
-            fontWeight: 500
-          }}>
-            Hover to Preview
-          </span>
-        </div>
       )}
 
-      {videoSrc && !videoError && (
+      {videoSrc && (
         <video
           ref={videoRef}
           src={videoSrc}
@@ -416,17 +424,50 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
           preload="metadata"
           className={styles.reelHoverVideo}
           style={{
-            opacity: isPlaying ? 1 : (hasStarted ? 0.85 : 0),
+            opacity: isPlaying ? 1 : 0,
             transition: 'opacity 0.25s ease',
-            zIndex: 1
+            zIndex: 1,
+            pointerEvents: 'none'
           }}
-          onError={() => setVideoError(true)}
+          onPlaying={() => {
+            if (isHoveredRef.current) {
+              setIsPlaying(true);
+              setIsLoading(false);
+            }
+          }}
+          onError={() => {
+            setVideoError(true);
+            setIsLoading(false);
+          }}
         />
       )}
 
-      <div className={styles.reelGradientScrim} style={{ zIndex: 2 }} />
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0, 0, 0, 0.35)',
+          zIndex: 4,
+          backdropFilter: 'blur(2px)',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            border: '3px solid rgba(255, 255, 255, 0.25)',
+            borderTopColor: '#f43f5e',
+            animation: 'spin 0.8s linear infinite'
+          }} />
+        </div>
+      )}
 
-      <div className={styles.reelTopBadge} style={{ zIndex: 3 }}>
+      <div className={styles.reelGradientScrim} style={{ zIndex: 2, pointerEvents: 'none' }} />
+
+      <div className={styles.reelTopBadge} style={{ zIndex: 3, pointerEvents: 'none' }}>
         <SocialInstagramIcon size={14} />
         <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
@@ -434,9 +475,136 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
   );
 };
 
+// Robust Modal Video Player component for DoctorProfile with anti-pause handling
+const ReelModalPlayer = ({ activeReel, onClose }) => {
+  const videoRef = useRef(null);
+  const [videoError, setVideoError] = useState(false);
+  const [directVideoUrl, setDirectVideoUrl] = useState('');
+
+  const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
+  const isDirect = rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget));
+  const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+
+  useEffect(() => {
+    let active = true;
+    if (!rawTarget) return;
+    if (isDirect) {
+      setDirectVideoUrl(rawTarget);
+      return;
+    }
+    fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawTarget)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (active && data.success && data.videoUrl) {
+          setDirectVideoUrl(data.videoUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [rawTarget, isDirect]);
+
+  const modalVideoSrc = directVideoUrl || (isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`);
+
+  useEffect(() => {
+    setVideoError(false);
+    if (videoRef.current) {
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [modalVideoSrc]);
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div 
+        className={styles.modalContent} 
+        onClick={e => e.stopPropagation()} 
+        style={{ 
+          maxWidth: '430px', 
+          width: '92%', 
+          background: '#000000',
+          borderRadius: '20px', 
+          overflow: 'hidden',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
+          position: 'relative',
+          padding: 0
+        }}
+      >
+        <button 
+          type="button" 
+          onClick={onClose} 
+          aria-label="Close"
+          title="Close"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            zIndex: 30,
+            background: 'rgba(0, 0, 0, 0.65)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '50%',
+            width: '36px',
+            height: '36px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#ffffff',
+            backdropFilter: 'blur(6px)',
+            transition: 'all 0.2s'
+          }}
+        >
+          <X size={20} />
+        </button>
+
+        <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {!videoError ? (
+            <video
+              ref={videoRef}
+              key={modalVideoSrc}
+              src={modalVideoSrc}
+              poster={coverSrc}
+              playsInline
+              controls
+              controlsList="nodownload"
+              onError={() => setVideoError(true)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                background: '#000000',
+                display: 'block'
+              }}
+            />
+          ) : (
+            <iframe
+              src={(() => {
+                const match = String(rawTarget).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                return match ? `https://www.instagram.com/reel/${match[1]}/embed/` : getEmbedUrl(rawTarget);
+              })()}
+              title="Instagram Reel Player"
+              scrolling="no"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              style={{ width: '100%', height: '100%', border: 'none', background: '#000000' }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const DoctorProfile = ({ doctorId, onNavigate }) => {
-  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, refreshReviews, deleteReview, faqs } = useData();
+  const { doctors, updateDoctor, syncDoctorLocally, refreshDoctors, reviews, refreshReviews, deleteReview, updateReview, faqs, faqSymbols = [] } = useData();
   const [deletingReviewId, setDeletingReviewId] = useState(null);
+  const [adminEditingReview, setAdminEditingReview] = useState(null);
 
   const handleDeleteReview = async (rev) => {
     const revId = rev._id || rev.id;
@@ -2233,51 +2401,12 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 <div className={styles.faqAccordionCol}>
                   <div className={styles.faqList}>
                     {(() => {
-                      const defaultDoctorFaqs = [
-                        {
-                          category: 'Booking & Schedule',
-                          icon: <FaqCalendarIcon />,
-                          q: `How can I book an appointment with ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'}?`,
-                          steps: [
-                            'Open The Sehat Buddy platform on web or mobile app',
-                            'Select consultation type (In-Clinic Visit or Video Consultation)',
-                            'Choose your preferred consultation date and available appointment slot',
-                            'Review patient details, enter your symptoms, and proceed with instant confirmation'
-                          ],
-                          note: "Once completed, your appointment will be booked, and you'll receive instant confirmation via SMS and WhatsApp."
-                        },
-                        {
-                          category: 'Clinic Preparation',
-                          icon: <FaqDocumentIcon />,
-                          q: 'What do I need to show at the clinic?',
-                          a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.'
-                        },
-                        {
-                          category: 'Privacy & Security',
-                          icon: <FaqShieldLockIcon />,
-                          q: 'Is my consultation private with the doctor?',
-                          a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.'
-                        },
-                        {
-                          category: 'Rescheduling Policy',
-                          icon: <FaqRescheduleIcon />,
-                          q: `Can I reschedule my appointment with ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'}?`,
-                          a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.'
-                        },
-                        {
-                          category: 'Cashless Insurance',
-                          icon: <FaqInsuranceIcon />,
-                          q: `Does ${doctor?.name ? (doctor.name.startsWith('Dr.') ? doctor.name : `Dr. ${doctor.name}`) : 'the doctor'} accept health insurance or cashless claims?`,
-                          a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.'
-                        }
-                      ];
-
                       const defaultIcons = [
-                        <FaqCalendarIcon />,
-                        <FaqDocumentIcon />,
-                        <FaqShieldLockIcon />,
-                        <FaqRescheduleIcon />,
-                        <FaqInsuranceIcon />
+                        <FaqCalendarIcon key="def-cal" />,
+                        <FaqDocumentIcon key="def-doc" />,
+                        <FaqShieldLockIcon key="def-shld" />,
+                        <FaqRescheduleIcon key="def-resch" />,
+                        <FaqInsuranceIcon key="def-ins" />
                       ];
 
                       const defaultCategories = [
@@ -2288,13 +2417,36 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         'Cashless Insurance'
                       ];
 
+                      const resolveFaqIcon = (item, fallbackIndex) => {
+                        const customImg = item?.image || (item?.icon && (item.icon.startsWith('http') || item.icon.startsWith('data:image') || item.icon.startsWith('/')));
+                        if (customImg) {
+                          const src = item.image || item.icon;
+                          return <img src={src} alt="FAQ Icon" style={{ width: '30px', height: '30px', objectFit: 'contain' }} />;
+                        }
+
+                        const iconKey = item?.icon || item?.key;
+                        if (iconKey) {
+                          if (iconKey === 'calendar') return <FaqCalendarIcon />;
+                          if (iconKey === 'document') return <FaqDocumentIcon />;
+                          if (iconKey === 'shield') return <FaqShieldLockIcon />;
+                          if (iconKey === 'reschedule') return <FaqRescheduleIcon />;
+                          if (iconKey === 'insurance') return <FaqInsuranceIcon />;
+                          const dbSymbol = faqSymbols.find(s => s.key === iconKey);
+                          if (dbSymbol && (dbSymbol.imageUrl || dbSymbol.svg)) {
+                            return <img src={dbSymbol.imageUrl || dbSymbol.svg} alt={dbSymbol.name} style={{ width: '30px', height: '30px', objectFit: 'contain' }} />;
+                          }
+                        }
+
+                        return defaultIcons[fallbackIndex % defaultIcons.length];
+                      };
+
                       const specificDoctorFaqs = (faqs || [])
                         .filter(f => f.isActive && f.targetType === 'doctor' && (
                           (f.targetId && (String(f.targetId) === String(doctor.id || doctor._id))) ||
                           (f.targetName && doctor.name && f.targetName.toLowerCase() === doctor.name.toLowerCase())
                         ))
                         .map((f, i) => ({
-                          icon: defaultIcons[i % defaultIcons.length],
+                          icon: resolveFaqIcon(f, i),
                           category: f.category || defaultCategories[i % defaultCategories.length] || 'Doctor FAQ',
                           q: f.question,
                           a: f.answer
@@ -2302,16 +2454,36 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
                       const embeddedDocFaqs = (Array.isArray(doctor?.faqs) && doctor.faqs.length > 0)
                         ? doctor.faqs.map((f, i) => ({
-                            icon: defaultIcons[(specificDoctorFaqs.length + i) % defaultIcons.length],
+                            icon: resolveFaqIcon(f, specificDoctorFaqs.length + i),
                             category: f.category || defaultCategories[(specificDoctorFaqs.length + i) % defaultCategories.length] || 'General FAQ',
                             q: f.q || f.question,
                             a: f.a || f.answer,
                             steps: f.steps,
                             note: f.note
                           }))
-                        : (specificDoctorFaqs.length > 0 ? [] : defaultDoctorFaqs);
+                        : [];
 
                       const faqsToRender = [...specificDoctorFaqs, ...embeddedDocFaqs];
+
+                      if (faqsToRender.length === 0) {
+                        return (
+                          <div style={{
+                            padding: '32px 20px',
+                            textAlign: 'center',
+                            background: '#f8fafc',
+                            borderRadius: '16px',
+                            border: '1.5px dashed #cbd5e1'
+                          }}>
+                            <HelpCircle size={32} color="#94a3b8" style={{ marginBottom: '8px' }} />
+                            <h4 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#334155' }}>
+                              No FAQs Published Yet
+                            </h4>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                              Frequently Asked Questions for this doctor have not been added yet.
+                            </p>
+                          </div>
+                        );
+                      }
 
                       return faqsToRender.map((faq, idx) => {
                         const isOpen = expandedFaq === idx;
@@ -2472,7 +2644,27 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                       </div>
 
                       {isAdmin && (
-                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                          <button
+                            type="button"
+                            onClick={() => setAdminEditingReview(rev)}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              borderRadius: '6px',
+                              padding: '5px 10px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              color: '#2563eb',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            title="Edit / Modify this review as Administrator"
+                          >
+                            <Edit2 size={13} /> Edit (Admin)
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleDeleteReview(rev)}
@@ -2526,78 +2718,12 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       </Container>
 
       {/* Reel Pop up Modal on Same Page - Clean Native Video Player */}
-      {activeReel && (() => {
-        const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
-        const isDirect = rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget));
-        const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
-        const modalVideoSrc = isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
-
-        return (
-          <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
-            <div 
-              className={styles.modalContent} 
-              onClick={e => e.stopPropagation()} 
-              style={{ 
-                maxWidth: '430px', 
-                width: '92%', 
-                background: '#000000',
-                borderRadius: '20px', 
-                overflow: 'hidden',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
-                position: 'relative',
-                padding: 0
-              }}
-            >
-              {/* Floating Close Button */}
-              <button 
-                type="button" 
-                onClick={() => setActiveReel(null)} 
-                aria-label="Close"
-                title="Close"
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  zIndex: 30,
-                  background: 'rgba(0, 0, 0, 0.65)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '50%',
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: '#ffffff',
-                  backdropFilter: 'blur(6px)',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <X size={20} />
-              </button>
-
-              <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <video
-                  key={modalVideoSrc}
-                  src={modalVideoSrc}
-                  poster={coverSrc}
-                  autoPlay
-                  playsInline
-                  controls
-                  controlsList="nodownload"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    background: '#000000',
-                    display: 'block'
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {activeReel && (
+        <ReelModalPlayer 
+          activeReel={activeReel} 
+          onClose={() => setActiveReel(null)} 
+        />
+      )}
 
       {/* Video Modal */}
       {activeVideo && (
@@ -2855,6 +2981,30 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
           targetType="doctor"
           targetId={doctor._id || doctor.id}
           targetName={doctor.name}
+        />
+      )}
+
+      {/* Admin Review Edit Modal */}
+      {adminEditingReview && (
+        <ReviewFormModal
+          reviewToEdit={adminEditingReview}
+          preselectedDoctor={doctor}
+          initialTargetType="doctor"
+          onClose={() => setAdminEditingReview(null)}
+          onSave={async (data) => {
+            try {
+              await updateReview(adminEditingReview.id || adminEditingReview._id, data);
+              if (typeof refreshReviews === 'function') {
+                refreshReviews();
+              }
+              if (typeof refreshDoctors === 'function') {
+                refreshDoctors();
+              }
+            } catch (err) {
+              alert(err?.message || 'Failed to modify review');
+            }
+            setAdminEditingReview(null);
+          }}
         />
       )}
     </div>

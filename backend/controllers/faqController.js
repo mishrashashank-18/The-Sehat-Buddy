@@ -99,10 +99,13 @@ export const createFaq = async (req, res) => {
       });
     }
 
-    const { question, answer, category, targetType, targetId, targetName, icon, note, steps, order, isActive } = req.body;
+    const { question, answer, category, targetType, targetId, targetName, icon, image, note, steps, order, isActive } = req.body;
     if (!question || !answer) {
       return res.status(400).json({ success: false, message: 'Question and answer are required' });
     }
+    const finalIcon = icon || (image ? image : 'calendar');
+    const finalImage = image || (icon && (icon.startsWith('http') || icon.startsWith('data:image')) ? icon : '');
+
     const faq = await Faq.create({
       question,
       answer,
@@ -110,7 +113,8 @@ export const createFaq = async (req, res) => {
       targetType: targetType || 'general',
       targetId: targetId || '',
       targetName: targetName || '',
-      icon: icon || 'help-circle',
+      icon: finalIcon,
+      image: finalImage,
       note: note || '',
       steps: Array.isArray(steps) ? steps : (steps ? [steps] : []),
       order: order !== undefined ? Number(order) : 0,

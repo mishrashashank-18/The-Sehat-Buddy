@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { X, HelpCircle, Save, Building2, Stethoscope, Check, Tag, CreditCard, FileText, Siren, ShieldCheck, Upload, Loader2, Clock, Bed, Phone, Heart } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
+import FaqSymbolSelector from './FaqSymbolSelector';
 import styles from './DoctorFormModal.module.css';
 
 export const FAQ_ICON_OPTIONS = [
@@ -122,7 +123,8 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
     targetId: initialTargetId,
     targetName: initialTargetName || (initialTargetType === 'doctor' ? doctors[0]?.name : hospitals[0]?.name) || '',
     category: initialCategory,
-    icon: faqToEdit?.icon || 'credit-card',
+    icon: faqToEdit?.icon || 'calendar',
+    image: faqToEdit?.image || '',
     question: faqToEdit?.question || '',
     answer: faqToEdit?.answer || '',
     order: faqToEdit?.order !== undefined ? faqToEdit.order : 0,
@@ -332,145 +334,17 @@ const FaqFormModal = ({ faqToEdit, onClose, onSave }) => {
             )}
           </div>
 
-          {/* STEP 3: CHOOSE OR UPLOAD FAQ ICON */}
+          {/* STEP 3: CHOOSE OR UPLOAD FAQ SYMBOL / IMAGE */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
-                3. Choose or Upload FAQ Icon *
-              </label>
-              {customIconPreview && (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: '#2563eb',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    padding: 0
-                  }}
-                >
-                  + Upload another icon
-                </button>
-              )}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '8px' }}>
-              {FAQ_ICON_OPTIONS.map(opt => {
-                const isSelected = formData.icon === opt.id;
-                const IconComp = opt.icon;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, icon: opt.id }))}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      padding: '10px 4px',
-                      borderRadius: '12px',
-                      border: isSelected ? '2px solid #2563eb' : '1.5px solid #e2e8f0',
-                      background: isSelected ? '#eff6ff' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '10px',
-                      background: isSelected ? '#2563eb' : opt.bg,
-                      color: isSelected ? '#ffffff' : opt.color,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.15s ease'
-                    }}>
-                      <IconComp size={18} />
-                    </div>
-                    <span style={{
-                      fontSize: '0.68rem',
-                      fontWeight: isSelected ? 700 : 600,
-                      color: isSelected ? '#1d4ed8' : '#475569',
-                      textAlign: 'center',
-                      lineHeight: 1.2
-                    }}>
-                      {opt.label}
-                    </span>
-                  </button>
-                );
-              })}
-
-              {/* 6th Option: Upload Custom Icon */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (customIconPreview && formData.icon !== customIconPreview) {
-                    setFormData(prev => ({ ...prev, icon: customIconPreview }));
-                  } else {
-                    fileInputRef.current?.click();
-                  }
-                }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '10px 4px',
-                  borderRadius: '12px',
-                  border: (formData.icon === customIconPreview && customIconPreview) ? '2px solid #2563eb' : '1.5px dashed #94a3b8',
-                  background: (formData.icon === customIconPreview && customIconPreview) ? '#eff6ff' : '#f8fafc',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                <div style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  background: customIconPreview ? '#ffffff' : '#f1f5f9',
-                  color: '#2563eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  border: customIconPreview ? '1px solid #bfdbfe' : 'none',
-                  overflow: 'hidden'
-                }}>
-                  {isUploadingIcon ? (
-                    <Loader2 size={18} className="animate-spin" color="#2563eb" />
-                  ) : customIconPreview ? (
-                    <img
-                      src={customIconPreview}
-                      alt="Custom icon"
-                      style={{ width: '22px', height: '22px', objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <Upload size={18} color="#64748b" />
-                  )}
-                </div>
-                <span style={{
-                  fontSize: '0.68rem',
-                  fontWeight: (formData.icon === customIconPreview && customIconPreview) ? 700 : 600,
-                  color: (formData.icon === customIconPreview && customIconPreview) ? '#1d4ed8' : '#475569',
-                  textAlign: 'center',
-                  lineHeight: 1.2
-                }}>
-                  {customIconPreview ? 'Custom Icon' : 'Upload Icon'}
-                </span>
-              </button>
-            </div>
-
-            <input
-              type="file"
-              ref={fileInputRef}
-              accept="image/png,image/jpeg,image/svg+xml,image/webp"
-              style={{ display: 'none' }}
-              onChange={handleIconUpload}
+            <FaqSymbolSelector
+              selectedValue={formData.image || formData.icon}
+              onSelect={({ icon, image }) => {
+                setFormData(prev => ({
+                  ...prev,
+                  icon: icon || image,
+                  image: image || (icon?.startsWith('http') ? icon : '')
+                }));
+              }}
             />
           </div>
 

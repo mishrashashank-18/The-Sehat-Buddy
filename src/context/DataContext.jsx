@@ -12,6 +12,7 @@ const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
 const STORAGE_KEY_ARTICLES = 'sehat_buddy_articles_v2';
 const STORAGE_KEY_CORPORATE = 'sehat_buddy_corporate_v2';
 const STORAGE_KEY_FAQS = 'sehat_buddy_faqs_v2';
+const STORAGE_KEY_FAQ_SYMBOLS = 'sehat_buddy_faq_symbols_v2';
 const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
 const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
 const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v3';
@@ -257,6 +258,18 @@ export const DataProvider = ({ children }) => {
     return [];
   });
 
+  // 8b. FAQ Symbols / Icons State
+  const [faqSymbols, setFaqSymbols] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_FAQ_SYMBOLS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  });
+
   // 9. Public Reviews State
   const [reviews, setReviews] = useState(() => {
     try {
@@ -329,9 +342,17 @@ export const DataProvider = ({ children }) => {
     }
     const mapped = docList.map(d => {
       const existing = prevDoctors.find(p => matchesId(p, d));
-      const resolvedSpecialty = d.specialization || d.specialty || existing?.specialty || existing?.specialization || 'General Physician';
-      const resolvedPrice = d.fees ?? d.price ?? existing?.price ?? existing?.fees ?? 500;
+      const rawSpec = (d.specialization && d.specialization !== 'General Medicine')
+        ? d.specialization
+        : ((d.specialty && d.specialty !== 'General Medicine') ? d.specialty : (d.specialization || d.specialty || existing?.specialization || existing?.specialty || 'General Physician'));
+      const resolvedSpecialty = rawSpec || 'General Physician';
+      const resolvedPrice = (d.fees !== undefined && d.fees !== 500)
+        ? d.fees
+        : (d.price !== undefined && d.price !== 500
+          ? d.price
+          : (d.fees ?? d.price ?? existing?.fees ?? existing?.price ?? 500));
       const resolvedPhone = d.phone || d.contact_number || existing?.phone || existing?.contact_number || '';
+      const resolvedDegree = d.degree || d.qualifications || existing?.degree || existing?.qualifications || '';
       return {
         ...existing,
         ...d,
@@ -339,6 +360,8 @@ export const DataProvider = ({ children }) => {
         _id: d._id || existing?._id || d.id,
         phone: resolvedPhone,
         contact_number: resolvedPhone,
+        degree: resolvedDegree,
+        qualifications: resolvedDegree,
         specialty: resolvedSpecialty,
         specialization: resolvedSpecialty,
         price: resolvedPrice,
@@ -352,6 +375,7 @@ export const DataProvider = ({ children }) => {
         certifications: Array.isArray(d.certifications) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
         memberships: Array.isArray(d.memberships) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
         careerExperience: Array.isArray(d.careerExperience) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
+        faqs: (Array.isArray(d.faqs) && d.faqs.length > 0) ? d.faqs : (Array.isArray(existing?.faqs) ? existing.faqs : (Array.isArray(d.faqs) ? d.faqs : [])),
         tags: Array.isArray(d.tags) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
         reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
         youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
@@ -484,6 +508,15 @@ export const DataProvider = ({ children }) => {
     } catch {}
   }, []);
 
+  const refreshFaqSymbols = useCallback(async () => {
+    try {
+      const data = await api.getFaqSymbols();
+      if (Array.isArray(data)) {
+        setFaqSymbols(data.map(s => ({ ...s, id: s._id || s.id })));
+      }
+    } catch {}
+  }, []);
+
   const refreshReviews = useCallback(async () => {
     try {
       const data = await api.getReviews();
@@ -508,10 +541,11 @@ export const DataProvider = ({ children }) => {
       refreshHospitals(),
       refreshContent(),
       refreshFaqs(),
+      refreshFaqSymbols(),
       refreshReviews(),
       refreshSpecialities()
     ]);
-  }, [refreshDoctors, refreshHospitals, refreshContent, refreshFaqs, refreshReviews, refreshSpecialities]);
+  }, [refreshDoctors, refreshHospitals, refreshContent, refreshFaqs, refreshFaqSymbols, refreshReviews, refreshSpecialities]);
 
   // Zero-latency real-time synchronization via Server-Sent Events (SSE)
   useEffect(() => {
@@ -558,9 +592,15 @@ export const DataProvider = ({ children }) => {
                 });
               } else if (payload.docId && payload.fullDocument) {
                 const docData = payload.fullDocument;
-                const spec = docData.specialty || docData.specialization;
+                const rawSpec = (docData.specialization && docData.specialization !== 'General Medicine')
+                  ? docData.specialization
+                  : ((docData.specialty && docData.specialty !== 'General Medicine') ? docData.specialty : (docData.specialization || docData.specialty));
                 const deg = docData.degree || docData.qualifications;
-                const pr = docData.price ?? docData.fees;
+                const pr = (docData.fees !== undefined && docData.fees !== 500)
+                  ? docData.fees
+                  : (docData.price !== undefined && docData.price !== 500
+                    ? docData.price
+                    : (docData.fees ?? docData.price));
                 const exp = docData.experience !== undefined ? docData.experience : undefined;
                 const hosp = docData.hospital;
                 const nm = docData.name;
@@ -585,8 +625,8 @@ export const DataProvider = ({ children }) => {
                         name: nm ? String(nm).trim() : d.name,
                         phone: resolvedPh,
                         contact_number: resolvedPh,
-                        specialty: spec || d.specialty || d.specialization,
-                        specialization: spec || d.specialization || d.specialty,
+                        specialty: rawSpec || d.specialization || d.specialty,
+                        specialization: rawSpec || d.specialization || d.specialty,
                         hospital: hosp !== undefined ? hosp : d.hospital,
                         experience: exp !== undefined ? exp : d.experience,
                         degree: deg || d.degree || d.qualifications,
@@ -609,6 +649,7 @@ export const DataProvider = ({ children }) => {
                         certifications: Array.isArray(docData.certifications) ? docData.certifications : d.certifications,
                         memberships: Array.isArray(docData.memberships) ? docData.memberships : d.memberships,
                         careerExperience: Array.isArray(docData.careerExperience) ? docData.careerExperience : d.careerExperience,
+                        faqs: Array.isArray(docData.faqs) ? docData.faqs : (Array.isArray(d.faqs) ? d.faqs : []),
                         reels: Array.isArray(docData.reels) ? docData.reels : d.reels,
                         youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos,
                         isStarDoctor: docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor)
@@ -621,8 +662,8 @@ export const DataProvider = ({ children }) => {
                       ...docData,
                       id: docData._id || docData.id,
                       _id: docData._id || docData.id,
-                      specialty: spec || 'General Physician',
-                      specialization: spec || 'General Physician',
+                      specialty: rawSpec || 'General Physician',
+                      specialization: rawSpec || 'General Physician',
                       degree: deg || '',
                       qualifications: deg || '',
                       price: pr || 500,
@@ -632,6 +673,7 @@ export const DataProvider = ({ children }) => {
                       availableDays: avDays || 'Mon - Sat (10am - 4pm)',
                       availabilityStatus: avStatus || 'Available',
                       available: avBool !== undefined ? avBool : true,
+                      faqs: Array.isArray(docData.faqs) ? docData.faqs : [],
                       phone: ph !== undefined ? ph : (docData.phone || docData.contact_number || ''),
                       contact_number: ph !== undefined ? ph : (docData.contact_number || docData.phone || ''),
                       isStarDoctor: Boolean(docData.isStarDoctor)
@@ -653,6 +695,8 @@ export const DataProvider = ({ children }) => {
               refreshContent();
             } else if (collection === 'faqs') {
               refreshFaqs();
+            } else if (collection === 'faq_symbols' || collection === 'faqsymbols') {
+              refreshFaqSymbols();
             } else if (collection === 'reviews') {
               if (payload.docId && payload.fullDocument) {
                 setReviews(prev => {
@@ -741,6 +785,7 @@ export const DataProvider = ({ children }) => {
       else if (key === STORAGE_KEY_ARTICLES && Array.isArray(data)) setArticles(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_CORPORATE && Array.isArray(data)) setCorporateTieups(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_FAQS && Array.isArray(data)) setFaqs(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_FAQ_SYMBOLS && Array.isArray(data)) setFaqSymbols(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_REVIEWS && Array.isArray(data)) setReviews(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_SPECIALITIES && Array.isArray(data)) setSpecialitiesProcedures(prev => (isSame(prev, data) ? prev : data));
     };
@@ -762,6 +807,7 @@ export const DataProvider = ({ children }) => {
         else if (e.key === STORAGE_KEY_ARTICLES && Array.isArray(parsed)) setArticles(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_CORPORATE && Array.isArray(parsed)) setCorporateTieups(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_FAQS && Array.isArray(parsed)) setFaqs(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_FAQ_SYMBOLS && Array.isArray(parsed)) setFaqSymbols(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_REVIEWS && Array.isArray(parsed)) setReviews(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_SPECIALITIES && Array.isArray(parsed)) setSpecialitiesProcedures(prev => (isSame(prev, parsed) ? prev : parsed));
       } catch {}
@@ -799,6 +845,7 @@ export const DataProvider = ({ children }) => {
   useEffect(() => { syncState(STORAGE_KEY_HOSPITALS, hospitals); }, [hospitals]);
   useEffect(() => { syncState(STORAGE_KEY_CORPORATE, corporateTieups); }, [corporateTieups]);
   useEffect(() => { syncState(STORAGE_KEY_FAQS, faqs); }, [faqs]);
+  useEffect(() => { syncState(STORAGE_KEY_FAQ_SYMBOLS, faqSymbols); }, [faqSymbols]);
   useEffect(() => { syncState(STORAGE_KEY_REVIEWS, reviews); }, [reviews]);
   useEffect(() => { syncState(STORAGE_KEY_SPECIALITIES, specialitiesProcedures); }, [specialitiesProcedures]);
   useEffect(() => { syncState(STORAGE_KEY_BRANDING, branding); }, [branding]);
@@ -860,8 +907,19 @@ export const DataProvider = ({ children }) => {
     setDoctors(prev => {
       const updated = prev.map(doc => {
         if (matchesId(doc, id)) {
-          const resolvedSpecialty = updatedData.specialty || updatedData.specialization || doc.specialty || doc.specialization;
-          const resolvedPrice = updatedData.price !== undefined ? parseInt(updatedData.price, 10) || doc.price : (updatedData.fees !== undefined ? parseInt(updatedData.fees, 10) || doc.fees : doc.price);
+          const incomingSpec = updatedData.specialization || updatedData.specialty;
+          const resolvedSpecialty = (incomingSpec && incomingSpec !== 'General Medicine')
+            ? incomingSpec
+            : ((doc.specialization && doc.specialization !== 'General Medicine') ? doc.specialization : (doc.specialty || doc.specialization || 'General Physician'));
+          const resolvedPrice = (updatedData.fees !== undefined && updatedData.fees !== 500)
+            ? parseInt(updatedData.fees, 10)
+            : (updatedData.price !== undefined && updatedData.price !== 500
+              ? parseInt(updatedData.price, 10)
+              : (updatedData.fees !== undefined
+                ? parseInt(updatedData.fees, 10)
+                : (updatedData.price !== undefined
+                  ? parseInt(updatedData.price, 10)
+                  : (doc.fees ?? doc.price ?? 500))));
           const resolvedPhone = updatedData.phone !== undefined ? updatedData.phone : (updatedData.contact_number !== undefined ? updatedData.contact_number : (doc.phone || doc.contact_number || ''));
           mergedDoctor = {
             ...doc,
@@ -927,9 +985,16 @@ export const DataProvider = ({ children }) => {
         setDoctors(prev => {
           const updated = prev.map(doc => {
             if (matchesId(doc, id) || (res._id && matchesId(doc, res._id)) || (res.id && matchesId(doc, res.id))) {
-              const resSpecialty = res.specialization ?? res.specialty ?? doc.specialty;
-              const resPrice = res.fees ?? res.price ?? doc.price;
-              const resDegree = res.degree ?? res.qualifications ?? doc.degree;
+              const rawResSpec = (res.specialization && res.specialization !== 'General Medicine')
+                ? res.specialization
+                : ((res.specialty && res.specialty !== 'General Medicine') ? res.specialty : (res.specialization || res.specialty));
+              const resSpecialty = rawResSpec || doc.specialization || doc.specialty || 'General Physician';
+              const resPrice = (res.fees !== undefined && res.fees !== 500)
+                ? res.fees
+                : (res.price !== undefined && res.price !== 500
+                  ? res.price
+                  : (res.fees ?? res.price ?? doc.price));
+              const resDegree = res.degree || res.qualifications || doc.degree || doc.qualifications || '';
               const resHospital = res.hospital ?? doc.hospital;
               const resName = res.name ?? doc.name;
               const resEmail = res.email ? String(res.email).trim().toLowerCase() : (updatedData.email ? String(updatedData.email).trim().toLowerCase() : doc.email);
@@ -960,6 +1025,7 @@ export const DataProvider = ({ children }) => {
                 certifications: Array.isArray(res.certifications) ? res.certifications : (updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications),
                 memberships: Array.isArray(res.memberships) ? res.memberships : (updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships),
                 careerExperience: Array.isArray(res.careerExperience) ? res.careerExperience : (updatedData.careerExperience !== undefined ? updatedData.careerExperience : doc.careerExperience),
+                faqs: Array.isArray(res.faqs) ? res.faqs : (updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs),
                 tags: Array.isArray(res.tags) ? res.tags : (updatedData.tags !== undefined ? updatedData.tags : doc.tags),
                 reels: Array.isArray(res.reels) ? res.reels : doc.reels,
                 youtube_videos: Array.isArray(res.youtube_videos) ? res.youtube_videos : doc.youtube_videos,
@@ -1479,6 +1545,32 @@ export const DataProvider = ({ children }) => {
     api.deleteFaq(id).catch(() => {});
   };
 
+  // FAQ Symbols CRUD
+  const addFaqSymbol = async (symbolData) => {
+    try {
+      const saved = await api.createFaqSymbol(symbolData);
+      if (saved) {
+        setFaqSymbols(prev => {
+          const filtered = prev.filter(s => s.key !== saved.key && !matchesId(s, saved._id));
+          return [...filtered, { ...saved, id: saved._id || saved.id }];
+        });
+        return saved;
+      }
+    } catch (err) {
+      console.error('Failed to add FAQ symbol:', err);
+      throw err;
+    }
+  };
+
+  const deleteFaqSymbol = async (id) => {
+    setFaqSymbols(prev => prev.filter(s => !matchesId(s, id)));
+    try {
+      await api.deleteFaqSymbol(id);
+    } catch (err) {
+      console.error('Failed to delete FAQ symbol:', err);
+    }
+  };
+
   // Reviews CRUD
   const addReview = async (reviewData, tokenOverride = null) => {
     try {
@@ -1715,6 +1807,11 @@ export const DataProvider = ({ children }) => {
         addFaq,
         updateFaq,
         deleteFaq,
+        // FAQ Symbols / Presets
+        faqSymbols,
+        refreshFaqSymbols,
+        addFaqSymbol,
+        deleteFaqSymbol,
         // Public Reviews
         reviews,
         addReview,

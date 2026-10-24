@@ -4859,7 +4859,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       : `${API_BASE}/reel-video?url=${encodeURIComponent(previewMediaItem.url)}`}
                     poster={previewMediaItem.coverPhoto}
                     controls
-                    autoPlay
                     playsInline
                     style={{ width: '100%', maxWidth: '420px', maxHeight: '560px', borderRadius: '12px', background: '#000', objectFit: 'contain' }}
                   />

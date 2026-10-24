@@ -18,12 +18,17 @@ import {
   Sparkles,
   Phone,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  MessageSquare,
+  Plus,
+  Edit3,
+  Trash2
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
+import ReviewFormModal from './ReviewFormModal';
 import {
   dedupeAppointments,
   isMockPatientAppointment,
@@ -32,10 +37,17 @@ import {
 import styles from './DoctorHistoryModal.module.css';
 
 const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
-  const { doctors, reviews } = useData();
+  const { doctors, reviews, addReview, updateReview, deleteReview } = useData();
   const liveDoc = useMemo(() => {
     return (doctors || []).find(d => matchesId(d, doctor?.id || doctor?._id)) || doctor || {};
   }, [doctors, doctor]);
+
+  const doctorReviews = useMemo(() => {
+    return getDoctorVerifiedReviews(liveDoc, reviews);
+  }, [liveDoc, reviews]);
+
+  const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
+  const [reviewToEdit, setReviewToEdit] = useState(null);
 
   const liveRating = useMemo(() => {
     const verifiedReviews = getDoctorVerifiedReviews(liveDoc, reviews);
@@ -521,6 +533,14 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                 <Pill size={15} />
                 <span>Prescriptions ({prescriptions.length})</span>
               </button>
+              <button
+                type="button"
+                className={`${styles.tabBtn} ${activeTab === 'reviews' ? styles.tabBtnActive : ''}`}
+                onClick={() => setActiveTab('reviews')}
+              >
+                <Star size={15} color="#d97706" />
+                <span>Patient Reviews ({doctorReviews.length})</span>
+              </button>
             </div>
 
             <div className={styles.searchFilterGroup}>
@@ -729,8 +749,198 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
               )}
             </div>
           )}
+          {/* TAB 3: Doctor Reviews Management */}
+          {activeTab === 'reviews' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                background: '#f8fafc',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                flexWrap: 'wrap',
+                gap: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#fef3c7', padding: '4px 10px', borderRadius: '8px', color: '#b45309', fontWeight: 800 }}>
+                    <Star size={16} fill="#f59e0b" color="#f59e0b" />
+                    <span>{liveRating.score}</span>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e' }}>({doctorReviews.length} {doctorReviews.length === 1 ? 'review' : 'reviews'})</span>
+                  </div>
+                  <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                    Authentic patient reviews displayed on Dr. {liveDoc.name ? liveDoc.name.replace(/^Dr\.\s*/i, '') : ''}'s public profile.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewToEdit(null);
+                    setIsReviewFormOpen(true);
+                  }}
+                  style={{
+                    background: '#7c3aed',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Plus size={15} /> Add Review for {liveDoc.name}
+                </button>
+              </div>
+
+              {doctorReviews.length === 0 ? (
+                <div className={styles.emptyState}>
+                  <MessageSquare size={40} className={styles.emptyIcon} />
+                  <h4 className={styles.emptyTitle}>No Reviews for this Doctor Yet</h4>
+                  <p className={styles.emptySubtitle}>
+                    Dr. {liveDoc.name ? liveDoc.name.replace(/^Dr\.\s*/i, '') : ''} does not have any recorded patient reviews yet. Click "+ Add Review" above to publish a verified review.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '14px' }}>
+                  {doctorReviews.map((rev) => (
+                    <div
+                      key={rev.id || rev._id}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        boxShadow: '0 2px 5px rgba(0,0,0,0.03)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <strong style={{ fontSize: '0.94rem', color: '#0f172a' }}>{rev.patientName}</strong>
+                          <span style={{ fontSize: '0.76rem', color: '#94a3b8', display: 'block' }}>
+                            {rev.patientCity || 'Bengaluru'} {rev.createdAt ? `• ${new Date(rev.createdAt).toLocaleDateString()}` : ''}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '2px' }}>
+                          {[1, 2, 3, 4, 5].map((s) => (
+                            <Star
+                              key={s}
+                              size={13}
+                              fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'}
+                              color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {rev.treatment && (
+                        <div style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 600 }}>
+                          Treatment: {rev.treatment}
+                        </div>
+                      )}
+
+                      {rev.title && (
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#1e293b' }}>
+                          {rev.title}
+                        </div>
+                      )}
+
+                      <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: 1.5 }}>
+                        {rev.comment}
+                      </p>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                        <span style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: rev.status === 'approved' ? '#ecfdf5' : rev.status === 'pending' ? '#fef3c7' : '#fef2f2',
+                          color: rev.status === 'approved' ? '#059669' : rev.status === 'pending' ? '#b45309' : '#ef4444'
+                        }}>
+                          {rev.status}
+                        </span>
+
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewToEdit(rev);
+                              setIsReviewFormOpen(true);
+                            }}
+                            style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.76rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
+                            title="Edit / Modify review details"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (window.confirm(`Permanently delete review by "${rev.patientName}"?`)) {
+                                await deleteReview(rev._id || rev.id);
+                              }
+                            }}
+                            style={{
+                              background: '#fef2f2',
+                              border: '1px solid #fee2e2',
+                              borderRadius: '6px',
+                              padding: '4px 8px',
+                              fontSize: '0.76rem',
+                              fontWeight: 600,
+                              color: '#ef4444',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '3px'
+                            }}
+                            title="Delete this review permanently"
+                          >
+                            <Trash2 size={12} /> Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {isReviewFormOpen && (
+        <ReviewFormModal
+          reviewToEdit={reviewToEdit}
+          preselectedDoctor={liveDoc}
+          initialTargetType="doctor"
+          onClose={() => {
+            setIsReviewFormOpen(false);
+            setReviewToEdit(null);
+          }}
+          onSave={async (data) => {
+            try {
+              if (reviewToEdit) {
+                await updateReview(reviewToEdit.id || reviewToEdit._id, data);
+              } else {
+                await addReview(data);
+              }
+            } catch (err) {
+              console.error('Failed to save review:', err);
+            }
+            setIsReviewFormOpen(false);
+            setReviewToEdit(null);
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -714,7 +714,7 @@ export const api = {
 
   // Auto-convert Instagram Reel to Cloudinary Video
   async uploadInstagramReel(url, folder = 'sehatbuddy/reels') {
-    const token = localStorage.getItem('token');
+    const token = getActiveAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
@@ -756,6 +756,31 @@ export const api = {
 
   async deleteFaq(id) {
     const res = await fetch(`${API_BASE}/faqs/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // FAQ Symbols & Icons API
+  async getFaqSymbols() {
+    const res = await fetch(`${API_BASE}/faqs/symbols`);
+    const data = await handleResponse(res);
+    return data.data || [];
+  },
+
+  async createFaqSymbol(symbolData) {
+    const res = await fetch(`${API_BASE}/faqs/symbols`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(symbolData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteFaqSymbol(id) {
+    const res = await fetch(`${API_BASE}/faqs/symbols/${id}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });

@@ -15,23 +15,25 @@ const PopularDoctors = ({ onNavigate }) => {
     }
   }, [doctors, refreshDoctors]);
 
-  // Prioritize star doctors at the front of Popular Doctors while keeping all active doctors visible
+  // When doctors are marked as Star in admin dashboard, strictly show ONLY those star doctors in Popular Doctors.
+  // Fallback to active doctors only if no doctor has been marked star yet.
   const displayDoctors = useMemo(() => {
-    const active = (doctors || []).filter(doc => doc.available !== false);
-    return [...active].sort((a, b) => {
-      if (Boolean(a.isStarDoctor) && !Boolean(b.isStarDoctor)) return -1;
-      if (!Boolean(a.isStarDoctor) && Boolean(b.isStarDoctor)) return 1;
-      return 0;
-    });
+    const allDocs = Array.isArray(doctors) ? doctors : [];
+    const starDoctors = allDocs.filter(doc => Boolean(doc.isStarDoctor));
+    if (starDoctors.length > 0) {
+      return starDoctors;
+    }
+    return allDocs.filter(doc => doc.available !== false);
   }, [doctors]);
 
-  // Duplicate doctors for seamless infinite marquee loop (running left)
+  // Generate seamless marquee cards: exactly two identical halves for smooth infinite runLeft (-50%) loop
   const marqueeDoctors = useMemo(() => {
-    return displayDoctors.length > 0
-      ? (displayDoctors.length < 5
-          ? [...displayDoctors, ...displayDoctors, ...displayDoctors, ...displayDoctors]
-          : [...displayDoctors, ...displayDoctors])
-      : [];
+    if (displayDoctors.length === 0) return [];
+    let half = [...displayDoctors];
+    while (half.length < 6) {
+      half = [...half, ...displayDoctors];
+    }
+    return [...half, ...half];
   }, [displayDoctors]);
 
   return (

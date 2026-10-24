@@ -16,7 +16,11 @@ const faqSchema = new mongoose.Schema({
   targetName: { type: String, default: '' },
   icon: { 
     type: String, 
-    default: 'credit-card' 
+    default: 'calendar' 
+  },
+  image: { 
+    type: String, 
+    default: '' 
   },
   note: { type: String, default: '' },
   steps: [{ type: String }],

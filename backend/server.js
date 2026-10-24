@@ -225,6 +225,50 @@ app.get('/api/reel-cover', async (req, res) => {
   }
 });
 
+// In-memory cache for direct extracted reel video streams (2 hour TTL)
+const reelVideoCache = new Map();
+const inFlightReelExtractions = new Map();
+
+// Helper to stream range requests directly or redirect safely without losing HTTP range context
+const streamOrRedirectVideo = async (targetVideoUrl, req, res) => {
+  if (req.query.json === 'true') {
+    return res.json({ success: true, videoUrl: targetVideoUrl });
+  }
+
+  const rangeHeader = req.headers.range;
+  if (rangeHeader) {
+    try {
+      const upstream = await fetch(targetVideoUrl, {
+        headers: {
+          'Range': rangeHeader,
+          'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        }
+      });
+
+      res.status(upstream.status);
+      res.setHeader('Content-Type', upstream.headers.get('content-type') || 'video/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=7200');
+
+      const cr = upstream.headers.get('content-range');
+      if (cr) res.setHeader('Content-Range', cr);
+      const cl = upstream.headers.get('content-length');
+      if (cl) res.setHeader('Content-Length', cl);
+
+      const { Readable } = await import('stream');
+      Readable.fromWeb(upstream.body).pipe(res);
+      return;
+    } catch (streamErr) {
+      console.warn('Range streaming proxy fallback to 307:', streamErr.message);
+    }
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 'public, max-age=7200');
+  return res.redirect(307, targetVideoUrl);
+};
+
 // Dedicated Instagram Reel Direct Video Extractor / Stream Endpoint
 app.get('/api/reel-video', async (req, res) => {
   try {
@@ -233,53 +277,81 @@ app.get('/api/reel-video', async (req, res) => {
       return res.status(400).json({ success: false, message: 'URL is required' });
     }
 
-    // Direct Cloudinary or MP4 videos stream directly
-    if (rawUrl.includes('cloudinary') || rawUrl.endsWith('.mp4') || rawUrl.endsWith('.webm')) {
-      if (req.query.json === 'true') {
-        return res.json({ success: true, videoUrl: rawUrl });
-      }
-      return res.redirect(rawUrl);
+    const cleanRaw = String(rawUrl).trim();
+
+    // Direct Cloudinary or MP4/WebM/MOV videos stream directly
+    if (
+      cleanRaw.includes('cloudinary.com') ||
+      /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(cleanRaw)
+    ) {
+      return streamOrRedirectVideo(cleanRaw, req, res);
     }
 
-    let targetReelUrl = rawUrl;
-    if (!targetReelUrl.startsWith('http')) {
-      targetReelUrl = `https://www.instagram.com/reel/${targetReelUrl}/`;
+    // Extract clean canonical shortcode and URL (strips tracking & UTM query params)
+    const shortcodeMatch = cleanRaw.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
+    const cacheKey = shortcode || cleanRaw;
+    const targetReelUrl = shortcode ? `https://www.instagram.com/reel/${shortcode}/` : cleanRaw;
+
+    // Check in-memory cache first (instant response in <1ms)
+    const cached = reelVideoCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now() && cached.videoUrl) {
+      return streamOrRedirectVideo(cached.videoUrl, req, res);
     }
 
-    try {
-      const { exec } = await import('child_process');
-      const { promisify } = await import('util');
-      const execPromise = promisify(exec);
-      const commands = [
-        `py -m yt_dlp -g "${targetReelUrl}"`,
-        `yt-dlp -g "${targetReelUrl}"`,
-        `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -g "${targetReelUrl}"`,
-        `python -m yt_dlp -g "${targetReelUrl}"`
-      ];
-      let directMp4 = null;
-      for (const cmd of commands) {
+    // Deduplicate in-flight extraction requests to prevent CPU thrashing & multiple yt-dlp processes
+    if (!inFlightReelExtractions.has(cacheKey)) {
+      const extractionPromise = (async () => {
         try {
-          const { stdout } = await execPromise(cmd, { timeout: 15000 });
-          const lines = stdout.trim().split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
-          if (lines.length > 0) {
-            directMp4 = lines[0];
-            break;
+          const { exec } = await import('child_process');
+          const { promisify } = await import('util');
+          const execPromise = promisify(exec);
+
+          // Fast direct commands with socket-timeout
+          const commands = [
+            `yt-dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`,
+            `py -m yt_dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`
+          ];
+
+          for (const cmd of commands) {
+            try {
+              const { stdout } = await execPromise(cmd, { timeout: 12000 });
+              const lines = stdout.trim().split('\n').map(s => s.trim()).filter(s => s.startsWith('http'));
+              if (lines.length > 0) {
+                const directMp4 = lines[0];
+                reelVideoCache.set(cacheKey, {
+                  videoUrl: directMp4,
+                  expiresAt: Date.now() + 2 * 3600 * 1000 // 2 hours
+                });
+                return directMp4;
+              }
+            } catch (cmdErr) {
+              // try next fallback command
+            }
           }
-        } catch {}
-      }
-      if (directMp4 && directMp4.startsWith('http')) {
-        if (req.query.json === 'true') {
-          return res.json({ success: true, videoUrl: directMp4 });
+        } catch (ytErr) {
+          console.warn('Reel extraction warning:', ytErr.message);
         }
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        return res.redirect(directMp4);
-      }
-    } catch (ytErr) {
-      console.warn('yt-dlp direct extraction fallback:', ytErr.message);
+        return null;
+      })().finally(() => {
+        inFlightReelExtractions.delete(cacheKey);
+      });
+
+      inFlightReelExtractions.set(cacheKey, extractionPromise);
     }
 
-    return res.status(404).json({ success: false, message: 'No video stream found' });
+    const directMp4 = await inFlightReelExtractions.get(cacheKey);
+
+    if (directMp4 && directMp4.startsWith('http')) {
+      return streamOrRedirectVideo(directMp4, req, res);
+    }
+
+    return res.status(404).json({
+      success: false,
+      message: 'Direct video stream unavailable',
+      shortcode,
+      embedUrl: shortcode ? `https://www.instagram.com/reel/${shortcode}/embed/` : null
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

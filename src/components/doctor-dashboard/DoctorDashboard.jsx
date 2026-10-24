@@ -253,6 +253,78 @@ export const getLocalDateString = (d = new Date()) => {
   return `${y}-${m}-${day}`;
 };
 
+const DashboardReelPlayer = ({ url, coverPhoto, onFallbackToEmbed }) => {
+  const videoRef = useRef(null);
+  const [directVideoUrl, setDirectVideoUrl] = useState('');
+  const [hasError, setHasError] = useState(false);
+
+  const isDirect = url && (url.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(url));
+
+  useEffect(() => {
+    let active = true;
+    if (!url) return;
+    if (isDirect) {
+      setDirectVideoUrl(url);
+      return;
+    }
+    fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(url)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (active && data.success && data.videoUrl) {
+          setDirectVideoUrl(data.videoUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [url, isDirect]);
+
+  const videoSrc = directVideoUrl || (isDirect ? url : `${API_BASE}/reel-video?url=${encodeURIComponent(url)}`);
+
+  useEffect(() => {
+    setHasError(false);
+    if (videoRef.current) {
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [videoSrc]);
+
+  if (hasError) {
+    return (
+      <iframe
+        src={getMediaEmbedUrl(url)}
+        title="Reel Preview Player"
+        scrolling="no"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+        style={{ width: '100%', height: '100%', border: 'none' }}
+      />
+    );
+  }
+
+  return (
+    <video
+      ref={videoRef}
+      key={videoSrc}
+      src={videoSrc}
+      poster={coverPhoto}
+      playsInline
+      controls
+      onError={() => {
+        setHasError(true);
+        onFallbackToEmbed?.();
+      }}
+      style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000000' }}
+    />
+  );
+};
+
 const DoctorDashboard = ({ onNavigate }) => {
   // Live real-time PC date tracker: always pulls directly from the user's PC
   const [currentPcDate, setCurrentPcDate] = useState(() => new Date());
@@ -9198,27 +9270,11 @@ const DoctorDashboard = ({ onNavigate }) => {
               position: 'relative'
             }}>
               {previewMediaModal.type === 'reel' ? (
-                !previewReelError ? (
-                  <video
-                    key={previewMediaModal.url}
-                    src={`${API_BASE}/reel-video?url=${encodeURIComponent(previewMediaModal.url)}`}
-                    poster={previewMediaModal.coverPhoto}
-                    autoPlay
-                    playsInline
-                    controls
-                    onError={() => setPreviewReelError(true)}
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', background: '#000000' }}
-                  />
-                ) : (
-                  <iframe
-                    src={getMediaEmbedUrl(previewMediaModal.url)}
-                    title="Reel Preview Player"
-                    scrolling="no"
-                    allow="autoplay; encrypted-media; picture-in-picture"
-                    allowFullScreen
-                    style={{ width: '100%', height: '100%', border: 'none' }}
-                  />
-                )
+                <DashboardReelPlayer
+                  url={previewMediaModal.url}
+                  coverPhoto={previewMediaModal.coverPhoto}
+                  onFallbackToEmbed={() => setPreviewReelError(true)}
+                />
               ) : (
                 <iframe
                   src={getMediaEmbedUrl(previewMediaModal.url)}

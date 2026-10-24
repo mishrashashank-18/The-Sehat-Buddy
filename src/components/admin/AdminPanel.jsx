@@ -91,6 +91,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     resetToDefaults,
     stats,
     faqs,
+    faqSymbols = [],
     addFaq,
     updateFaq,
     deleteFaq,
@@ -315,31 +316,20 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   // Search & Filters for FAQs
   const [faqSearch, setFaqSearch] = useState('');
   const [faqCategoryFilter, setFaqCategoryFilter] = useState('all');
+  const [faqTypeFilter, setFaqTypeFilter] = useState('all'); // 'all' | 'doctor' | 'hospital'
+  const [faqDoctorFilter, setFaqDoctorFilter] = useState('all'); // 'all' | doctorName
   const [isFaqModalOpen, setIsFaqModalOpen] = useState(false);
   const [faqToEdit, setFaqToEdit] = useState(null);
-
-  // Dynamic categories for FAQ filter (standards + all custom categories present in FAQs)
-  const faqFilterCategories = React.useMemo(() => {
-    const defaultCats = [
-      'Insurance & Cashless',
-      'Surgeries & Procedures',
-      'Hospitals & Admissions',
-      'Doctors & Consultations',
-      'General'
-    ];
-    const set = new Set(defaultCats);
-    (faqs || []).forEach(f => {
-      const cat = (f?.category || '').trim();
-      if (cat) set.add(cat);
-    });
-    return Array.from(set);
-  }, [faqs]);
 
   // Search & Filters for Reviews
   const [reviewSearch, setReviewSearch] = useState('');
   const [reviewStatusFilter, setReviewStatusFilter] = useState('all');
+  const [reviewTypeFilter, setReviewTypeFilter] = useState('all'); // 'all' | 'doctor' | 'hospital'
+  const [reviewDoctorFilter, setReviewDoctorFilter] = useState('all'); // 'all' | doctorName
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewToEdit, setReviewToEdit] = useState(null);
+  const [preselectedReviewDoctor, setPreselectedReviewDoctor] = useState(null);
+  const [forcedReviewType, setForcedReviewType] = useState(null);
 
   // Search & Filters for Specialities & Procedures
   const [specSearch, setSpecSearch] = useState('');
@@ -625,41 +615,124 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     return Array.from(new Set(hospitals.map(h => h.city).filter(Boolean)));
   }, [hospitals]);
 
+  // Unified system FAQs: Portal FAQs + Doctor-specific FAQs from database
+  const allSystemFaqs = useMemo(() => {
+    const list = [...(faqs || [])];
+    (doctors || []).forEach(doc => {
+      if (Array.isArray(doc.faqs) && doc.faqs.length > 0) {
+        doc.faqs.forEach((df, idx) => {
+          const qText = (df.q || df.question || '').trim();
+          const alreadyExists = list.some(f => 
+            (f.targetId && (String(f.targetId) === String(doc.id || doc._id))) &&
+            (f.question || '').trim().toLowerCase() === qText.toLowerCase()
+          );
+          if (!alreadyExists && qText) {
+            list.push({
+              _id: `doc_${doc.id || doc._id}_faq_${idx}`,
+              id: `doc_${doc.id || doc._id}_faq_${idx}`,
+              question: qText,
+              q: qText,
+              answer: (df.a || df.answer || '').trim(),
+              a: (df.a || df.answer || '').trim(),
+              category: df.category || 'Doctors & Consultations',
+              targetType: 'doctor',
+              targetId: doc.id || doc._id,
+              targetName: doc.name,
+              icon: df.icon || 'calendar',
+              image: df.image || '',
+              isActive: true,
+              isEmbeddedDoctorFaq: true,
+              doctorId: doc.id || doc._id,
+              doctorFaqIndex: idx
+            });
+          }
+        });
+      }
+    });
+    return list;
+  }, [faqs, doctors]);
+
+  const doctorFaqsCount = useMemo(() => allSystemFaqs.filter(f => f.targetType === 'doctor').length, [allSystemFaqs]);
+  const hospitalFaqsCount = useMemo(() => allSystemFaqs.filter(f => f.targetType === 'hospital').length, [allSystemFaqs]);
+
+  // Dynamic categories for FAQ filter (standards + all custom categories present in FAQs)
+  const faqFilterCategories = React.useMemo(() => {
+    const defaultCats = [
+      'Insurance & Cashless',
+      'Surgeries & Procedures',
+      'Hospitals & Admissions',
+      'Doctors & Consultations',
+      'Booking & Schedule',
+      'Clinic Preparation',
+      'Privacy & Security',
+      'Rescheduling Policy',
+      'Cashless Insurance',
+      'General'
+    ];
+    const set = new Set(defaultCats);
+    allSystemFaqs.forEach(f => {
+      const cat = (f?.category || '').trim();
+      if (cat) set.add(cat);
+    });
+    return Array.from(set);
+  }, [allSystemFaqs]);
+
   // FAQ Category counts lookup map
   const faqCategoryCounts = useMemo(() => {
     const counts = {};
-    (faqs || []).forEach(f => {
+    allSystemFaqs.forEach(f => {
       if (f.category) {
         counts[f.category] = (counts[f.category] || 0) + 1;
       }
     });
     return counts;
-  }, [faqs]);
+  }, [allSystemFaqs]);
 
   // Filtered FAQs
   const filteredFaqs = useMemo(() => {
     const q = faqSearch.toLowerCase().trim();
-    return (faqs || []).filter(f => {
+    return allSystemFaqs.filter(f => {
+      const matchType = faqTypeFilter === 'all' || f.targetType === faqTypeFilter;
+      const matchDoctor = faqDoctorFilter === 'all' || (
+        (f.targetName && f.targetName.toLowerCase().includes(faqDoctorFilter.toLowerCase())) ||
+        String(f.targetId) === String(faqDoctorFilter) ||
+        String(f.doctorId) === String(faqDoctorFilter)
+      );
       const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
       const matchSearch = !q ||
         (f.question || '').toLowerCase().includes(q) ||
-        (f.answer || '').toLowerCase().includes(q);
-      return matchCat && matchSearch;
+        (f.answer || '').toLowerCase().includes(q) ||
+        (f.targetName || '').toLowerCase().includes(q);
+      return matchType && matchDoctor && matchCat && matchSearch;
     });
-  }, [faqs, faqCategoryFilter, faqSearch]);
+  }, [allSystemFaqs, faqTypeFilter, faqDoctorFilter, faqCategoryFilter, faqSearch]);
 
   // Filtered Reviews
   const filteredReviews = useMemo(() => {
     const q = reviewSearch.toLowerCase().trim();
     return (reviews || []).filter(r => {
       const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
+      const matchType = reviewTypeFilter === 'all' || r.targetType === reviewTypeFilter;
+      const matchDoctor = reviewDoctorFilter === 'all' ||
+        (r.targetType === 'doctor' && (
+          (r.targetName && r.targetName.toLowerCase().includes(reviewDoctorFilter.toLowerCase())) ||
+          (r.doctorName && r.doctorName.toLowerCase().includes(reviewDoctorFilter.toLowerCase())) ||
+          String(r.targetId) === String(reviewDoctorFilter) ||
+          String(r.doctorId) === String(reviewDoctorFilter)
+        ));
       const matchSearch = !q ||
         (r.patientName || '').toLowerCase().includes(q) ||
         (r.targetName || '').toLowerCase().includes(q) ||
+        (r.doctorName || '').toLowerCase().includes(q) ||
+        (r.title || '').toLowerCase().includes(q) ||
+        (r.treatment || '').toLowerCase().includes(q) ||
         (r.comment || '').toLowerCase().includes(q);
-      return matchStatus && matchSearch;
+      return matchStatus && matchType && matchDoctor && matchSearch;
     });
-  }, [reviews, reviewStatusFilter, reviewSearch]);
+  }, [reviews, reviewStatusFilter, reviewTypeFilter, reviewDoctorFilter, reviewSearch]);
+
+  const doctorReviewsCount = useMemo(() => (reviews || []).filter(r => r.targetType === 'doctor').length, [reviews]);
+  const hospitalReviewsCount = useMemo(() => (reviews || []).filter(r => r.targetType === 'hospital').length, [reviews]);
 
   // Filtered Specialities & Procedures
   const filteredSpecialitiesProcedures = useMemo(() => {
@@ -728,8 +801,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       deleteHospital(deleteModalState.item.id || deleteModalState.item._id);
       showToast(`Hospital "${deleteModalState.item.name}" deleted successfully.`);
     } else if (deleteModalState.type === 'faq' && deleteModalState.item) {
-      deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
-      showToast('FAQ deleted successfully.');
+      if (deleteModalState.item.isEmbeddedDoctorFaq && deleteModalState.item.doctorId) {
+        const doc = doctors.find(d => matchesId(d, deleteModalState.item.doctorId));
+        if (doc && Array.isArray(doc.faqs)) {
+          const updatedFaqs = doc.faqs.filter((_, idx) => idx !== deleteModalState.item.doctorFaqIndex);
+          await updateDoctor(doc._id || doc.id, { faqs: updatedFaqs });
+          showToast(`Doctor FAQ deleted successfully.`);
+        }
+      } else {
+        deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
+        showToast('FAQ deleted successfully.');
+      }
     } else if (deleteModalState.type === 'review' && deleteModalState.item) {
       try {
         await deleteReview(deleteModalState.item._id || deleteModalState.item.id || deleteModalState.item);
@@ -1564,19 +1646,19 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <table className={styles.dataTable}>
                     <thead>
                       <tr>
-                        <th style={{ minWidth: '220px' }}>Doctor</th>
-                        <th style={{ minWidth: '165px' }}>Specialty & Experience</th>
-                        <th style={{ minWidth: '190px' }}>Affiliated Hospital</th>
-                        <th style={{ minWidth: '110px' }}>Consultation Fee</th>
-                        <th style={{ minWidth: '125px' }}>Rating</th>
-                        <th style={{ minWidth: '165px' }}>Availability</th>
+                        <th style={{ minWidth: '220px', width: '220px' }}>Doctor</th>
+                        <th style={{ minWidth: '175px', width: '175px' }}>Specialty & Experience</th>
+                        <th style={{ minWidth: '190px', width: '190px' }}>Affiliated Hospital</th>
+                        <th style={{ minWidth: '110px', width: '110px' }}>Consultation Fee</th>
+                        <th style={{ minWidth: '125px', width: '125px' }}>Rating</th>
+                        <th style={{ minWidth: '165px', width: '165px' }}>Availability</th>
                         <th style={{ minWidth: '320px', width: '320px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDoctors.map(doc => (
                         <tr key={doc.id || doc._id}>
-                          <td>
+                          <td style={{ minWidth: '220px', width: '220px' }}>
                             <div
                               className={`${styles.tableDocProfile} ${styles.tableDocProfileClickable}`}
                               onClick={() => setSelectedDoctorForHistory(doc)}
@@ -1598,24 +1680,24 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </div>
                             </div>
                           </td>
-                          <td>
+                          <td style={{ minWidth: '175px', width: '175px' }}>
                             <div className={styles.tableSpecialtyCell}>
-                              <span className={styles.specialtyBadge}>{doc.specialty || doc.specialization || 'General Physician'}</span>
+                              <span className={styles.specialtyBadge}>{doc.specialization || doc.specialty || 'General Physician'}</span>
                               <div className={styles.tableSubText}>
                                 {typeof doc.experience === 'number' || (!isNaN(Number(doc.experience)) && String(doc.experience).trim() !== '') ? `${doc.experience} Years Experience` : (doc.experience || 'Experienced')}
                               </div>
                             </div>
                           </td>
-                          <td>
+                          <td style={{ minWidth: '190px', width: '190px' }}>
                             <div className={styles.tableHospitalCell}>
                               <Building2 size={15} />
                               <span>{doc.hospital || 'Private Clinic'}</span>
                             </div>
                           </td>
-                          <td>
+                          <td style={{ minWidth: '110px', width: '110px' }}>
                             <span className={styles.priceHighlight}>₹{doc.price}</span>
                           </td>
-                          <td>
+                          <td style={{ minWidth: '125px', width: '125px' }}>
                             {(() => {
                               const liveRating = getDoctorDisplayRating(doc);
                               const cNum = Number(liveRating.count) || 0;
@@ -1628,7 +1710,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               );
                             })()}
                           </td>
-                          <td>
+                          <td style={{ minWidth: '165px', width: '165px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span
@@ -1665,8 +1747,34 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </span>
                             </div>
                           </td>
-                          <td style={{ minWidth: '320px', width: '320px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
+                          <td style={{ minWidth: '420px', width: '420px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
+                              <button
+                                className={styles.historyActionBtn}
+                                style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a', fontWeight: 600 }}
+                                onClick={() => {
+                                  setReviewTypeFilter('doctor');
+                                  setReviewDoctorFilter(doc.name);
+                                  setReviewSearch('');
+                                  setActiveTab('reviews');
+                                }}
+                                title={`View & Manage Patient Reviews for ${doc.name}`}
+                              >
+                                <MessageSquare size={13} /> Reviews
+                              </button>
+                              <button
+                                className={styles.historyActionBtn}
+                                style={{ background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0', fontWeight: 600 }}
+                                onClick={() => {
+                                  setReviewToEdit(null);
+                                  setPreselectedReviewDoctor(doc);
+                                  setForcedReviewType('doctor');
+                                  setIsReviewModalOpen(true);
+                                }}
+                                title={`Add new patient review for ${doc.name}`}
+                              >
+                                <Plus size={13} /> Review
+                              </button>
                               <button
                                 className={styles.historyActionBtn}
                                 onClick={() => setSelectedDoctorForHistory(doc)}
@@ -2411,14 +2519,80 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <h2 className={styles.sectionTitle}>Frequently Asked Questions (FAQs)</h2>
                   <p className={styles.sectionSub}>Add new FAQs or modify existing answers displayed on the public portal.</p>
                 </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className={styles.primaryActionBtn}
+                    onClick={() => {
+                      setFaqToEdit(null);
+                      setIsFaqModalOpen(true);
+                    }}
+                  >
+                    <Plus size={16} /> Add New FAQ
+                  </button>
+                </div>
+              </div>
+
+              {/* FAQ Type Filter Tabs */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
                 <button
-                  className={styles.primaryActionBtn}
+                  type="button"
                   onClick={() => {
-                    setFaqToEdit(null);
-                    setIsFaqModalOpen(true);
+                    setFaqTypeFilter('all');
+                    setFaqDoctorFilter('all');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: faqTypeFilter === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: faqTypeFilter === 'all' ? '#eff6ff' : '#ffffff',
+                    color: faqTypeFilter === 'all' ? '#1d4ed8' : '#64748b'
                   }}
                 >
-                  <Plus size={16} /> Add New FAQ
+                  All FAQs ({allSystemFaqs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFaqTypeFilter('doctor')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    border: faqTypeFilter === 'doctor' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                    background: faqTypeFilter === 'doctor' ? '#f5f3ff' : '#ffffff',
+                    color: faqTypeFilter === 'doctor' ? '#6d28d9' : '#64748b'
+                  }}
+                >
+                  <Stethoscope size={14} /> Doctor FAQs ({doctorFaqsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFaqTypeFilter('hospital');
+                    setFaqDoctorFilter('all');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    border: faqTypeFilter === 'hospital' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: faqTypeFilter === 'hospital' ? '#eff6ff' : '#ffffff',
+                    color: faqTypeFilter === 'hospital' ? '#1d4ed8' : '#64748b'
+                  }}
+                >
+                  <Building2 size={14} /> Hospital FAQs ({hospitalFaqsCount})
                 </button>
               </div>
 
@@ -2436,6 +2610,39 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <button className={styles.clearSearch} onClick={() => setFaqSearch('')}>×</button>
                   )}
                 </div>
+
+                {/* Doctor Filter Dropdown */}
+                {faqTypeFilter !== 'hospital' && (
+                  <div className={styles.filterGroup}>
+                    <Stethoscope size={16} className={styles.filterIcon} color="#7c3aed" />
+                    <select
+                      value={faqDoctorFilter}
+                      onChange={(e) => {
+                        setFaqDoctorFilter(e.target.value);
+                        if (e.target.value !== 'all') {
+                          setFaqTypeFilter('doctor');
+                        }
+                      }}
+                      className={styles.filterSelect}
+                      style={{ minWidth: '180px' }}
+                    >
+                      <option value="all">All Doctors ({doctorFaqsCount})</option>
+                      {doctors.map(d => {
+                        const dCount = allSystemFaqs.filter(f => f.targetType === 'doctor' && (
+                          (f.targetName && f.targetName.toLowerCase().includes(d.name.toLowerCase())) ||
+                          String(f.targetId) === String(d.id || d._id) ||
+                          String(f.doctorId) === String(d.id || d._id)
+                        )).length;
+                        return (
+                          <option key={d.id || d._id} value={d.name}>
+                            {d.name} ({dCount})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
                 <div className={styles.filterGroup}>
                   <Filter size={16} className={styles.filterIcon} />
                   <select
@@ -2443,7 +2650,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     onChange={(e) => setFaqCategoryFilter(e.target.value)}
                     className={styles.filterSelect}
                   >
-                    <option value="all">All Categories ({faqs.length})</option>
+                    <option value="all">All Categories ({allSystemFaqs.length})</option>
                     {faqFilterCategories.map(cat => {
                       const count = faqCategoryCounts[cat] || 0;
                       return (
@@ -2474,11 +2681,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
                         <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
                           {(() => {
-                            const isCustom = faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.'));
-                            if (isCustom) {
+                            const customImgSrc = faq.image || (faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.')) ? faq.icon : '');
+                            const dbSymbol = (!customImgSrc && faq.icon) ? faqSymbols.find(s => s.key === faq.icon) : null;
+                            const effectiveImg = customImgSrc || (dbSymbol ? (dbSymbol.imageUrl || dbSymbol.svg) : '');
+
+                            if (effectiveImg) {
                               return (
                                 <div
-                                  title="Custom Uploaded Icon"
+                                  title={dbSymbol ? dbSymbol.name : 'Custom FAQ Icon'}
                                   style={{
                                     width: '42px',
                                     height: '42px',
@@ -2488,13 +2698,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     flexShrink: 0,
-                                    border: '1px solid #cbd5e1',
+                                    border: '1.5px solid #bfdbfe',
                                     marginTop: '2px',
                                     overflow: 'hidden',
-                                    padding: '6px'
+                                    padding: '4px'
                                   }}
                                 >
-                                  <img src={faq.icon} alt="FAQ Icon" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                  <img src={effectiveImg} alt="FAQ Icon" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                 </div>
                               );
                             }
@@ -2554,6 +2764,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           <button
                             type="button"
                             onClick={() => {
+                              if (faq.isEmbeddedDoctorFaq && faq.doctorId) {
+                                const targetDoc = doctors.find(d => matchesId(d, faq.doctorId));
+                                if (targetDoc) {
+                                  handleOpenEditDoctor(targetDoc);
+                                  return;
+                                }
+                              }
                               setFaqToEdit(faq);
                               setIsFaqModalOpen(true);
                             }}
@@ -2607,29 +2824,136 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
           {/* TAB 7: PUBLIC REVIEWS */}
           <div className={styles.viewSection} style={{ display: activeTab === 'reviews' ? 'block' : 'none' }}>
-              <div className={styles.sectionHeader}>
+              <div className={styles.sectionHeader} style={{ flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <h2 className={styles.sectionTitle}>Public Reviews & Patient Testimonials</h2>
-                  <p className={styles.sectionSub}>Moderate user reviews, verify insurance experiences, or add official hospital reviews.</p>
+                  <p className={styles.sectionSub}>Add, modify, edit, or delete patient reviews for doctors and hospitals with real-time sync.</p>
                 </div>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    style={{
+                      background: '#7c3aed',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px 18px',
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(124, 58, 237, 0.25)'
+                    }}
+                    onClick={() => {
+                      setReviewToEdit(null);
+                      setPreselectedReviewDoctor(null);
+                      setForcedReviewType('doctor');
+                      setIsReviewModalOpen(true);
+                    }}
+                  >
+                    <Stethoscope size={16} /> Add Doctor Review
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '10px',
+                      padding: '10px 18px',
+                      fontSize: '0.88rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                    }}
+                    onClick={() => {
+                      setReviewToEdit(null);
+                      setPreselectedReviewDoctor(null);
+                      setForcedReviewType('hospital');
+                      setIsReviewModalOpen(true);
+                    }}
+                  >
+                    <Building2 size={16} /> Add Hospital Review
+                  </button>
+                </div>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
-                  className={styles.primaryActionBtn}
+                  type="button"
                   onClick={() => {
-                    setReviewToEdit(null);
-                    setIsReviewModalOpen(true);
+                    setReviewTypeFilter('all');
+                    setReviewDoctorFilter('all');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: reviewTypeFilter === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: reviewTypeFilter === 'all' ? '#eff6ff' : '#ffffff',
+                    color: reviewTypeFilter === 'all' ? '#1d4ed8' : '#64748b'
                   }}
                 >
-                  <Plus size={16} /> Add New Review
+                  All Reviews ({reviews.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReviewTypeFilter('doctor')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    border: reviewTypeFilter === 'doctor' ? '2px solid #7c3aed' : '1px solid #cbd5e1',
+                    background: reviewTypeFilter === 'doctor' ? '#f5f3ff' : '#ffffff',
+                    color: reviewTypeFilter === 'doctor' ? '#6d28d9' : '#64748b'
+                  }}
+                >
+                  <Stethoscope size={14} /> Doctor Reviews ({doctorReviewsCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewTypeFilter('hospital');
+                    setReviewDoctorFilter('all');
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    border: reviewTypeFilter === 'hospital' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: reviewTypeFilter === 'hospital' ? '#eff6ff' : '#ffffff',
+                    color: reviewTypeFilter === 'hospital' ? '#1d4ed8' : '#64748b'
+                  }}
+                >
+                  <Building2 size={14} /> Hospital Reviews ({hospitalReviewsCount})
                 </button>
               </div>
 
-              {/* Filters */}
+              {/* Filters Bar */}
               <div className={styles.filterBar}>
                 <div className={styles.searchBox}>
                   <Search size={18} className={styles.searchIcon} />
                   <input
                     type="text"
-                    placeholder="Search by patient name, hospital, surgery, or keywords..."
+                    placeholder="Search by patient name, doctor, hospital, surgery, treatment..."
                     value={reviewSearch}
                     onChange={(e) => setReviewSearch(e.target.value)}
                   />
@@ -2637,6 +2961,40 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     <button className={styles.clearSearch} onClick={() => setReviewSearch('')}>×</button>
                   )}
                 </div>
+
+                {/* Doctor Selector Dropdown (When reviewing doctor reviews or all) */}
+                {reviewTypeFilter !== 'hospital' && (
+                  <div className={styles.filterGroup}>
+                    <Stethoscope size={16} className={styles.filterIcon} color="#7c3aed" />
+                    <select
+                      value={reviewDoctorFilter}
+                      onChange={(e) => {
+                        setReviewDoctorFilter(e.target.value);
+                        if (e.target.value !== 'all') {
+                          setReviewTypeFilter('doctor');
+                        }
+                      }}
+                      className={styles.filterSelect}
+                      style={{ minWidth: '180px' }}
+                    >
+                      <option value="all">All Doctors ({doctorReviewsCount})</option>
+                      {doctors.map(d => {
+                        const dCount = (reviews || []).filter(r => r.targetType === 'doctor' && (
+                          (r.targetName && r.targetName.toLowerCase().includes(d.name.toLowerCase())) ||
+                          (r.doctorName && r.doctorName.toLowerCase().includes(d.name.toLowerCase())) ||
+                          String(r.targetId) === String(d.id || d._id) ||
+                          String(r.doctorId) === String(d.id || d._id)
+                        )).length;
+                        return (
+                          <option key={d.id || d._id} value={d.name}>
+                            {d.name} ({dCount} reviews)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
                 <div className={styles.filterGroup}>
                   <Filter size={16} className={styles.filterIcon} />
                   <select
@@ -2644,7 +3002,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     onChange={(e) => setReviewStatusFilter(e.target.value)}
                     className={styles.filterSelect}
                   >
-                    <option value="all">All Reviews ({reviews.length})</option>
+                    <option value="all">All Statuses ({reviews.length})</option>
                     <option value="approved">Approved</option>
                     <option value="pending">Pending</option>
                     <option value="rejected">Rejected</option>
@@ -2652,9 +3010,109 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               </div>
 
+              {/* Active Doctor Filter Info Banner */}
+              {reviewDoctorFilter !== 'all' && (
+                <div style={{
+                  padding: '10px 14px',
+                  background: '#f5f3ff',
+                  border: '1.5px solid #ddd6fe',
+                  borderRadius: '10px',
+                  marginTop: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '10px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Stethoscope size={18} color="#7c3aed" />
+                    <span style={{ fontSize: '0.86rem', color: '#5b21b6', fontWeight: 700 }}>
+                      Showing reviews for: <span style={{ textDecoration: 'underline' }}>{reviewDoctorFilter}</span> ({filteredReviews.length} found)
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetDoc = doctors.find(d => d.name === reviewDoctorFilter);
+                        setReviewToEdit(null);
+                        setPreselectedReviewDoctor(targetDoc || { name: reviewDoctorFilter });
+                        setForcedReviewType('doctor');
+                        setIsReviewModalOpen(true);
+                      }}
+                      style={{
+                        background: '#7c3aed',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '5px 12px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add Review for this Doctor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewDoctorFilter('all')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#64748b',
+                        fontSize: '0.8rem',
+                        cursor: 'pointer',
+                        textDecoration: 'underline'
+                      }}
+                    >
+                      Clear Filter
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Reviews List */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {filteredReviews.map((rev) => (
+                {filteredReviews.length === 0 ? (
+                  <div style={{
+                    gridColumn: '1 / -1',
+                    padding: '48px 20px',
+                    textAlign: 'center',
+                    background: '#f8fafc',
+                    borderRadius: '14px',
+                    border: '1.5px dashed #cbd5e1'
+                  }}>
+                    <MessageSquare size={36} color="#94a3b8" style={{ margin: '0 auto 10px' }} />
+                    <h3 style={{ margin: '0 0 6px', fontSize: '1rem', color: '#1e293b' }}>No Reviews Found</h3>
+                    <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#64748b' }}>
+                      {reviewDoctorFilter !== 'all'
+                        ? `No reviews recorded yet for ${reviewDoctorFilter}. Click "+ Add Review for this Doctor" above to publish one.`
+                        : 'No patient reviews match your current filters. Add a doctor or hospital review using the buttons above.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewToEdit(null);
+                        setPreselectedReviewDoctor(reviewDoctorFilter !== 'all' ? (doctors.find(d => d.name === reviewDoctorFilter) || null) : null);
+                        setForcedReviewType(reviewTypeFilter === 'doctor' ? 'doctor' : 'hospital');
+                        setIsReviewModalOpen(true);
+                      }}
+                      style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '8px 18px',
+                        fontSize: '0.84rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Add New Review
+                    </button>
+                  </div>
+                ) : (
+                  filteredReviews.map((rev) => (
                     <div
                       key={rev.id || rev._id}
                       style={{
@@ -2664,13 +3122,16 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         padding: '18px',
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: '10px'
+                        gap: '10px',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
                           <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>{rev.patientName}</strong>
-                          <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block' }}>{rev.patientCity}</span>
+                          <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block' }}>
+                            {rev.patientCity || 'Bengaluru'} {rev.createdAt ? `• ${new Date(rev.createdAt).toLocaleDateString()}` : ''}
+                          </span>
                         </div>
                         <div style={{ display: 'flex', gap: '2px' }}>
                           {[1, 2, 3, 4, 5].map((s) => (
@@ -2684,7 +3145,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         </div>
                       </div>
 
-                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', color: '#334155', border: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', color: '#334155', border: '1px solid #f1f5f9' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
                           <span style={{
                             fontSize: '0.74rem',
@@ -2697,37 +3158,59 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           }}>
                             {rev.targetType === 'doctor' ? '👨‍⚕️ Doctor Review' : '🏥 Hospital Review'}
                           </span>
-                          <strong style={{ color: '#0f172a' }}>{rev.targetName}</strong>
+                          <strong style={{ color: '#0f172a' }}>{rev.targetName || rev.doctorName}</strong>
                         </div>
                         {rev.treatment && <span style={{ display: 'block', color: '#2563eb' }}>Treatment: {rev.treatment}</span>}
                         {rev.insuranceUsed && <span style={{ display: 'block', color: '#059669' }}>Insurance: {rev.insuranceUsed}</span>}
                       </div>
 
+                      {rev.title && (
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
+                          {rev.title}
+                        </div>
+                      )}
+
                       <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
                         {rev.comment}
                       </p>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                        <span style={{
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          textTransform: 'uppercase',
-                          padding: '3px 8px',
-                          borderRadius: '4px',
-                          background: rev.status === 'approved' ? '#ecfdf5' : rev.status === 'pending' ? '#fef3c7' : '#fef2f2',
-                          color: rev.status === 'approved' ? '#059669' : rev.status === 'pending' ? '#b45309' : '#ef4444'
-                        }}>
-                          {rev.status}
-                        </span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            padding: '3px 8px',
+                            borderRadius: '4px',
+                            background: rev.status === 'approved' ? '#ecfdf5' : rev.status === 'pending' ? '#fef3c7' : '#fef2f2',
+                            color: rev.status === 'approved' ? '#059669' : rev.status === 'pending' ? '#b45309' : '#ef4444'
+                          }}>
+                            {rev.status}
+                          </span>
+                          {rev.status === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateReview(rev.id || rev._id, { status: 'approved' });
+                                showToast(`Review by ${rev.patientName} approved!`);
+                              }}
+                              style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: '4px', fontSize: '0.72rem', padding: '2px 6px', fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Approve
+                            </button>
+                          )}
+                        </div>
 
                         <div style={{ display: 'flex', gap: '6px' }}>
                           <button
                             type="button"
                             onClick={() => {
                               setReviewToEdit(rev);
+                              setPreselectedReviewDoctor(null);
                               setIsReviewModalOpen(true);
                             }}
-                            style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
+                            style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '5px 10px', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
+                            title="Edit / Modify review details"
                           >
                             Edit
                           </button>
@@ -2761,7 +3244,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -2939,16 +3423,28 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       {isReviewModalOpen && (
         <ReviewFormModal
           reviewToEdit={reviewToEdit}
-          onClose={() => setIsReviewModalOpen(false)}
-          onSave={(data) => {
-            if (reviewToEdit) {
-              updateReview(reviewToEdit.id || reviewToEdit._id, data);
-              showToast('Review updated successfully!');
-            } else {
-              addReview(data);
-              showToast('New Review added successfully!');
+          preselectedDoctor={preselectedReviewDoctor}
+          initialTargetType={forcedReviewType}
+          onClose={() => {
+            setIsReviewModalOpen(false);
+            setPreselectedReviewDoctor(null);
+            setForcedReviewType(null);
+          }}
+          onSave={async (data) => {
+            try {
+              if (reviewToEdit) {
+                await updateReview(reviewToEdit.id || reviewToEdit._id, data);
+                showToast(`Review for "${data.targetName || data.doctorName}" modified successfully!`);
+              } else {
+                await addReview(data);
+                showToast(`New review for "${data.targetName || data.doctorName}" added successfully!`);
+              }
+            } catch (err) {
+              showToast(err.message || 'Failed to save review', 'error');
             }
             setIsReviewModalOpen(false);
+            setPreselectedReviewDoctor(null);
+            setForcedReviewType(null);
           }}
         />
       )}

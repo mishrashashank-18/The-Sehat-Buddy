@@ -280,43 +280,91 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const isHoveredRef = useRef(false);
+  const leaveTimerRef = useRef(null);
+  const [directVideoUrl, setDirectVideoUrl] = useState('');
 
   const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
+  const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+  const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
+  const effectiveCover = coverPhoto || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
 
-  // Determine video streaming source (Cloudinary direct stream or backend video streamer)
-  const videoSrc = useMemo(() => {
-    if (!rawUrl) return '';
-    if (isDirectVideoUrl(rawUrl)) {
-      return rawUrl;
+  const isDirect = isDirectVideoUrl(rawUrl);
+
+  useEffect(() => {
+    let active = true;
+    if (!rawUrl) return;
+    if (isDirect) {
+      setDirectVideoUrl(rawUrl);
+      return;
     }
-    return `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`;
-  }, [rawUrl]);
+    fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawUrl)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (active && data.success && data.videoUrl) {
+          setDirectVideoUrl(data.videoUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [rawUrl, isDirect]);
+
+  const videoSrc = directVideoUrl || (isDirect ? rawUrl : `${API_BASE}/reel-video?url=${encodeURIComponent(rawUrl)}`);
 
   const handleMouseEnter = () => {
-    if (videoRef.current) {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+    isHoveredRef.current = true;
+    if (videoRef.current && !videoError) {
       setHasStarted(true);
-      videoRef.current.currentTime = 0;
+      if (!isPlaying) {
+        setIsLoading(true);
+      }
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            setIsPlaying(true);
+            if (isHoveredRef.current) {
+              setIsPlaying(true);
+            } else if (videoRef.current) {
+              videoRef.current.pause();
+              setIsPlaying(false);
+            }
           })
           .catch((err) => {
-            console.warn('Reel hover preview autoplay error:', err);
+            if (err.name !== 'AbortError') {
+              console.warn('Reel hover preview autoplay error:', err);
+            }
+          })
+          .finally(() => {
+            setIsLoading(false);
           });
       }
     }
   };
 
   const handleMouseLeave = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    }
+    if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = setTimeout(() => {
+      isHoveredRef.current = false;
+      if (videoRef.current) {
+        videoRef.current.pause();
+        setIsPlaying(false);
+        setIsLoading(false);
+      }
+    }, 120);
   };
+
+  useEffect(() => {
+    return () => {
+      if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
 
   return (
     <div
@@ -330,66 +378,21 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       }}
     >
       {/* Background/Cover Image (visible when paused) */}
-      {coverPhoto ? (
+      {effectiveCover && (
         <img
-          src={coverPhoto}
-          alt={`Instagram Reel ${idx + 1}`}
+          src={effectiveCover}
+          alt="Instagram Reel"
           className={styles.reelCoverImg}
           loading="lazy"
           style={{
             opacity: isPlaying ? 0 : 1,
-            transition: 'opacity 0.25s ease'
+            transition: 'opacity 0.25s ease',
+            pointerEvents: 'none'
           }}
           onError={(e) => {
             e.target.style.display = 'none';
           }}
         />
-      ) : (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          background: 'radial-gradient(circle at 50% 38%, rgba(225, 48, 108, 0.22), transparent 70%), linear-gradient(160deg, #0b1120 0%, #0f172a 50%, #1e293b 100%)',
-          padding: '20px',
-          textAlign: 'center',
-          userSelect: 'none',
-          opacity: isPlaying ? 0 : 1,
-          transition: 'opacity 0.25s ease'
-        }}>
-          <div style={{
-            width: '46px',
-            height: '46px',
-            borderRadius: '12px',
-            background: 'linear-gradient(135deg, rgba(225, 48, 108, 0.25) 0%, rgba(247, 119, 55, 0.25) 100%)',
-            border: '1px solid rgba(225, 48, 108, 0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#f43f5e',
-            marginBottom: '12px'
-          }}>
-            <SocialInstagramIcon size={22} />
-          </div>
-          <span style={{
-            color: '#ffffff',
-            fontSize: '0.86rem',
-            fontWeight: 700,
-            letterSpacing: '0.02em',
-            marginBottom: '4px'
-          }}>
-            Reel {idx + 1}
-          </span>
-          <span style={{
-            color: '#94a3b8',
-            fontSize: '0.72rem',
-            fontWeight: 500
-          }}>
-            Hover to Preview
-          </span>
-        </div>
       )}
 
       {/* Hover Video Element */}
@@ -411,7 +414,8 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
             objectFit: 'cover',
             opacity: isPlaying ? 1 : 0,
             transition: 'opacity 0.3s ease',
-            zIndex: 1
+            zIndex: 1,
+            pointerEvents: 'none'
           }}
           onPlay={() => setIsPlaying(true)}
           onError={() => setVideoError(true)}
@@ -419,10 +423,10 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       )}
 
       {/* Gradient shadow scrim overlay */}
-      <div className={styles.reelGradientScrim} style={{ zIndex: 2 }} />
+      <div className={styles.reelGradientScrim} style={{ zIndex: 2, pointerEvents: 'none' }} />
 
       {/* Top Badge: Instagram Tag / Playing Status */}
-      <div className={styles.reelTopBadge} style={{ zIndex: 3 }}>
+      <div className={styles.reelTopBadge} style={{ zIndex: 3, pointerEvents: 'none' }}>
         <SocialInstagramIcon size={14} />
         <span>{isPlaying ? '▶ Playing' : 'Reel'}</span>
       </div>
@@ -430,8 +434,134 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
   );
 };
 
+// Robust Modal Video Player component for HospitalProfile with anti-pause handling
+const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
+  const videoRef = useRef(null);
+  const [videoError, setVideoError] = useState(false);
+  const [directVideoUrl, setDirectVideoUrl] = useState('');
+
+  const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
+  const isDirect = isDirectVideoUrl(rawTarget);
+  const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+
+  useEffect(() => {
+    let active = true;
+    if (!rawTarget) return;
+    if (isDirect) {
+      setDirectVideoUrl(rawTarget);
+      return;
+    }
+    fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawTarget)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (active && data.success && data.videoUrl) {
+          setDirectVideoUrl(data.videoUrl);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [rawTarget, isDirect]);
+
+  const modalVideoSrc = directVideoUrl || (isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`);
+
+  useEffect(() => {
+    setVideoError(false);
+    if (videoRef.current) {
+      const p = videoRef.current.play();
+      if (p !== undefined) {
+        p.catch((err) => {
+          if (videoRef.current) {
+            videoRef.current.muted = true;
+            videoRef.current.play().catch(() => {});
+          }
+        });
+      }
+    }
+  }, [modalVideoSrc]);
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div 
+        className={styles.modalContent} 
+        onClick={e => e.stopPropagation()} 
+        style={{ 
+          maxWidth: '430px', 
+          width: '92%', 
+          background: '#000000',
+          borderRadius: '20px', 
+          overflow: 'hidden',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
+          position: 'relative',
+          padding: 0
+        }}
+      >
+        <button 
+          type="button" 
+          onClick={onClose} 
+          aria-label="Close"
+          title="Close"
+          style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            zIndex: 30,
+            background: 'rgba(0, 0, 0, 0.65)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            borderRadius: '50%',
+            width: '36px',
+            height: '36px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: '#ffffff',
+            backdropFilter: 'blur(6px)',
+            transition: 'all 0.2s'
+          }}
+        >
+          <X size={20} />
+        </button>
+
+        <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {!videoError ? (
+            <video
+              ref={videoRef}
+              key={modalVideoSrc}
+              src={modalVideoSrc}
+              poster={coverSrc}
+              playsInline
+              controls
+              controlsList="nodownload"
+              onError={() => setVideoError(true)}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                background: '#000000',
+                display: 'block'
+              }}
+            />
+          ) : (
+            <iframe
+              src={(() => {
+                const match = String(rawTarget).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                return match ? `https://www.instagram.com/reel/${match[1]}/embed/` : getEmbedUrl(rawTarget);
+              })()}
+              title="Instagram Reel Player"
+              scrolling="no"
+              allow="autoplay; encrypted-media; picture-in-picture"
+              allowFullScreen
+              style={{ width: '100%', height: '100%', border: 'none', background: '#000000' }}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors, reviews, refreshReviews, deleteReview, faqs, user } = useData();
+  const { hospitals, doctors, reviews, refreshReviews, deleteReview, faqs, faqSymbols = [], user } = useData();
 
   const isAdmin = useMemo(() => {
     try {
@@ -1509,6 +1639,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                         q: f.question,
                         a: f.answer,
                         icon: f.icon,
+                        image: f.image,
                         steps: f.steps,
                         note: f.note
                       }));
@@ -1517,10 +1648,14 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
                     return faqsToRender.map((faq, idx) => {
                       const isOpen = expandedHospitalFaq === idx;
-                      const isCustom = faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.'));
-                      const FaqIcon = isCustom
-                        ? () => <img src={faq.icon} alt="FAQ Icon" style={{ width: '24px', height: '24px', objectFit: 'contain' }} />
-                        : ((faq.icon && FAQ_ICON_MAP[faq.icon]) ? FAQ_ICON_MAP[faq.icon] : FAQ_ICONS[idx % FAQ_ICONS.length]);
+                      const customSrc = faq.image || (faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image') || faq.icon.startsWith('/') || faq.icon.includes('.')) ? faq.icon : '');
+                      const matchingDbSymbol = (!customSrc && faq.icon) ? faqSymbols.find(s => s.key === faq.icon) : null;
+
+                      const FaqIcon = customSrc
+                        ? () => <img src={customSrc} alt="FAQ Icon" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+                        : (matchingDbSymbol && (matchingDbSymbol.imageUrl || matchingDbSymbol.svg)
+                          ? () => <img src={matchingDbSymbol.imageUrl || matchingDbSymbol.svg} alt={matchingDbSymbol.name} style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+                          : ((faq.icon && FAQ_ICON_MAP[faq.icon]) ? FAQ_ICON_MAP[faq.icon] : FAQ_ICONS[idx % FAQ_ICONS.length]));
                       return (
                         <div key={idx} className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}>
                           <button
@@ -1864,78 +1999,12 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       })()}
 
       {/* Reel Popup Modal - Clean Native Video Player (No Instagram Style) */}
-      {activeReel && (() => {
-        const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
-        const isDirect = isDirectVideoUrl(rawTarget);
-        const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
-        const modalVideoSrc = isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`;
-
-        return (
-          <div className={styles.modalOverlay} onClick={() => setActiveReel(null)}>
-            <div 
-              className={styles.modalContent}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                maxWidth: '430px',
-                width: '92%',
-                background: '#000000',
-                borderRadius: '20px',
-                overflow: 'hidden',
-                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.75)',
-                position: 'relative',
-                padding: 0
-              }}
-            >
-              {/* Floating Close Button */}
-              <button 
-                type="button" 
-                onClick={() => setActiveReel(null)} 
-                aria-label="Close"
-                title="Close"
-                style={{
-                  position: 'absolute',
-                  top: '12px',
-                  right: '12px',
-                  zIndex: 30,
-                  background: 'rgba(0, 0, 0, 0.65)',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  borderRadius: '50%',
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: '#ffffff',
-                  backdropFilter: 'blur(6px)',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <X size={20} />
-              </button>
-
-              <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <video
-                  key={modalVideoSrc}
-                  src={modalVideoSrc}
-                  poster={coverSrc}
-                  autoPlay
-                  playsInline
-                  controls
-                  controlsList="nodownload"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    background: '#000000',
-                    display: 'block'
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {activeReel && (
+        <HospitalReelModalPlayer
+          activeReel={activeReel}
+          onClose={() => setActiveReel(null)}
+        />
+      )}
 
       {/* Video Popup Modal */}
       {activeVideo && (

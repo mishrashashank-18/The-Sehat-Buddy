@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, 
   Plus, Trash2, Edit2, Star, Loader2, Award, GraduationCap, 
-  Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2 
+  Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag 
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import doc1 from '../../assets/images/doctor-1.png';
@@ -10,6 +10,7 @@ import doc2 from '../../assets/images/doctor-2.png';
 import doc3 from '../../assets/images/doctor-3.png';
 import doc4 from '../../assets/images/doctor-4.png';
 import { api } from '../../services/api';
+import FaqSymbolSelector from './FaqSymbolSelector';
 import styles from './DoctorFormModal.module.css';
 
 const DEFAULT_RAHUL_AWARDS = [
@@ -39,6 +40,59 @@ const DEFAULT_RAHUL_TIMELINE = [
   { role: 'Chief Resident in Cardiology', hospital: 'All India Institute of Medical Sciences', startYear: '2011', endYear: '2014', isPresent: false },
   { role: 'Clinical Fellow in Interventional Cardiology', hospital: 'AIIMS New Delhi', startYear: '2009', endYear: '2011', isPresent: false }
 ];
+
+const getDefaultDoctorTags = (doc) => {
+  const defaultList = [];
+  if (doc?.degree || doc?.qualifications) {
+    const parts = (doc.degree || doc.qualifications).split(/[,/]+/).map(s => s.trim()).filter(Boolean);
+    defaultList.push(...parts);
+  }
+  const spec = (doc?.specialty || doc?.specialization || '').toLowerCase();
+  if (spec.includes('dent') || spec.includes('paedo')) {
+    defaultList.push('BDS', 'MDS - Paedodontics', 'Implantologist', 'Pediatric Dentist', 'Cosmetic/Aesthetic Dentist', 'Preventive Dentistry', 'Dental Surgeon');
+  } else if (spec.includes('cardio')) {
+    defaultList.push('Interventional Cardiologist', 'Angioplasty Specialist', 'Echocardiography', 'Heart Failure Care', 'Preventive Cardiology', 'Chest Pain Specialist');
+  } else if (spec.includes('derma')) {
+    defaultList.push('Clinical Dermatology', 'Cosmetic/Aesthetic Specialist', 'Laser Therapeutics', 'Trichology', 'Cutaneous Surgeon', 'Acne & Skin Care');
+  } else if (spec.includes('ortho')) {
+    defaultList.push('Joint Replacement', 'Arthroscopy Specialist', 'Robotic Knee Surgery', 'Sports Medicine', 'Trauma Surgeon', 'Spine Rehabilitation');
+  } else if (spec.includes('pedia')) {
+    defaultList.push('Pediatric Intensive Care', 'Neonatology', 'Child Growth & Development', 'Vaccination Specialist', 'Pediatric Allergy Care');
+  } else if (spec.includes('gyne') || spec.includes('obs')) {
+    defaultList.push('High-Risk Obstetrics', 'Laparoscopic Surgeon', 'Infertility Specialist', 'Women Hormonal Health', 'Maternal Fetal Care');
+  } else if (spec.includes('neuro')) {
+    defaultList.push('Stroke Rehabilitation', 'Neurocritical Care', 'Electrophysiology', 'Headache & Migraine Specialist', 'Epilepsy Care');
+  } else if (spec.includes('uro')) {
+    defaultList.push('Robotic Urological Surgery', 'Kidney Stone Specialist', 'Endourology', 'Renal Transplant', 'Prostate Care');
+  } else {
+    defaultList.push('Consultant Physician', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Health Wellness');
+  }
+  return Array.from(new Set(defaultList));
+};
+
+const getSpecialtySuggestions = (specialty = '') => {
+  const spec = (specialty || '').toLowerCase();
+  if (spec.includes('dent') || spec.includes('paedo')) {
+    return ['BDS', 'MDS - Paedodontics', 'Implantologist', 'Pediatric Dentist', 'Cosmetic Dentist', 'Root Canal Specialist', 'Preventive Dentistry', 'Dental Surgeon', 'Oral & Maxillofacial'];
+  } else if (spec.includes('cardio')) {
+    return ['Interventional Cardiologist', 'Angioplasty Specialist', 'Echocardiography', 'Heart Failure Care', 'Preventive Cardiology', 'Chest Pain Specialist', 'Coronary Angiography', 'Arrhythmia Care', 'Cardiac Rehab'];
+  } else if (spec.includes('derma')) {
+    return ['Clinical Dermatology', 'Cosmetic Specialist', 'Laser Therapeutics', 'Trichology', 'Cutaneous Surgeon', 'Acne & Skin Care', 'Hair Loss Treatment', 'Skin Rejuvenation'];
+  } else if (spec.includes('ortho')) {
+    return ['Joint Replacement', 'Arthroscopy Specialist', 'Robotic Knee Surgery', 'Sports Medicine', 'Trauma Surgeon', 'Spine Rehabilitation', 'Hip Replacement', 'Fracture Care'];
+  } else if (spec.includes('pedia')) {
+    return ['Pediatric Intensive Care', 'Neonatology', 'Child Growth & Development', 'Vaccination Specialist', 'Pediatric Allergy Care', 'Newborn Care', 'Adolescent Medicine'];
+  } else if (spec.includes('gyne') || spec.includes('obs')) {
+    return ['High-Risk Obstetrics', 'Laparoscopic Surgeon', 'Infertility Specialist', 'Women Hormonal Health', 'Maternal Fetal Care', 'PCOS Management', 'Normal Delivery Care'];
+  } else if (spec.includes('neuro')) {
+    return ['Stroke Rehabilitation', 'Neurocritical Care', 'Electrophysiology', 'Headache & Migraine Specialist', 'Epilepsy Care', 'Brain Health', 'Neuropathy Treatment'];
+  } else if (spec.includes('uro')) {
+    return ['Robotic Urological Surgery', 'Kidney Stone Specialist', 'Endourology', 'Renal Transplant', 'Prostate Care', 'Urinary Incontinence', 'Andrology'];
+  } else if (spec.includes('general') || spec.includes('physician')) {
+    return ['Consultant Physician', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Health Wellness', 'Fever & Infection Care', 'Diabetes Care'];
+  }
+  return ['Consultant Specialist', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Patient Care Specialist'];
+};
 
 const PRESET_AVATARS = [
   { label: 'Male Doctor 1', src: doc1 },
@@ -114,7 +168,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         awards: initialAwards,
         certifications: initialCerts,
         memberships: initialMems,
-        careerExperience: initialTimeline
+        careerExperience: initialTimeline,
+        tags: Array.isArray(doctorToEdit.tags) && doctorToEdit.tags.length > 0
+          ? doctorToEdit.tags.filter(Boolean)
+          : getDefaultDoctorTags(doctorToEdit)
       };
     }
     return {
@@ -142,7 +199,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       awards: [],
       certifications: [],
       memberships: [],
-      careerExperience: []
+      careerExperience: [],
+      tags: getDefaultDoctorTags({ specialty: 'Cardiologist', degree: 'MBBS, MD' })
     };
   });
 
@@ -173,8 +231,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     const remoteCertsChanged = doctorToEdit.certifications && JSON.stringify(doctorToEdit.certifications) !== JSON.stringify(prevDoc.certifications);
     const remoteMemsChanged = doctorToEdit.memberships && JSON.stringify(doctorToEdit.memberships) !== JSON.stringify(prevDoc.memberships);
     const remoteExpChanged = doctorToEdit.careerExperience && JSON.stringify(doctorToEdit.careerExperience) !== JSON.stringify(prevDoc.careerExperience);
+    const remoteTagsChanged = doctorToEdit.tags && JSON.stringify(doctorToEdit.tags) !== JSON.stringify(prevDoc.tags);
 
-    if (!remotePhoneChanged && !remoteEmailChanged && !remoteHospitalChanged && !remoteSpecChanged && !remoteNameChanged && !remoteAwardsChanged && !remoteCertsChanged && !remoteMemsChanged && !remoteExpChanged) {
+    if (!remotePhoneChanged && !remoteEmailChanged && !remoteHospitalChanged && !remoteSpecChanged && !remoteNameChanged && !remoteAwardsChanged && !remoteCertsChanged && !remoteMemsChanged && !remoteExpChanged && !remoteTagsChanged) {
       return;
     }
 
@@ -194,6 +253,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       if (remoteCertsChanged) next.certifications = doctorToEdit.certifications;
       if (remoteMemsChanged) next.memberships = doctorToEdit.memberships;
       if (remoteExpChanged) next.careerExperience = doctorToEdit.careerExperience;
+      if (remoteTagsChanged) next.tags = Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags : [];
       return next;
     });
 
@@ -215,7 +275,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     doctorToEdit?.awards,
     doctorToEdit?.certifications,
     doctorToEdit?.memberships,
-    doctorToEdit?.careerExperience
+    doctorToEdit?.careerExperience,
+    doctorToEdit?.tags
   ]);
 
   // Credentials sub-tab navigation
@@ -545,20 +606,152 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           { role: 'Chief Resident Specialist', hospital: 'All India Institute of Medical Sciences', startYear: '2011', endYear: '2014', isPresent: false }
         ]
       }));
+    } else if (key === 'tags') {
+      handleResetDefaultTags();
     }
   };
 
   // Helper to clear list
   const handleClearList = (key, name) => {
+    if (key === 'tags') {
+      if (window.confirm('Are you sure you want to clear all tags?')) {
+        handleClearAllTags();
+      }
+      return;
+    }
     if (window.confirm(`Are you sure you want to clear all ${name}?`)) {
       setFormData(prev => ({ ...prev, [key]: [] }));
     }
   };
 
+  // Tags State & Handlers
+  const [newTagInput, setNewTagInput] = useState('');
+
+  const handleAddTag = (tagText) => {
+    const text = (tagText || newTagInput || '').trim();
+    if (!text) return;
+    const current = Array.isArray(formData.tags) ? formData.tags : [];
+    if (current.includes(text)) {
+      setNewTagInput('');
+      return;
+    }
+    const updated = [...current, text];
+    setFormData(prev => ({ ...prev, tags: updated }));
+    setNewTagInput('');
+    const docId = doctorToEdit?._id || doctorToEdit?.id;
+    if (docId) {
+      updateDoctor(docId, { tags: updated });
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove) => {
+    const current = Array.isArray(formData.tags) ? formData.tags : [];
+    const updated = current.filter(t => t !== tagToRemove);
+    setFormData(prev => ({ ...prev, tags: updated }));
+    const docId = doctorToEdit?._id || doctorToEdit?.id;
+    if (docId) {
+      updateDoctor(docId, { tags: updated });
+    }
+  };
+
+  const handleResetDefaultTags = () => {
+    const defaults = getDefaultDoctorTags(formData);
+    setFormData(prev => ({ ...prev, tags: defaults }));
+    const docId = doctorToEdit?._id || doctorToEdit?.id;
+    if (docId) {
+      updateDoctor(docId, { tags: defaults });
+    }
+  };
+
+  const handleClearAllTags = () => {
+    setFormData(prev => ({ ...prev, tags: [] }));
+    const docId = doctorToEdit?._id || doctorToEdit?.id;
+    if (docId) {
+      updateDoctor(docId, { tags: [] });
+    }
+  };
+
+  const renderTagsManager = () => (
+    <div className={styles.tagsContainer}>
+      {/* Current Tags Chips */}
+      <div className={styles.tagsChipList}>
+        {Array.isArray(formData.tags) && formData.tags.length > 0 ? (
+          formData.tags.map((tag, tIdx) => (
+            <div key={`tag-${tIdx}-${tag}`} className={styles.tagChip}>
+              <span>{tag}</span>
+              <button
+                type="button"
+                onClick={() => handleRemoveTag(tag)}
+                title={`Remove tag "${tag}"`}
+                className={styles.tagRemoveBtn}
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))
+        ) : (
+          <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '6px 0' }}>
+            No procedure or focus tags added yet. Type a tag below or click suggestions to add.
+          </div>
+        )}
+      </div>
+
+      {/* Add Custom Tag Form Row */}
+      <div className={styles.tagInputRow}>
+        <input
+          type="text"
+          value={newTagInput}
+          onChange={(e) => setNewTagInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleAddTag();
+            }
+          }}
+          placeholder="Type procedure/focus tag (e.g. Angioplasty Specialist, Echocardiography)..."
+          className={styles.tagInput}
+        />
+        <button
+          type="button"
+          onClick={() => handleAddTag()}
+          className={styles.tagAddBtn}
+        >
+          <Plus size={15} />
+          Add Tag
+        </button>
+      </div>
+
+      {/* Quick Suggestions */}
+      <div className={styles.tagSuggestionsWrap}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748b', marginRight: '4px' }}>
+          Recommended for {formData.specialty}:
+        </span>
+        {getSpecialtySuggestions(formData.specialty)
+          .filter(sug => !Array.isArray(formData.tags) || !formData.tags.includes(sug))
+          .slice(0, 7)
+          .map((sug, sIdx) => (
+            <button
+              key={sIdx}
+              type="button"
+              onClick={() => handleAddTag(sug)}
+              className={styles.tagSuggestionPill}
+              title={`Add "${sug}"`}
+            >
+              <Plus size={11} />
+              {sug}
+            </button>
+          ))}
+      </div>
+    </div>
+  );
+
   const [newFaqQ, setNewFaqQ] = useState('');
   const [newFaqA, setNewFaqA] = useState('');
+  const [newFaqCategory, setNewFaqCategory] = useState('Booking & Schedule');
+  const [newFaqIcon, setNewFaqIcon] = useState('calendar');
+  const [newFaqImage, setNewFaqImage] = useState('');
   const [editingFaqIdx, setEditingFaqIdx] = useState(null);
-  const [editingFaqData, setEditingFaqData] = useState({ q: '', a: '' });
+  const [editingFaqData, setEditingFaqData] = useState({ q: '', a: '', category: 'Booking & Schedule', icon: 'calendar', image: '' });
 
   const [imageType, setImageType] = useState(() => {
     if (doctorToEdit && typeof doctorToEdit.image === 'string' && doctorToEdit.image.startsWith('http')) {
@@ -622,7 +815,34 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   };
 
   const [uploadingReelIdx, setUploadingReelIdx] = useState(null);
+  const [uploadingReelVideoIdx, setUploadingReelVideoIdx] = useState(null);
   const [deletingCoverIdx, setDeletingCoverIdx] = useState(null);
+
+  const handleReelVideoUpload = async (index, file) => {
+    if (!file) return;
+    setUploadingReelVideoIdx(index);
+    try {
+      const res = await api.uploadVideo(file, 'sehatbuddy/reels');
+      const videoUrl = typeof res === 'string' ? res : (res?.url || '');
+      if (videoUrl) {
+        const autoCover = videoUrl.replace(/\.[^/.]+$/, '.jpg');
+        const newReels = [...formData.reels];
+        const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+        newReels[index] = { ...cur, url: videoUrl, coverPhoto: cur.coverPhoto || autoCover };
+        setFormData(prev => ({ ...prev, reels: newReels }));
+
+        const targetId = doctorToEdit?.id || doctorToEdit?._id;
+        if (targetId) {
+          await updateDoctor(targetId, { reels: newReels });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to upload video to Cloudinary:', err);
+      alert('Failed to upload video: ' + (err.message || 'Please check file format and size.'));
+    } finally {
+      setUploadingReelVideoIdx(null);
+    }
+  };
 
   const handleDeleteCoverPhoto = async (index) => {
     const newReels = [...formData.reels];
@@ -749,7 +969,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         awards: Array.isArray(formData.awards) ? formData.awards.filter(Boolean) : [],
         certifications: Array.isArray(formData.certifications) ? formData.certifications.filter(Boolean) : [],
         memberships: Array.isArray(formData.memberships) ? formData.memberships.filter(Boolean) : [],
-        careerExperience: Array.isArray(formData.careerExperience) ? formData.careerExperience.filter(Boolean) : []
+        careerExperience: Array.isArray(formData.careerExperience) ? formData.careerExperience.filter(Boolean) : [],
+        tags: Array.isArray(formData.tags) ? formData.tags.filter(Boolean) : []
       };
 
       if (doctorToEdit) {
@@ -1088,8 +1309,40 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             </label>
           </div>
 
+          {/* Clinical Focus & Procedure Tags */}
+          <div className={styles.sectionHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '20px' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Tag size={16} />
+              Clinical Focus & Procedure Tags
+              <span className={styles.credBadge}>{(formData.tags || []).length}</span>
+            </span>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={handleResetDefaultTags}
+                style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+                title="Reset to recommended specialty tags"
+              >
+                Reset Recommendations
+              </button>
+              <span style={{ color: '#cbd5e1' }}>|</span>
+              <button
+                type="button"
+                onClick={handleClearAllTags}
+                style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
+                title="Clear all tags"
+              >
+                Clear All
+              </button>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '-4px 0 10px 0' }}>
+            These procedure & focus badges appear directly under the doctor's name on the public doctor profile (e.g. Angioplasty Specialist, Heart Failure Care, Preventive Cardiology).
+          </p>
+          {renderTagsManager()}
+
           {/* Social Links */}
-          <div className={styles.sectionHeader}>Social Profiles</div>
+          <div className={styles.sectionHeader} style={{ marginTop: '20px' }}>Social Profiles</div>
           <div className={styles.grid2}>
             <div className={styles.formGroup}>
               <label>Instagram URL</label>
@@ -1141,24 +1394,75 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                   marginBottom: '12px' 
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap', gap: '6px' }}>
                   <label style={{ margin: 0, fontWeight: 700, fontSize: '0.86rem', color: '#0f172a' }}>
                     Reel {index + 1} URL
                   </label>
-                  {shortcode && (
-                    <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '100px', fontWeight: 700 }}>
-                      ✓ Cover Photo Linked
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {shortcode && (
+                      <span style={{ fontSize: '0.72rem', color: '#16a34a', background: '#dcfce7', padding: '2px 8px', borderRadius: '100px', fontWeight: 700 }}>
+                        ✓ Instagram Reel
+                      </span>
+                    )}
+                    {reelUrl && (reelUrl.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(reelUrl)) && (
+                      <span style={{ fontSize: '0.72rem', color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: '100px', fontWeight: 700 }}>
+                        ✓ Direct Video
+                      </span>
+                    )}
+                    <label
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        color: '#0284c7',
+                        background: '#e0f2fe',
+                        border: '1px solid #bae6fd',
+                        padding: '3px 8px',
+                        borderRadius: '6px',
+                        cursor: uploadingReelVideoIdx === index ? 'not-allowed' : 'pointer'
+                      }}
+                      title="Upload custom MP4/WebM video file directly to Cloudinary"
+                    >
+                      {uploadingReelVideoIdx === index ? (
+                        <>
+                          <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                          <span>Uploading Video...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Video size={12} />
+                          <span>Upload MP4</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="video/*"
+                        disabled={uploadingReelVideoIdx === index}
+                        style={{ display: 'none' }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            handleReelVideoUpload(index, file);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
                 <input
                   type="url"
                   placeholder="https://www.instagram.com/reel/..."
                   value={reelUrl}
                   onChange={(e) => {
+                    let val = e.target.value.trim();
+                    const match = val.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                    const cleanVal = match && match[1] ? `https://www.instagram.com/reel/${match[1]}/` : e.target.value;
                     const newReels = [...formData.reels];
                     const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-                    newReels[index] = { ...cur, url: e.target.value };
+                    newReels[index] = { ...cur, url: cleanVal };
                     setFormData({ ...formData, reels: newReels });
                   }}
                   style={{ marginBottom: '8px' }}
@@ -1417,6 +1721,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 <Briefcase size={14} />
                 <span>Timeline</span>
                 <span className={styles.credBadge}>{(formData.careerExperience || []).length}</span>
+              </button>
+              <button
+                type="button"
+                className={`${styles.credTab} ${activeCredTab === 'tags' ? styles.credTabActive : ''}`}
+                onClick={() => setActiveCredTab('tags')}
+              >
+                <Tag size={14} />
+                <span>Focus Tags</span>
+                <span className={styles.credBadge}>{(formData.tags || []).length}</span>
               </button>
             </div>
 
@@ -2218,6 +2531,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 </div>
               </div>
             )}
+
+            {/* TAB 5: Clinical Focus & Procedure Tags */}
+            {activeCredTab === 'tags' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {renderTagsManager()}
+              </div>
+            )}
           </div>
 
           {/* Doctor Profile FAQs (Managed by Admin) */}
@@ -2229,12 +2549,54 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             <button
               type="button"
               onClick={() => {
+                const docName = formData.name || doctorToEdit?.name || 'the doctor';
+                const cleanName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
                 const defaults = [
-                  { q: `How can I book an appointment with ${formData.name || 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
-                  { q: 'What do I need to bring at the clinic?', a: 'Carry a valid government ID, insurance policy e-card (for cashless claim), and previous medical reports.' },
-                  { q: 'Is my consultation confidential?', a: 'Yes, 100% private and protected under standard medical privacy regulations.' },
-                  { q: 'Can I reschedule my appointment?', a: 'Yes, appointments can be easily rescheduled prior to your booked slot.' },
-                  { q: 'Does the doctor accept cashless health insurance?', a: 'Yes, consultations and hospital procedures qualify for cashless mediclaim pre-authorization.' }
+                  {
+                    q: `How can I book an appointment with ${cleanName}?`,
+                    question: `How can I book an appointment with ${cleanName}?`,
+                    a: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+                    answer: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+                    category: 'Booking & Schedule',
+                    icon: 'calendar',
+                    image: ''
+                  },
+                  {
+                    q: 'What do I need to show at the clinic?',
+                    question: 'What do I need to show at the clinic?',
+                    a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+                    answer: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+                    category: 'Clinic Preparation',
+                    icon: 'document',
+                    image: ''
+                  },
+                  {
+                    q: 'Is my consultation private with the doctor?',
+                    question: 'Is my consultation private with the doctor?',
+                    a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+                    answer: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+                    category: 'Privacy & Security',
+                    icon: 'shield',
+                    image: ''
+                  },
+                  {
+                    q: `Can I reschedule my appointment with ${cleanName}?`,
+                    question: `Can I reschedule my appointment with ${cleanName}?`,
+                    a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+                    answer: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+                    category: 'Rescheduling Policy',
+                    icon: 'reschedule',
+                    image: ''
+                  },
+                  {
+                    q: `Does ${cleanName} accept health insurance or cashless claims?`,
+                    question: `Does ${cleanName} accept health insurance or cashless claims?`,
+                    a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+                    answer: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+                    category: 'Cashless Insurance',
+                    icon: 'insurance',
+                    image: ''
+                  }
                 ];
                 setFormData(prev => ({ ...prev, faqs: defaults }));
               }}
@@ -2275,13 +2637,40 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                         placeholder="Answer..."
                         style={{ width: '100%', padding: '6px 8px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
                       />
+                      <input
+                        type="text"
+                        value={editingFaqData.category || ''}
+                        onChange={(e) => setEditingFaqData({ ...editingFaqData, category: e.target.value })}
+                        placeholder="Category (e.g. Booking & Schedule, Clinic Preparation, etc.)"
+                        style={{ width: '100%', padding: '5px 8px', fontSize: '0.8rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                      />
+                      <div style={{ marginTop: '4px', marginBottom: '4px' }}>
+                        <FaqSymbolSelector
+                          isCompact={true}
+                          selectedValue={editingFaqData.image || editingFaqData.icon}
+                          onSelect={({ icon, image }) => {
+                            setEditingFaqData(prev => ({
+                              ...prev,
+                              icon: icon || image,
+                              image: image || (icon?.startsWith('http') ? icon : '')
+                            }));
+                          }}
+                        />
+                      </div>
                       <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                         <button
                           type="button"
                           onClick={() => {
                             if (!editingFaqData.q.trim()) return;
                             const updated = [...formData.faqs];
-                            updated[fIdx] = { ...editingFaqData };
+                            updated[fIdx] = {
+                              ...editingFaqData,
+                              q: editingFaqData.q.trim(),
+                              question: editingFaqData.q.trim(),
+                              a: editingFaqData.a.trim(),
+                              answer: editingFaqData.a.trim(),
+                              category: editingFaqData.category?.trim() || 'Doctor FAQ'
+                            };
                             setFormData({ ...formData, faqs: updated });
                             setEditingFaqIdx(null);
                           }}
@@ -2300,12 +2689,39 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b', marginBottom: '2px' }}>
-                          Q{fIdx + 1}: {faq.q || faq.question}
-                        </div>
-                        <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                          {faq.a || faq.answer}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1 }}>
+                        {(faq.image || faq.icon) && (
+                          <div style={{
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '6px',
+                            background: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                            overflow: 'hidden'
+                          }}>
+                            {(faq.image || (faq.icon && (faq.icon.startsWith('http') || faq.icon.startsWith('data:image')))) ? (
+                              <img src={faq.image || faq.icon} alt="Icon" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+                            ) : (
+                              <HelpCircle size={16} color="#2563eb" />
+                            )}
+                          </div>
+                        )}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#eff6ff', color: '#2563eb', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                              {faq.category || 'Doctor FAQ'}
+                            </span>
+                          </div>
+                          <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b', marginBottom: '2px' }}>
+                            Q{fIdx + 1}: {faq.q || faq.question}
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                            {faq.a || faq.answer}
+                          </div>
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
@@ -2313,7 +2729,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                           type="button"
                           onClick={() => {
                             setEditingFaqIdx(fIdx);
-                            setEditingFaqData({ q: faq.q || faq.question || '', a: faq.a || faq.answer || '' });
+                            setEditingFaqData({
+                              q: faq.q || faq.question || '',
+                              a: faq.a || faq.answer || '',
+                              category: faq.category || 'Booking & Schedule',
+                              icon: faq.icon || 'calendar',
+                              image: faq.image || ''
+                            });
                           }}
                           style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '4px' }}
                           title="Edit FAQ"
@@ -2337,9 +2759,69 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 </div>
               ))
             ) : (
-              <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontStyle: 'italic' }}>
-                No custom FAQs yet. Default platform FAQs will be displayed.
-              </span>
+              <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
+                <span style={{ fontSize: '0.84rem', color: '#64748b', display: 'block', marginBottom: '8px' }}>
+                  No FAQs saved for this doctor in database yet.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const docName = formData.name || doctorToEdit?.name || 'the doctor';
+                    const cleanName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
+                    const defaults = [
+                      {
+                        q: `How can I book an appointment with ${cleanName}?`,
+                        question: `How can I book an appointment with ${cleanName}?`,
+                        a: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+                        answer: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+                        category: 'Booking & Schedule',
+                        icon: 'calendar',
+                        image: ''
+                      },
+                      {
+                        q: 'What do I need to show at the clinic?',
+                        question: 'What do I need to show at the clinic?',
+                        a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+                        answer: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+                        category: 'Clinic Preparation',
+                        icon: 'document',
+                        image: ''
+                      },
+                      {
+                        q: 'Is my consultation private with the doctor?',
+                        question: 'Is my consultation private with the doctor?',
+                        a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+                        answer: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+                        category: 'Privacy & Security',
+                        icon: 'shield',
+                        image: ''
+                      },
+                      {
+                        q: `Can I reschedule my appointment with ${cleanName}?`,
+                        question: `Can I reschedule my appointment with ${cleanName}?`,
+                        a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+                        answer: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+                        category: 'Rescheduling Policy',
+                        icon: 'reschedule',
+                        image: ''
+                      },
+                      {
+                        q: `Does ${cleanName} accept health insurance or cashless claims?`,
+                        question: `Does ${cleanName} accept health insurance or cashless claims?`,
+                        a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+                        answer: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+                        category: 'Cashless Insurance',
+                        icon: 'insurance',
+                        image: ''
+                      }
+                    ];
+                    setFormData(prev => ({ ...prev, faqs: defaults }));
+                  }}
+                  style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  ⚡ Initialize 5 Standard FAQs
+                </button>
+              </div>
             )}
           </div>
 
@@ -2357,7 +2839,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   if (!newFaqQ.trim()) return;
-                  const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                  const updated = [...(formData.faqs || []), {
+                    q: newFaqQ.trim(),
+                    question: newFaqQ.trim(),
+                    a: newFaqA.trim(),
+                    answer: newFaqA.trim(),
+                    category: newFaqCategory.trim() || 'Booking & Schedule',
+                    icon: newFaqIcon,
+                    image: newFaqImage
+                  }];
                   setFormData({ ...formData, faqs: updated });
                   setNewFaqQ('');
                   setNewFaqA('');
@@ -2374,7 +2864,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   if (!newFaqQ.trim()) return;
-                  const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                  const updated = [...(formData.faqs || []), {
+                    q: newFaqQ.trim(),
+                    question: newFaqQ.trim(),
+                    a: newFaqA.trim(),
+                    answer: newFaqA.trim(),
+                    category: newFaqCategory.trim() || 'Booking & Schedule',
+                    icon: newFaqIcon,
+                    image: newFaqImage
+                  }];
                   setFormData({ ...formData, faqs: updated });
                   setNewFaqQ('');
                   setNewFaqA('');
@@ -2382,11 +2880,39 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               }}
               style={{ width: '100%', padding: '6px 10px', fontSize: '0.85rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
             />
+            
+            <input
+              type="text"
+              placeholder="Category (e.g. Booking & Schedule, Clinic Preparation, Cashless Insurance)"
+              value={newFaqCategory}
+              onChange={(e) => setNewFaqCategory(e.target.value)}
+              style={{ width: '100%', padding: '6px 10px', fontSize: '0.82rem', borderRadius: '6px', border: '1px solid #cbd5e1', marginBottom: '8px', boxSizing: 'border-box' }}
+            />
+
+            <div style={{ marginBottom: '10px' }}>
+              <FaqSymbolSelector
+                isCompact={true}
+                selectedValue={newFaqImage || newFaqIcon}
+                onSelect={({ icon, image }) => {
+                  setNewFaqIcon(icon || image);
+                  setNewFaqImage(image || (icon?.startsWith('http') ? icon : ''));
+                }}
+              />
+            </div>
+
             <button
               type="button"
               onClick={() => {
                 if (!newFaqQ.trim()) return;
-                const updated = [...(formData.faqs || []), { q: newFaqQ.trim(), a: newFaqA.trim() }];
+                const updated = [...(formData.faqs || []), {
+                  q: newFaqQ.trim(),
+                  question: newFaqQ.trim(),
+                  a: newFaqA.trim(),
+                  answer: newFaqA.trim(),
+                  category: newFaqCategory.trim() || 'Booking & Schedule',
+                  icon: newFaqIcon,
+                  image: newFaqImage
+                }];
                 setFormData({ ...formData, faqs: updated });
                 setNewFaqQ('');
                 setNewFaqA('');

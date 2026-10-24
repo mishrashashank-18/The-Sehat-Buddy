@@ -3,15 +3,18 @@ import { X, Star, Save, Building2, Stethoscope, Check } from 'lucide-react';
 import { useData } from '../../context/useData';
 import styles from './DoctorFormModal.module.css';
 
-const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
+const ReviewFormModal = ({ reviewToEdit, preselectedDoctor = null, initialTargetType: propTargetType = null, onClose, onSave }) => {
   const { hospitals, doctors } = useData();
 
   // Determine initial target type and IDs
-  const initialTargetType = reviewToEdit?.targetType === 'doctor' ? 'doctor' : 'hospital';
-  const initialTargetName = reviewToEdit?.targetName || '';
+  const initialTargetType = reviewToEdit?.targetType
+    ? reviewToEdit.targetType
+    : (preselectedDoctor ? 'doctor' : (propTargetType || 'hospital'));
+
+  let initialTargetName = reviewToEdit?.targetName || (preselectedDoctor ? preselectedDoctor.name : '');
+  let initialTargetId = reviewToEdit?.targetId || reviewToEdit?.doctorId || (preselectedDoctor ? (preselectedDoctor.id || preselectedDoctor._id) : '');
   
   // Find matching ID if available
-  let initialTargetId = reviewToEdit?.targetId || '';
   if (!initialTargetId && initialTargetName) {
     if (initialTargetType === 'doctor') {
       const matchDoc = doctors.find(d => d.name === initialTargetName);
@@ -26,8 +29,10 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
   if (!initialTargetId) {
     if (initialTargetType === 'doctor' && doctors.length > 0) {
       initialTargetId = doctors[0].id || doctors[0]._id;
+      initialTargetName = doctors[0].name;
     } else if (hospitals.length > 0) {
       initialTargetId = hospitals[0].id || hospitals[0]._id;
+      initialTargetName = hospitals[0].name;
     }
   }
 
@@ -37,10 +42,12 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
     targetType: initialTargetType,
     targetId: initialTargetId,
     targetName: initialTargetName || (initialTargetType === 'doctor' ? doctors[0]?.name : hospitals[0]?.name) || '',
+    doctorId: reviewToEdit?.doctorId || (initialTargetType === 'doctor' ? initialTargetId : ''),
+    doctorName: reviewToEdit?.doctorName || (initialTargetType === 'doctor' ? initialTargetName : ''),
     rating: reviewToEdit?.rating !== undefined ? Number(reviewToEdit.rating) : 5,
-    title: reviewToEdit?.title || '',
-    comment: reviewToEdit?.comment || '',
-    treatment: reviewToEdit?.treatment || (initialTargetType === 'doctor' ? (doctors[0]?.specialization || doctors[0]?.specialty || '') : ''),
+    title: reviewToEdit?.title || reviewToEdit?.headline || '',
+    comment: reviewToEdit?.comment || reviewToEdit?.comments || '',
+    treatment: reviewToEdit?.treatment || (initialTargetType === 'doctor' ? (preselectedDoctor ? (preselectedDoctor.specialization || preselectedDoctor.specialty || '') : (doctors[0]?.specialization || doctors[0]?.specialty || '')) : ''),
     insuranceUsed: reviewToEdit?.insuranceUsed || 'Star Health',
     isVerified: reviewToEdit?.isVerified !== undefined ? reviewToEdit.isVerified : true,
     status: reviewToEdit?.status || 'approved'
@@ -49,12 +56,16 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
   // Switch between Hospital and Doctor
   const handleTypeChange = (newType) => {
     if (newType === 'doctor') {
-      const defaultDoc = doctors[0];
+      const defaultDoc = preselectedDoctor || doctors[0];
+      const docId = defaultDoc ? (defaultDoc.id || defaultDoc._id) : '';
+      const docName = defaultDoc ? defaultDoc.name : '';
       setFormData(prev => ({
         ...prev,
         targetType: 'doctor',
-        targetId: defaultDoc ? (defaultDoc.id || defaultDoc._id) : '',
-        targetName: defaultDoc ? defaultDoc.name : '',
+        targetId: docId,
+        targetName: docName,
+        doctorId: docId,
+        doctorName: docName,
         treatment: prev.treatment || (defaultDoc ? (defaultDoc.specialization || defaultDoc.specialty || '') : '')
       }));
     } else {
@@ -63,7 +74,9 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
         ...prev,
         targetType: 'hospital',
         targetId: defaultHosp ? (defaultHosp.id || defaultHosp._id) : '',
-        targetName: defaultHosp ? defaultHosp.name : ''
+        targetName: defaultHosp ? defaultHosp.name : '',
+        doctorId: '',
+        doctorName: ''
       }));
     }
   };
@@ -74,7 +87,9 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
     setFormData(prev => ({
       ...prev,
       targetId: selectedId,
-      targetName: hosp ? hosp.name : ''
+      targetName: hosp ? hosp.name : '',
+      doctorId: '',
+      doctorName: ''
     }));
   };
 
@@ -85,6 +100,8 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
       ...prev,
       targetId: selectedId,
       targetName: doc ? doc.name : '',
+      doctorId: selectedId,
+      doctorName: doc ? doc.name : '',
       treatment: prev.treatment || (doc ? (doc.specialization || doc.specialty || '') : '')
     }));
   };
@@ -95,7 +112,14 @@ const ReviewFormModal = ({ reviewToEdit, onClose, onSave }) => {
       alert('Please fill in Patient Name, select a valid Doctor or Hospital, and enter Review Comment.');
       return;
     }
-    onSave(formData);
+    const finalPayload = {
+      ...formData,
+      targetId: String(formData.targetId || ''),
+      targetName: String(formData.targetName || '').trim(),
+      doctorId: formData.targetType === 'doctor' ? String(formData.targetId || formData.doctorId || '') : '',
+      doctorName: formData.targetType === 'doctor' ? String(formData.targetName || formData.doctorName || '').trim() : ''
+    };
+    onSave(finalPayload);
   };
 
   return (

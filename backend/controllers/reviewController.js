@@ -237,18 +237,18 @@ export const createReview = async (req, res) => {
       patientCity: patientCity || req.user.city || 'Bengaluru',
       userId: req.user._id || req.user.id,
       userEmail: req.user.email,
-      targetType: targetType || 'hospital',
-      targetId: targetId || '',
-      targetName,
-      doctorId: doctorId || '',
-      doctorName: doctorName || '',
+      targetType: targetType || 'doctor',
+      targetId: targetId || doctorId || '',
+      targetName: targetName || doctorName || '',
+      doctorId: doctorId || (targetType === 'doctor' ? targetId : ''),
+      doctorName: doctorName || (targetType === 'doctor' ? targetName : ''),
       rating: Number(rating),
       title: title || '',
       comment,
       treatment: treatment || '',
       insuranceUsed: insuranceUsed || 'None',
-      isVerified: true,
-      status: 'approved' // auto-approve for seamless public experience, admin can moderate anytime
+      isVerified: isVerified !== undefined ? Boolean(isVerified) : true,
+      status: status || 'approved'
     });
 
     broadcastDbChange('reviews', 'insert', review._id, review);
@@ -282,12 +282,33 @@ export const updateReview = async (req, res) => {
       }
     }
 
+    const prevTargetType = review.targetType;
+    const prevTargetId = review.targetId || review.doctorId;
+    const prevTargetName = review.targetName || review.doctorName;
+
     Object.assign(review, req.body);
+    if (review.targetType === 'doctor') {
+      if (!review.doctorId && review.targetId) review.doctorId = review.targetId;
+      if (!review.doctorName && review.targetName) review.doctorName = review.targetName;
+    }
+
     const updated = await review.save();
     broadcastDbChange('reviews', 'update', updated._id, updated);
+
+    // Keep aggregates synchronized
     if (updated.targetType === 'hospital') {
       syncHospitalRating(updated.targetId, updated.targetName).catch(() => {});
+    } else if (updated.targetType === 'doctor') {
+      syncDoctorRating(updated.targetId || updated.doctorId, updated.targetName || updated.doctorName).catch(() => {});
     }
+
+    // If target changed, sync the previous target too
+    if (prevTargetType === 'hospital' && (prevTargetId !== updated.targetId || prevTargetName !== updated.targetName)) {
+      syncHospitalRating(prevTargetId, prevTargetName).catch(() => {});
+    } else if (prevTargetType === 'doctor' && (prevTargetId !== (updated.targetId || updated.doctorId) || prevTargetName !== (updated.targetName || updated.doctorName))) {
+      syncDoctorRating(prevTargetId, prevTargetName).catch(() => {});
+    }
+
     res.json({ success: true, message: 'Review updated successfully', data: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -48,6 +48,9 @@ const doctorSchema = new mongoose.Schema({
     answer: { type: String },
     q: { type: String },
     a: { type: String },
+    icon: { type: String },
+    image: { type: String },
+    category: { type: String },
     steps: [{ type: String }],
     note: { type: String }
   }],
@@ -68,11 +71,46 @@ const doctorSchema = new mongoose.Schema({
 }, { timestamps: true, minimize: false, versionKey: false });
 
 doctorSchema.pre('save', async function() {
-  if (!this.isModified('password')) {
-    return;
+  if (this.isModified('password')) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+
+  // Mirror paired fields to prevent desync across schemas and legacy clients
+  if (this.specialization || this.specialty) {
+    const spec = (this.specialization && this.specialization !== 'General Medicine')
+      ? this.specialization
+      : (this.specialty || this.specialization || 'General Medicine');
+    this.specialization = spec;
+    this.specialty = spec;
+  }
+
+  if (this.qualifications || this.degree) {
+    const deg = this.qualifications || this.degree || '';
+    this.qualifications = deg;
+    this.degree = deg;
+  }
+
+  if (this.fees !== undefined || this.price !== undefined) {
+    let feeVal = 500;
+    if (this.fees !== undefined && this.fees !== null && this.fees !== 500) {
+      feeVal = Number(this.fees);
+    } else if (this.price !== undefined && this.price !== null && this.price !== 500) {
+      feeVal = Number(this.price);
+    } else if (this.fees !== undefined && this.fees !== null) {
+      feeVal = Number(this.fees);
+    } else if (this.price !== undefined && this.price !== null) {
+      feeVal = Number(this.price);
+    }
+    this.fees = feeVal;
+    this.price = feeVal;
+  }
+
+  if (this.contact_number !== undefined || this.phone !== undefined) {
+    const ph = this.contact_number || this.phone || '';
+    this.contact_number = ph;
+    this.phone = ph;
+  }
 });
 
 doctorSchema.methods.matchPassword = async function(enteredPassword) {

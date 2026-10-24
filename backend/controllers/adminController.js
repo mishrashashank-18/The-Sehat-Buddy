@@ -11,6 +11,57 @@ import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '..
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 
+export const generateStandardDoctorFaqs = (docName) => {
+  const cleanName = (docName || '').trim().startsWith('Dr.') ? (docName || '').trim() : `Dr. ${(docName || 'the doctor').trim()}`;
+  return [
+    {
+      q: `How can I book an appointment with ${cleanName}?`,
+      question: `How can I book an appointment with ${cleanName}?`,
+      a: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+      answer: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
+      category: 'Booking & Schedule',
+      icon: 'calendar',
+      image: ''
+    },
+    {
+      q: 'What do I need to show at the clinic?',
+      question: 'What do I need to show at the clinic?',
+      a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+      answer: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
+      category: 'Clinic Preparation',
+      icon: 'document',
+      image: ''
+    },
+    {
+      q: 'Is my consultation private with the doctor?',
+      question: 'Is my consultation private with the doctor?',
+      a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+      answer: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
+      category: 'Privacy & Security',
+      icon: 'shield',
+      image: ''
+    },
+    {
+      q: `Can I reschedule my appointment with ${cleanName}?`,
+      question: `Can I reschedule my appointment with ${cleanName}?`,
+      a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+      answer: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
+      category: 'Rescheduling Policy',
+      icon: 'reschedule',
+      image: ''
+    },
+    {
+      q: `Does ${cleanName} accept health insurance or cashless claims?`,
+      question: `Does ${cleanName} accept health insurance or cashless claims?`,
+      a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+      answer: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
+      category: 'Cashless Insurance',
+      icon: 'insurance',
+      image: ''
+    }
+  ];
+};
+
 export const authAdmin = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -142,7 +193,8 @@ export const addDoctor = async (req, res) => {
       awards,
       certifications,
       memberships,
-      careerExperience
+      careerExperience,
+      tags
     } = req.body;
 
     let image = req.body.image || '';
@@ -203,11 +255,12 @@ export const addDoctor = async (req, res) => {
       available: available !== undefined ? available : true,
       availableDays: availableDays || 'Mon - Sat (10am - 4pm)',
       isStarDoctor: Boolean(isStarDoctor),
-      faqs: Array.isArray(faqs) ? faqs : [],
+      faqs: (Array.isArray(faqs) && faqs.length > 0) ? faqs : generateStandardDoctorFaqs(name),
       awards: Array.isArray(awards) ? awards.filter(Boolean) : [],
       certifications: Array.isArray(certifications) ? certifications.filter(Boolean) : [],
       memberships: Array.isArray(memberships) ? memberships.filter(Boolean) : [],
-      careerExperience: Array.isArray(careerExperience) ? careerExperience.filter(Boolean) : []
+      careerExperience: Array.isArray(careerExperience) ? careerExperience.filter(Boolean) : [],
+      tags: Array.isArray(tags) ? tags.filter(Boolean) : []
     });
 
     // Sync hospital staff roster if hospital is specified
@@ -370,11 +423,14 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.specialty !== undefined || req.body.specialization !== undefined) {
-        const spec = req.body.specialty || req.body.specialization;
+        const spec = req.body.specialization || req.body.specialty;
         doctor.specialty = spec;
         doctor.specialization = spec;
         doctor.markModified('specialty');
         doctor.markModified('specialization');
+      } else if (doctor.specialization && (!doctor.specialty || doctor.specialty === 'General Medicine' || doctor.specialty !== doctor.specialization)) {
+        doctor.specialty = doctor.specialization;
+        doctor.markModified('specialty');
       }
 
       if (req.body.hospital !== undefined) {
