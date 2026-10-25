@@ -7,6 +7,7 @@ import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
+import { calculateHospitalProfileCompletion, normalizeAndValidatePhone, validateBedCapacity, MIN_PROFILE_COMPLETION_THRESHOLD } from '../utils/hospitalProfileCompletion.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -408,6 +409,24 @@ export const registerHospital = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Hospital already exists with this email address' });
     }
     
+    let cleanPhone = phone || '';
+    if (cleanPhone) {
+      const phoneValidation = normalizeAndValidatePhone(cleanPhone);
+      if (!phoneValidation.valid) {
+        return res.status(400).json({ success: false, message: phoneValidation.error });
+      }
+      cleanPhone = phoneValidation.normalized;
+    } else {
+      return res.status(400).json({ success: false, message: 'Official hospital contact number is required (10 digits)' });
+    }
+
+    const candidateTotal = totalBeds !== undefined && totalBeds !== '' && !isNaN(Number(totalBeds)) ? Number(totalBeds) : 0;
+    const candidateAvailable = req.body.availableBeds !== undefined && req.body.availableBeds !== '' && !isNaN(Number(req.body.availableBeds)) ? Number(req.body.availableBeds) : 0;
+    const bedValidation = validateBedCapacity(candidateTotal, candidateAvailable);
+    if (!bedValidation.valid) {
+      return res.status(400).json({ success: false, message: bedValidation.error });
+    }
+
     // Generate secure, user-friendly temporary password if not explicitly provided
     let temporaryPassword = password;
     if (!temporaryPassword || temporaryPassword === 'CHANGEME_PENDING_SETUP') {
@@ -484,41 +503,53 @@ export const registerHospital = async (req, res) => {
       }
     }
 
-    const hospital = await Hospital.create({ 
+    const hospitalDraft = { 
       name, 
       email: cleanEmail, 
       password: temporaryPassword, 
-      address: address || (city ? `${city} Central Campus` : 'Main Medical Campus'), 
+      address: address || '', 
       city: city || 'Delhi', 
       state: state || '', 
       zip: zip || '', 
-      phone: phone || '', 
+      phone: cleanPhone, 
       description: description || '', 
-      specialities: parsedSpecialities && parsedSpecialities.length > 0 ? parsedSpecialities : ['Cardiology', 'Neurology', 'Orthopedics'], 
-      image: image || 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80',
-      rating: rating || 4.8,
-      reviews: reviews || '50+',
-      totalBeds: totalBeds || 100,
-      emergency24x7: emergency24x7 !== undefined ? emergency24x7 : true,
-      establishedYear: establishedYear || 2005,
+      specialities: Array.isArray(parsedSpecialities) ? parsedSpecialities : [], 
+      image: image || '',
+      photos: Array.isArray(req.body.photos) ? req.body.photos : [],
+      rating: rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : 0,
+      reviews: reviews || '0 Reviews',
+      totalBeds: bedValidation.total,
+      availableBeds: bedValidation.available,
+      emptyBeds: bedValidation.available,
+      emergency24x7: emergency24x7 !== undefined ? Boolean(emergency24x7) : false,
+      establishedYear: establishedYear ? Number(establishedYear) : undefined,
+      showOnHome: req.body.showOnHome !== undefined ? Boolean(req.body.showOnHome) : true,
+      isVerified: Boolean(req.body.isVerified),
       isFirstLogin: false,
       passwordSet: true,
       reels: reels || [],
       youtube_videos: youtube_videos || [],
-      star_doctors: resolvedStarDoctors,
+      star_doctors: uniqueStarDoctors,
       staff_emails: parsedStaffEmails,
       staff_doctors: parsedStaffDoctors,
-      cashlessInsurance: req.body.cashlessInsurance !== undefined ? req.body.cashlessInsurance : true,
-      acceptedInsurances: Array.isArray(req.body.acceptedInsurances) && req.body.acceptedInsurances.length > 0 ? req.body.acceptedInsurances : ['Star Health', 'HDFC ERGO', 'ICICI Lombard', 'Care Health', 'Niva Bupa'],
+      cashlessInsurance: req.body.cashlessInsurance !== undefined ? Boolean(req.body.cashlessInsurance) : false,
+      acceptedInsurances: Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : [],
       tpaHelpdesk: req.body.tpaHelpdesk || {
-        phone: req.body.phone || '080-45678900',
-        email: 'tpa@' + (cleanEmail ? cleanEmail.split('@')[1] : 'sehatbuddy.com'),
-        preAuthTime: '30 Mins Cashless Pre-Approval'
+        phone: '',
+        email: '',
+        preAuthTime: ''
       },
-      insuranceHelpline: req.body.insuranceHelpline || '1800-SEHAT-CARE',
-      latitude: latitude !== undefined ? Number(latitude) : undefined,
-      longitude: longitude !== undefined ? Number(longitude) : undefined
-    });
+      insuranceHelpline: req.body.insuranceHelpline || '',
+      latitude: latitude !== undefined && latitude !== '' ? Number(latitude) : undefined,
+      longitude: longitude !== undefined && longitude !== '' ? Number(longitude) : undefined,
+      status: req.body.status || 'active'
+    };
+
+    const initialCompletion = calculateHospitalProfileCompletion(hospitalDraft);
+    hospitalDraft.profileCompletion = initialCompletion.percentage;
+    hospitalDraft.publicationStatus = req.body.publicationStatus || (initialCompletion.percentage >= MIN_PROFILE_COMPLETION_THRESHOLD && req.body.isVerified ? 'published' : 'draft');
+
+    const hospital = await Hospital.create(hospitalDraft);
     
     if (hospital) {
       broadcastDbChange('hospitals', 'insert', hospital._id, hospital);
@@ -599,7 +630,18 @@ export const registerHospital = async (req, res) => {
 
 export const getHospitals = async (req, res) => {
   try {
-    const hospitals = await Hospital.find({}).select('-password').populate('star_doctors', '-password');
+    const isPublicOnly = req.query.public === 'true';
+    let query = {};
+    if (isPublicOnly) {
+      query = {
+        $or: [
+          { publicationStatus: 'published' },
+          { publicationStatus: { $exists: false } },
+          { publicationStatus: null }
+        ]
+      };
+    }
+    const hospitals = await Hospital.find(query).select('-password').populate('star_doctors', '-password');
     res.json({ success: true, data: hospitals });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -609,17 +651,48 @@ export const getHospitals = async (req, res) => {
 export const getHospitalById = async (req, res) => {
   try {
     let hospital = null;
-    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-      hospital = await Hospital.findById(req.params.id).select('-password').populate('star_doctors', '-password');
+    const reqId = String(req.params.id || '').trim();
+    if (mongoose.Types.ObjectId.isValid(reqId)) {
+      hospital = await Hospital.findById(reqId).select('-password').populate('star_doctors', '-password');
     }
     if (!hospital) {
-      hospital = await Hospital.findOne({ $or: [{ id: req.params.id }, { email: req.params.id }] }).select('-password').populate('star_doctors', '-password');
+      hospital = await Hospital.findOne({ $or: [{ id: reqId }, { email: reqId }] }).select('-password').populate('star_doctors', '-password');
     }
-    if (hospital) {
-      res.json({ success: true, data: hospital });
-    } else {
-      res.status(404).json({ success: false, message: 'Hospital not found' });
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital not found' });
     }
+
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isSelf = req.user && (
+      req.user.id === hospital._id.toString() ||
+      req.user._id?.toString() === hospital._id.toString() ||
+      (req.user.email && hospital.email && req.user.email.toLowerCase() === hospital.email.toLowerCase())
+    );
+
+    const isPublished = (
+      hospital.status === 'active' &&
+      hospital.publicationStatus === 'published' &&
+      (hospital.profileCompletion || 0) >= MIN_PROFILE_COMPLETION_THRESHOLD
+    );
+
+    // If unpublished or incomplete and explicitly requested by public patient view
+    const isExplicitlyPublic = req.query.public === 'true';
+    if (isExplicitlyPublic && !isPublished && !isAdmin && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: 'This hospital profile is currently unpublished or pending completion review.'
+      });
+    }
+
+    // Attach latest live profile completion breakdown for dashboard
+    const completion = calculateHospitalProfileCompletion(hospital);
+    const hospObj = hospital.toObject();
+    hospObj.profileCompletion = completion.percentage;
+    hospObj.isEligibleForPublication = completion.isEligibleForPublication;
+    hospObj.missingRequirements = completion.missingRequirements;
+    hospObj.completionBreakdown = completion.breakdown;
+
+    res.json({ success: true, data: hospObj });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -637,7 +710,15 @@ export const getMyHospital = async (req, res) => {
     if (!hospital) {
       return res.status(404).json({ success: false, message: 'Authenticated hospital record not found' });
     }
-    return res.json({ success: true, data: hospital });
+
+    const completion = calculateHospitalProfileCompletion(hospital);
+    const hospObj = hospital.toObject();
+    hospObj.profileCompletion = completion.percentage;
+    hospObj.isEligibleForPublication = completion.isEligibleForPublication;
+    hospObj.missingRequirements = completion.missingRequirements;
+    hospObj.completionBreakdown = completion.breakdown;
+
+    return res.json({ success: true, data: hospObj });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -645,6 +726,9 @@ export const getMyHospital = async (req, res) => {
 
 export const updateHospital = async (req, res) => {
   try {
+    if (req.body && req.body.__v !== undefined) {
+      delete req.body.__v;
+    }
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(req.params.id)) {
       hospital = await Hospital.findById(req.params.id);
@@ -730,15 +814,15 @@ export const updateHospital = async (req, res) => {
 
     // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
     const allowedFields = [
-      'name', 'email', 'address', 'city', 'state', 'zip', 'phone', 'description',
-      'rating', 'reviews', 'totalBeds', 'availableBeds', 'emptyBeds', 'emergency24x7', 'establishedYear',
-      'isVerified', 'cashlessInsurance', 'insuranceHelpline', 'latitude', 'longitude',
+      'name', 'email', 'address', 'city', 'state', 'zip', 'description',
+      'rating', 'reviews', 'emergency24x7', 'establishedYear',
+      'cashlessInsurance', 'insuranceHelpline', 'latitude', 'longitude',
       'instagram', 'facebook'
     ];
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        if (field === 'totalBeds' || field === 'availableBeds' || field === 'emptyBeds' || field === 'establishedYear') {
+        if (field === 'establishedYear') {
           hospital[field] = Number(req.body[field]);
         } else {
           hospital[field] = req.body[field];
@@ -747,32 +831,78 @@ export const updateHospital = async (req, res) => {
       }
     });
 
-    if (req.body.availableBeds !== undefined) {
-      const val = Math.max(0, Number(req.body.availableBeds));
-      hospital.availableBeds = val;
-      hospital.emptyBeds = val;
-      hospital.markModified('availableBeds');
-      hospital.markModified('emptyBeds');
-    } else if (req.body.emptyBeds !== undefined) {
-      const val = Math.max(0, Number(req.body.emptyBeds));
-      hospital.emptyBeds = val;
-      hospital.availableBeds = val;
+    // Validate phone number strictly (10-digit Indian mobile)
+    if (req.body.phone !== undefined) {
+      const phoneValidation = normalizeAndValidatePhone(req.body.phone);
+      if (!phoneValidation.valid) {
+        return res.status(400).json({ success: false, message: phoneValidation.error });
+      }
+      hospital.phone = phoneValidation.normalized;
+      hospital.markModified('phone');
+    }
+
+    // Validate bed capacity strictly (totalBeds >= 1, availableBeds >= 0, availableBeds <= totalBeds)
+    if (req.body.totalBeds !== undefined || req.body.availableBeds !== undefined || req.body.emptyBeds !== undefined) {
+      const candidateTotal = req.body.totalBeds !== undefined ? req.body.totalBeds : hospital.totalBeds;
+      const incomingAvail = req.body.availableBeds !== undefined 
+        ? req.body.availableBeds 
+        : (req.body.emptyBeds !== undefined ? req.body.emptyBeds : hospital.availableBeds);
+
+      const bedValidation = validateBedCapacity(candidateTotal, incomingAvail);
+      if (!bedValidation.valid) {
+        return res.status(400).json({ success: false, message: bedValidation.error });
+      }
+      hospital.totalBeds = bedValidation.total;
+      hospital.availableBeds = bedValidation.available;
+      hospital.emptyBeds = bedValidation.available;
+      hospital.markModified('totalBeds');
       hospital.markModified('availableBeds');
       hospital.markModified('emptyBeds');
     }
 
-    // Sync any new staff doctors & emails BEFORE saving so they get ObjectIds
-    const incomingStaffDoctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : (hospital.staff_doctors || []);
-    const incomingStaffEmails = Array.isArray(req.body.staff_emails) 
+    // Publication Status & Verification Workflow
+    if (isAdmin) {
+      if (req.body.isVerified !== undefined) {
+        hospital.isVerified = Boolean(req.body.isVerified);
+        hospital.markModified('isVerified');
+      }
+      if (req.body.publicationStatus !== undefined && ['draft', 'pending_review', 'published', 'suspended'].includes(req.body.publicationStatus)) {
+        hospital.publicationStatus = req.body.publicationStatus;
+        hospital.markModified('publicationStatus');
+      }
+      if (req.body.status !== undefined && ['active', 'suspended', 'deactivated'].includes(req.body.status)) {
+        hospital.status = req.body.status;
+        hospital.markModified('status');
+      }
+      if (req.body.showOnHome !== undefined) {
+        hospital.showOnHome = Boolean(req.body.showOnHome);
+        hospital.markModified('showOnHome');
+      }
+    } else if (isHospitalAdmin) {
+      if (req.body.publicationStatus === 'pending_review' || req.body.publicationStatus === 'published') {
+        const previewCompletion = calculateHospitalProfileCompletion(hospital);
+        if (previewCompletion.percentage < MIN_PROFILE_COMPLETION_THRESHOLD) {
+          return res.status(400).json({
+            success: false,
+            message: `Profile completion is currently at ${previewCompletion.percentage}%. Your hospital profile must reach at least ${MIN_PROFILE_COMPLETION_THRESHOLD}% to be eligible for publication. Missing: ${previewCompletion.missingRequirements.slice(0, 2).join(', ')}.`
+          });
+        }
+        hospital.publicationStatus = req.body.publicationStatus;
+        hospital.markModified('publicationStatus');
+      }
+    }
+
+    // Direct staff synchronization WITHOUT resurrecting deleted doctors
+    if (req.body.staff_doctors !== undefined) {
+      hospital.staff_doctors = Array.isArray(req.body.staff_doctors) ? req.body.staff_doctors : [];
+      hospital.markModified('staff_doctors');
+    }
+    if (req.body.staff_emails !== undefined) {
+      const parsedEmails = Array.isArray(req.body.staff_emails)
         ? req.body.staff_emails.map(e => e.trim().toLowerCase()).filter(Boolean)
-        : (req.body.staff_emails ? String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : (hospital.staff_emails || []));
-    
-    const combinedStaff = [
-      ...incomingStaffDoctors,
-      ...incomingStaffEmails.map(e => ({ email: e }))
-    ];
-    if (combinedStaff.length > 0) {
-      await syncHospitalStaff(req.body.name || hospital.name, combinedStaff, hospital._id);
+        : (req.body.staff_emails ? String(req.body.staff_emails).split(',').map(e => e.trim().toLowerCase()).filter(Boolean) : []);
+      hospital.staff_emails = parsedEmails;
+      hospital.markModified('staff_emails');
     }
 
     if (req.body.specialities !== undefined) {
@@ -929,16 +1059,9 @@ export const updateHospital = async (req, res) => {
       hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
       hospital.markModified('photos');
     }
-    if (req.body.staff_doctors !== undefined) {
-      hospital.staff_doctors = incomingStaffDoctors;
-      hospital.markModified('staff_doctors');
-    }
-    if (req.body.staff_emails !== undefined) {
-      hospital.staff_emails = incomingStaffEmails;
-      hospital.markModified('staff_emails');
-    }
     if (req.body.cashlessInsurance !== undefined) {
       hospital.cashlessInsurance = Boolean(req.body.cashlessInsurance);
+      hospital.markModified('cashlessInsurance');
     }
     if (req.body.acceptedInsurances !== undefined) {
       hospital.acceptedInsurances = Array.isArray(req.body.acceptedInsurances) ? req.body.acceptedInsurances : [];
@@ -950,6 +1073,7 @@ export const updateHospital = async (req, res) => {
     }
     if (req.body.insuranceHelpline !== undefined) {
       hospital.insuranceHelpline = req.body.insuranceHelpline;
+      hospital.markModified('insuranceHelpline');
     }
     const incomingImage = req.file ? req.file.path : req.body.image;
     if (incomingImage && incomingImage !== hospital.image) {
@@ -967,12 +1091,59 @@ export const updateHospital = async (req, res) => {
       hospital.image = incomingImage;
       hospital.markModified('image');
     }
+
+    // Recalculate profile completion dynamically from persisted state
+    const completion = calculateHospitalProfileCompletion(hospital);
+    hospital.profileCompletion = completion.percentage;
+    hospital.markModified('profileCompletion');
+
+    // Auto-update publication status if completion falls below threshold
+    if (hospital.publicationStatus === 'published' && completion.percentage < MIN_PROFILE_COMPLETION_THRESHOLD) {
+      hospital.publicationStatus = 'draft';
+      hospital.markModified('publicationStatus');
+    }
     
-    const updatedHospital = await hospital.save();
+    let updatedHospital;
+    try {
+      updatedHospital = await hospital.save();
+    } catch (saveErr) {
+      if (saveErr.name === 'VersionError' || saveErr.message?.includes('No matching document')) {
+        const fresh = await Hospital.findById(hospital._id);
+        if (fresh) {
+          allowedFields.forEach((field) => {
+            if (req.body[field] !== undefined) fresh[field] = req.body[field];
+          });
+          if (isAdmin && req.body.showOnHome !== undefined) fresh.showOnHome = Boolean(req.body.showOnHome);
+          if (isAdmin && req.body.publicationStatus !== undefined) fresh.publicationStatus = req.body.publicationStatus;
+          if (isAdmin && req.body.status !== undefined) fresh.status = req.body.status;
+          if (req.body.totalBeds !== undefined) fresh.totalBeds = Number(req.body.totalBeds);
+          if (req.body.availableBeds !== undefined) {
+            fresh.availableBeds = Number(req.body.availableBeds);
+            fresh.emptyBeds = Number(req.body.availableBeds);
+          }
+          fresh.profileCompletion = calculateHospitalProfileCompletion(fresh).percentage;
+          updatedHospital = await fresh.save();
+        } else {
+          throw saveErr;
+        }
+      } else {
+        throw saveErr;
+      }
+    }
 
     const populated = await Hospital.findById(updatedHospital._id).select('-password').populate('star_doctors', '-password');
-    broadcastDbChange('hospitals', 'update', updatedHospital._id, populated || updatedHospital);
-    res.json({ success: true, message: 'Hospital updated', data: populated || updatedHospital });
+    const populatedObj = populated ? populated.toObject() : updatedHospital.toObject();
+    populatedObj.profileCompletion = completion.percentage;
+    populatedObj.isEligibleForPublication = completion.isEligibleForPublication;
+    populatedObj.missingRequirements = completion.missingRequirements;
+    populatedObj.completionBreakdown = completion.breakdown;
+
+    broadcastDbChange('hospitals', 'update', updatedHospital._id, populatedObj);
+    res.json({
+      success: true,
+      message: 'Hospital details updated successfully',
+      data: populatedObj
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1166,18 +1337,26 @@ export const updateHospitalBeds = async (req, res) => {
       });
     }
 
-    if (req.body.totalBeds !== undefined) {
-      hospital.totalBeds = Math.max(0, Number(req.body.totalBeds));
-      hospital.markModified('totalBeds');
-    }
+    const candidateTotal = req.body.totalBeds !== undefined ? req.body.totalBeds : hospital.totalBeds;
     const incomingAvailable = req.body.availableBeds !== undefined ? req.body.availableBeds : req.body.emptyBeds;
-    if (incomingAvailable !== undefined) {
-      const val = Math.max(0, Number(incomingAvailable));
-      hospital.availableBeds = val;
-      hospital.emptyBeds = val;
-      hospital.markModified('availableBeds');
-      hospital.markModified('emptyBeds');
+    const candidateAvailable = incomingAvailable !== undefined ? incomingAvailable : hospital.availableBeds;
+
+    const bedValidation = validateBedCapacity(candidateTotal, candidateAvailable);
+    if (!bedValidation.valid) {
+      return res.status(400).json({ success: false, message: bedValidation.error });
     }
+
+    hospital.totalBeds = bedValidation.total;
+    hospital.availableBeds = bedValidation.available;
+    hospital.emptyBeds = bedValidation.available;
+    hospital.markModified('totalBeds');
+    hospital.markModified('availableBeds');
+    hospital.markModified('emptyBeds');
+
+    // Recalculate profile completion
+    const completion = calculateHospitalProfileCompletion(hospital);
+    hospital.profileCompletion = completion.percentage;
+    hospital.markModified('profileCompletion');
 
     const updated = await hospital.save();
     broadcastDbChange('hospitals', 'update', updated._id, updated);
@@ -1189,10 +1368,123 @@ export const updateHospitalBeds = async (req, res) => {
         name: updated.name,
         totalBeds: updated.totalBeds,
         availableBeds: updated.availableBeds,
-        emptyBeds: updated.availableBeds
+        emptyBeds: updated.availableBeds,
+        profileCompletion: updated.profileCompletion
       }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Remove doctor specifically from a hospital roster (star doctors, staff doctors, staff emails).
+ * Never deletes or alters doctor records belonging to other hospitals.
+ */
+export const removeDoctorFromHospital = async (req, res) => {
+  try {
+    const { id: hospitalId, doctorId } = req.params;
+    if (!hospitalId || !doctorId) {
+      return res.status(400).json({ success: false, message: 'Hospital ID and Doctor ID are required' });
+    }
+
+    let hospital = null;
+    if (mongoose.Types.ObjectId.isValid(hospitalId)) {
+      hospital = await Hospital.findById(hospitalId);
+    }
+    if (!hospital) {
+      hospital = await Hospital.findOne({ $or: [{ id: hospitalId }, { email: hospitalId }] });
+    }
+    if (!hospital) {
+      return res.status(404).json({ success: false, message: 'Hospital not found' });
+    }
+
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isSelf = req.user && (
+      req.user.id === hospital._id.toString() ||
+      req.user._id?.toString() === hospital._id.toString() ||
+      (req.user.email && hospital.email && req.user.email.toLowerCase() === hospital.email.toLowerCase())
+    );
+
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: You do not have permission to modify this hospital roster'
+      });
+    }
+
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(doctorId)) {
+      doctor = await Doctor.findById(doctorId);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: doctorId });
+    }
+    if (!doctor && doctorId.includes('@')) {
+      doctor = await Doctor.findOne({ email: doctorId.toLowerCase().trim() });
+    }
+
+    const docObjectId = doctor ? doctor._id : (mongoose.Types.ObjectId.isValid(doctorId) ? doctorId : null);
+    const docEmail = doctor ? (doctor.email || '').toLowerCase().trim() : (doctorId.includes('@') ? doctorId.toLowerCase().trim() : null);
+
+    // 1. Remove from star_doctors
+    if (docObjectId) {
+      hospital.star_doctors = (hospital.star_doctors || []).filter(sd => String(sd) !== String(docObjectId));
+      hospital.markModified('star_doctors');
+    }
+
+    // 2. Remove from staff_doctors & staff_emails
+    if (docEmail) {
+      hospital.staff_doctors = (hospital.staff_doctors || []).filter(sd => {
+        const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase().trim();
+        return sdEmail !== docEmail;
+      });
+      hospital.markModified('staff_doctors');
+
+      hospital.staff_emails = (hospital.staff_emails || []).filter(em => {
+        const e = (typeof em === 'string' ? em : em?.email)?.toLowerCase().trim();
+        return e !== docEmail;
+      });
+      hospital.markModified('staff_emails');
+    }
+
+    // 3. If doctor was created specifically for this hospital and has no other hospital affiliations, delete doctor permanently
+    if (doctor) {
+      const docHosp = String(doctor.hospital || '').trim().toLowerCase();
+      const thisHospName = String(hospital.name || '').trim().toLowerCase();
+      const thisHospId = String(hospital._id || hospital.id || '').trim().toLowerCase();
+
+      const otherHospitalCount = await Hospital.countDocuments({
+        _id: { $ne: hospital._id },
+        $or: [
+          { star_doctors: doctor._id },
+          { 'staff_doctors.email': docEmail },
+          { staff_emails: docEmail }
+        ]
+      });
+
+      if ((docHosp === thisHospName || docHosp === thisHospId) && otherHospitalCount === 0) {
+        if (doctor.email !== 'dr.rahul@sehatbuddy.com' && (!doctor.name || !doctor.name.toLowerCase().includes('rahul verma'))) {
+          await doctor.deleteOne();
+          broadcastDbChange('doctors', 'delete', doctor._id);
+        }
+      }
+    }
+
+    // Recalculate profile completion
+    const completion = calculateHospitalProfileCompletion(hospital);
+    hospital.profileCompletion = completion.percentage;
+    hospital.markModified('profileCompletion');
+
+    const updated = await hospital.save();
+    broadcastDbChange('hospitals', 'update', updated._id, updated);
+
+    return res.json({
+      success: true,
+      message: 'Doctor removed from hospital roster successfully',
+      data: updated
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

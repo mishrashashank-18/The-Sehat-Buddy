@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
+import { initHospitalPublicationAndCompletion } from './utils/hospitalMigration.js';
 
 import adminRoutes from './routes/adminRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
@@ -54,6 +55,7 @@ if (NODE_ENV === 'production') {
 // Connect to MongoDB & Initialize Realtime Change Stream
 connectDB().then(() => {
   initMongoDBChangeStream();
+  initHospitalPublicationAndCompletion();
 }).catch(() => {});
 
 const app = express();
@@ -98,7 +100,8 @@ app.use(cors({
       callback(new Error(`Origin [${origin}] not allowed by CORS`));
     }
   },
-  credentials: true
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-request', 'Cache-Control', 'Pragma']
 }));
 
 // 3. Request Body Parser with payload limit

@@ -8,7 +8,12 @@ import styles from './TopHospitals.module.css';
 const TopHospitals = ({ onNavigate }) => {
   const { hospitals, reviews } = useData();
 
-  const displayHospitals = hospitals && hospitals.length > 0 ? hospitals : [];
+  const allHospitals = hospitals && hospitals.length > 0 ? hospitals : [];
+  const totalHospitalsCount = allHospitals.filter(h => !h.publicationStatus || h.publicationStatus === 'published').length || allHospitals.length;
+
+  const displayHospitals = allHospitals.filter(
+    h => (!h.publicationStatus || h.publicationStatus === 'published') && (h.showOnHome !== false)
+  );
   // Duplicate hospitals for seamless infinite marquee loop (running right)
   const marqueeHospitals = displayHospitals.length > 0
     ? (displayHospitals.length < 5
@@ -21,7 +26,7 @@ const TopHospitals = ({ onNavigate }) => {
       <Container>
         <SectionHeader
           title="Top Partner Hospitals"
-          linkText={`Explore All Hospitals (${displayHospitals.length})`}
+          linkText={`Explore All Hospitals (${totalHospitalsCount})`}
           onLinkClick={() => {
             if (onNavigate) {
               onNavigate('find-hospitals');
@@ -66,12 +71,12 @@ const TopHospitals = ({ onNavigate }) => {
                       <div className={styles.rating}>
                         <Star size={13} fill="#FACC15" color="#FACC15" />
                         <span>{(() => {
-                          const hospReviews = (reviews || []).filter(r => r.status !== 'rejected' && (
+                          const hospReviews = (reviews || []).filter(r => r && r.status !== 'rejected' && (
                             (r.targetId && (r.targetId === hospital.id || r.targetId === hospital._id)) ||
                             (r.targetName && hospital.name && (r.targetName.toLowerCase() === hospital.name.toLowerCase() || hospital.name.toLowerCase().includes(r.targetName.toLowerCase())))
                           ));
                           return hospReviews.length > 0
-                            ? (hospReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / hospReviews.length).toFixed(1)
+                            ? (hospReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0) / hospReviews.length).toFixed(1)
                             : (hospital.rating || '4.8');
                         })()}</span>
                       </div>

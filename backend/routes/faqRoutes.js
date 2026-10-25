@@ -1,7 +1,7 @@
 import express from 'express';
 import { getFaqs, createFaq, updateFaq, deleteFaq } from '../controllers/faqController.js';
 import { getFaqSymbols, createFaqSymbol, deleteFaqSymbol } from '../controllers/faqSymbolController.js';
-import { protect, requireAdmin } from '../middleware/authMiddleware.js';
+import { protect, requireRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
@@ -10,10 +10,14 @@ router.get('/symbols', getFaqSymbols);
 router.post('/symbols', createFaqSymbol);
 router.delete('/symbols/:id', deleteFaqSymbol);
 
-// Standard FAQs endpoints
+// Standard FAQs endpoints - allow both website administrators and hospital managers
+const faqProtect = (req, res, next) => {
+  return protect(req, res, () => requireRole('admin', 'hospital')(req, res, next));
+};
+
 router.get('/', getFaqs);
-router.post('/', protect, requireAdmin, createFaq);
-router.put('/:id', protect, requireAdmin, updateFaq);
-router.delete('/:id', protect, requireAdmin, deleteFaq);
+router.post('/', faqProtect, createFaq);
+router.put('/:id', faqProtect, updateFaq);
+router.delete('/:id', faqProtect, deleteFaq);
 
 export default router;

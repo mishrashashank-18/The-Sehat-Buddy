@@ -47,8 +47,12 @@ const FindHospitals = ({ onNavigate }) => {
     )
   ).sort();
 
-  // Filter hospitals based on search criteria
+  // Filter hospitals based on search criteria (public directory shows published hospitals)
   const filteredHospitals = hospitals.filter(hospital => {
+    if (hospital.publicationStatus && hospital.publicationStatus !== 'published') {
+      return false;
+    }
+
     // Name or address match
     if (searchName) {
       const q = searchName.toLowerCase().trim();
@@ -200,12 +204,12 @@ const FindHospitals = ({ onNavigate }) => {
                       <div className={styles.rating}>
                         <Star size={13} fill="#FACC15" color="#FACC15" />
                         <span>{(() => {
-                          const hospReviews = (reviews || []).filter(r => r.status !== 'rejected' && (
+                          const hospReviews = (reviews || []).filter(r => r && r.status !== 'rejected' && (
                             (r.targetId && (r.targetId === hospital.id || r.targetId === hospital._id)) ||
                             (r.targetName && hospital.name && (r.targetName.toLowerCase() === hospital.name.toLowerCase() || hospital.name.toLowerCase().includes(r.targetName.toLowerCase())))
                           ));
                           return hospReviews.length > 0
-                            ? (hospReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / hospReviews.length).toFixed(1)
+                            ? (hospReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0) / hospReviews.length).toFixed(1)
                             : (hospital.rating || '4.8');
                         })()}</span>
                       </div>

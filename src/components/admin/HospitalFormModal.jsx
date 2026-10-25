@@ -22,6 +22,7 @@ import { useData } from '../../context/useData';
 import { isDoctorInStarList, getDoctorCanonicalId } from '../../context/DataContext';
 import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
+import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
 import styles from './HospitalFormModal.module.css';
 
 const getYouTubeThumbnail = (url) => {
@@ -146,11 +147,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
       return {
         name: hospitalToEdit.name || '',
-        city: hospitalToEdit.city || 'Delhi',
+        city: hospitalToEdit.city || 'Bengaluru',
         address: hospitalToEdit.address || '',
         rating: hospitalToEdit.rating || 4.8,
         reviews: hospitalToEdit.reviews || '500+',
         totalBeds: hospitalToEdit.totalBeds || 300,
+        availableBeds: hospitalToEdit.availableBeds !== undefined ? hospitalToEdit.availableBeds : (hospitalToEdit.emptyBeds || 20),
         emergency24x7: Boolean(hospitalToEdit.emergency24x7),
         phone: hospitalToEdit.phone || '',
         email: hospitalToEdit.email || '',
@@ -175,43 +177,32 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     }
     return {
       name: '',
-      city: 'Delhi',
+      city: 'Bengaluru',
       address: '',
-      rating: 4.8,
-      reviews: '1,200+',
-      totalBeds: 400,
-      emergency24x7: true,
-      phone: '+91 ',
+      rating: 0,
+      reviews: '0 Reviews',
+      totalBeds: '',
+      availableBeds: '',
+      emergency24x7: false,
+      phone: '',
       email: '',
-      establishedYear: 2005,
+      establishedYear: '',
       description: '',
-      image: PRESET_HOSPITAL_IMAGES[0].url,
-      specialties: ['Cardiology', 'Neurology', 'Orthopedics'],
-      reels: [
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' }
-      ],
-      youtube_videos: [
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' },
-        { url: '', coverPhoto: '' }
-      ],
+      image: '',
+      specialties: [],
+      reels: [],
+      youtube_videos: [],
       star_doctors: [],
       latitude: '',
       longitude: '',
       staff_emails: [],
       staff_doctors: [],
-      cashlessInsurance: true,
-      acceptedInsurances: defaultAcceptedInsurances,
+      cashlessInsurance: false,
+      acceptedInsurances: [],
       tpaPhone: '',
       tpaEmail: '',
-      tpaPreAuthTime: '30 Mins Cashless Pre-Approval',
-      insuranceHelpline: '1800-SEHAT-CARE'
+      tpaPreAuthTime: '',
+      insuranceHelpline: ''
     };
   });
 
@@ -287,8 +278,17 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     if (!formData.address.trim()) {
       newErrors.address = 'Hospital street address is required';
     }
-    if (hospitalToEdit && formData.totalBeds && Number(formData.totalBeds) <= 0) {
-      newErrors.totalBeds = 'Valid bed capacity is required';
+    // 10-digit Indian Mobile Validation
+    const phoneCheck = validateIndianPhone(formData.phone);
+    if (!phoneCheck.isValid && !phoneCheck.valid) {
+      newErrors.phone = phoneCheck.error;
+    }
+    // Bed Counts Validation (only if editing or if beds were entered)
+    if (hospitalToEdit || (formData.totalBeds !== '' && Number(formData.totalBeds) > 0)) {
+      const bedCheck = validateBedCounts(formData.totalBeds, formData.availableBeds || 0);
+      if (!bedCheck.isValid && !bedCheck.valid) {
+        newErrors.totalBeds = bedCheck.error;
+      }
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -300,18 +300,24 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+      alert('Invalid format. Please select a JPG, PNG, or WebP photo.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert('File size exceeds 15MB limit.');
+      return;
+    }
+
     setIsUploading(true);
     try {
       const url = await api.uploadImage(file, 'sehatbuddy/hospitals');
-      setFormData(prev => ({ ...prev, image: url }));
+      if (url) {
+        setFormData(prev => ({ ...prev, image: url }));
+      }
     } catch (err) {
-      console.error('Failed to upload to Cloudinary:', err);
-      // Fallback to data URI
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, image: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      console.error('Failed to upload image:', err);
+      alert(err.message || 'Failed to upload image. Please try again.');
     } finally {
       setIsUploading(false);
     }
@@ -398,61 +404,110 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
     setIsSubmitting(true);
     try {
-      const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
+      const phoneCheck = validateIndianPhone(formData.phone);
 
-      const payload = {
-        name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
-        city: formData.city.trim() || 'Delhi',
-        address: formData.address.trim() || `${formData.city || 'Central'} Medical Campus`,
-        rating: parseFloat(formData.rating) || 4.8,
-        reviews: formData.reviews || '50+',
-        totalBeds: parseInt(formData.totalBeds, 10) || 100,
-        emergency24x7: Boolean(formData.emergency24x7),
-        phone: formData.phone.trim() || '+91 11 2000 3000',
-        establishedYear: parseInt(formData.establishedYear, 10) || 2005,
-        description: formData.description.trim(),
-        specialties: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'],
-        specialities: formData.specialties && formData.specialties.length > 0 ? formData.specialties : ['Cardiology', 'Neurology', 'Orthopedics'], // DB mapping
-        image: finalImage,
-        reels: formData.reels
-          .map(r => {
-            if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
-            if (r && typeof r === 'object') {
-              const url = (r.url || '').trim();
-              const coverPhoto = (r.coverPhoto || '').trim();
-              if (!url && !coverPhoto) return null;
-              return { url, coverPhoto };
-            }
-            return null;
-          })
-          .filter(Boolean),
-        youtube_videos: formData.youtube_videos
-          .map(v => {
-            if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
-            if (v && typeof v === 'object') {
-              const url = (v.url || '').trim();
-              const coverPhoto = (v.coverPhoto || '').trim();
-              if (!url && !coverPhoto) return null;
-              return { url, coverPhoto };
-            }
-            return null;
-          })
-          .filter(Boolean),
-        star_doctors: formData.star_doctors,
-        staff_emails: formData.staff_emails,
-        staff_doctors: formData.staff_doctors,
-        cashlessInsurance: formData.cashlessInsurance,
-        acceptedInsurances: formData.acceptedInsurances,
-        tpaHelpdesk: {
-          phone: formData.tpaPhone.trim() || formData.phone.trim() || '080-45678900',
-          email: formData.tpaEmail.trim() || formData.email.trim(),
-          preAuthTime: formData.tpaPreAuthTime.trim() || '30 Mins Cashless Pre-Approval'
-        },
-        insuranceHelpline: formData.insuranceHelpline.trim() || '1800-SEHAT-CARE',
-        latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
-        longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
-      };
+      let payload;
+      if (hospitalToEdit) {
+        const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
+        const bedCheck = validateBedCounts(formData.totalBeds, formData.availableBeds || 0);
+
+        payload = {
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          city: formData.city.trim() || 'Bengaluru',
+          address: formData.address.trim() || `${formData.city || 'Central'} Medical Campus`,
+          rating: parseFloat(formData.rating) || 0,
+          reviews: formData.reviews || '0 Reviews',
+          totalBeds: bedCheck.total,
+          availableBeds: bedCheck.available,
+          emptyBeds: bedCheck.available,
+          emergency24x7: Boolean(formData.emergency24x7),
+          phone: phoneCheck.normalized,
+          establishedYear: formData.establishedYear ? parseInt(formData.establishedYear, 10) : undefined,
+          description: formData.description.trim(),
+          specialties: formData.specialties || [],
+          specialities: formData.specialties || [],
+          image: finalImage,
+          reels: formData.reels
+            .map(r => {
+              if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
+              if (r && typeof r === 'object') {
+                const url = (r.url || '').trim();
+                const coverPhoto = (r.coverPhoto || '').trim();
+                if (!url && !coverPhoto) return null;
+                return { url, coverPhoto };
+              }
+              return null;
+            })
+            .filter(Boolean),
+          youtube_videos: formData.youtube_videos
+            .map(v => {
+              if (typeof v === 'string') return v.trim() ? { url: v.trim(), coverPhoto: '' } : null;
+              if (v && typeof v === 'object') {
+                const url = (v.url || '').trim();
+                const coverPhoto = (v.coverPhoto || '').trim();
+                if (!url && !coverPhoto) return null;
+                return { url, coverPhoto };
+              }
+              return null;
+            })
+            .filter(Boolean),
+          star_doctors: formData.star_doctors || [],
+          staff_emails: formData.staff_emails || [],
+          staff_doctors: formData.staff_doctors || [],
+          cashlessInsurance: Boolean(formData.cashlessInsurance),
+          acceptedInsurances: formData.acceptedInsurances || [],
+          tpaHelpdesk: {
+            phone: formData.tpaPhone.trim(),
+            email: formData.tpaEmail.trim(),
+            preAuthTime: formData.tpaPreAuthTime.trim()
+          },
+          insuranceHelpline: formData.insuranceHelpline.trim(),
+          latitude: formData.latitude !== '' && formData.latitude !== null && !isNaN(Number(formData.latitude)) ? Number(formData.latitude) : undefined,
+          longitude: formData.longitude !== '' && formData.longitude !== null && !isNaN(Number(formData.longitude)) ? Number(formData.longitude) : undefined,
+          showOnHome: formData.showOnHome !== undefined ? Boolean(formData.showOnHome) : true,
+        };
+      } else {
+        // When registering a brand-new hospital from admin, ONLY pass the 5 fields entered.
+        // Everything else is kept clean, blank, and unconfigured for the hospital manager.
+        payload = {
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          city: formData.city.trim() || 'Bengaluru',
+          address: formData.address.trim(),
+          phone: phoneCheck.normalized,
+          rating: 0,
+          reviews: '0 Reviews',
+          totalBeds: 0,
+          availableBeds: 0,
+          emptyBeds: 0,
+          emergency24x7: false,
+          establishedYear: undefined,
+          description: '',
+          specialties: [],
+          specialities: [],
+          image: '',
+          photos: [],
+          reels: [],
+          youtube_videos: [],
+          star_doctors: [],
+          staff_emails: [],
+          staff_doctors: [],
+          cashlessInsurance: false,
+          acceptedInsurances: [],
+          tpaHelpdesk: {
+            phone: '',
+            email: '',
+            preAuthTime: ''
+          },
+          insuranceHelpline: '',
+          latitude: undefined,
+          longitude: undefined,
+          isVerified: false,
+          publicationStatus: 'draft',
+          showOnHome: true
+        };
+      }
 
       if (hospitalToEdit) {
         await updateHospital(hospitalToEdit.id || hospitalToEdit._id, payload);
@@ -782,13 +837,19 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Helpline / Contact Phone</label>
+              <label>Helpline / Contact Phone <span className={styles.req}>*</span></label>
               <input
-                type="text"
-                placeholder="+91 11 2000 3000"
+                type="tel"
+                maxLength={10}
+                placeholder="e.g. 9876543210 (10 digits)"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setFormData({ ...formData, phone: val });
+                }}
+                className={errors.phone ? styles.inputError : ''}
               />
+              {errors.phone && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.phone}</span>}
             </div>
           </div>
 
@@ -835,11 +896,22 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               <label>Total Bed Capacity <span className={styles.req}>*</span></label>
               <input
                 type="number"
-                min="10"
-                step="10"
+                min="1"
                 value={formData.totalBeds}
                 onChange={(e) => setFormData({ ...formData, totalBeds: e.target.value })}
                 className={errors.totalBeds ? styles.inputError : ''}
+              />
+              {errors.totalBeds && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.totalBeds}</span>}
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Available Beds</label>
+              <input
+                type="number"
+                min="0"
+                max={formData.totalBeds}
+                value={formData.availableBeds}
+                onChange={(e) => setFormData({ ...formData, availableBeds: e.target.value })}
               />
             </div>
 
@@ -999,14 +1071,20 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
           {imageType === 'upload' && (
             <div className={styles.uploadArea}>
-              <label className={styles.uploadLabel}>
-                <Upload size={24} />
-                <span>Click to select hospital image from your device</span>
-                <input type="file" accept="image/*" onChange={handleFileUpload} className={styles.fileInput} />
+              <label className={styles.uploadLabel} style={{ cursor: isUploading ? 'wait' : 'pointer' }}>
+                {isUploading ? <Loader2 size={24} className={styles.spinIcon} /> : <Upload size={24} />}
+                <span>{isUploading ? 'Uploading to Cloudinary...' : 'Click to select hospital image from your device'}</span>
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  disabled={isUploading}
+                  onChange={handleFileUpload}
+                  className={styles.fileInput}
+                />
               </label>
-              {formData.image && typeof formData.image === 'string' && formData.image.startsWith('data:') && (
-                <div className={styles.previewBox}>
-                  <img src={formData.image} alt="Uploaded preview" />
+              {formData.image && (
+                <div className={styles.previewBox} style={{ marginTop: '12px' }}>
+                  <img src={formData.image} alt="Hospital preview" style={{ maxHeight: '160px', borderRadius: '8px', objectFit: 'cover' }} />
                 </div>
               )}
             </div>

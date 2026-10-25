@@ -233,25 +233,50 @@ router.post('/video', protect, (req, res, next) => {
         });
       }
 
-      const uploadResult = await new Promise((resolve, reject) => {
-        cld.uploader.upload_large(
-          filePath,
-          {
-            resource_type: 'video',
-            folder,
-            chunk_size: 6000000
-          },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result);
-          }
-        );
-      });
+      const stats = fs.statSync(filePath);
+      const isUnder25MB = stats.size < 25 * 1024 * 1024;
+
+      const uploadOptions = {
+        resource_type: 'video',
+        folder,
+        quality: 'auto',
+        eager_async: true
+      };
+
+      let uploadResult;
+      if (isUnder25MB) {
+        // Direct stream upload is 3-5x faster for reels under 25MB (avoids multi-chunk negotiation latency)
+        uploadResult = await cld.uploader.upload(filePath, uploadOptions);
+      } else {
+        // Larger files use upload_large with 10MB chunking for optimal throughput
+        uploadResult = await new Promise((resolve, reject) => {
+          cld.uploader.upload_large(
+            filePath,
+            {
+              ...uploadOptions,
+              chunk_size: 10000000
+            },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+        });
+      }
+
+      const rawUrl = uploadResult.secure_url || uploadResult.url;
+      // Auto-inject Cloudinary fast-start autoplay streaming flags (q_auto,f_auto)
+      const autoPlayUrl = rawUrl.includes('/video/upload/') && !rawUrl.includes('/video/upload/q_auto')
+        ? rawUrl.replace('/video/upload/', '/video/upload/q_auto,f_auto/')
+        : rawUrl;
+      const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
       notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
-        url: uploadResult.secure_url || uploadResult.url,
+        url: autoPlayUrl,
+        raw_url: rawUrl,
+        coverPhoto,
         public_id: uploadResult.public_id,
         duration: uploadResult.duration,
         format: uploadResult.format,
@@ -351,14 +376,23 @@ router.post('/instagram-reel', protect, async (req, res) => {
       const cld = getCloudinary();
       const uploadResult = await cld.uploader.upload(tempFilePath, {
         resource_type: 'video',
-        folder
+        folder,
+        quality: 'auto',
+        eager_async: true
       });
+
+      const rawUrl = uploadResult.secure_url || uploadResult.url;
+      const autoPlayUrl = rawUrl.includes('/video/upload/') && !rawUrl.includes('/video/upload/q_auto')
+        ? rawUrl.replace('/video/upload/', '/video/upload/q_auto,f_auto/')
+        : rawUrl;
+      const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
       notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
-        url: uploadResult.secure_url || uploadResult.url,
-        coverPhoto: (uploadResult.secure_url || uploadResult.url).replace(/\.[^/.]+$/, '.jpg'),
+        url: autoPlayUrl,
+        raw_url: rawUrl,
+        coverPhoto,
         public_id: uploadResult.public_id,
         duration: uploadResult.duration
       });

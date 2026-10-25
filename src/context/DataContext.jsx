@@ -2,10 +2,9 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { DataContext } from './context';
 import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
-import { initialHospitals } from '../data/hospitals';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
-const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v2';
+const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v4';
 const STORAGE_KEY_HERO = 'sehat_buddy_hero_v4';
 const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
 const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
@@ -154,13 +153,19 @@ export const DataProvider = ({ children }) => {
   // 2. Hospitals State (Fetched directly from DB / cached)
   const [hospitals, setHospitals] = useState(() => {
     try {
+      localStorage.removeItem('sehat_buddy_hospitals_v2');
+      localStorage.removeItem('sehat_buddy_hospitals_v3');
       const saved = localStorage.getItem(STORAGE_KEY_HOSPITALS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Keep only authentic hospitals with database ObjectIds (filter out legacy numeric mocks)
+          const valid = parsed.filter(h => h && (h._id || (h.id && String(h.id).length > 5)));
+          if (valid.length > 0) return valid;
+        }
       }
     } catch {}
-    return initialHospitals;
+    return [];
   });
 
   // 3. Hero & Front Page General Content State
@@ -434,11 +439,12 @@ export const DataProvider = ({ children }) => {
           email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
           preAuthTime: '30 Mins Cashless Pre-Approval'
         },
-        insuranceHelpline: h.insuranceHelpline || existing?.insuranceHelpline || '1800-SEHAT-CARE'
+        insuranceHelpline: h.insuranceHelpline || existing?.insuranceHelpline || '1800-SEHAT-CARE',
+        showOnHome: h.showOnHome !== undefined ? Boolean(h.showOnHome) : (existing?.showOnHome ?? true)
       };
     });
-    const notInApi = prevHospitals.filter(prevH => !hospList.some(h => matchesId(prevH, h)));
-    return [...mapped, ...notInApi];
+    // Authoritative database data: never retain deleted or mock hospitals
+    return mapped;
   };
 
   // Modular real-time refresh operations directly from MongoDB Atlas
@@ -464,6 +470,9 @@ export const DataProvider = ({ children }) => {
       if (Array.isArray(data)) {
         setHospitals(prev => {
           const mapped = mapHospitalList(data, prev);
+          if (JSON.stringify(prev) === JSON.stringify(mapped)) {
+            return prev;
+          }
           try {
             localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(mapped));
             broadcastSync(STORAGE_KEY_HOSPITALS, mapped);
@@ -726,7 +735,46 @@ export const DataProvider = ({ children }) => {
                 refreshDoctors();
               }
             } else if (collection === 'hospitals') {
-              refreshHospitals();
+              if (payload.operation === 'delete' && payload.docId) {
+                setHospitals(prev => {
+                  const updated = prev.filter(h => !matchesId(h, payload.docId));
+                  try {
+                    localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+                    broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+                  } catch {}
+                  return updated;
+                });
+              } else if (payload.docId && payload.fullDocument) {
+                const hospData = payload.fullDocument;
+                setHospitals(prev => {
+                  let hasDiff = false;
+                  const updated = prev.map(h => {
+                    if (matchesId(h, payload.docId)) {
+                      const candidate = {
+                        ...h,
+                        ...hospData,
+                        id: h.id || hospData.id || hospData._id,
+                        _id: hospData._id || h._id || hospData.id,
+                        showOnHome: hospData.showOnHome !== undefined ? Boolean(hospData.showOnHome) : (h.showOnHome ?? true)
+                      };
+                      if (JSON.stringify(candidate) !== JSON.stringify(h)) {
+                        hasDiff = true;
+                        return candidate;
+                      }
+                      return h;
+                    }
+                    return h;
+                  });
+                  if (!hasDiff) return prev;
+                  try {
+                    localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+                    broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+                  } catch {}
+                  return updated;
+                });
+              } else {
+                refreshHospitals();
+              }
             } else if (collection === 'contents') {
               refreshContent();
             } else if (collection === 'faqs') {
@@ -1244,33 +1292,39 @@ export const DataProvider = ({ children }) => {
       return updated;
     });
 
-    setHospitals(prev => prev.map(h => {
-      const newStars = (h.star_doctors || []).filter(sd => {
-        const sdId = typeof sd === 'object' ? String(sd._id || sd.id) : String(sd);
-        return sdId.toLowerCase() !== cleanId && (!cleanEmail || sdId.toLowerCase() !== cleanEmail);
+    setHospitals(prev => {
+      const updatedHosp = prev.map(h => {
+        const newStars = (h.star_doctors || []).filter(sd => {
+          const sdId = typeof sd === 'object' ? String(sd._id || sd.id) : String(sd);
+          return sdId.toLowerCase() !== cleanId && (!cleanEmail || sdId.toLowerCase() !== cleanEmail);
+        });
+        const newStaffDocs = (h.staff_doctors || []).filter(sd => {
+          const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase();
+          return sdEmail !== cleanEmail && sdEmail !== cleanId;
+        });
+        const newStaffEmails = (h.staff_emails || []).filter(e => {
+          const em = (typeof e === 'string' ? e : e?.email)?.toLowerCase();
+          return em !== cleanEmail && em !== cleanId;
+        });
+        return {
+          ...h,
+          star_doctors: newStars,
+          staff_doctors: newStaffDocs,
+          staff_emails: newStaffEmails
+        };
       });
-      const newStaffDocs = (h.staff_doctors || []).filter(sd => {
-        const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase();
-        return sdEmail !== cleanEmail && sdEmail !== cleanId;
-      });
-      const newStaffEmails = (h.staff_emails || []).filter(e => {
-        const em = (typeof e === 'string' ? e : e?.email)?.toLowerCase();
-        return em !== cleanEmail && em !== cleanId;
-      });
-      return {
-        ...h,
-        star_doctors: newStars,
-        staff_doctors: newStaffDocs,
-        staff_emails: newStaffEmails
-      };
-    }));
+      try {
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updatedHosp));
+        broadcastSync(STORAGE_KEY_HOSPITALS, updatedHosp);
+      } catch {}
+      return updatedHosp;
+    });
   };
 
   // Hospital CRUD operations
   const addHospital = async (hospitalData) => {
     const newHospital = {
       ...hospitalData,
-      id: Date.now(),
       rating: parseFloat(hospitalData.rating) || 4.5,
       reviews: hospitalData.reviews ? `${hospitalData.reviews}` : '50+',
       totalBeds: parseInt(hospitalData.totalBeds, 10) || 100,
@@ -1294,23 +1348,22 @@ export const DataProvider = ({ children }) => {
         preAuthTime: '30 Mins Cashless Pre-Approval'
       },
       insuranceHelpline: hospitalData.insuranceHelpline || '1800-SEHAT-CARE',
-      latitude: hospitalData.latitude !== undefined ? Number(hospitalData.latitude) : undefined,
-      longitude: hospitalData.longitude !== undefined ? Number(hospitalData.longitude) : undefined
+      latitude: hospitalData.latitude !== undefined && hospitalData.latitude !== '' ? Number(hospitalData.latitude) : undefined,
+      longitude: hospitalData.longitude !== undefined && hospitalData.longitude !== '' ? Number(hospitalData.longitude) : undefined
     };
 
-    let serverResult = null;
-    try {
-      serverResult = await api.addHospital(newHospital);
-      if (serverResult?.data) {
-        newHospital._id = serverResult.data._id;
-        newHospital.id = serverResult.data._id || newHospital.id;
-      }
-    } catch (err) {
-      console.warn('Backend hospital registration error:', err);
-    }
+    // Database is authoritative: wait for backend confirmation
+    const serverResult = await api.addHospital(newHospital);
+    const createdData = serverResult?.data || serverResult;
+    const finalHospital = {
+      ...newHospital,
+      ...createdData,
+      _id: createdData._id || createdData.id,
+      id: createdData._id || createdData.id
+    };
 
     setHospitals(prev => {
-      const updated = [newHospital, ...prev];
+      const updated = [finalHospital, ...prev.filter(h => !matchesId(h, finalHospital._id))];
       try {
         localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_HOSPITALS, updated);
@@ -1319,7 +1372,7 @@ export const DataProvider = ({ children }) => {
     });
 
     return {
-      hospital: newHospital,
+      hospital: finalHospital,
       temporaryPassword: serverResult?.temporaryPassword
     };
   };
@@ -1343,6 +1396,9 @@ export const DataProvider = ({ children }) => {
             establishedYear: updatedData.establishedYear !== undefined ? parseInt(updatedData.establishedYear, 10) : hosp.establishedYear,
             reviews: updatedData.reviews !== undefined ? updatedData.reviews : hosp.reviews,
             isVerified: updatedData.isVerified !== undefined ? Boolean(updatedData.isVerified) : hosp.isVerified,
+            publicationStatus: updatedData.publicationStatus !== undefined ? updatedData.publicationStatus : hosp.publicationStatus,
+            status: updatedData.status !== undefined ? updatedData.status : hosp.status,
+            profileCompletion: updatedData.profileCompletion !== undefined ? updatedData.profileCompletion : hosp.profileCompletion,
             image: updatedData.image !== undefined ? updatedData.image : hosp.image,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) : hosp.rating,
             totalBeds: updatedData.totalBeds !== undefined ? parseInt(updatedData.totalBeds, 10) : hosp.totalBeds,
@@ -1391,16 +1447,37 @@ export const DataProvider = ({ children }) => {
 
     try {
       const serverId = mergedHospital?._id || (typeof id === 'string' && id.length === 24 ? id : (mergedHospital?.id || id));
-      const serverResult = await api.updateHospital(serverId, mergedHospital || updatedData);
+      const payloadToSend = { ...(updatedData || {}) };
+      delete payloadToSend.__v;
+      delete payloadToSend._id;
+      delete payloadToSend.id;
+      const serverResult = await api.updateHospital(serverId, payloadToSend);
       if (serverResult) {
         setHospitals(prev => {
-          const synced = prev.map(h => matchesId(h, id) ? { ...h, ...serverResult } : h);
+          let hasDiff = false;
+          const synced = prev.map(h => {
+            if (matchesId(h, id)) {
+              const cand = { ...h, ...serverResult };
+              if (JSON.stringify(cand) !== JSON.stringify(h)) {
+                hasDiff = true;
+                return cand;
+              }
+            }
+            return h;
+          });
+          if (!hasDiff) return prev;
           try {
             localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(synced));
             broadcastSync(STORAGE_KEY_HOSPITALS, synced);
           } catch {}
           return synced;
         });
+        try {
+          const hospUser = JSON.parse(localStorage.getItem('hospital_user') || 'null');
+          if (hospUser && matchesId(hospUser, id)) {
+            localStorage.setItem('hospital_user', JSON.stringify({ ...hospUser, ...serverResult }));
+          }
+        } catch {}
         return serverResult;
       }
       return mergedHospital;
@@ -1424,35 +1501,34 @@ export const DataProvider = ({ children }) => {
     const totalBeds = bedData.totalBeds !== undefined ? parseInt(bedData.totalBeds, 10) : undefined;
     const availableBeds = bedData.availableBeds !== undefined ? parseInt(bedData.availableBeds, 10) : (bedData.emptyBeds !== undefined ? parseInt(bedData.emptyBeds, 10) : undefined);
 
-    setHospitals(prev => prev.map(h => {
-      if (matchesId(h, id)) {
-        return {
-          ...h,
-          totalBeds: totalBeds !== undefined ? totalBeds : h.totalBeds,
-          availableBeds: availableBeds !== undefined ? availableBeds : h.availableBeds,
-          emptyBeds: availableBeds !== undefined ? availableBeds : (h.emptyBeds !== undefined ? h.emptyBeds : h.availableBeds)
-        };
-      }
-      return h;
-    }));
-
     try {
-      await api.updateHospitalBeds(id, {
+      const res = await api.updateHospitalBeds(id, {
         totalBeds,
         availableBeds,
         emptyBeds: availableBeds
       });
+
+      setHospitals(prev => {
+        const updated = prev.map(h => matchesId(h, id) ? { ...h, ...res } : h);
+        try {
+          localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
+          broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+        } catch {}
+        return updated;
+      });
+      return res;
     } catch (err) {
-      console.warn('Backend updateHospitalBeds failed, falling back to updateHospital:', err);
-      await api.updateHospital(id, {
-        totalBeds,
-        availableBeds,
-        emptyBeds: availableBeds
-      });
+      console.error('Backend updateHospitalBeds failed:', err);
+      throw err;
     }
   };
 
-  const deleteHospital = (id) => {
+  const deleteHospital = async (id) => {
+    const target = (hospitals || []).find(h => matchesId(h, id));
+    const targetServerId = target?._id || (typeof id === 'string' && id.length === 24 ? id : target?.id || id);
+
+    await api.deleteHospital(targetServerId);
+
     setHospitals(prev => {
       const updated = prev.filter(hosp => !matchesId(hosp, id));
       try {
@@ -1461,7 +1537,6 @@ export const DataProvider = ({ children }) => {
       } catch {}
       return updated;
     });
-    api.deleteHospital(id).catch(() => {});
   };
 
   // Hero & General Content CRUD
@@ -1613,36 +1688,70 @@ export const DataProvider = ({ children }) => {
   };
 
   // FAQs CRUD
-  const addFaq = (faqData) => {
-    const newFaq = {
-      ...faqData,
-      id: faqData.id || faqData._id || `faq-${Date.now()}`,
-      order: Number(faqData.order) || (faqs.length + 1),
-      isActive: faqData.isActive !== undefined ? Boolean(faqData.isActive) : true
-    };
-    setFaqs(prev => [newFaq, ...prev]);
-    api.addFaq(newFaq).then(saved => {
-      if (saved && saved._id) {
-        setFaqs(prev => prev.map(f => f.id === newFaq.id ? { ...saved, id: saved._id } : f));
-      }
-    }).catch(() => {});
-    return newFaq;
+  const addFaq = async (faqData) => {
+    try {
+      const saved = await api.addFaq(faqData);
+      const newFaq = {
+        ...faqData,
+        ...(saved || {}),
+        id: saved?._id || saved?.id || faqData.id || faqData._id || `faq-${Date.now()}`,
+        _id: saved?._id || faqData._id || saved?.id || faqData.id,
+        order: Number(faqData.order) || (faqs.length + 1),
+        isActive: faqData.isActive !== undefined ? Boolean(faqData.isActive) : true
+      };
+      setFaqs(prev => {
+        const next = [newFaq, ...prev.filter(f => !matchesId(f, newFaq.id))];
+        try {
+          localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          broadcastSync(STORAGE_KEY_FAQS, next);
+        } catch {}
+        return next;
+      });
+      return newFaq;
+    } catch (err) {
+      console.error('Failed to add FAQ to database:', err);
+      throw err;
+    }
   };
 
-  const updateFaq = (id, updatedData) => {
-    setFaqs(prev => prev.map(f => {
-      if (matchesId(f, id)) {
-        const merged = { ...f, ...updatedData };
-        api.updateFaq(id, merged).catch(() => {});
-        return merged;
-      }
-      return f;
-    }));
+  const updateFaq = async (id, updatedData) => {
+    try {
+      const saved = await api.updateFaq(id, updatedData);
+      setFaqs(prev => {
+        const next = prev.map(f => {
+          if (matchesId(f, id)) {
+            return { ...f, ...updatedData, ...(saved || {}) };
+          }
+          return f;
+        });
+        try {
+          localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          broadcastSync(STORAGE_KEY_FAQS, next);
+        } catch {}
+        return next;
+      });
+      return saved;
+    } catch (err) {
+      console.error('Failed to update FAQ in database:', err);
+      throw err;
+    }
   };
 
-  const deleteFaq = (id) => {
-    setFaqs(prev => prev.filter(f => !matchesId(f, id)));
-    api.deleteFaq(id).catch(() => {});
+  const deleteFaq = async (id) => {
+    try {
+      await api.deleteFaq(id);
+      setFaqs(prev => {
+        const next = prev.filter(f => !matchesId(f, id));
+        try {
+          localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          broadcastSync(STORAGE_KEY_FAQS, next);
+        } catch {}
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to delete FAQ from database:', err);
+      throw err;
+    }
   };
 
   // FAQ Symbols CRUD
@@ -1724,22 +1833,27 @@ export const DataProvider = ({ children }) => {
     }
   };
 
-  const updateReview = (id, updatedData) => {
-    setReviews(prev => {
-      const updated = prev.map(r => {
-        if (matchesId(r, id)) {
-          const merged = { ...r, ...updatedData };
-          api.updateReview(id, merged).catch(() => {});
-          return merged;
-        }
-        return r;
+  const updateReview = async (id, updatedData) => {
+    try {
+      const saved = await api.updateReview(id, updatedData);
+      setReviews(prev => {
+        const updated = prev.map(r => {
+          if (matchesId(r, id)) {
+            return { ...r, ...updatedData, ...(saved || {}) };
+          }
+          return r;
+        });
+        try {
+          localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+          broadcastSync(STORAGE_KEY_REVIEWS, updated);
+        } catch {}
+        return updated;
       });
-      try {
-        localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
-        broadcastSync(STORAGE_KEY_REVIEWS, updated);
-      } catch {}
-      return updated;
-    });
+      return saved;
+    } catch (err) {
+      console.error('Failed to update review on server:', err);
+      throw err;
+    }
   };
 
   const deleteReview = async (target) => {

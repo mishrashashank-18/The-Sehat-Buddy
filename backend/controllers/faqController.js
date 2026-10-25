@@ -92,10 +92,10 @@ export const getFaqs = async (req, res) => {
 
 export const createFaq = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'hospital')) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Only website administrators can create FAQs'
+        message: 'Forbidden: Only website administrators and hospital managers can create FAQs'
       });
     }
 
@@ -106,13 +106,17 @@ export const createFaq = async (req, res) => {
     const finalIcon = icon || (image ? image : 'calendar');
     const finalImage = image || (icon && (icon.startsWith('http') || icon.startsWith('data:image')) ? icon : '');
 
+    const resolvedTargetType = targetType || (req.user.role === 'hospital' ? 'hospital' : 'general');
+    const resolvedTargetId = targetId || (req.user.role === 'hospital' ? String(req.user.id || req.user._id) : '');
+    const resolvedTargetName = targetName || (req.user.role === 'hospital' ? (req.user.name || '') : '');
+
     const faq = await Faq.create({
       question,
       answer,
-      category: category || (targetType === 'doctor' ? 'Doctors & Consultations' : targetType === 'hospital' ? 'Hospitals & Admissions' : 'General'),
-      targetType: targetType || 'general',
-      targetId: targetId || '',
-      targetName: targetName || '',
+      category: category || (resolvedTargetType === 'doctor' ? 'Doctors & Consultations' : resolvedTargetType === 'hospital' ? 'Hospitals & Admissions' : 'General'),
+      targetType: resolvedTargetType,
+      targetId: resolvedTargetId,
+      targetName: resolvedTargetName,
       icon: finalIcon,
       image: finalImage,
       note: note || '',
@@ -129,10 +133,10 @@ export const createFaq = async (req, res) => {
 
 export const updateFaq = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'hospital')) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Only website administrators can update FAQs'
+        message: 'Forbidden: Only website administrators and hospital managers can update FAQs'
       });
     }
 
@@ -140,6 +144,19 @@ export const updateFaq = async (req, res) => {
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
     }
+
+    if (req.user.role === 'hospital') {
+      const userHospId = String(req.user.id || req.user._id || '').toLowerCase();
+      const userHospName = (req.user.name || '').toLowerCase();
+      const fTargetId = String(faq.targetId || '').toLowerCase();
+      const fTargetName = (faq.targetName || '').toLowerCase();
+      const isOwner = (fTargetId && fTargetId === userHospId) ||
+                      (fTargetName && userHospName && (fTargetName.includes(userHospName) || userHospName.includes(fTargetName)));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You can only update FAQs for your own hospital' });
+      }
+    }
+
     Object.assign(faq, req.body);
     const updated = await faq.save();
     broadcastDbChange('faqs', 'update', updated._id, updated);
@@ -151,10 +168,10 @@ export const updateFaq = async (req, res) => {
 
 export const deleteFaq = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'admin') {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'hospital')) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Only website administrators can delete FAQs'
+        message: 'Forbidden: Only website administrators and hospital managers can delete FAQs'
       });
     }
 
@@ -162,6 +179,19 @@ export const deleteFaq = async (req, res) => {
     if (!faq) {
       return res.status(404).json({ success: false, message: 'FAQ not found' });
     }
+
+    if (req.user.role === 'hospital') {
+      const userHospId = String(req.user.id || req.user._id || '').toLowerCase();
+      const userHospName = (req.user.name || '').toLowerCase();
+      const fTargetId = String(faq.targetId || '').toLowerCase();
+      const fTargetName = (faq.targetName || '').toLowerCase();
+      const isOwner = (fTargetId && fTargetId === userHospId) ||
+                      (fTargetName && userHospName && (fTargetName.includes(userHospName) || userHospName.includes(fTargetName)));
+      if (!isOwner) {
+        return res.status(403).json({ success: false, message: 'Forbidden: You can only delete FAQs for your own hospital' });
+      }
+    }
+
     const faqId = faq._id;
     await faq.deleteOne();
     broadcastDbChange('faqs', 'delete', faqId);

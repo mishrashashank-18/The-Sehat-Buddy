@@ -10,7 +10,6 @@ const SearchBar = ({ onNavigate }) => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [speciality, setSpeciality] = useState('');
-  const [location, setLocation] = useState('');
 
   // Collect dynamic list of specialties from doctors and hospitals
   const specialtiesSet = new Set();
@@ -27,24 +26,11 @@ const SearchBar = ({ onNavigate }) => {
   ['Cardiology', 'Neurology', 'Orthopedics', 'Gynecology', 'Pediatrics', 'Dermatology'].forEach(s => specialtiesSet.add(s));
   const uniqueSpecialties = Array.from(specialtiesSet).sort();
 
-  // Collect dynamic list of locations/cities from hospitals and doctors
-  const locationsSet = new Set();
-  hospitals?.forEach(hosp => {
-    if (hosp.city) locationsSet.add(hosp.city);
-  });
-  doctors?.forEach(doc => {
-    if (doc.address?.city) locationsSet.add(doc.address.city);
-    if (typeof doc.address === 'string' && doc.address.length < 30) locationsSet.add(doc.address);
-  });
-  // Fallback major cities
-  ['Delhi', 'Gurgaon', 'Noida', 'Mumbai', 'Bangalore', 'Indore'].forEach(c => locationsSet.add(c));
-  const uniqueLocations = Array.from(locationsSet).sort();
-
   const handleSearch = (e) => {
     if (e) e.preventDefault();
 
     const query = searchQuery.trim();
-    const loc = location.trim();
+    const loc = 'Bengaluru';
     const spec = speciality.trim();
 
     // Check if query specifically targets a hospital
@@ -116,17 +102,14 @@ const SearchBar = ({ onNavigate }) => {
           <label className={styles.label}>Location</label>
           <div className={styles.inputWrapper}>
             <MapPin size={18} className={styles.iconLocation} />
-            <select 
-              className={`${styles.select} ${styles.selectWithIcon}`}
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            >
-              <option value="">Select Location</option>
-              {uniqueLocations.map((loc) => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
-            <ChevronDown size={18} className={styles.selectIcon} />
+            <input
+              type="text"
+              className={`${styles.input} ${styles.selectWithIcon}`}
+              value="Bengaluru"
+              readOnly
+              style={{ cursor: 'default', color: '#1e293b', fontWeight: 500, backgroundColor: '#ffffff' }}
+              title="Currently serving Bengaluru"
+            />
           </div>
         </div>
         

@@ -856,6 +856,43 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     }
   };
 
+
+  // Filtered reviews belonging strictly to this hospital
+  const hospitalReviews = useMemo(() => {
+    if (!reviews || !hospital) return [];
+    const hospId = String(hospital?.id || hospital?._id || '').toLowerCase().trim();
+    const hospName = String(hospital?.name || '').toLowerCase().trim();
+
+    return reviews
+      .filter(r => r.status !== 'rejected')
+      .filter(r => {
+        if (r.targetType && r.targetType !== 'hospital') return false;
+        const tId = String(r.targetId || '').toLowerCase().trim();
+        const tName = String(r.targetName || '').toLowerCase().trim();
+
+        if (tId) {
+          return tId === hospId;
+        }
+        if (tName && hospName) {
+          return tName === hospName || (tName.length > 5 && hospName.includes(tName)) || (hospName.length > 5 && tName.includes(hospName));
+        }
+        return false;
+      });
+  }, [reviews, hospital]);
+
+  const avgRating = useMemo(() => {
+    if (hospitalReviews.length === 0) return (hospital?.rating ? String(hospital.rating) : '4.8');
+    const total = hospitalReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0);
+    return (total / hospitalReviews.length).toFixed(1);
+  }, [hospitalReviews, hospital?.rating]);
+
+  const reviewsCountText = useMemo(() => {
+    if (hospitalReviews.length === 0) {
+      return hospital?.reviews || '50+ Reviews';
+    }
+    return `${hospitalReviews.length} Review${hospitalReviews.length === 1 ? '' : 's'}`;
+  }, [hospitalReviews, hospital?.reviews]);
+
   if (!hospital) {
     return (
       <div className={styles.pageWrapper}>
@@ -990,41 +1027,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     }).filter(Boolean);
   }
 
-  // Filtered reviews belonging strictly to this hospital
-  const hospitalReviews = useMemo(() => {
-    if (!reviews || !hospital) return [];
-    const hospId = String(hospital?.id || hospital?._id || '').toLowerCase().trim();
-    const hospName = String(hospital?.name || '').toLowerCase().trim();
-
-    return reviews
-      .filter(r => r.status !== 'rejected')
-      .filter(r => {
-        if (r.targetType && r.targetType !== 'hospital') return false;
-        const tId = String(r.targetId || '').toLowerCase().trim();
-        const tName = String(r.targetName || '').toLowerCase().trim();
-
-        if (tId) {
-          return tId === hospId;
-        }
-        if (tName && hospName) {
-          return tName === hospName || (tName.length > 5 && hospName.includes(tName)) || (hospName.length > 5 && tName.includes(hospName));
-        }
-        return false;
-      });
-  }, [reviews, hospital]);
-
-  const avgRating = useMemo(() => {
-    if (hospitalReviews.length === 0) return (hospital?.rating ? String(hospital.rating) : '4.8');
-    const total = hospitalReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0);
-    return (total / hospitalReviews.length).toFixed(1);
-  }, [hospitalReviews, hospital?.rating]);
-
-  const reviewsCountText = useMemo(() => {
-    if (hospitalReviews.length === 0) {
-      return hospital?.reviews || '50+ Reviews';
-    }
-    return `${hospitalReviews.length} Review${hospitalReviews.length === 1 ? '' : 's'}`;
-  }, [hospitalReviews, hospital?.reviews]);
 
   return (
     <div className={styles.pageWrapper}>

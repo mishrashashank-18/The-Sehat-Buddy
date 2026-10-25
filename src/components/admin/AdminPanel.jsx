@@ -11,6 +11,7 @@ import {
   ExternalLink,
   RotateCcw,
   CheckCircle2,
+  Loader2,
   MapPin,
   Star,
   Bed,
@@ -47,6 +48,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
+import { matchesId } from '../../context/DataContext';
 import DoctorFormModal from './DoctorFormModal';
 import HospitalFormModal from './HospitalFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -87,6 +89,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     corporateTieups,
     updateDoctor,
     deleteDoctor,
+    updateHospital,
     deleteHospital,
     resetToDefaults,
     stats,
@@ -139,6 +142,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
+  const [togglingHospHomeId, setTogglingHospHomeId] = useState(null);
 
   // Appointments Management State
   const [appointments, setAppointments] = useState(() => {
@@ -599,7 +603,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     return Array.from(new Set((doctors || []).map(d => d.specialty || d.specialization).filter(Boolean)));
   }, [doctors]);
 
-  // Filtered Hospitals
+  // Filtered Hospitals (prioritize hospitals pending review first)
   const filteredHospitals = useMemo(() => {
     const q = hospitalSearch.toLowerCase().trim();
     return (hospitals || []).filter(hosp => {
@@ -611,6 +615,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         hospitalCityFilter === 'all' || (hosp.city || '').toLowerCase() === hospitalCityFilter.toLowerCase();
       const matchesEmergency = !emergencyOnly || hosp.emergency24x7;
       return matchesSearch && matchesCity && matchesEmergency;
+    }).sort((a, b) => {
+      if (a.publicationStatus === 'pending_review' && b.publicationStatus !== 'pending_review') return -1;
+      if (b.publicationStatus === 'pending_review' && a.publicationStatus !== 'pending_review') return 1;
+      return 0;
     });
   }, [hospitals, hospitalSearch, hospitalCityFilter, emergencyOnly]);
 
@@ -1880,6 +1888,41 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </label>
               </div>
 
+              {/* Pending Publication Reviews Banner */}
+              {(() => {
+                const pendingList = (hospitals || []).filter(h => h.publicationStatus === 'pending_review');
+                if (pendingList.length === 0) return null;
+                return (
+                  <div style={{
+                    background: '#fef3c7',
+                    border: '1px solid #fde68a',
+                    borderRadius: '10px',
+                    padding: '12px 18px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                    flexWrap: 'wrap'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Clock size={20} color="#b45309" />
+                      <div>
+                        <strong style={{ color: '#92400e', fontSize: '0.9rem' }}>
+                          {pendingList.length} Hospital{pendingList.length > 1 ? 's' : ''} Awaiting Publication Review
+                        </strong>
+                        <p style={{ margin: 0, color: '#b45309', fontSize: '0.8rem' }}>
+                          Submitted for public listing: {pendingList.map(h => h.name).join(', ')}
+                        </p>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#92400e', background: '#fde68a', padding: '4px 10px', borderRadius: '6px' }}>
+                      Shown at top of list below
+                    </span>
+                  </div>
+                );
+              })()}
+
               {/* Hospitals Cards Grid */}
               {filteredHospitals.length === 0 ? (
                 <div className={styles.emptyState}>
@@ -1906,9 +1949,60 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                             e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
                           }}
                         />
-                        <div className={styles.cardCityBadge}>
-                          <MapPin size={13} /> {hosp.city}
+                        <div style={{
+                          position: 'absolute',
+                          top: '10px',
+                          left: '10px',
+                          display: 'flex',
+                          gap: '6px',
+                          zIndex: 2,
+                          flexWrap: 'wrap',
+                          maxWidth: hosp.emergency24x7 ? 'calc(100% - 130px)' : 'calc(100% - 20px)'
+                        }}>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '20px',
+                            background: hosp.publicationStatus === 'published' ? '#166534' : hosp.publicationStatus === 'pending_review' ? '#b45309' : '#334155',
+                            color: '#ffffff',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                          }}>
+                            {hosp.publicationStatus === 'published' ? '● Published' : hosp.publicationStatus === 'pending_review' ? '⏳ Review' : 'Draft'}
+                          </span>
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '20px',
+                            background: hosp.showOnHome !== false ? '#15803d' : '#475569',
+                            color: '#ffffff',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '3px'
+                          }}>
+                            {hosp.showOnHome !== false ? '⚡ Home Live' : '⏸️ Home Off'}
+                          </span>
+                          {hosp.profileCompletion !== undefined && (
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '3px 8px',
+                              borderRadius: '20px',
+                              background: hosp.profileCompletion >= 80 ? '#059669' : hosp.profileCompletion >= 50 ? '#d97706' : '#dc2626',
+                              color: '#ffffff',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                            }}>
+                              {hosp.profileCompletion}% Complete
+                            </span>
+                          )}
                         </div>
+                        {hosp.city && (
+                          <div className={styles.cardCityBadge}>
+                            <MapPin size={13} /> {hosp.city}
+                          </div>
+                        )}
                         {hosp.emergency24x7 && (
                           <div className={styles.cardEmergencyBadge}>
                             24/7 Emergency
@@ -1968,7 +2062,117 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           </span>
                         </div>
 
+                        {/* Admin-Only: Home Page Marquee Running Control */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: hosp.showOnHome !== false ? '#f0fdf4' : '#f8fafc',
+                          border: `1px solid ${hosp.showOnHome !== false ? '#bbf7d0' : '#e2e8f0'}`,
+                          borderRadius: '8px',
+                          margin: '10px 0 12px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '1rem' }}>{hosp.showOnHome !== false ? '⚡' : '⏸️'}</span>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: hosp.showOnHome !== false ? '#15803d' : '#64748b' }}>
+                                  {hosp.showOnHome !== false ? 'Running on Home Page' : 'Hidden from Home Page'}
+                                </span>
+                                <span style={{ fontSize: '0.62rem', background: '#e0e7ff', color: '#4338ca', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                                  Admin Only
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                                {hosp.showOnHome !== false ? 'Active in homepage carousel marquee' : 'Not featured on homepage carousel'}
+                              </span>
+                            </div>
+                          </div>
+                          {(() => {
+                            const hospKey = String(hosp._id || hosp.id);
+                            const isToggling = togglingHospHomeId === hospKey;
+                            const isRunning = hosp.showOnHome !== false;
+
+                            return (
+                              <button
+                                type="button"
+                                disabled={isToggling}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (isToggling) return;
+                                  const newStatus = !isRunning;
+                                  setTogglingHospHomeId(hospKey);
+                                  try {
+                                    await updateHospital(hospKey, { showOnHome: newStatus });
+                                  } catch (err) {
+                                    alert(err.message || 'Failed to update home page visibility');
+                                  } finally {
+                                    setTogglingHospHomeId(null);
+                                  }
+                                }}
+                                style={{
+                                  background: isRunning ? '#16a34a' : '#94a3b8',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  borderRadius: '20px',
+                                  padding: '5px 12px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 700,
+                                  cursor: isToggling ? 'wait' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '5px',
+                                  boxShadow: isRunning ? '0 1px 3px rgba(22, 163, 74, 0.3)' : 'none',
+                                  opacity: isToggling ? 0.75 : 1,
+                                  transition: 'background-color 0.2s ease, opacity 0.2s ease'
+                                }}
+                                title="Toggle home page marquee display (Admin only)"
+                              >
+                                {isToggling ? (
+                                  <>
+                                    <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                                    <span>Updating...</span>
+                                  </>
+                                ) : (
+                                  <span>{isRunning ? '✓ Running' : '✕ Hidden'}</span>
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </div>
+
                         <div className={styles.cardFooterActions}>
+                          {hosp.publicationStatus === 'pending_review' && (
+                            <button
+                              type="button"
+                              style={{
+                                background: '#16a34a',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px'
+                              }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await updateHospital(hosp.id || hosp._id, { publicationStatus: 'published' });
+                                  alert(`Hospital "${hosp.name}" is now approved and live on the public website!`);
+                                } catch (err) {
+                                  alert(err.message || 'Failed to approve hospital.');
+                                }
+                              }}
+                              title="Approve this hospital and publish it to the live website"
+                            >
+                              <CheckCircle2 size={14} /> Approve & Publish
+                            </button>
+                          )}
                           <button
                             className={styles.secondaryBtn}
                             style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: 4 }}

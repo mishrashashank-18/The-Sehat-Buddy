@@ -38,9 +38,9 @@ export const syncHospitalRating = async (targetId, targetName) => {
     } else {
       await Hospital.updateOne(
         { _id: hospital._id },
-        { $set: { rating: 4.5, reviews: '0 Reviews' } }
+        { $set: { rating: 4.8, reviews: '0 Reviews' } }
       );
-      hospital.rating = 4.5;
+      hospital.rating = 4.8;
       hospital.reviews = '0 Reviews';
       broadcastDbChange('hospitals', 'update', hospital._id, hospital);
     }
@@ -206,7 +206,8 @@ export const createReview = async (req, res) => {
       comment,
       treatment,
       insuranceUsed,
-      isVerified
+      isVerified,
+      status
     } = req.body;
 
     if (!patientName || !comment || !rating || !targetName) {
@@ -216,7 +217,7 @@ export const createReview = async (req, res) => {
       });
     }
 
-    // Strict authentication enforcement: No patient can publish review without login
+    // Strict authentication enforcement: No user can publish review without login
     if (!req.user) {
       return res.status(401).json({
         success: false,
@@ -224,24 +225,28 @@ export const createReview = async (req, res) => {
       });
     }
 
-    // Role check: Only registered patients ('user') or system administrators ('admin') can publish reviews
-    if (req.user.role !== 'user' && req.user.role !== 'admin') {
+    // Role check: Registered patients ('user'), system administrators ('admin'), or authenticated hospitals ('hospital')
+    if (req.user.role !== 'user' && req.user.role !== 'admin' && req.user.role !== 'hospital') {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Only verified patients can publish reviews.'
+        message: 'Forbidden: You must be a logged in patient, hospital, or administrator to publish reviews.'
       });
     }
 
+    const resolvedTargetType = targetType || (req.user.role === 'hospital' ? 'hospital' : 'doctor');
+    const resolvedTargetId = targetId || doctorId || (req.user.role === 'hospital' ? String(req.user.id || req.user._id) : '');
+    const resolvedTargetName = targetName || doctorName || (req.user.role === 'hospital' ? (req.user.name || '') : '');
+
     const review = await Review.create({
-      patientName: patientName.trim() || req.user.name || 'Verified Patient',
+      patientName: patientName.trim() || (req.user.role === 'user' ? (req.user.name || 'Verified Patient') : 'Verified Patient'),
       patientCity: patientCity || req.user.city || 'Bengaluru',
       userId: req.user._id || req.user.id,
       userEmail: req.user.email,
-      targetType: targetType || 'doctor',
-      targetId: targetId || doctorId || '',
-      targetName: targetName || doctorName || '',
-      doctorId: doctorId || (targetType === 'doctor' ? targetId : ''),
-      doctorName: doctorName || (targetType === 'doctor' ? targetName : ''),
+      targetType: resolvedTargetType,
+      targetId: resolvedTargetId,
+      targetName: resolvedTargetName,
+      doctorId: doctorId || (resolvedTargetType === 'doctor' ? resolvedTargetId : ''),
+      doctorName: doctorName || (resolvedTargetType === 'doctor' ? resolvedTargetName : ''),
       rating: Number(rating),
       title: title || '',
       comment,

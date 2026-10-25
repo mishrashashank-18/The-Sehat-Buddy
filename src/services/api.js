@@ -46,6 +46,7 @@ const getAuthHeaders = (isFormData = false) => {
   const token = getActiveAuthToken();
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
+  headers['x-admin-request'] = 'true';
   if (!isFormData) headers['Content-Type'] = 'application/json';
   return headers;
 };
@@ -386,7 +387,9 @@ export const api = {
 
   // Hospitals
   async getHospitals() {
-    const res = await fetch(`${API_BASE}/hospitals/list`);
+    const res = await fetch(`${API_BASE}/hospitals/list`, {
+      headers: getAuthHeaders()
+    });
     const data = await handleResponse(res);
     return data.data || data;
   },
@@ -445,6 +448,14 @@ export const api = {
 
   async deleteHospital(id) {
     const res = await fetch(`${API_BASE}/hospitals/${id}`, { 
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async removeDoctorFromHospital(hospitalId, doctorId) {
+    const res = await fetch(`${API_BASE}/hospitals/${hospitalId}/doctors/${doctorId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     });
@@ -686,7 +697,7 @@ export const api = {
           try {
             const data = JSON.parse(xhr.responseText);
             if (xhr.status >= 200 && xhr.status < 300 && data.success) {
-              resolve(data.url);
+              resolve(data);
             } else {
               reject(new Error(data.message || 'Video upload to Cloudinary failed'));
             }
@@ -709,7 +720,7 @@ export const api = {
       body: formData
     });
     const data = await handleResponse(res);
-    return data.url;
+    return data;
   },
 
   // Auto-convert Instagram Reel to Cloudinary Video
@@ -808,24 +819,7 @@ export const api = {
   },
 
   async addReview(reviewData, tokenOverride = null) {
-    let token = tokenOverride;
-    if (!token) {
-      const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
-      if (path.startsWith('/admin')) {
-        token = localStorage.getItem('admin_token') || localStorage.getItem('token');
-      } else {
-        const patientToken = localStorage.getItem('patient_token') || localStorage.getItem('user_token');
-        if (patientToken) {
-          token = patientToken;
-        } else {
-          try {
-            const u = JSON.parse(localStorage.getItem('user') || '{}');
-            if (u && u.role === 'user') token = localStorage.getItem('token');
-          } catch {}
-        }
-      }
-    }
-
+    const token = tokenOverride || getActiveAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 

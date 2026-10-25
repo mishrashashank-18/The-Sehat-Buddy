@@ -7,16 +7,6 @@ import { API_BASE } from '../../services/api';
 import Container from './Container';
 import styles from './Navbar.module.css';
 
-const CITIES = [
-  'Bengaluru',
-  'Delhi NCR',
-  'Mumbai',
-  'Hyderabad',
-  'Chennai',
-  'Kolkata',
-  'Pune'
-];
-
 const CARE_SERVICES = [
   { name: 'Senior Care', desc: 'Elderly assistance & nursing', icon: '👴' },
   { name: "Women's Health", desc: 'Gynecology & maternal wellness', icon: '🌸' },
@@ -27,10 +17,7 @@ const CARE_SERVICES = [
 
 const Navbar = ({ onNavigate, currentView = 'site' }) => {
   const { branding } = useData();
-  const [selectedCity, setSelectedCity] = useState(() => {
-    return localStorage.getItem('selectedCity') || 'Bengaluru';
-  });
-  const [isCityOpen, setIsCityOpen] = useState(false);
+  const [selectedCity] = useState('Bengaluru');
   const [isCareOpen, setIsCareOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState(() => {
@@ -38,7 +25,6 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
     return authedUser;
   });
 
-  const cityDropdownRef = useRef(null);
   const careDropdownRef = useRef(null);
 
   // Compute active tab from currentView
@@ -79,12 +65,9 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
     }
   }, [currentView]);
 
-  // Click outside listener for dropdowns
+  // Click outside listener for care dropdown
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (cityDropdownRef.current && !cityDropdownRef.current.contains(e.target)) {
-        setIsCityOpen(false);
-      }
       if (careDropdownRef.current && !careDropdownRef.current.contains(e.target)) {
         setIsCareOpen(false);
       }
@@ -92,12 +75,6 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleSelectCity = (city) => {
-    setSelectedCity(city);
-    localStorage.setItem('selectedCity', city);
-    setIsCityOpen(false);
-  };
 
   const handleGoHome = (e) => {
     if (e) e.preventDefault();
@@ -277,38 +254,16 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
         {/* Right Actions */}
         <div className={styles.actions}>
-          {/* Location Selector Pill */}
-          <div className={styles.locationWrapper} ref={cityDropdownRef}>
-            <button
-              type="button"
+          {/* Location Badge (Fixed to Bengaluru) */}
+          <div className={styles.locationWrapper}>
+            <div
               className={styles.locationPill}
-              onClick={() => setIsCityOpen(!isCityOpen)}
-              aria-label="Select location"
+              style={{ cursor: 'default' }}
+              title="Serving Bengaluru"
             >
               <MapPin size={16} className={styles.locationIcon} />
-              <span className={styles.cityName}>{selectedCity}</span>
-              <ChevronDown
-                size={14}
-                className={`${styles.chevron} ${isCityOpen ? styles.chevronOpen : ''}`}
-              />
-            </button>
-
-            {isCityOpen && (
-              <div className={styles.cityDropdownMenu}>
-                <div className={styles.cityDropdownHeader}>Select Location</div>
-                {CITIES.map((city) => (
-                  <button
-                    key={city}
-                    type="button"
-                    className={`${styles.cityDropdownItem} ${selectedCity === city ? styles.cityActive : ''}`}
-                    onClick={() => handleSelectCity(city)}
-                  >
-                    <span>{city}</span>
-                    {selectedCity === city && <Check size={14} className={styles.cityCheckIcon} />}
-                  </button>
-                ))}
-              </div>
-            )}
+              <span className={styles.cityName}>Bengaluru</span>
+            </div>
           </div>
 
           {/* User Auth or Profile */}
@@ -398,15 +353,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
             <div className={styles.mobileLocationRow}>
               <MapPin size={16} color="#64748B" />
-              <select
-                value={selectedCity}
-                onChange={(e) => handleSelectCity(e.target.value)}
-                className={styles.mobileCitySelect}
-              >
-                {CITIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+              <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#334155' }}>Bengaluru</span>
             </div>
 
             {user ? (

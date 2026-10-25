@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useData } from '../../context/useData';
+import { matchesId } from '../../context/DataContext';
 import { api } from '../../services/api';
 import { Loader2, Building2 } from 'lucide-react';
 import AdminHospitalEditPage from '../admin/AdminHospitalEditPage';
@@ -32,6 +33,9 @@ const HospitalDashboard = ({ onNavigate }) => {
         const data = await api.getMyHospital();
         if (isMounted && data) {
           setCurrentHospitalData(data);
+          try {
+            localStorage.setItem('hospital_user', JSON.stringify(data));
+          } catch {}
         }
       } catch (err) {
         console.warn('Could not fetch /api/hospitals/me, falling back to local session:', err);
@@ -46,9 +50,16 @@ const HospitalDashboard = ({ onNavigate }) => {
     return () => { isMounted = false; };
   }, [refreshHospitals]);
 
-  // Active hospital: ONLY resolves to the verified authenticated hospital, prioritizing reactive DataContext updates
+  // Active hospital: ONLY resolves to the verified authenticated hospital, prioritizing authoritative database data
   const activeHospital = useMemo(() => {
-    const target = currentHospitalData || loggedInUser;
+    if (currentHospitalData) {
+      const foundInList = Array.isArray(hospitals)
+        ? hospitals.find(h => matchesId(h, currentHospitalData._id || currentHospitalData.id || currentHospitalData.email))
+        : null;
+      return { ...(foundInList || {}), ...currentHospitalData };
+    }
+
+    const target = loggedInUser;
     const targetId = target?._id || target?.id;
     const targetEmail = target?.email;
 
@@ -67,9 +78,6 @@ const HospitalDashboard = ({ onNavigate }) => {
       }
     }
 
-    if (currentHospitalData) {
-      return currentHospitalData;
-    }
     if (targetId || targetEmail) {
       return { ...loggedInUser, name: loggedInUser.name || 'Hospital Facility', id: targetId || targetEmail, _id: targetId };
     }
@@ -80,7 +88,7 @@ const HospitalDashboard = ({ onNavigate }) => {
     return null;
   }, [currentHospitalData, hospitals, loggedInUser]);
 
-  if (loadingHospital && !activeHospital) {
+  if (loadingHospital) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b' }}>
         <Loader2 size={36} style={{ animation: 'spin 1s linear infinite', color: '#2563eb', marginBottom: '12px' }} />

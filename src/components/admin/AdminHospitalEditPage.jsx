@@ -50,6 +50,7 @@ import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import DoctorFormModal from './DoctorFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
 import styles from './AdminHospitalEditPage.module.css';
 
 const DEFAULT_SPECIALTIES = [
@@ -69,6 +70,19 @@ const DEFAULT_SPECIALTIES = [
   'Endocrinology',
   'Urology',
   'Ophthalmology'
+];
+
+const VALID_HOSPITAL_TABS = [
+  'general',
+  'media',
+  'specialties',
+  'doctors',
+  'insurance',
+  'social-reels',
+  'faqs',
+  'patients',
+  'reviews',
+  'er-fleet'
 ];
 
 const PRESET_HOSPITAL_IMAGES = [
@@ -175,6 +189,85 @@ const InstagramIcon = ({ size = 16, color = 'currentColor' }) => (
   </svg>
 );
 
+// Helper to reliably parse reels whether stored as array of objects, array of strings, or whitespace/comma-delimited string
+const parseReels = (data) => {
+  if (!data) return [];
+  let list = data;
+  if (typeof data === 'string') {
+    list = data.includes('http') ? data.trim().split(/\s+/).filter(u => u.startsWith('http')) : data.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  if (!Array.isArray(list)) return [];
+  return list.map(r => {
+    if (typeof r === 'string') return { url: r.trim(), coverPhoto: '' };
+    return { url: (r?.url || r?.link || '').trim(), coverPhoto: (r?.coverPhoto || r?.cover || '').trim() };
+  }).filter(r => r.url || r.coverPhoto);
+};
+
+const parseVideos = (data) => {
+  if (!data) return [];
+  let list = data;
+  if (typeof data === 'string') {
+    list = data.includes('http') ? data.trim().split(/\s+/).filter(u => u.startsWith('http')) : data.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  if (!Array.isArray(list)) return [];
+  return list.map(v => {
+    if (typeof v === 'string') return { url: v.trim(), coverPhoto: '' };
+    return { url: (v?.url || v?.link || '').trim(), coverPhoto: (v?.coverPhoto || v?.cover || '').trim() };
+  }).filter(v => v.url || v.coverPhoto);
+};
+
+export const createInitialHospitalFormData = (hosp) => {
+  if (!hosp) return null;
+  const existingPhotos = Array.isArray(hosp.photos) ? [...hosp.photos] : [];
+  const existingReels = parseReels(hosp.reels);
+  const existingVideos = parseVideos(hosp.youtube_videos);
+
+  const existingStarDocs = (Array.isArray(hosp.star_doctors) ? hosp.star_doctors : [])
+    .map(d => typeof d === 'object' && d !== null ? (d._id || d.id) : d)
+    .filter(Boolean);
+
+  const existingStaffDocs = Array.isArray(hosp.staff_doctors) ? [...hosp.staff_doctors] : [];
+  const existingStaffEmails = Array.isArray(hosp.staff_emails) ? [...hosp.staff_emails] : [];
+
+  return {
+    name: hosp.name || '',
+    city: hosp.city || '',
+    address: hosp.address || '',
+    latitude: hosp.latitude !== undefined && hosp.latitude !== null ? hosp.latitude : '',
+    longitude: hosp.longitude !== undefined && hosp.longitude !== null ? hosp.longitude : '',
+    establishedYear: hosp.establishedYear ? hosp.establishedYear : '',
+    totalBeds: hosp.totalBeds !== undefined && hosp.totalBeds !== null && hosp.totalBeds !== 0 ? hosp.totalBeds : '',
+    availableBeds: hosp.availableBeds !== undefined && hosp.availableBeds !== null && hosp.availableBeds !== 0 ? hosp.availableBeds : (hosp.emptyBeds !== undefined && hosp.emptyBeds !== null && hosp.emptyBeds !== 0 ? hosp.emptyBeds : ''),
+    emergency24x7: hosp.emergency24x7 !== undefined ? Boolean(hosp.emergency24x7) : false,
+    isVerified: hosp.isVerified !== undefined ? Boolean(hosp.isVerified) : false,
+    publicationStatus: hosp.publicationStatus || 'draft',
+    status: hosp.status || 'active',
+    showOnHome: hosp.showOnHome !== undefined ? Boolean(hosp.showOnHome) : true,
+    profileCompletion: hosp.profileCompletion || 0,
+    rating: hosp.rating !== undefined && hosp.rating !== null && !isNaN(Number(hosp.rating)) ? Number(hosp.rating) : 0,
+    reviews: hosp.reviews || '0 Reviews',
+    phone: hosp.phone || '',
+    email: hosp.email || '',
+    description: hosp.description || '',
+    image: hosp.image || '',
+    photos: existingPhotos,
+    specialties: Array.isArray(hosp.specialties) ? hosp.specialties : (Array.isArray(hosp.specialities) ? hosp.specialities : []),
+    star_doctors: existingStarDocs,
+    staff_doctors: existingStaffDocs,
+    staff_emails: existingStaffEmails,
+    cashlessInsurance: hosp.cashlessInsurance !== undefined ? Boolean(hosp.cashlessInsurance) : false,
+    acceptedInsurances: Array.isArray(hosp.acceptedInsurances) ? hosp.acceptedInsurances : [],
+    insuranceHelpline: hosp.insuranceHelpline || '',
+    tpaPhone: hosp.tpaHelpdesk?.phone || '',
+    tpaEmail: hosp.tpaHelpdesk?.email || '',
+    tpaPreAuthTime: hosp.tpaHelpdesk?.preAuthTime || '',
+    instagram: hosp.instagram || '',
+    facebook: hosp.facebook || '',
+    reels: existingReels,
+    youtube_videos: existingVideos
+  };
+};
+
 export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospitalView = false, hospitalData = null }) {
   const {
     hospitals,
@@ -205,32 +298,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   }, [hospitalId]);
 
-  // Helper to reliably parse reels whether stored as array of objects, array of strings, or whitespace/comma-delimited string
-  const parseReels = (data) => {
-    if (!data) return [];
-    let list = data;
-    if (typeof data === 'string') {
-      list = data.includes('http') ? data.trim().split(/\s+/).filter(u => u.startsWith('http')) : data.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    if (!Array.isArray(list)) return [];
-    return list.map(r => {
-      if (typeof r === 'string') return { url: r.trim(), coverPhoto: '' };
-      return { url: (r?.url || r?.link || '').trim(), coverPhoto: (r?.coverPhoto || r?.cover || '').trim() };
-    }).filter(r => r.url || r.coverPhoto);
-  };
-
-  const parseVideos = (data) => {
-    if (!data) return [];
-    let list = data;
-    if (typeof data === 'string') {
-      list = data.includes('http') ? data.trim().split(/\s+/).filter(u => u.startsWith('http')) : data.split(',').map(s => s.trim()).filter(Boolean);
-    }
-    if (!Array.isArray(list)) return [];
-    return list.map(v => {
-      if (typeof v === 'string') return { url: v.trim(), coverPhoto: '' };
-      return { url: (v?.url || v?.link || '').trim(), coverPhoto: (v?.coverPhoto || v?.cover || '').trim() };
-    }).filter(v => v.url || v.coverPhoto);
-  };
 
   // Find target hospital
   const hospital = useMemo(() => {
@@ -243,8 +310,72 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     );
   }, [hospitals, hospitalId, hospitalData]);
 
-  // Tab State: only active tab is shown (single-page tab switching)
-  const [activeTab, setActiveTab] = useState('general');
+  // Tab State: Persistent across page reloads (checks URL query ?tab=..., hash, sessionStorage, and localStorage)
+  const tabStorageKey = useMemo(() => {
+    return isHospitalView 
+      ? 'sehat_hospital_active_tab' 
+      : `sehat_admin_hospital_tab_${hospitalId || hospital?._id || 'edit'}`;
+  }, [isHospitalView, hospitalId, hospital?._id]);
+
+  const [activeTab, setActiveTabState] = useState(() => {
+    try {
+      // 1. Check URL query ?tab=...
+      const urlParams = new URLSearchParams(window.location.search);
+      const queryTab = urlParams.get('tab');
+      if (queryTab && VALID_HOSPITAL_TABS.includes(queryTab)) {
+        return queryTab;
+      }
+      // 2. Check URL hash (e.g. #reviews)
+      const cleanHash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (cleanHash && VALID_HOSPITAL_TABS.includes(cleanHash)) {
+        return cleanHash;
+      }
+      // 3. Check sessionStorage
+      const savedSessionTab = sessionStorage.getItem(tabStorageKey);
+      if (savedSessionTab && VALID_HOSPITAL_TABS.includes(savedSessionTab)) {
+        return savedSessionTab;
+      }
+      // 4. Check localStorage
+      const savedLocalTab = localStorage.getItem(tabStorageKey);
+      if (savedLocalTab && VALID_HOSPITAL_TABS.includes(savedLocalTab)) {
+        return savedLocalTab;
+      }
+    } catch (e) {
+      console.warn('Failed to read persisted tab:', e);
+    }
+    return 'general';
+  });
+
+  const setActiveTab = useCallback((tab) => {
+    if (!VALID_HOSPITAL_TABS.includes(tab)) return;
+    setActiveTabState(tab);
+    try {
+      sessionStorage.setItem(tabStorageKey, tab);
+      localStorage.setItem(tabStorageKey, tab);
+
+      // Keep URL search query updated without full page reload
+      const currentUrl = new URL(window.location.href);
+      currentUrl.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', currentUrl.toString());
+    } catch (e) {
+      console.warn('Failed to persist active tab:', e);
+    }
+  }, [tabStorageKey]);
+
+  // Keep state synchronized if user clicks browser back/forward buttons
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const queryTab = urlParams.get('tab');
+        if (queryTab && VALID_HOSPITAL_TABS.includes(queryTab)) {
+          setActiveTabState(queryTab);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const saveSuccessTimeoutRef = useRef(null);
@@ -285,8 +416,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   // Form State
-  const [formData, setFormData] = useState(null);
-  const initializedHospitalId = useRef(null);
+  const [formData, setFormData] = useState(() => (hospital ? createInitialHospitalFormData(hospital) : null));
+  const initializedHospitalId = useRef(hospital ? String(hospital.id || hospital._id || '') : null);
+  const isDirtyRef = useRef(false);
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('all'); // 'all' | 'star'
@@ -304,6 +436,17 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     isOpen: false,
     doctor: null
   });
+
+  // Validation & Error States
+  const [phoneError, setPhoneError] = useState('');
+  const [bedError, setBedError] = useState('');
+  const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [heroUploadSuccess, setHeroUploadSuccess] = useState(false);
+  const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [galleryUploadMode, setGalleryUploadMode] = useState('file'); // 'file' | 'url'
+  const [galleryFile, setGalleryFile] = useState(null);
+  const [galleryFilePreview, setGalleryFilePreview] = useState(null);
+  const [isRequestingPublication, setIsRequestingPublication] = useState(false);
 
   // New Photo Form State
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
@@ -553,17 +696,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const reviewStats = useMemo(() => {
     const total = hospitalReviews.length;
     const avg = total > 0
-      ? (hospitalReviews.reduce((sum, r) => sum + (Number(r.rating) || 5), 0) / total).toFixed(1)
-      : '5.0';
-    const fiveStars = hospitalReviews.filter(r => Number(r.rating) === 5).length;
-    const verifiedCount = hospitalReviews.filter(r => r.isVerified).length;
-    return { total, avg, fiveStars, verifiedCount };
-  }, [hospitalReviews]);
+      ? (hospitalReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0) / total).toFixed(1)
+      : (formData?.rating !== undefined && formData?.rating !== '' && !isNaN(Number(formData?.rating)) && Number(formData?.rating) > 0
+          ? Number(formData?.rating).toFixed(1)
+          : (hospital?.rating !== undefined && hospital?.rating !== null && Number(hospital?.rating) > 0 ? Number(hospital.rating).toFixed(1) : 'New'));
+    const fiveStars = hospitalReviews.filter(r => Number(r?.rating) === 5).length;
+    const verifiedCount = hospitalReviews.filter(r => r?.isVerified).length;
+    const reviewsText = total > 0
+      ? `${total} Review${total === 1 ? '' : 's'}`
+      : (formData?.reviews && formData?.reviews !== '500+ Reviews' ? formData?.reviews : (hospital?.reviews || '0 Reviews'));
+    return { total, avg, fiveStars, verifiedCount, reviewsText };
+  }, [hospitalReviews, formData?.rating, formData?.reviews, hospital?.rating, hospital?.reviews]);
 
   // Filtered Hospital Reviews
   const filteredHospitalReviews = useMemo(() => {
     return hospitalReviews.filter(rev => {
-      if (reviewRatingFilter !== 'all' && Number(rev.rating) !== Number(reviewRatingFilter)) {
+      if (!rev) return false;
+      if (reviewRatingFilter !== 'all' && Number(rev?.rating) !== Number(reviewRatingFilter)) {
         return false;
       }
       if (reviewSearch.trim()) {
@@ -614,9 +763,14 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setIsAddingReview(true);
   };
 
-  const handleDeleteReviewClick = (revId) => {
+  const handleDeleteReviewClick = async (revId) => {
     if (window.confirm('Are you sure you want to permanently delete this public review? It will be removed immediately from this hospital.')) {
-      deleteReview(revId);
+      try {
+        await deleteReview(revId);
+      } catch (err) {
+        console.error('Failed to delete review:', err);
+        alert('Failed to delete review: ' + (err.message || 'Please check connection.'));
+      }
     }
   };
 
@@ -657,6 +811,20 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
       setIsAddingReview(false);
       setEditingReviewId(null);
+      setReviewForm({
+        patientName: '',
+        patientCity: '',
+        rating: 5,
+        title: '',
+        comment: '',
+        treatment: '',
+        insuranceUsed: 'None',
+        isVerified: true,
+        status: 'approved'
+      });
+      if (typeof refreshReviews === 'function') {
+        refreshReviews();
+      }
     } catch (err) {
       console.error('Failed to save review:', err);
       alert('Failed to save review. Please check your connection.');
@@ -671,8 +839,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
     const currentHospId = String(hospital.id || hospital._id || '');
 
-    // If the hospital is already initialized, synchronize star_doctors and photos if updated from server/DataContext
-    if (initializedHospitalId.current === currentHospId && formData !== null) {
+    // If the hospital is already initialized and user has unsaved edits, do not overwrite their edits, only synchronize background aggregates
+    if (initializedHospitalId.current === currentHospId && formData !== null && isDirtyRef.current) {
       const incomingStarDocs = (Array.isArray(hospital.star_doctors) ? hospital.star_doctors : [])
         .map(d => typeof d === 'object' && d !== null ? (d._id || d.id) : d)
         .filter(Boolean);
@@ -681,53 +849,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       if (curStarStr !== incStarStr) {
         setFormData(prev => ({ ...prev, star_doctors: incomingStarDocs }));
       }
+      if (hospital.profileCompletion !== undefined && hospital.profileCompletion !== formData.profileCompletion) {
+        setFormData(prev => ({
+          ...prev,
+          profileCompletion: hospital.profileCompletion,
+          publicationStatus: hospital.publicationStatus || prev.publicationStatus,
+          showOnHome: hospital.showOnHome !== undefined ? Boolean(hospital.showOnHome) : prev.showOnHome
+        }));
+      }
+      return;
+    }
+
+    if (initializedHospitalId.current === currentHospId && formData !== null && !isDirtyRef.current) {
       return;
     }
 
     initializedHospitalId.current = currentHospId;
-
-    const existingPhotos = Array.isArray(hospital.photos) ? [...hospital.photos] : [];
-    const existingReels = parseReels(hospital.reels);
-    const existingVideos = parseVideos(hospital.youtube_videos);
-
-    const existingStarDocs = (Array.isArray(hospital.star_doctors) ? hospital.star_doctors : [])
-      .map(d => typeof d === 'object' && d !== null ? (d._id || d.id) : d)
-      .filter(Boolean);
-
-    const existingStaffDocs = Array.isArray(hospital.staff_doctors) ? [...hospital.staff_doctors] : [];
-
-    setFormData({
-      name: hospital.name || '',
-      city: hospital.city || 'Delhi',
-      address: hospital.address || '',
-      latitude: hospital.latitude !== undefined && hospital.latitude !== null ? hospital.latitude : '',
-      longitude: hospital.longitude !== undefined && hospital.longitude !== null ? hospital.longitude : '',
-      establishedYear: hospital.establishedYear || 2000,
-      totalBeds: hospital.totalBeds || 100,
-      availableBeds: hospital.availableBeds !== undefined ? hospital.availableBeds : (hospital.emptyBeds || 20),
-      emergency24x7: hospital.emergency24x7 !== undefined ? Boolean(hospital.emergency24x7) : true,
-      isVerified: hospital.isVerified !== undefined ? Boolean(hospital.isVerified) : true,
-      rating: hospital.rating || 4.8,
-      reviews: hospital.reviews || '500+ Reviews',
-      phone: hospital.phone || '',
-      email: hospital.email || '',
-      description: hospital.description || '',
-      image: hospital.image || PRESET_HOSPITAL_IMAGES[0].url,
-      photos: existingPhotos,
-      specialties: hospital.specialties || hospital.specialities || ['Cardiology', 'Neurology', 'Orthopedics'],
-      star_doctors: existingStarDocs,
-      staff_doctors: existingStaffDocs,
-      cashlessInsurance: hospital.cashlessInsurance !== undefined ? Boolean(hospital.cashlessInsurance) : true,
-      acceptedInsurances: Array.isArray(hospital.acceptedInsurances) && hospital.acceptedInsurances.length > 0 ? hospital.acceptedInsurances : defaultAcceptedInsurances,
-      insuranceHelpline: hospital.insuranceHelpline || '1800-SEHAT-CARE',
-      tpaPhone: hospital.tpaHelpdesk?.phone || '',
-      tpaEmail: hospital.tpaHelpdesk?.email || '',
-      tpaPreAuthTime: hospital.tpaHelpdesk?.preAuthTime || '30 Mins Cashless Pre-Approval',
-      instagram: hospital.instagram || '',
-      facebook: hospital.facebook || '',
-      reels: existingReels,
-      youtube_videos: existingVideos
-    });
+    setFormData(createInitialHospitalFormData(hospital));
   }, [hospital]);
 
   if (!hospital) {
@@ -767,6 +905,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Field change handler
   const handleChange = (field, value) => {
+    isDirtyRef.current = true;
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -811,7 +950,84 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setSaveSuccess(false);
   };
 
-  const handleRemovePhoto = (index) => {
+  const handleAddGalleryFile = async () => {
+    if (!galleryFile) return;
+    try {
+      setIsUploadingGallery(true);
+      const url = await api.uploadImage(galleryFile, 'sehatbuddy/gallery');
+      if (url) {
+        const newPhoto = {
+          url,
+          title: newPhotoTitle.trim() || `${formData.name || 'Hospital'} Facility`,
+          category: newPhotoCategory || 'Facility'
+        };
+        setFormData(prev => ({
+          ...prev,
+          photos: [...prev.photos, newPhoto]
+        }));
+        setGalleryFile(null);
+        setGalleryFilePreview(null);
+        setNewPhotoTitle('');
+        setSaveSuccess(false);
+      }
+    } catch (err) {
+      console.error('Failed to upload gallery image:', err);
+      alert(err.message || 'Failed to upload photo. Please try again.');
+    } finally {
+      setIsUploadingGallery(false);
+    }
+  };
+
+  const handleReplaceGalleryPhoto = async (index, file) => {
+    if (!file) return;
+    if (!/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+      alert('Invalid file format. Please select a JPG, PNG, or WebP photo.');
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      alert('File size exceeds 15MB limit.');
+      return;
+    }
+    try {
+      const oldPhoto = formData.photos[index];
+      const oldUrl = typeof oldPhoto === 'string' ? oldPhoto : oldPhoto?.url;
+      const newUrl = await api.uploadImage(file, 'sehatbuddy/gallery');
+      if (newUrl) {
+        if (oldUrl && oldUrl.includes('cloudinary.com')) {
+          try {
+            await api.deleteImage(oldUrl);
+          } catch (e) {
+            console.warn('Old photo cleanup note:', e.message);
+          }
+        }
+        setFormData(prev => {
+          const updated = [...prev.photos];
+          const curr = updated[index];
+          if (typeof curr === 'string') {
+            updated[index] = newUrl;
+          } else {
+            updated[index] = { ...curr, url: newUrl };
+          }
+          return { ...prev, photos: updated };
+        });
+        setSaveSuccess(false);
+      }
+    } catch (err) {
+      console.error('Failed to replace photo:', err);
+      alert(err.message || 'Failed to replace photo.');
+    }
+  };
+
+  const handleRemovePhoto = async (index) => {
+    const photoToRemove = formData.photos[index];
+    const photoUrl = typeof photoToRemove === 'string' ? photoToRemove : photoToRemove?.url;
+    if (photoUrl && photoUrl.includes('cloudinary.com')) {
+      try {
+        await api.deleteImage(photoUrl);
+      } catch (e) {
+        console.warn('Cloudinary delete notice:', e.message);
+      }
+    }
     setFormData(prev => ({
       ...prev,
       photos: prev.photos.filter((_, i) => i !== index)
@@ -884,7 +1100,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const handleOpenAddDoctor = () => {
     setDoctorToEdit({
       hospital: formData.name || hospital.name,
-      city: formData.city || hospital.city || 'Delhi',
+      city: formData.city || hospital.city || 'Bengaluru',
       department: (formData.specialties && formData.specialties[0]) || 'Cardiology'
     });
     setIsDoctorModalOpen(true);
@@ -906,14 +1122,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const doc = deleteDoctorModalState.doctor;
     if (!doc) return;
     try {
+      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      const docId = doc._id || doc.id || doc.email;
+
+      // 1. Remove from hospital roster in backend specifically
+      if (targetHospId && docId) {
+        try {
+          await api.removeDoctorFromHospital(targetHospId, docId);
+        } catch (hospErr) {
+          console.warn('removeDoctorFromHospital call notice:', hospErr.message);
+        }
+      }
+
+      // 2. Also call context deleteDoctor
       await deleteDoctor(doc);
+
+      // 3. Immediately prune from formData star_doctors, staff_doctors, and staff_emails
+      const cleanEmail = (doc.email || '').toLowerCase().trim();
+      const cleanId = String(doc._id || doc.id || '').toLowerCase().trim();
+
       setFormData(prev => ({
         ...prev,
-        star_doctors: prev.star_doctors.filter(sd => !isDoctorInStarList(doc, [sd]))
+        star_doctors: (prev.star_doctors || []).filter(sd => !isDoctorInStarList(doc, [sd])),
+        staff_doctors: (prev.staff_doctors || []).filter(sd => {
+          const sdEmail = (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase().trim();
+          return sdEmail !== cleanEmail && sdEmail !== cleanId;
+        }),
+        staff_emails: (prev.staff_emails || []).filter(em => {
+          const e = (typeof em === 'string' ? em : em?.email)?.toLowerCase().trim();
+          return e !== cleanEmail && e !== cleanId;
+        })
       }));
+
       setDeleteDoctorModalState({ isOpen: false, doctor: null });
     } catch (err) {
       console.error('Failed to delete doctor:', err);
+      alert(err.message || 'Failed to remove doctor.');
     }
   };
 
@@ -1002,6 +1246,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Reels
   const handleAddReel = () => {
+    isDirtyRef.current = true;
     setFormData(prev => ({
       ...prev,
       reels: [...prev.reels, { url: '', coverPhoto: '' }]
@@ -1009,6 +1254,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   const handleUpdateReel = (index, field, value) => {
+    isDirtyRef.current = true;
     setFormData(prev => {
       const next = [...prev.reels];
       next[index] = { ...next[index], [field]: value };
@@ -1018,6 +1264,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   const handleRemoveReel = async (index) => {
+    isDirtyRef.current = true;
     const updatedReels = formData.reels.filter((_, i) => i !== index);
     setFormData(prev => ({
       ...prev,
@@ -1042,6 +1289,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // YouTube Videos
   const handleAddVideo = () => {
+    isDirtyRef.current = true;
     setFormData(prev => ({
       ...prev,
       youtube_videos: [...prev.youtube_videos, { url: '', coverPhoto: '' }]
@@ -1049,6 +1297,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   const handleUpdateVideo = (index, field, value) => {
+    isDirtyRef.current = true;
     setFormData(prev => {
       const next = [...prev.youtube_videos];
       next[index] = { ...next[index], [field]: value };
@@ -1088,7 +1337,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const key = `${type}-${index}`;
     setUploadingMediaKey(key);
     try {
-      const url = await api.uploadImage(file, 'sehatbuddy/covers');
+      const rawRes = await api.uploadImage(file, 'sehatbuddy/covers');
+      const url = typeof rawRes === 'string' ? rawRes : (rawRes?.url || '');
       if (type === 'reel') {
         handleUpdateReel(index, 'coverPhoto', url);
       } else {
@@ -1122,15 +1372,18 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
     try {
       const data = await api.uploadVideo(file, 'sehatbuddy/reels', (percent) => {
-        setReelUploadProgress(prev => ({ ...prev, [index]: percent }));
+        setReelUploadProgress(prev => ({ ...prev, [index]: Math.min(98, Math.max(10, percent)) }));
       });
 
-      if (data && data.url) {
+      const videoUrl = typeof data === 'string' ? data : (data?.url || data?.secure_url || '');
+      if (videoUrl) {
         // Auto-set the Cloudinary Video URL
-        handleUpdateReel(index, 'url', data.url);
+        handleUpdateReel(index, 'url', videoUrl);
         // Auto-set the Cloudinary instant video thumbnail if coverPhoto is empty or generated
-        const autoThumbnail = data.url.replace(/\.[^/.]+$/, '.jpg');
+        const autoThumbnail = (data && data.coverPhoto) || videoUrl.replace(/\.[^/.]+$/, '.jpg');
         handleUpdateReel(index, 'coverPhoto', autoThumbnail);
+      } else {
+        throw new Error('Upload succeeded but no video URL was returned by server');
       }
     } catch (err) {
       console.error('Video upload to Cloudinary failed:', err);
@@ -1150,11 +1403,15 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setUploadingMediaKey(key);
     try {
       const data = await api.uploadInstagramReel(raw, 'sehatbuddy/reels');
-      if (data && data.url) {
-        handleUpdateReel(idx, 'url', data.url);
-        if (data.coverPhoto) {
-          handleUpdateReel(idx, 'coverPhoto', data.coverPhoto);
+      const videoUrl = typeof data === 'string' ? data : (data?.url || '');
+      const coverPhoto = (data && data.coverPhoto) || (videoUrl ? videoUrl.replace(/\.[^/.]+$/, '.jpg') : '');
+      if (videoUrl) {
+        handleUpdateReel(idx, 'url', videoUrl);
+        if (coverPhoto) {
+          handleUpdateReel(idx, 'coverPhoto', coverPhoto);
         }
+      } else {
+        throw new Error('Conversion succeeded but no video URL was returned');
       }
     } catch (err) {
       console.error('Failed to convert Instagram reel:', err);
@@ -1193,33 +1450,38 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     e.preventDefault();
     if (!faqForm.question.trim() || !faqForm.answer.trim()) return;
 
-    const stepsArray = faqForm.stepsInput
-      ? faqForm.stepsInput.split('\n').map(s => s.trim()).filter(Boolean)
-      : [];
+    try {
+      const stepsArray = faqForm.stepsInput
+        ? faqForm.stepsInput.split('\n').map(s => s.trim()).filter(Boolean)
+        : [];
 
-    const faqPayload = {
-      targetType: 'hospital',
-      targetId: hospital.id || hospital._id,
-      targetName: formData.name || hospital.name,
-      question: faqForm.question.trim(),
-      answer: faqForm.answer.trim(),
-      category: faqForm.category.trim() || 'General',
-      note: faqForm.note.trim(),
-      steps: stepsArray,
-      icon: faqForm.icon || 'help-circle',
-      isActive: true
-    };
+      const faqPayload = {
+        targetType: 'hospital',
+        targetId: hospital.id || hospital._id,
+        targetName: formData.name || hospital.name,
+        question: faqForm.question.trim(),
+        answer: faqForm.answer.trim(),
+        category: faqForm.category.trim() || 'General',
+        note: faqForm.note.trim(),
+        steps: stepsArray,
+        icon: faqForm.icon || 'help-circle',
+        isActive: true
+      };
 
-    if (editingFaqId) {
-      await updateFaq(editingFaqId, faqPayload);
-    } else {
-      await addFaq(faqPayload);
+      if (editingFaqId) {
+        await updateFaq(editingFaqId, faqPayload);
+      } else {
+        await addFaq(faqPayload);
+      }
+
+      setFaqForm({ question: '', answer: '', category: 'General', note: '', stepsInput: '', icon: 'help-circle' });
+      setCustomFaqIconPreview(null);
+      setIsAddingFaq(false);
+      setEditingFaqId(null);
+    } catch (err) {
+      console.error('Failed to save FAQ:', err);
+      alert('Failed to save FAQ: ' + (err.message || 'Please check connection.'));
     }
-
-    setFaqForm({ question: '', answer: '', category: 'General', note: '', stepsInput: '', icon: 'help-circle' });
-    setCustomFaqIconPreview(null);
-    setIsAddingFaq(false);
-    setEditingFaqId(null);
   };
 
   const handleEditFaqClick = (faq) => {
@@ -1242,54 +1504,98 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setIsAddingFaq(true);
   };
 
-  const handleDeleteFaqClick = (faqId) => {
+  const handleDeleteFaqClick = async (faqId) => {
     if (window.confirm('Are you sure you want to delete this hospital FAQ?')) {
-      deleteFaq(faqId);
+      try {
+        await deleteFaq(faqId);
+      } catch (err) {
+        console.error('Failed to delete FAQ:', err);
+        alert('Failed to delete FAQ: ' + (err.message || 'Please check connection.'));
+      }
     }
   };
 
   // Master Save Function
-  const handleSaveAll = async () => {
+  const handleSaveAll = async (overridePayload = null) => {
     setIsSaving(true);
     setErrorMessage('');
+    setPhoneError('');
+    setBedError('');
     setSaveSuccess(false);
 
+    // Guard: If invoked directly as an event handler (e.g. onClick={handleSaveAll}), ignore the SyntheticEvent
+    const cleanOverride = (
+      overridePayload &&
+      typeof overridePayload === 'object' &&
+      !overridePayload.nativeEvent &&
+      !overridePayload.target &&
+      !overridePayload._reactName &&
+      !(typeof Event !== 'undefined' && overridePayload instanceof Event)
+    ) ? overridePayload : null;
+
     try {
+      // 1. Phone validation (10 digits Indian mobile)
+      const phoneValidation = validateIndianPhone(formData.phone);
+      if (!phoneValidation.isValid && !phoneValidation.valid) {
+        const err = phoneValidation.error || 'Please enter a valid 10-digit Indian mobile number';
+        setPhoneError(err);
+        setErrorMessage(err);
+        setIsSaving(false);
+        setActiveTab('general');
+        return;
+      }
+
+      // 2. Bed Capacity validation
+      const bedValidation = validateBedCounts(formData.totalBeds, formData.availableBeds);
+      if (!bedValidation.isValid && !bedValidation.valid) {
+        const err = bedValidation.error || 'Please enter valid bed capacity numbers';
+        setBedError(err);
+        setErrorMessage(err);
+        setIsSaving(false);
+        setActiveTab('general');
+        return;
+      }
+
       const payload = {
-        name: formData.name.trim(),
-        city: formData.city.trim(),
-        address: formData.address.trim(),
-        latitude: formData.latitude !== '' ? Number(formData.latitude) : null,
-        longitude: formData.longitude !== '' ? Number(formData.longitude) : null,
-        establishedYear: Number(formData.establishedYear) || 2000,
-        totalBeds: Number(formData.totalBeds) || 100,
-        availableBeds: Number(formData.availableBeds) || 0,
-        emptyBeds: Number(formData.availableBeds) || 0,
+        name: (formData.name || '').trim(),
+        city: (formData.city || '').trim(),
+        address: (formData.address || '').trim(),
+        latitude: formData.latitude !== '' && formData.latitude !== null && formData.latitude !== undefined ? Number(formData.latitude) : null,
+        longitude: formData.longitude !== '' && formData.longitude !== null && formData.longitude !== undefined ? Number(formData.longitude) : null,
+        establishedYear: formData.establishedYear ? Number(formData.establishedYear) : null,
+        totalBeds: bedValidation.total !== undefined ? bedValidation.total : (Number(formData.totalBeds) || 0),
+        availableBeds: bedValidation.available !== undefined ? bedValidation.available : (Number(formData.availableBeds) || 0),
+        emptyBeds: bedValidation.available !== undefined ? bedValidation.available : (Number(formData.availableBeds) || 0),
         emergency24x7: Boolean(formData.emergency24x7),
         isVerified: Boolean(formData.isVerified),
-        rating: Number(formData.rating) || 4.8,
-        reviews: formData.reviews || '500+ Reviews',
-        phone: formData.phone.trim(),
-        email: formData.email.trim(),
-        description: formData.description.trim(),
+        publicationStatus: formData.publicationStatus || 'draft',
+        status: formData.status || 'active',
+        showOnHome: formData.showOnHome !== undefined ? Boolean(formData.showOnHome) : true,
+        rating: formData.rating !== undefined && formData.rating !== '' && !isNaN(Number(formData.rating)) ? Number(formData.rating) : 0,
+        reviews: formData.reviews || '0 Reviews',
+        phone: phoneValidation.normalized || formData.phone,
+        email: (formData.email || '').trim(),
+        description: (formData.description || '').trim(),
         image: formData.image,
-        photos: formData.photos,
-        specialties: formData.specialties,
-        specialities: formData.specialties,
-        star_doctors: formData.star_doctors,
-        staff_doctors: formData.staff_doctors,
+        photos: Array.isArray(formData.photos) ? formData.photos : [],
+        specialties: Array.isArray(formData.specialties) ? formData.specialties : [],
+        specialities: Array.isArray(formData.specialties) ? formData.specialties : [],
+        star_doctors: Array.isArray(formData.star_doctors) ? formData.star_doctors : [],
+        staff_doctors: Array.isArray(formData.staff_doctors) ? formData.staff_doctors : [],
+        staff_emails: Array.isArray(formData.staff_emails) ? formData.staff_emails : [],
         cashlessInsurance: Boolean(formData.cashlessInsurance),
-        acceptedInsurances: formData.acceptedInsurances,
-        insuranceHelpline: formData.insuranceHelpline.trim(),
+        acceptedInsurances: Array.isArray(formData.acceptedInsurances) ? formData.acceptedInsurances : [],
+        insuranceHelpline: (formData.insuranceHelpline || '').trim(),
         tpaHelpdesk: {
-          phone: formData.tpaPhone.trim(),
-          email: formData.tpaEmail.trim(),
-          preAuthTime: formData.tpaPreAuthTime.trim()
+          phone: (formData.tpaPhone || '').trim(),
+          email: (formData.tpaEmail || '').trim(),
+          preAuthTime: (formData.tpaPreAuthTime || '').trim()
         },
-        instagram: formData.instagram.trim(),
-        facebook: formData.facebook.trim(),
-        reels: formData.reels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim()))),
-        youtube_videos: formData.youtube_videos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim())))
+        instagram: (formData.instagram || '').trim(),
+        facebook: (formData.facebook || '').trim(),
+        reels: Array.isArray(formData.reels) ? formData.reels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim()))) : [],
+        youtube_videos: Array.isArray(formData.youtube_videos) ? formData.youtube_videos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim()))) : [],
+        ...(cleanOverride || {})
       };
 
       if (isHospitalView) {
@@ -1298,7 +1604,26 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       }
 
       const targetHospId = hospital?._id || hospitalId || hospital?.id;
-      await updateHospital(targetHospId, payload);
+      const res = await updateHospital(targetHospId, payload);
+      if (res) {
+        isDirtyRef.current = false;
+        try {
+          const currentHospUser = JSON.parse(localStorage.getItem('hospital_user') || 'null');
+          if (currentHospUser) {
+            localStorage.setItem('hospital_user', JSON.stringify({ ...currentHospUser, ...res }));
+          }
+        } catch {}
+        setFormData(prev => ({
+          ...prev,
+          profileCompletion: res.profileCompletion !== undefined ? res.profileCompletion : prev.profileCompletion,
+          publicationStatus: res.publicationStatus || prev.publicationStatus,
+          status: res.status || prev.status,
+          phone: res.phone || prev.phone,
+          totalBeds: res.totalBeds !== undefined ? res.totalBeds : prev.totalBeds,
+          availableBeds: res.availableBeds !== undefined ? res.availableBeds : prev.availableBeds
+        }));
+      }
+
       triggerSaveSuccess(5000);
       if (typeof refreshHospitals === 'function') {
         refreshHospitals();
@@ -1392,7 +1717,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
             <button
               type="button"
               className={styles.saveBtn}
-              onClick={handleSaveAll}
+              onClick={() => handleSaveAll()}
               disabled={isSaving}
               title="Save all changes to backend database and sync frontend"
             >
@@ -1468,6 +1793,38 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     <MapPin size={12} />
                     {formData.city}
                   </span>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.02em',
+                    background: formData.publicationStatus === 'published' ? '#dcfce7' : formData.publicationStatus === 'pending_review' ? '#fef3c7' : '#f1f5f9',
+                    color: formData.publicationStatus === 'published' ? '#15803d' : formData.publicationStatus === 'pending_review' ? '#b45309' : '#475569',
+                    border: `1px solid ${formData.publicationStatus === 'published' ? '#86efac' : formData.publicationStatus === 'pending_review' ? '#fde68a' : '#cbd5e1'}`
+                  }}>
+                    {formData.publicationStatus === 'published' && '● Published'}
+                    {formData.publicationStatus === 'pending_review' && '⏳ In Review'}
+                    {formData.publicationStatus === 'draft' && '📝 Draft'}
+                    {formData.publicationStatus === 'suspended' && '🚫 Suspended'}
+                  </span>
+                  <span style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '3px 10px',
+                    borderRadius: '9999px',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    background: (formData.profileCompletion || 0) >= 80 ? '#ecfdf5' : (formData.profileCompletion || 0) >= 50 ? '#fffbeb' : '#fef2f2',
+                    color: (formData.profileCompletion || 0) >= 80 ? '#047857' : (formData.profileCompletion || 0) >= 50 ? '#b45309' : '#b91c1c',
+                    border: `1px solid ${(formData.profileCompletion || 0) >= 80 ? '#6ee7b7' : (formData.profileCompletion || 0) >= 50 ? '#fde68a' : '#fca5a5'}`
+                  }}>
+                    Profile: {formData.profileCompletion || 0}%
+                  </span>
                 </div>
 
                 <h2 className={styles.overviewTitle}>{formData.name}</h2>
@@ -1480,9 +1837,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <div className={styles.overviewMetaItem}>
                     <div className={styles.overviewRatingPill}>
                       <Star size={13} fill="#f59e0b" color="#f59e0b" />
-                      <strong>{formData.rating || 4.8}</strong>
+                      <strong>{reviewStats.avg}</strong>
                     </div>
-                    <span className={styles.overviewReviewsText}>{formData.reviews || '500+ Reviews'}</span>
+                    <span className={styles.overviewReviewsText}>{reviewStats.reviewsText}</span>
                   </div>
 
                   {formData.phone && (
@@ -1525,6 +1882,104 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 <div className={styles.occupancyFooter}>
                   <span><strong>{formData.availableBeds}</strong> Vacant Beds</span>
                   <span><strong>{formData.totalBeds}</strong> Total Capacity</span>
+                </div>
+              </div>
+
+              {/* Profile Completion & Publication Widget */}
+              <div style={{
+                marginTop: '10px',
+                padding: '10px 14px',
+                background: '#ffffff',
+                borderRadius: '10px',
+                border: '1px solid #e2e8f0',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>Profile Completion</span>
+                  <span style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    color: (formData.profileCompletion || 0) >= 80 ? '#16a34a' : (formData.profileCompletion || 0) >= 50 ? '#d97706' : '#dc2626'
+                  }}>
+                    {formData.profileCompletion || 0}%
+                  </span>
+                </div>
+                <div style={{ width: '100%', height: '7px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${Math.min(100, Math.max(0, formData.profileCompletion || 0))}%`,
+                    height: '100%',
+                    backgroundColor: (formData.profileCompletion || 0) >= 80 ? '#16a34a' : (formData.profileCompletion || 0) >= 50 ? '#f59e0b' : '#ef4444',
+                    transition: 'width 0.4s ease'
+                  }} />
+                </div>
+                <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                    {(formData.profileCompletion || 0) >= 80 ? '✓ Ready for Public Website' : 'Need ≥80% to be Public'}
+                  </span>
+                  {isHospitalView && formData.publicationStatus !== 'published' && (
+                    <button
+                      type="button"
+                      disabled={isRequestingPublication || (formData.profileCompletion || 0) < 80}
+                      onClick={async () => {
+                        setIsRequestingPublication(true);
+                        try {
+                          await handleSaveAll({ publicationStatus: 'pending_review' });
+                          alert('Your hospital profile has been submitted for review! Website administrators will verify and activate your public listing.');
+                        } catch (e) {
+                          alert(e.message || 'Failed to submit publication request.');
+                        } finally {
+                          setIsRequestingPublication(false);
+                        }
+                      }}
+                      style={{
+                        background: (formData.profileCompletion || 0) >= 80 ? '#2563eb' : '#cbd5e1',
+                        color: (formData.profileCompletion || 0) >= 80 ? '#ffffff' : '#64748b',
+                        border: 'none',
+                        padding: '4px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: (formData.profileCompletion || 0) >= 80 ? 'pointer' : 'not-allowed',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title={(formData.profileCompletion || 0) < 80 ? 'Complete at least 80% to submit for publication' : 'Submit profile for admin review and publication'}
+                    >
+                      {isRequestingPublication ? <Loader2 size={12} className={styles.spinIcon} /> : <CheckCircle2 size={12} />}
+                      <span>{isRequestingPublication ? 'Submitting...' : 'Request Publication'}</span>
+                    </button>
+                  )}
+                  {!isHospitalView && formData.publicationStatus === 'pending_review' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await handleSaveAll({ publicationStatus: 'published' });
+                          alert('Hospital approved and published successfully! It is now live on the public website.');
+                        } catch (e) {
+                          alert(e.message || 'Failed to publish hospital.');
+                        }
+                      }}
+                      style={{
+                        background: '#16a34a',
+                        color: '#ffffff',
+                        border: 'none',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}
+                      title="Approve and publish this hospital to the live website"
+                    >
+                      <CheckCircle2 size={12} />
+                      <span>Approve & Publish</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1847,6 +2302,44 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div className={styles.gridTwo} style={{ marginTop: '16px' }}>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>
+                    <Phone size={14} /> Hospital Contact Phone (10-digit Indian Mobile) *
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={10}
+                    className={`${styles.inputField} ${phoneError ? styles.inputError : ''}`}
+                    value={formData.phone}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      handleChange('phone', val);
+                      if (phoneError) setPhoneError('');
+                    }}
+                    placeholder="e.g. 9876543210"
+                  />
+                  {phoneError ? (
+                    <span style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '4px', display: 'block', fontWeight: 600 }}>{phoneError}</span>
+                  ) : (
+                    <span className={styles.helperText}>Indian mobile number (10 digits starting with 6-9)</span>
+                  )}
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    <Mail size={14} /> Official Hospital Email Address
+                  </label>
+                  <input
+                    type="email"
+                    className={styles.inputField}
+                    value={formData.email}
+                    onChange={(e) => handleChange('email', e.target.value)}
+                    placeholder="e.g. info@hospital.com"
+                  />
+                </div>
+              </div>
+
+              <div className={styles.gridTwo} style={{ marginTop: '16px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
                     <MapPin size={14} />
                     Latitude (For Live Directions & Route)
                   </label>
@@ -1898,7 +2391,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     min="1"
                     max="5"
                     className={styles.inputField}
-                    value={formData.rating}
+                    value={formData.rating ? formData.rating : ''}
+                    placeholder="e.g. 4.8"
                     onChange={(e) => handleChange('rating', e.target.value)}
                   />
                 </div>
@@ -1908,7 +2402,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.reviews}
+                    value={formData.reviews || ''}
                     onChange={(e) => handleChange('reviews', e.target.value)}
                     placeholder="e.g. 1,400+ Reviews"
                   />
@@ -1932,24 +2426,40 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
               <div className={styles.gridTwo}>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Total Hospital Beds</label>
+                  <label className={styles.formLabel}>Total Hospital Beds *</label>
                   <input
                     type="number"
-                    className={styles.inputField}
-                    value={formData.totalBeds}
-                    onChange={(e) => handleChange('totalBeds', e.target.value)}
+                    min="1"
+                    placeholder="e.g. 250"
+                    className={`${styles.inputField} ${bedError ? styles.inputError : ''}`}
+                    value={formData.totalBeds || ''}
+                    onChange={(e) => {
+                      handleChange('totalBeds', e.target.value);
+                      if (bedError) setBedError('');
+                    }}
                   />
+                  <span className={styles.helperText}>Total registered operational beds</span>
                 </div>
 
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Available / Vacant Beds</label>
+                  <label className={styles.formLabel}>Available / Vacant Beds *</label>
                   <input
                     type="number"
-                    className={styles.inputField}
-                    value={formData.availableBeds}
-                    onChange={(e) => handleChange('availableBeds', e.target.value)}
+                    min="0"
+                    max={formData.totalBeds || undefined}
+                    placeholder="e.g. 35"
+                    className={`${styles.inputField} ${bedError ? styles.inputError : ''}`}
+                    value={formData.availableBeds !== undefined && formData.availableBeds !== null && formData.availableBeds !== '' ? formData.availableBeds : ''}
+                    onChange={(e) => {
+                      handleChange('availableBeds', e.target.value);
+                      if (bedError) setBedError('');
+                    }}
                   />
-                  <span className={styles.helperText}>Live bed capacity displayed on hospital cards</span>
+                  {bedError ? (
+                    <span style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '4px', display: 'block', fontWeight: 600 }}>{bedError}</span>
+                  ) : (
+                    <span className={styles.helperText}>Must be non-negative and ≤ Total Beds ({formData.totalBeds || 0})</span>
+                  )}
                 </div>
               </div>
 
@@ -1984,6 +2494,52 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   </label>
                 </div>
               </div>
+
+              {!isHospitalView && (
+                <>
+                  <div style={{ marginTop: '18px', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b', display: 'block' }}>Public Listing Status</span>
+                      <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Controls whether this hospital appears on public search, map, and discovery</span>
+                    </div>
+                    <select
+                      className={styles.selectField}
+                      style={{ maxWidth: '200px', fontWeight: 600, padding: '8px 12px' }}
+                      value={formData.publicationStatus}
+                      onChange={(e) => handleChange('publicationStatus', e.target.value)}
+                    >
+                      <option value="draft">Draft (Private)</option>
+                      <option value="pending_review">Pending Review</option>
+                      <option value="published">Published (Public)</option>
+                      <option value="suspended">Suspended</option>
+                    </select>
+                  </div>
+
+                  <div style={{ marginTop: '12px', padding: '14px 16px', background: formData.showOnHome !== false ? '#f0fdf4' : '#f8fafc', borderRadius: '8px', border: `1px solid ${formData.showOnHome !== false ? '#bbf7d0' : '#e2e8f0'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: formData.showOnHome !== false ? '#15803d' : '#1e293b' }}>
+                          Home Page Running Marquee
+                        </span>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, padding: '2px 8px', borderRadius: '12px', background: '#e0e7ff', color: '#4338ca' }}>
+                          Admin Only
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                        Controls whether this hospital runs inside the "Top Partner Hospitals" carousel on the homepage
+                      </span>
+                    </div>
+                    <label className={styles.switch}>
+                      <input
+                        type="checkbox"
+                        checked={formData.showOnHome !== false}
+                        onChange={(e) => handleChange('showOnHome', e.target.checked)}
+                      />
+                      <span className={styles.slider} />
+                    </label>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Facility Description */}
@@ -2042,6 +2598,88 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     />
                   </div>
 
+                  {/* Device Photo Upload for Primary Campus Hero */}
+                  <div style={{ marginTop: '14px', padding: '14px', background: '#f8fafc', border: '1.5px dashed #cbd5e1', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                        Or Upload Primary Hero from Device:
+                      </span>
+                      {heroUploadSuccess && (
+                        <span style={{ fontSize: '0.78rem', color: '#16a34a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <CheckCircle2 size={13} /> Uploaded to Cloudinary!
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      id="heroPhotoInput"
+                      accept=".jpg,.jpeg,.png,.webp"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+                          alert('Invalid format. Please select a JPG, PNG, or WebP photo.');
+                          return;
+                        }
+                        if (file.size > 15 * 1024 * 1024) {
+                          alert('Photo size exceeds 15MB limit.');
+                          return;
+                        }
+                        try {
+                          setIsUploadingHero(true);
+                          const url = await api.uploadImage(file, 'sehatbuddy/hospitals');
+                          if (url) {
+                            handleChange('image', url);
+                            setHeroUploadSuccess(true);
+                            setTimeout(() => setHeroUploadSuccess(false), 4000);
+                          }
+                        } catch (err) {
+                          console.error('Failed to upload hero photo:', err);
+                          alert(err.message || 'Failed to upload photo. Please check internet connection.');
+                        } finally {
+                          setIsUploadingHero(false);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        disabled={isUploadingHero}
+                        onClick={() => document.getElementById('heroPhotoInput')?.click()}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '8px 16px',
+                          background: isUploadingHero ? '#94a3b8' : '#2563eb',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '7px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: isUploadingHero ? 'wait' : 'pointer'
+                        }}
+                      >
+                        {isUploadingHero ? (
+                          <>
+                            <Loader2 size={15} className={styles.spinAnimation} />
+                            <span>Uploading to Cloudinary...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={15} />
+                            <span>Select & Upload Photo</span>
+                          </>
+                        )}
+                      </button>
+                      <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        Supports JPG, PNG, WebP (max 15MB)
+                      </span>
+                    </div>
+                  </div>
+
                   <div style={{ marginTop: '16px' }}>
                     <label className={styles.formLabel}>Or Select from Presets:</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '8px' }}>
@@ -2069,7 +2707,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
                 <div>
                   <label className={styles.formLabel}>Hero Image Preview</label>
-                  <div style={{ width: '100%', height: '220px', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #cbd5e1', position: 'relative' }}>
+                  <div style={{ width: '100%', height: '240px', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #cbd5e1', position: 'relative' }}>
                     <img
                       src={formData.image}
                       alt="Hero Preview"
@@ -2100,70 +2738,198 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
               {/* Add New Photo Box */}
               <div className={styles.addBox}>
-                <div className={styles.addBoxHeader}>
-                  <Plus size={16} />
-                  <span>Add New Photo to Gallery</span>
-                </div>
-
-                <div className={styles.gridThree}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Image Direct URL *</label>
-                    <input
-                      type="text"
-                      className={styles.inputField}
-                      value={newPhotoUrl}
-                      onChange={(e) => setNewPhotoUrl(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                    />
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
+                  <div className={styles.addBoxHeader} style={{ marginBottom: 0 }}>
+                    <Plus size={16} />
+                    <span>Add New Photo to Showcase Gallery</span>
                   </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Photo Title / Description</label>
-                    <input
-                      type="text"
-                      className={styles.inputField}
-                      value={newPhotoTitle}
-                      onChange={(e) => setNewPhotoTitle(e.target.value)}
-                      placeholder="e.g. Critical Care ICU Unit"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.formLabel}>Category</label>
-                    <select
-                      className={styles.selectField}
-                      value={newPhotoCategory}
-                      onChange={(e) => setNewPhotoCategory(e.target.value)}
+                  <div style={{ display: 'flex', gap: '6px', background: '#e2e8f0', padding: '3px', borderRadius: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryUploadMode('file')}
+                      style={{
+                        border: 'none',
+                        background: galleryUploadMode === 'file' ? '#ffffff' : 'transparent',
+                        color: galleryUploadMode === 'file' ? '#2563eb' : '#64748b',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: galleryUploadMode === 'file' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                      }}
                     >
-                      {PHOTO_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
+                      Upload File from Device
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGalleryUploadMode('url')}
+                      style={{
+                        border: 'none',
+                        background: galleryUploadMode === 'url' ? '#ffffff' : 'transparent',
+                        color: galleryUploadMode === 'url' ? '#2563eb' : '#64748b',
+                        padding: '4px 12px',
+                        borderRadius: '6px',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        boxShadow: galleryUploadMode === 'url' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                      }}
+                    >
+                      Paste Image Direct URL
+                    </button>
                   </div>
                 </div>
 
-                <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
-                  <button
-                    type="button"
-                    onClick={handleAddPhoto}
-                    disabled={!newPhotoUrl.trim()}
-                    style={{
-                      background: '#2563eb',
-                      color: 'white',
-                      border: 'none',
-                      padding: '8px 18px',
-                      borderRadius: '8px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Plus size={15} />
-                    <span>Add to Showcase</span>
-                  </button>
-                </div>
+                {galleryUploadMode === 'file' ? (
+                  <div>
+                    <div className={styles.gridThree}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Select Device Photo *</label>
+                        <input
+                          type="file"
+                          accept=".jpg,.jpeg,.png,.webp"
+                          className={styles.inputField}
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (!f) return;
+                            if (!/\.(jpg|jpeg|png|webp)$/i.test(f.name)) {
+                              alert('Invalid format. Only JPG, PNG, and WebP are supported.');
+                              return;
+                            }
+                            if (f.size > 15 * 1024 * 1024) {
+                              alert('Photo exceeds 15MB limit.');
+                              return;
+                            }
+                            setGalleryFile(f);
+                            setGalleryFilePreview(URL.createObjectURL(f));
+                          }}
+                        />
+                        <span className={styles.helperText}>JPG, PNG, or WebP up to 15MB</span>
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Photo Title / Description</label>
+                        <input
+                          type="text"
+                          className={styles.inputField}
+                          value={newPhotoTitle}
+                          onChange={(e) => setNewPhotoTitle(e.target.value)}
+                          placeholder="e.g. Critical Care ICU Unit"
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Category</label>
+                        <select
+                          className={styles.selectField}
+                          value={newPhotoCategory}
+                          onChange={(e) => setNewPhotoCategory(e.target.value)}
+                        >
+                          {PHOTO_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {galleryFilePreview && (
+                      <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ width: '80px', height: '60px', borderRadius: '6px', overflow: 'hidden', border: '1px solid #cbd5e1' }}>
+                          <img src={galleryFilePreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </div>
+                        <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                          Ready to upload: <strong>{galleryFile?.name}</strong> ({(galleryFile?.size / (1024 * 1024)).toFixed(2)} MB)
+                        </span>
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={handleAddGalleryFile}
+                        disabled={!galleryFile || isUploadingGallery}
+                        style={{
+                          background: '#2563eb',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 18px',
+                          borderRadius: '8px',
+                          fontWeight: 600,
+                          cursor: (!galleryFile || isUploadingGallery) ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        {isUploadingGallery ? <Loader2 size={15} className={styles.spinAnimation} /> : <Upload size={15} />}
+                        <span>{isUploadingGallery ? 'Uploading to Cloudinary...' : 'Upload & Add to Showcase'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className={styles.gridThree}>
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Image Direct URL *</label>
+                        <input
+                          type="text"
+                          className={styles.inputField}
+                          value={newPhotoUrl}
+                          onChange={(e) => setNewPhotoUrl(e.target.value)}
+                          placeholder="https://images.unsplash.com/..."
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Photo Title / Description</label>
+                        <input
+                          type="text"
+                          className={styles.inputField}
+                          value={newPhotoTitle}
+                          onChange={(e) => setNewPhotoTitle(e.target.value)}
+                          placeholder="e.g. Critical Care ICU Unit"
+                        />
+                      </div>
+
+                      <div className={styles.formGroup}>
+                        <label className={styles.formLabel}>Category</label>
+                        <select
+                          className={styles.selectField}
+                          value={newPhotoCategory}
+                          onChange={(e) => setNewPhotoCategory(e.target.value)}
+                        >
+                          {PHOTO_CATEGORIES.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '14px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        onClick={handleAddPhoto}
+                        disabled={!newPhotoUrl.trim()}
+                        style={{
+                          background: '#2563eb',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 18px',
+                          borderRadius: '8px',
+                          fontWeight: 600,
+                          cursor: !newPhotoUrl.trim() ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}
+                      >
+                        <Plus size={15} />
+                        <span>Add to Showcase</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Gallery Grid */}
@@ -2179,14 +2945,41 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           e.target.src = 'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=800&q=80';
                         }}
                       />
-                      <button
-                        type="button"
-                        className={styles.photoDeleteBtn}
-                        onClick={() => handleRemovePhoto(idx)}
-                        title="Delete photo from gallery"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '6px' }}>
+                        <label
+                          title="Replace this photo with a device upload"
+                          style={{
+                            background: 'rgba(15, 23, 42, 0.75)',
+                            color: '#ffffff',
+                            padding: '6px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <Upload size={14} />
+                          <input
+                            type="file"
+                            accept=".jpg,.jpeg,.png,.webp"
+                            style={{ display: 'none' }}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) handleReplaceGalleryPhoto(idx, f);
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className={styles.photoDeleteBtn}
+                          style={{ position: 'static' }}
+                          onClick={() => handleRemovePhoto(idx)}
+                          title="Delete photo from gallery"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
                     </div>
 
                     <div className={styles.photoMeta}>
@@ -2235,6 +3028,11 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   </button>
                 </span>
               ))}
+              {formData.specialties.length === 0 && (
+                <span style={{ fontSize: '0.88rem', color: '#64748b', fontStyle: 'italic', padding: '6px 0' }}>
+                  No departments added yet. Select from the quick-add list below or type a custom specialty.
+                </span>
+              )}
             </div>
 
             {/* Add Custom Specialty Input */}
@@ -2519,7 +3317,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.insuranceHelpline}
+                    value={formData.insuranceHelpline || ''}
                     onChange={(e) => handleChange('insuranceHelpline', e.target.value)}
                     placeholder="e.g. 1800-SEHAT-CARE"
                   />
@@ -2530,7 +3328,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.tpaPhone}
+                    value={formData.tpaPhone || ''}
                     onChange={(e) => handleChange('tpaPhone', e.target.value)}
                     placeholder="e.g. +91 98765 43210"
                   />
@@ -2541,7 +3339,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.tpaPreAuthTime}
+                    value={formData.tpaPreAuthTime || ''}
                     onChange={(e) => handleChange('tpaPreAuthTime', e.target.value)}
                     placeholder="e.g. 30 Mins Cashless Pre-Approval"
                   />
@@ -2763,14 +3561,26 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
               <div className={styles.gridTwo}>
                 <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Hospital Helpdesk Phone</label>
+                  <label className={styles.formLabel}>
+                    <Phone size={14} /> Hospital Helpdesk Phone (10-digit Indian Mobile) *
+                  </label>
                   <input
-                    type="text"
-                    className={styles.inputField}
+                    type="tel"
+                    maxLength={10}
+                    className={`${styles.inputField} ${phoneError ? styles.inputError : ''}`}
                     value={formData.phone}
-                    onChange={(e) => handleChange('phone', e.target.value)}
-                    placeholder="e.g. +91 1800 102 3222"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      handleChange('phone', val);
+                      if (phoneError) setPhoneError('');
+                    }}
+                    placeholder="e.g. 9876543210"
                   />
+                  {phoneError ? (
+                    <span style={{ color: '#ef4444', fontSize: '0.82rem', marginTop: '4px', display: 'block', fontWeight: 600 }}>{phoneError}</span>
+                  ) : (
+                    <span className={styles.helperText}>Indian mobile number (10 digits starting with 6-9)</span>
+                  )}
                 </div>
 
                 <div className={styles.formGroup}>
@@ -2791,7 +3601,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.instagram}
+                    value={formData.instagram || ''}
                     onChange={(e) => handleChange('instagram', e.target.value)}
                     placeholder="e.g. https://instagram.com/manipalhospitals"
                   />
@@ -2802,7 +3612,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <input
                     type="text"
                     className={styles.inputField}
-                    value={formData.facebook}
+                    value={formData.facebook || ''}
                     onChange={(e) => handleChange('facebook', e.target.value)}
                     placeholder="e.g. https://facebook.com/manipalhospitals"
                   />
@@ -2837,7 +3647,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
                       type="button"
-                      onClick={handleSaveAll}
+                      onClick={() => handleSaveAll()}
                       disabled={isSaving}
                       style={{
                         background: '#16a34a',
@@ -3175,7 +3985,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                     <button
                       type="button"
-                      onClick={handleSaveAll}
+                      onClick={() => handleSaveAll()}
                       disabled={isSaving}
                       style={{
                         background: '#16a34a',
@@ -3408,7 +4218,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <button
                     type="button"
                     className={styles.saveBtn}
-                    onClick={handleSaveAll}
+                    onClick={() => handleSaveAll()}
                     disabled={isSaving}
                     style={{ padding: '10px 24px', fontSize: '0.94rem' }}
                   >

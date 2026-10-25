@@ -23,13 +23,31 @@ const hospitalSchema = new mongoose.Schema({
   description: { type: String },
   specialities: [{ type: String }],
   isVerified: { type: Boolean, default: false },
-  rating: { type: Number, default: 4.8 },
-  reviews: { type: String, default: '50+' },
-  totalBeds: { type: Number, default: 100 },
-  availableBeds: { type: Number, default: 24 },
-  emptyBeds: { type: Number, default: 24 },
-  emergency24x7: { type: Boolean, default: true },
-  establishedYear: { type: Number, default: 2000 },
+  profileCompletion: { type: Number, default: 0 },
+  publicationStatus: {
+    type: String,
+    enum: ['draft', 'pending_review', 'published', 'suspended'],
+    default: 'draft',
+    index: true
+  },
+  status: {
+    type: String,
+    enum: ['active', 'suspended', 'deactivated'],
+    default: 'active',
+    index: true
+  },
+  showOnHome: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
+  rating: { type: Number, default: 0 },
+  reviews: { type: String, default: '0 Reviews' },
+  totalBeds: { type: Number, default: 0 },
+  availableBeds: { type: Number, default: 0 },
+  emptyBeds: { type: Number, default: 0 },
+  emergency24x7: { type: Boolean, default: false },
+  establishedYear: { type: Number },
   instagram: { type: String, default: '' },
   facebook: { type: String, default: '' },
   reels: [mongoose.Schema.Types.Mixed],
@@ -46,17 +64,17 @@ const hospitalSchema = new mongoose.Schema({
     name: { type: String },
     email: { type: String, required: true }
   }],
-  cashlessInsurance: { type: Boolean, default: true },
+  cashlessInsurance: { type: Boolean, default: false },
   acceptedInsurances: [{ type: String }],
   tpaHelpdesk: {
     phone: { type: String, default: '' },
     email: { type: String, default: '' },
-    preAuthTime: { type: String, default: '30 Mins Cashless Pre-Approval' }
+    preAuthTime: { type: String, default: '' }
   },
-  insuranceHelpline: { type: String, default: '1800-SEHAT-CARE' },
+  insuranceHelpline: { type: String, default: '' },
   latitude: { type: Number },
   longitude: { type: Number },
-}, { timestamps: true });
+}, { timestamps: true, minimize: false, versionKey: false });
 
 hospitalSchema.pre('save', async function() {
   if (!this.isModified('password')) {
