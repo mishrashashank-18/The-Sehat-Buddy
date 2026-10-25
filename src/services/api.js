@@ -726,6 +726,18 @@ export const api = {
     return await handleResponse(res);
   },
 
+  // Avatars API
+  async getAvatars() {
+    try {
+      const res = await fetch(`${API_BASE}/avatars`);
+      const data = await handleResponse(res);
+      return data.data || [];
+    } catch (e) {
+      console.warn('Avatars fetch warning, using defaults:', e.message);
+      return [];
+    }
+  },
+
   // FAQs API
   async getFaqs(params = {}) {
     const qs = new URLSearchParams(params).toString();

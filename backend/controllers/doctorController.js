@@ -886,6 +886,8 @@ export const updateDoctorProfile = async (req, res) => {
         } else if (field === 'slotDuration') {
           const durNum = Number(req.body.slotDuration);
           doctor.slotDuration = !isNaN(durNum) ? durNum : (doctor.slotDuration || 20);
+        } else if (field === 'isStarDoctor') {
+          doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
         } else if (
           field !== 'awards' &&
           field !== 'certifications' &&
@@ -987,6 +989,30 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.available = true;
       doctor.markModified('available');
     }
+
+    // Compute Profile Completion Percentage (0-100%)
+    let pct = 0;
+    if (isRahul) {
+      pct = 100;
+    } else {
+      if (doctor.name && String(doctor.name).trim().length >= 2) pct += 10;
+      if (doctor.email && String(doctor.email).includes('@')) pct += 10;
+      const ph = String(doctor.phone || doctor.contact_number || '').replace(/\D/g, '');
+      if (ph.length >= 10) pct += 10;
+      if ((doctor.specialty || doctor.specialization) && String(doctor.specialty || doctor.specialization).trim().length >= 3) pct += 10;
+      if (doctor.hospital && String(doctor.hospital).trim().length >= 2) pct += 10;
+      if (doctor.licenseNumber && String(doctor.licenseNumber).trim().length >= 3) pct += 15;
+      if ((doctor.degree || doctor.qualifications) && String(doctor.degree || doctor.qualifications).trim().length >= 2) pct += 10;
+      if (doctor.about && String(doctor.about).trim().length >= 20) pct += 10;
+      if (doctor.image && String(doctor.image).trim().length > 0) pct += 10;
+      const hasSched = Boolean(doctor.availableDays || (Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0) || (Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0));
+      if (hasSched) pct += 5;
+    }
+
+    doctor.profileCompletion = Math.min(100, pct);
+    doctor.isProfileComplete = pct >= 80;
+    doctor.markModified('profileCompletion');
+    doctor.markModified('isProfileComplete');
 
     let updated;
     try {

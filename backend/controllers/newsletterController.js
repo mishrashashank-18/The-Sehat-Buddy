@@ -130,22 +130,19 @@ export const subscribeNewsletter = async (req, res) => {
 
     const emailText = `Hello,\n\nThank you for subscribing to The Sehat Buddy Health Newsletter!\n\nYou're on our priority list for verified doctor insights, hospital packages, and preventive health tips.\n\nBest regards,\nThe Sehat Buddy Team\nSupport: thesehatbuddy@gmail.com`;
 
-    // Send confirmation email via Brevo
-    try {
-      await sendEmail({
-        email: cleanEmail,
-        subject: emailSubject,
-        message: emailText,
-        html: emailHtml
-      });
-
+    // Send confirmation email via Brevo asynchronously in background
+    sendEmail({
+      email: cleanEmail,
+      subject: emailSubject,
+      message: emailText,
+      html: emailHtml
+    }).then(async () => {
       subscriber.welcomeEmailSent = true;
       subscriber.welcomeEmailSentAt = new Date();
-      await subscriber.save();
-    } catch (emailErr) {
+      await subscriber.save().catch(() => {});
+    }).catch(emailErr => {
       console.error('Failed to send Brevo welcome email:', emailErr.message);
-      // Even if email delivery fails, subscriber is stored in DB
-    }
+    });
 
     try {
       broadcastDbChange('subscribers', isNewSubscriber ? 'insert' : 'update', subscriber._id, subscriber);

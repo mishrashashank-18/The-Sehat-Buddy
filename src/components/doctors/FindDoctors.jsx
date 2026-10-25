@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '../../context/useData';
 import Container from '../layout/Container';
 import DoctorCard from './DoctorCard';
+import { isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
 import styles from './FindDoctors.module.css';
 
 const FindDoctors = ({ onNavigate }) => {
@@ -46,11 +47,11 @@ const FindDoctors = ({ onNavigate }) => {
     return name.includes('rahul') || email.includes('rahul') || id === '1' || id === '6ac270f38586bcec9f96207f';
   };
 
-  // Get unique specialties for the dropdown
+  // Get unique specialties for the dropdown (only from active doctors with >=80% profile completion)
   const uniqueSpecialties = useMemo(() => {
     return Array.from(new Set(
       doctors
-        .filter(d => d.available !== false || isProtectedDoctor(d))
+        .filter(d => (d.available !== false || isProtectedDoctor(d)) && (isProtectedDoctor(d) || isDoctorProfileEligibleForListing(d)))
         .map(d => d.specialty || d.specialization)
         .filter(Boolean)
     ));
@@ -61,6 +62,11 @@ const FindDoctors = ({ onNavigate }) => {
     return doctors.filter(doc => {
       // Only filter out doctors explicitly de-listed by admin, never core doctor Dr. Rahul Verma
       if (!isProtectedDoctor(doc) && doc.available === false) return false;
+      
+      // Strict rule: Doctor must have completed 80-100% of profile in doctor dashboard to be listed
+      if (!isProtectedDoctor(doc) && !isDoctorProfileEligibleForListing(doc)) {
+        return false;
+      }
       
       // Keyword match (name, specialty, degree, about, or treatments)
       if (searchName) {

@@ -4,10 +4,11 @@ import {
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
-  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2
+  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2, AlertTriangle
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
+import { isDoctorProfileEligibleForListing, getDoctorProfileCompletionDetails } from '../../utils/doctorProfileCompletion';
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import ReviewFormModal from '../admin/ReviewFormModal';
@@ -679,7 +680,21 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       }
     };
     window.addEventListener('sehat_db_change', handleDbChange);
-    return () => window.removeEventListener('sehat_db_change', handleDbChange);
+    const handleDoctorsUpdated = (e) => {
+      const updatedDocs = e.detail;
+      if (Array.isArray(updatedDocs)) {
+        const matching = updatedDocs.find(d => matchesId(d, doctorId));
+        if (matching) {
+          syncDoctorLocally?.(matching);
+        }
+      }
+    };
+    window.addEventListener('sehat_doctors_updated', handleDoctorsUpdated);
+
+    return () => {
+      window.removeEventListener('sehat_db_change', handleDbChange);
+      window.removeEventListener('sehat_doctors_updated', handleDoctorsUpdated);
+    };
   }, [doctorId, syncDoctorLocally]);
 
   // Restore scroll position on refresh
@@ -1274,7 +1289,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     }
   };
 
-  // Generate procedure / qualification tags matching the design
+  // Generate procedure / qualification tags (strictly user-configured)
   const getDoctorTags = (doc) => {
     if (!doc) return [];
     if (Array.isArray(doc?.tags) && doc.tags.length > 0) {
@@ -1285,27 +1300,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       const parts = (doc.degree || doc.qualifications).split(/[,/]+/).map(s => s.trim()).filter(Boolean);
       list.push(...parts);
     }
-    const spec = (doc?.specialty || doc?.specialization || '').toLowerCase();
-    if (spec.includes('dent') || spec.includes('paedo')) {
-      list.push('BDS', 'MDS - Paedodontics', 'Implantologist', 'Pediatric Dentist', 'Cosmetic/Aesthetic Dentist', 'Preventive Dentistry', 'Dental Surgeon');
-    } else if (spec.includes('cardio')) {
-      list.push('Interventional Cardiologist', 'Angioplasty Specialist', 'Echocardiography', 'Heart Failure Care', 'Preventive Cardiology', 'Chest Pain Specialist');
-    } else if (spec.includes('derma')) {
-      list.push('Clinical Dermatology', 'Cosmetic/Aesthetic Specialist', 'Laser Therapeutics', 'Trichology', 'Cutaneous Surgeon', 'Acne & Skin Care');
-    } else if (spec.includes('ortho')) {
-      list.push('Joint Replacement', 'Arthroscopy Specialist', 'Robotic Knee Surgery', 'Sports Medicine', 'Trauma Surgeon', 'Spine Rehabilitation');
-    } else if (spec.includes('pedia')) {
-      list.push('Pediatric Intensive Care', 'Neonatology', 'Child Growth & Development', 'Vaccination Specialist', 'Pediatric Allergy Care');
-    } else if (spec.includes('gyne') || spec.includes('obs')) {
-      list.push('High-Risk Obstetrics', 'Laparoscopic Surgeon', 'Infertility Specialist', 'Women Hormonal Health', 'Maternal Fetal Care');
-    } else if (spec.includes('neuro')) {
-      list.push('Stroke Rehabilitation', 'Neurocritical Care', 'Electrophysiology', 'Headache & Migraine Specialist', 'Epilepsy Care');
-    } else if (spec.includes('uro')) {
-      list.push('Robotic Urological Surgery', 'Kidney Stone Specialist', 'Endourology', 'Renal Transplant', 'Prostate Care');
-    } else {
-      list.push('Consultant Physician', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Health Wellness');
-    }
-    return Array.from(new Set(list)).slice(0, 7);
+    return Array.from(new Set(list));
   };
 
   const doctorTags = React.useMemo(() => {
@@ -1369,15 +1364,95 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     return `${count} patient review${count === 1 ? '' : 's'}`;
   }, [doctorReviews.length]);
 
+  const isEligible = isDoctorProfileEligibleForListing(doctor);
+  const completionDetails = getDoctorProfileCompletionDetails(doctor);
+
+  const isViewerAuthorized = React.useMemo(() => {
+    try {
+      if (localStorage.getItem('admin_logged_in') === 'true') return true;
+      const docUserStr = localStorage.getItem('doctor_user') || localStorage.getItem('user');
+      if (docUserStr) {
+        const u = JSON.parse(docUserStr);
+        if (doctor && (matchesId(u, doctor) || (u.email && doctor.email && u.email.toLowerCase().trim() === doctor.email.toLowerCase().trim()))) {
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  }, [doctor]);
+
   if (!doctor) {
     return (
       <div className={styles.pageWrapper}>
         <Container>
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <h2>Doctor Not Found</h2>
-            <button onClick={() => onNavigate('find-doctors')} className={styles.backBtn}>
+            <button onClick={() => onNavigate ? onNavigate('find-doctors') : window.location.href = '/find-doctors'} className={styles.backBtn}>
               Back to Doctors
             </button>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  // If doctor's profile is incomplete (< 80%) and viewer is a regular patient/guest:
+  if (!isEligible && !isViewerAuthorized) {
+    return (
+      <div className={styles.pageWrapper}>
+        <Container>
+          <button onClick={() => window.history.back()} className={styles.backBtn} style={{ marginBottom: '24px' }}>
+            <ArrowLeft size={18} /> Back
+          </button>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '18px',
+            border: '1px solid #e2e8f0',
+            padding: '60px 24px',
+            textAlign: 'center',
+            maxWidth: '640px',
+            margin: '0 auto 60px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.04)'
+          }}>
+            <div style={{
+              width: '68px',
+              height: '68px',
+              borderRadius: '50%',
+              background: '#fef3c7',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 20px',
+              boxShadow: '0 4px 12px rgba(217, 119, 6, 0.15)'
+            }}>
+              <ShieldCheck size={36} />
+            </div>
+            <h2 style={{ fontSize: '1.5rem', color: '#0f172a', fontWeight: 800, marginBottom: '12px' }}>
+              Doctor Profile Under Verification
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.98rem', lineHeight: '1.6', marginBottom: '28px' }}>
+              Dr. {doctor.name}&apos;s profile is currently undergoing verification and credential setup.
+              To uphold clinical standards and patient trust, doctors only become publicly available for appointments once their profile reaches at least 80% completion.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => onNavigate ? onNavigate('find-doctors') : window.location.href = '/find-doctors'}
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '10px',
+                  fontWeight: 600,
+                  fontSize: '0.92rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(37,99,235,0.25)'
+                }}
+              >
+                Find Other Verified Doctors
+              </button>
+            </div>
           </div>
         </Container>
       </div>
@@ -1391,6 +1466,76 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         <button onClick={() => window.history.back()} className={styles.backBtn}>
           <ArrowLeft size={18} /> Back
         </button>
+
+        {/* Private Preview Banner for Doctor/Admin if Profile < 80% */}
+        {!isEligible && isViewerAuthorized && (
+          <div style={{
+            background: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            borderRadius: '14px',
+            padding: '16px 20px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '16px',
+            flexWrap: 'wrap',
+            boxShadow: '0 2px 8px rgba(217,119,6,0.06)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                background: '#fef3c7',
+                color: '#b45309',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <AlertTriangle size={22} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 800, color: '#92400e', fontSize: '0.98rem' }}>
+                    Profile Incomplete ({completionDetails.percentage}% / 80% Required)
+                  </span>
+                  <span style={{
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    background: '#fef3c7',
+                    color: '#b45309',
+                    border: '1px solid #fcd34d',
+                    padding: '2px 8px',
+                    borderRadius: '6px'
+                  }}>
+                    Private Preview Mode
+                  </span>
+                </div>
+                <div style={{ color: '#b45309', fontSize: '0.85rem', marginTop: '2px' }}>
+                  This doctor profile is NOT listed on Find Doctors yet. Complete {80 - completionDetails.percentage}% more of your profile in the Doctor Dashboard to publish it publicly in real-time.
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => onNavigate ? onNavigate('doctor-dashboard') : window.location.href = '/doctor'}
+              style={{
+                padding: '9px 18px',
+                background: '#d97706',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontWeight: 700,
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(217,119,6,0.2)'
+              }}
+            >
+              Open Doctor Dashboard
+            </button>
+          </div>
+        )}
 
         {/* UNIFIED DOCTOR MASTER CARD: Merges Doctor Profile, Highlights, About & Booking into One Cohesive Card */}
         <div className={styles.unifiedDoctorCard}>
@@ -1407,14 +1552,34 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             <div className={styles.heroTopRow} ref={heroTopRowRef}>
               <div className={styles.heroAvatarCol}>
                 <div className={styles.heroAvatarWrap}>
-                  <img 
-                    src={doctor.image} 
-                    alt={doctor.name}
-                    className={styles.heroAvatarImg}
-                    onError={(e) => {
-                      e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
-                    }} 
-                  />
+                  {doctor.image ? (
+                    <img 
+                      src={doctor.image} 
+                      alt={doctor.name}
+                      className={styles.heroAvatarImg}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        const fallback = e.target.nextElementSibling;
+                        if (fallback) fallback.style.display = 'flex';
+                      }} 
+                    />
+                  ) : null}
+                  <div 
+                    className={styles.heroAvatarPlaceholder}
+                    style={{
+                      display: doctor.image ? 'none' : 'flex',
+                      width: '100%',
+                      height: '100%',
+                      minHeight: '140px',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)',
+                      color: '#0284c7',
+                      borderRadius: '16px'
+                    }}
+                  >
+                    <Stethoscope size={48} strokeWidth={1.7} />
+                  </div>
                 </div>
 
                 {/* Social Profile Icons Below Doctor Photo */}
@@ -1497,9 +1662,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
                 </div>
 
-                <div className={styles.heroJobTitle}>
-                  {doctor.jobTitle || 'Senior consultant'}
-                </div>
+                {doctor.jobTitle && (
+                  <div className={styles.heroJobTitle}>
+                    {doctor.jobTitle}
+                  </div>
+                )}
 
                 <div className={styles.heroSpecialtyRow}>
                   <span className={styles.heroSpecialtyPill}>
@@ -1512,11 +1679,13 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 </div>
 
                 {/* Tags / Degrees / Clinical Focus */}
-                <div className={styles.heroTagsWrap}>
-                  {doctorTags.map((tag, idx) => (
-                    <span key={`${tag}-${idx}`} className={styles.heroTagPill}>{tag}</span>
-                  ))}
-                </div>
+                {doctorTags.length > 0 && (
+                  <div className={styles.heroTagsWrap}>
+                    {doctorTags.map((tag, idx) => (
+                      <span key={`${tag}-${idx}`} className={styles.heroTagPill}>{tag}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1541,7 +1710,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 <div>
                   <span className={styles.heroHighlightLabel}>Hospital</span>
                   <strong className={styles.heroHighlightVal}>
-                    {doctor.hospital || 'Apollo Hospital & Heart Center'}
+                    {doctor.hospital || 'Private Practice'}
                   </strong>
                 </div>
               </div>
@@ -1554,9 +1723,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   <span className={styles.heroHighlightLabel}>Registration</span>
                   <div className={styles.heroRegValWrap}>
                     <strong className={styles.heroHighlightVal}>
-                      {doctor.licenseNumber || `DMC-2009-${String(doctor.id || doctor._id || '44182').slice(-5).toUpperCase()}`}
+                      {doctor.licenseNumber || 'Pending Verification'}
                     </strong>
-                    <span className={styles.heroRegVerifiedTag}>Verified</span>
+                    {doctor.licenseNumber && (
+                      <span className={styles.heroRegVerifiedTag}>Verified</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1622,8 +1793,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
                   <div className={styles.aboutMetaContent}>
                     <span className={styles.aboutMetaLabel}>Qualifications</span>
-                    <span className={styles.aboutMetaValue} title={doctor.degree || doctor.qualifications || 'MBBS, MD'}>
-                      {doctor.degree || doctor.qualifications || 'MBBS, MD'}
+                    <span className={styles.aboutMetaValue} title={doctor.degree || doctor.qualifications || 'Not Specified'}>
+                      {doctor.degree || doctor.qualifications || 'Not Specified'}
                     </span>
                   </div>
                 </div>

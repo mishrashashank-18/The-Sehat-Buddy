@@ -340,18 +340,16 @@ export const bookAppointment = async (req, res) => {
       date: Date.now()
     });
 
-    // Send confirmation email if email available
+    // Send confirmation email asynchronously without blocking booking response
     if (clientEmail) {
-      try {
-        await sendEmail({
-          email: clientEmail,
-          subject: 'Appointment Booked Successfully - The Sehat Buddy',
-          message: `Your appointment with Dr. ${doctor.name} is confirmed for ${slotDate} at ${slotTime}.`,
-          html: `<h4>Hello ${clientName},</h4><p>Your appointment with Dr. ${doctor.name} (${doctor.specialization || 'Specialist'}) is confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Hospital / Clinic: ${doctor.hospital || 'Apollo Hospital'}</p>`
-        });
-      } catch (err) {
+      sendEmail({
+        email: clientEmail,
+        subject: 'Appointment Booked Successfully - The Sehat Buddy',
+        message: `Your appointment with Dr. ${doctor.name} is confirmed for ${slotDate} at ${slotTime}.`,
+        html: `<h4>Hello ${clientName},</h4><p>Your appointment with Dr. ${doctor.name} (${doctor.specialization || 'Specialist'}) is confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Hospital / Clinic: ${doctor.hospital || 'Apollo Hospital'}</p>`
+      }).catch(err => {
         console.log('Error sending email notification:', err.message);
-      }
+      });
     }
 
     // Real-time notification broadcast to all dashboards (doctor, user, admin)
@@ -462,16 +460,14 @@ export const bookHospitalAppointment = async (req, res) => {
     });
 
     if (clientEmail) {
-      try {
-        await sendEmail({
-          email: clientEmail,
-          subject: `Appointment Booked Successfully - ${hospitalName}`,
-          message: `Your visit at ${hospitalName} is confirmed for ${slotDate} at ${slotTime} (${department || 'General OPD'}).`,
-          html: `<h4>Hello ${clientName},</h4><p>Your appointment at <strong>${hospitalName}</strong> has been confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Department / Speciality: <strong>${department || 'General Medicine'}</strong></p><p>Consultation Type: <strong>${consultationType || 'Hospital OPD Visit'}</strong></p><p>Hospital Address: ${hospitalAddress}</p><p>We look forward to assisting you.</p>`
-        });
-      } catch (err) {
+      sendEmail({
+        email: clientEmail,
+        subject: `Appointment Booked Successfully - ${hospitalName}`,
+        message: `Your visit at ${hospitalName} is confirmed for ${slotDate} at ${slotTime} (${department || 'General OPD'}).`,
+        html: `<h4>Hello ${clientName},</h4><p>Your appointment at <strong>${hospitalName}</strong> has been confirmed for <strong>${slotDate} at ${slotTime}</strong>.</p><p>Department / Speciality: <strong>${department || 'General Medicine'}</strong></p><p>Consultation Type: <strong>${consultationType || 'Hospital OPD Visit'}</strong></p><p>Hospital Address: ${hospitalAddress}</p><p>We look forward to assisting you.</p>`
+      }).catch(err => {
         console.log('Error sending email notification:', err.message);
-      }
+      });
     }
 
     try {

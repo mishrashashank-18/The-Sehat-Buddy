@@ -378,35 +378,45 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     };
   }, []);
 
-  // In-flight guard for star doctor toggling to prevent double-clicks / racing requests (Ref-based to avoid unnecessary re-renders)
+  // In-flight guard and state tracking for star doctor toggling to prevent double-clicks, racing requests, and UI flickering
   const starTogglingRef = useRef(new Set());
+  const [togglingDoctorIds, setTogglingDoctorIds] = useState(new Set());
 
-  const handleToggleStarDoctor = async (doc, e) => {
+  const handleToggleStarDoctor = useCallback(async (doc, e) => {
     e?.preventDefault?.();
     e?.stopPropagation?.();
-    const docId = doc._id || doc.id;
+    const docId = String(doc._id || doc.id);
     if (!docId || starTogglingRef.current.has(docId)) return;
 
+    // Synchronously lock this doctor ID against rapid clicks
     starTogglingRef.current.add(docId);
-    const nextVal = !Boolean(doc.isStarDoctor);
+    setTogglingDoctorIds(prev => new Set(prev).add(docId));
 
-    // Provide immediate, crisp toast feedback so user gets instant confirmation without lag
-    showToast(
-      nextVal
-        ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
-        : `Removed ${doc.name} from Star Doctors.`,
-      'success',
-      3500
-    );
+    const nextVal = !Boolean(doc.isStarDoctor);
 
     try {
       await updateDoctor(docId, { isStarDoctor: nextVal });
+      showToast(
+        nextVal
+          ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
+          : `Removed ${doc.name} from Star Doctors.`,
+        'success',
+        3000
+      );
     } catch (err) {
       showToast(err.message || 'Failed to update star doctor status', 'error', 5000);
     } finally {
-      starTogglingRef.current.delete(docId);
+      // Small 250ms cooldown prevents rapid multi-click jitter while state settles
+      setTimeout(() => {
+        starTogglingRef.current.delete(docId);
+        setTogglingDoctorIds(prev => {
+          const next = new Set(prev);
+          next.delete(docId);
+          return next;
+        });
+      }, 250);
     }
-  };
+  }, [updateDoctor, showToast]);
 
   // Realtime Cloud Quota & Storage Stats (MongoDB, Cloudinary & Brevo)
   const [storageData, setStorageData] = useState(null);
@@ -534,7 +544,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     };
 
     window.addEventListener('focus', handleFocusSync);
-    window.addEventListener('sehat_doctors_updated', handleFocusSync);
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') handleFocusSync();
     };
@@ -542,7 +551,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
     return () => {
       window.removeEventListener('focus', handleFocusSync);
-      window.removeEventListener('sehat_doctors_updated', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [activeTab, refreshDoctors, refreshHospitals]);
@@ -1778,16 +1786,26 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               >
                                 <History size={14} /> History
                               </button>
-                              <button
-                                className={`${styles.starActionBtn} ${doc.isStarDoctor ? styles.starActionBtnActive : ''}`}
-                                onClick={(e) => handleToggleStarDoctor(doc, e)}
-                                title={doc.isStarDoctor ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
-                              >
-                                <span className={styles.starIconWrapper}>
-                                  <Star size={15} fill={doc.isStarDoctor ? "#F59E0B" : "none"} color={doc.isStarDoctor ? "#D97706" : "#64748B"} />
-                                </span>
-                                <span className={styles.starTextWrapper}>{doc.isStarDoctor ? "Starred" : "Star"}</span>
-                              </button>
+                              {(() => {
+                                const docKey = String(doc._id || doc.id);
+                                const isToggling = togglingDoctorIds.has(docKey);
+                                const isStarred = Boolean(doc.isStarDoctor);
+                                return (
+                                  <button
+                                    type="button"
+                                    className={`${styles.starActionBtn} ${isStarred ? styles.starActionBtnActive : ''} ${isToggling ? styles.starActionBtnToggling : ''}`}
+                                    onClick={(e) => handleToggleStarDoctor(doc, e)}
+                                    disabled={isToggling}
+                                    aria-busy={isToggling}
+                                    title={isStarred ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
+                                  >
+                                    <span className={styles.starIconWrapper}>
+                                      <Star size={15} fill={isStarred ? "#F59E0B" : "none"} color={isStarred ? "#D97706" : "#64748B"} />
+                                    </span>
+                                    <span className={styles.starTextWrapper}>{isStarred ? "Starred" : "Star"}</span>
+                                  </button>
+                                );
+                              })()}
                               <button
                                 className={styles.editActionBtn}
                                 onClick={() => handleOpenEditDoctor(doc)}

@@ -2,6 +2,7 @@ import React from 'react';
 import { Star } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { getDoctorVerifiedReviews, formatDoctorExperience } from './DoctorProfile';
+import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
 import styles from './DoctorCard.module.css';
 
 const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
@@ -41,11 +42,11 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
     <div className={styles.card} onClick={handleClick} style={{ cursor: 'pointer' }}>
       <div className={styles.imageWrapper}>
         <img
-          src={doctor.image}
+          src={doctor.image || DEFAULT_DOCTOR_AVATARS[0].localSrc}
           alt={doctor.name}
           className={styles.image}
           onError={(e) => {
-            e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+            e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
           }}
         />
       </div>

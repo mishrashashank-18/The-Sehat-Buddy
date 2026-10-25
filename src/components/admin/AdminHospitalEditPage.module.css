@@ -1029,6 +1029,13 @@ input:checked + .slider:before {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
+  user-select: none;
+}
+
+.starToggleBtn:disabled {
+  cursor: wait !important;
+  opacity: 0.85;
+  pointer-events: none !important;
 }
 
 .starToggleActive {

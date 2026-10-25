@@ -5,6 +5,7 @@ import {
   Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag 
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
 import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
 import doc3 from '../../assets/images/doctor-3.png';
@@ -95,10 +96,12 @@ const getSpecialtySuggestions = (specialty = '') => {
 };
 
 const PRESET_AVATARS = [
-  { label: 'Male Doctor 1', src: doc1 },
-  { label: 'Female Doctor 1', src: doc2 },
-  { label: 'Male Doctor 2', src: doc3 },
-  { label: 'Female Doctor 2', src: doc4 },
+  { label: 'Male Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[0].url, preview: DEFAULT_DOCTOR_AVATARS[0].localSrc, key: 'male_doctor' },
+  { label: 'Female Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].localSrc, key: 'female_doctor' },
+  { label: 'Male Doctor 1', src: doc1, preview: doc1, key: 'doc1' },
+  { label: 'Female Doctor 1', src: doc2, preview: doc2, key: 'doc2' },
+  { label: 'Male Doctor 2', src: doc3, preview: doc3, key: 'doc3' },
+  { label: 'Female Doctor 2', src: doc4, preview: doc4, key: 'doc4' },
 ];
 
 const SPECIALTY_OPTIONS = [
@@ -152,14 +155,16 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         price: doctorToEdit.price ?? doctorToEdit.fees ?? 500,
         rating: doctorToEdit.rating !== undefined ? doctorToEdit.rating : 0,
         reviews: doctorToEdit.reviews !== undefined ? doctorToEdit.reviews : '0',
-        degree: doctorToEdit.degree || doctorToEdit.qualifications || 'MBBS',
+        degree: doctorToEdit.degree || doctorToEdit.qualifications || '',
+        jobTitle: doctorToEdit.jobTitle || '',
+        licenseNumber: doctorToEdit.licenseNumber || '',
         phone: cleanPhone,
         email: doctorToEdit.email || '',
-        availableDays: doctorToEdit.availableDays || 'Mon - Sat (10:00 AM - 4:00 PM)',
+        availableDays: doctorToEdit.availableDays || '',
         about: doctorToEdit.about || '',
         available: doctorToEdit.available !== undefined ? doctorToEdit.available : true,
         isStarDoctor: Boolean(doctorToEdit.isStarDoctor),
-        image: doctorToEdit.image || doc1,
+        image: doctorToEdit.image || '',
         instagram: doctorToEdit.instagram || '',
         facebook: doctorToEdit.facebook || '',
         reels: Array.isArray(doctorToEdit.reels) ? [...doctorToEdit.reels, '', '', '', '', ''].slice(0, 5) : ['', '', '', '', ''],
@@ -169,9 +174,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         certifications: initialCerts,
         memberships: initialMems,
         careerExperience: initialTimeline,
-        tags: Array.isArray(doctorToEdit.tags) && doctorToEdit.tags.length > 0
-          ? doctorToEdit.tags.filter(Boolean)
-          : getDefaultDoctorTags(doctorToEdit)
+        tags: Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags.filter(Boolean) : []
       };
     }
     return {
@@ -179,18 +182,20 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       specialty: 'Cardiologist',
       customSpecialty: '',
       hospital: hospitals[0]?.name || '',
-      experienceYears: 8,
-      price: 700,
+      experienceYears: 0,
+      price: 500,
       rating: 0,
       reviews: '0',
-      degree: 'MBBS, MD',
+      degree: '',
+      jobTitle: '',
+      licenseNumber: '',
       phone: '',
       email: '',
-      availableDays: 'Mon - Sat (10:00 AM - 4:00 PM)',
+      availableDays: '',
       about: '',
       available: true,
       isStarDoctor: false,
-      image: doc1,
+      image: '',
       instagram: '',
       facebook: '',
       reels: ['', '', '', '', ''],
@@ -200,7 +205,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       certifications: [],
       memberships: [],
       careerExperience: [],
-      tags: getDefaultDoctorTags({ specialty: 'Cardiologist', degree: 'MBBS, MD' })
+      tags: []
     };
   });
 
@@ -254,6 +259,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       if (remoteMemsChanged) next.memberships = doctorToEdit.memberships;
       if (remoteExpChanged) next.careerExperience = doctorToEdit.careerExperience;
       if (remoteTagsChanged) next.tags = Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags : [];
+      if (doctorToEdit.jobTitle !== undefined) next.jobTitle = doctorToEdit.jobTitle || '';
+      if (doctorToEdit.licenseNumber !== undefined) next.licenseNumber = doctorToEdit.licenseNumber || '';
       return next;
     });
 
@@ -755,6 +762,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
   const [imageType, setImageType] = useState(() => {
     if (doctorToEdit && typeof doctorToEdit.image === 'string' && doctorToEdit.image.startsWith('http')) {
+      if (DEFAULT_DOCTOR_AVATARS.some(a => a.url === doctorToEdit.image || doctorToEdit.image.includes(a.key))) {
+        return 'preset';
+      }
       return 'url';
     }
     return 'preset';
@@ -940,6 +950,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         reviews: doctorToEdit?.reviews !== undefined ? doctorToEdit.reviews : (formData.reviews || '0'),
         hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
         degree: formData.degree,
+        jobTitle: formData.jobTitle ? String(formData.jobTitle).trim() : '',
+        licenseNumber: formData.licenseNumber ? String(formData.licenseNumber).trim() : '',
         phone: formData.phone,
         email: formData.email.trim().toLowerCase(),
         availableDays: formData.availableDays,
@@ -1108,6 +1120,35 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             </div>
           </div>
 
+          {/* Job Title & License Number */}
+          <div className={styles.grid2}>
+            <div className={styles.formGroup}>
+              <label>Designation / Job Title</label>
+              <input
+                type="text"
+                placeholder="e.g. Senior Consultant Cardiologist"
+                value={formData.jobTitle || ''}
+                onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
+              />
+              <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px', display: 'block' }}>
+                Clinical designation displayed alongside doctor profile (e.g. Director & HOD).
+              </small>
+            </div>
+
+            <div className={styles.formGroup}>
+              <label>Medical Registration / License No.</label>
+              <input
+                type="text"
+                placeholder="e.g. DMC-2014-78219 or MCI-89412"
+                value={formData.licenseNumber || ''}
+                onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
+              />
+              <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '3px', display: 'block' }}>
+                Required for clinical verification badge and contributes 15% to profile completion.
+              </small>
+            </div>
+          </div>
+
           {/* Hospital Affiliation */}
           <div className={styles.formGroup}>
             <label>Affiliated Hospital</label>
@@ -1176,6 +1217,29 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           {/* Profile Avatar / Photo */}
           <div className={styles.sectionHeader}>Doctor Photo / Avatar</div>
           
+          {formData.image && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <img 
+                src={formData.image} 
+                alt="Current doctor photo" 
+                style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #00a896', flexShrink: 0 }}
+                onError={(e) => { e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc; }}
+              />
+              <div style={{ fontSize: '0.82rem', color: '#334155', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span style={{ fontWeight: 600, color: '#0f172a' }}>Active Photo: </span>
+                {DEFAULT_DOCTOR_AVATARS.find(a => a.url === formData.image)?.label || (formData.image.startsWith('data:') ? 'Custom Uploaded Image' : 'Selected Avatar')}
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setFormData({ ...formData, image: '' })}
+                style={{ fontSize: '0.75rem', background: '#fee2e2', color: '#ef4444', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                title="Remove photo"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
           <div className={styles.avatarSelectionTabs}>
             <button
               type="button"
@@ -1202,16 +1266,22 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
           {imageType === 'preset' && (
             <div className={styles.presetGrid}>
-              {PRESET_AVATARS.map((preset, idx) => (
-                <div
-                  key={idx}
-                  className={`${styles.presetItem} ${formData.image === preset.src ? styles.presetSelected : ''}`}
-                  onClick={() => setFormData({ ...formData, image: preset.src })}
-                >
-                  <img src={preset.src} alt={preset.label} />
-                  <span>{preset.label}</span>
-                </div>
-              ))}
+              {PRESET_AVATARS.map((preset, idx) => {
+                const isSelected = formData.image === preset.src || 
+                  formData.image === preset.preview ||
+                  (preset.key && String(formData.image || '').includes(preset.key));
+                return (
+                  <div
+                    key={idx}
+                    className={`${styles.presetItem} ${isSelected ? styles.presetSelected : ''}`}
+                    onClick={() => setFormData({ ...formData, image: preset.src })}
+                    title={`Select ${preset.label}`}
+                  >
+                    <img src={preset.preview || preset.src} alt={preset.label} />
+                    <span>{preset.label}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
 

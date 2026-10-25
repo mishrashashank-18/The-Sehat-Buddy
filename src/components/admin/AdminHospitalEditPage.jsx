@@ -328,6 +328,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   // Direct Media Upload State
   const [uploadingMediaKey, setUploadingMediaKey] = useState(null);
   const [reelUploadProgress, setReelUploadProgress] = useState({});
+  const [togglingDoctorIds, setTogglingDoctorIds] = useState(new Set());
+  const starTogglingRef = useRef(new Set());
 
   // Patient Bookings & Visits Management State
   const [appointments, setAppointments] = useState([]);
@@ -817,18 +819,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setSaveSuccess(false);
   };
 
-  // Star Doctors toggle with immediate auto-persist across dashboards & public profile
+  // Star Doctors toggle with immediate auto-persist across dashboards & public profile (with lock guard & rollback on error)
   const handleToggleStarDoctor = async (docOrId) => {
     const docObj = (typeof docOrId === 'object' && docOrId !== null)
       ? docOrId
       : ((doctors || []).find(d => matchesId(d, docOrId)) || { id: docOrId, _id: docOrId });
 
     const canonicalId = getDoctorCanonicalId(docObj) || String(docOrId);
-    const isSelected = isDoctorInStarList(docObj, formData.star_doctors);
+    if (!canonicalId || starTogglingRef.current.has(canonicalId)) return;
 
+    starTogglingRef.current.add(canonicalId);
+    setTogglingDoctorIds(prev => new Set(prev).add(canonicalId));
+
+    const isSelected = isDoctorInStarList(docObj, formData.star_doctors);
+    const prevList = formData.star_doctors || [];
     const nextList = isSelected
-      ? formData.star_doctors.filter(sd => !isDoctorInStarList(docObj, [sd]))
-      : [...formData.star_doctors.filter(sd => !isDoctorInStarList(docObj, [sd])), canonicalId];
+      ? prevList.filter(sd => !isDoctorInStarList(docObj, [sd]))
+      : [...prevList.filter(sd => !isDoctorInStarList(docObj, [sd])), canonicalId];
 
     setFormData(prev => ({
       ...prev,
@@ -846,8 +853,30 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         });
         triggerSaveSuccess(3500);
       } catch (err) {
-        console.warn('Auto-save star doctor failed:', err);
+        console.warn('Auto-save star doctor failed, rolling back:', err);
+        setFormData(prev => ({
+          ...prev,
+          star_doctors: prevList
+        }));
+      } finally {
+        setTimeout(() => {
+          starTogglingRef.current.delete(canonicalId);
+          setTogglingDoctorIds(prev => {
+            const next = new Set(prev);
+            next.delete(canonicalId);
+            return next;
+          });
+        }, 250);
       }
+    } else {
+      setTimeout(() => {
+        starTogglingRef.current.delete(canonicalId);
+        setTogglingDoctorIds(prev => {
+          const next = new Set(prev);
+          next.delete(canonicalId);
+          return next;
+        });
+      }, 250);
     }
   };
 
@@ -2381,15 +2410,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       </div>
 
                       <div className={styles.docCardActions}>
-                        <button
-                          type="button"
-                          className={`${styles.starToggleBtn} ${isSelected ? styles.starToggleActive : styles.starToggleInactive}`}
-                          onClick={() => handleToggleStarDoctor(doc)}
-                          title={isSelected ? 'Remove from Star Doctors' : 'Set as Star Doctor'}
-                        >
-                          <Sparkles size={13} fill={isSelected ? '#b45309' : 'none'} />
-                          <span>{isSelected ? '⭐ Star Doctor' : 'Set as Star'}</span>
-                        </button>
+                        {(() => {
+                          const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
+                          const isDocToggling = togglingDoctorIds.has(canonicalDocId);
+                          return (
+                            <button
+                              type="button"
+                              className={`${styles.starToggleBtn} ${isSelected ? styles.starToggleActive : styles.starToggleInactive}`}
+                              onClick={() => handleToggleStarDoctor(doc)}
+                              disabled={isDocToggling}
+                              aria-busy={isDocToggling}
+                              title={isSelected ? 'Remove from Star Doctors' : 'Set as Star Doctor'}
+                            >
+                              <Sparkles size={13} fill={isSelected ? '#b45309' : 'none'} />
+                              <span>{isSelected ? '⭐ Star Doctor' : 'Set as Star'}</span>
+                            </button>
+                          );
+                        })()}
 
                         <div className={styles.docBtnGroup}>
                           <button

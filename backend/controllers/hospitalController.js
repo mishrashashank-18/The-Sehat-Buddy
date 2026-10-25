@@ -527,61 +527,60 @@ export const registerHospital = async (req, res) => {
       const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
       const portalLoginUrl = `${clientUrl}/hospital`;
 
-      // Dispatch welcome credentials email via Brevo
-      try {
-        await sendEmail({
-          email: hospital.email,
-          subject: `Welcome to Sehat Buddy — ${hospital.name} Hospital Portal Credentials`,
-          message: `Hello ${hospital.name},\n\nYour hospital facility has been successfully registered on the Sehat Buddy healthcare platform.\n\nYou can access your Hospital Management Portal using the following credentials:\n\nPortal URL: ${portalLoginUrl}\nLogin Email: ${hospital.email}\nTemporary Password: ${temporaryPassword}\n\nPlease log in and update your profile, manage doctors, and change your password for security.\n\nWarm regards,\nThe Sehat Buddy Team`,
-          html: `
-            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-              <div style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
-                <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">The Sehat Buddy</h1>
-                <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">Hospital Partner Onboarding</p>
-              </div>
-              <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
-                <h2 style="margin: 0 0 16px; font-size: 20px; color: #0f172a;">Welcome, ${hospital.name}!</h2>
-                <p style="margin: 0 0 20px; font-size: 15px; color: #475569;">
-                  Your healthcare facility has been successfully onboarded on <strong>The Sehat Buddy</strong> network. You now have full access to your dedicated Hospital Management Portal.
-                </p>
-                
-                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin: 24px 0;">
-                  <h3 style="margin: 0 0 14px; font-size: 15px; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Your Portal Login Credentials</h3>
-                  <div style="margin-bottom: 10px;">
-                    <span style="font-size: 13px; color: #64748b; display: block;">Portal Login URL:</span>
-                    <a href="${portalLoginUrl}" style="font-size: 14px; color: #2563eb; font-weight: 600; text-decoration: none;">${portalLoginUrl}</a>
-                  </div>
-                  <div style="margin-bottom: 10px;">
-                    <span style="font-size: 13px; color: #64748b; display: block;">Official Email (Login ID):</span>
-                    <span style="font-size: 15px; color: #0f172a; font-weight: 600; font-family: monospace;">${hospital.email}</span>
-                  </div>
-                  <div>
-                    <span style="font-size: 13px; color: #64748b; display: block;">Temporary Password:</span>
-                    <span style="font-size: 16px; color: #dc2626; font-weight: 700; font-family: monospace; letter-spacing: 0.5px; background: #fee2e2; padding: 4px 10px; border-radius: 6px; display: inline-block;">${temporaryPassword}</span>
-                  </div>
+      // Dispatch welcome credentials email via Brevo in background
+      sendEmail({
+        email: hospital.email,
+        subject: `Welcome to Sehat Buddy — ${hospital.name} Hospital Portal Credentials`,
+        message: `Hello ${hospital.name},\n\nYour hospital facility has been successfully registered on the Sehat Buddy healthcare platform.\n\nYou can access your Hospital Management Portal using the following credentials:\n\nPortal URL: ${portalLoginUrl}\nLogin Email: ${hospital.email}\nTemporary Password: ${temporaryPassword}\n\nPlease log in and update your profile, manage doctors, and change your password for security.\n\nWarm regards,\nThe Sehat Buddy Team`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+            <div style="background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%); padding: 32px 24px; text-align: center; color: #ffffff;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">The Sehat Buddy</h1>
+              <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">Hospital Partner Onboarding</p>
+            </div>
+            <div style="padding: 32px 28px; color: #1e293b; line-height: 1.6;">
+              <h2 style="margin: 0 0 16px; font-size: 20px; color: #0f172a;">Welcome, ${hospital.name}!</h2>
+              <p style="margin: 0 0 20px; font-size: 15px; color: #475569;">
+                Your healthcare facility has been successfully onboarded on <strong>The Sehat Buddy</strong> network. You now have full access to your dedicated Hospital Management Portal.
+              </p>
+              
+              <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 20px; margin: 24px 0;">
+                <h3 style="margin: 0 0 14px; font-size: 15px; color: #1e293b; text-transform: uppercase; letter-spacing: 0.5px;">Your Portal Login Credentials</h3>
+                <div style="margin-bottom: 10px;">
+                  <span style="font-size: 13px; color: #64748b; display: block;">Portal Login URL:</span>
+                  <a href="${portalLoginUrl}" style="font-size: 14px; color: #2563eb; font-weight: 600; text-decoration: none;">${portalLoginUrl}</a>
                 </div>
-
-                <div style="text-align: center; margin: 30px 0;">
-                  <a href="${portalLoginUrl}" style="background: #2563eb; color: #ffffff; padding: 13px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);">
-                    Access Hospital Portal &rarr;
-                  </a>
+                <div style="margin-bottom: 10px;">
+                  <span style="font-size: 13px; color: #64748b; display: block;">Official Email (Login ID):</span>
+                  <span style="font-size: 15px; color: #0f172a; font-weight: 600; font-family: monospace;">${hospital.email}</span>
                 </div>
-
-                <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 28px; font-size: 13px; color: #64748b;">
-                  <p style="margin: 0 0 8px;"><strong>Security Tip:</strong> For your facility's safety, please log in and update your password under Hospital Profile settings.</p>
-                  <p style="margin: 0;">Need assistance? Contact our hospital partner support at <a href="mailto:thesehatbuddy@gmail.com" style="color: #2563eb;">thesehatbuddy@gmail.com</a>.</p>
+                <div>
+                  <span style="font-size: 13px; color: #64748b; display: block;">Temporary Password:</span>
+                  <span style="font-size: 16px; color: #dc2626; font-weight: 700; font-family: monospace; letter-spacing: 0.5px; background: #fee2e2; padding: 4px 10px; border-radius: 6px; display: inline-block;">${temporaryPassword}</span>
                 </div>
               </div>
-              <div style="background: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
-                &copy; ${new Date().getFullYear()} The Sehat Buddy Healthcare Platform. All rights reserved.
+
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${portalLoginUrl}" style="background: #2563eb; color: #ffffff; padding: 13px 28px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);">
+                  Access Hospital Portal &rarr;
+                </a>
+              </div>
+
+              <div style="border-top: 1px solid #e2e8f0; padding-top: 20px; margin-top: 28px; font-size: 13px; color: #64748b;">
+                <p style="margin: 0 0 8px;"><strong>Security Tip:</strong> For your facility's safety, please log in and update your password under Hospital Profile settings.</p>
+                <p style="margin: 0;">Need assistance? Contact our hospital partner support at <a href="mailto:thesehatbuddy@gmail.com" style="color: #2563eb;">thesehatbuddy@gmail.com</a>.</p>
               </div>
             </div>
-          `
-        });
+            <div style="background: #f1f5f9; padding: 16px 24px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0;">
+              &copy; ${new Date().getFullYear()} The Sehat Buddy Healthcare Platform. All rights reserved.
+            </div>
+          </div>
+        `
+      }).then(() => {
         console.log(`✓ Welcome email successfully dispatched to hospital: ${hospital.email}`);
-      } catch (emailErr) {
+      }).catch(emailErr => {
         console.error(`Failed to dispatch welcome email to ${hospital.email}:`, emailErr.message);
-      }
+      });
 
       res.status(201).json({
         success: true,

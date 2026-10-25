@@ -370,7 +370,10 @@ export const DataProvider = ({ children }) => {
         reviews: d.reviews !== undefined ? d.reviews : (existing?.reviews || '50+'),
         availabilityStatus: d.availabilityStatus || existing?.availabilityStatus || 'Available',
         experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
+        jobTitle: d.jobTitle !== undefined ? d.jobTitle : (existing?.jobTitle || ''),
         licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
+        profileCompletion: d.profileCompletion !== undefined ? Number(d.profileCompletion) : (existing?.profileCompletion || 0),
+        isProfileComplete: d.isProfileComplete !== undefined ? Boolean(d.isProfileComplete) : Boolean(existing?.isProfileComplete),
         awards: Array.isArray(d.awards) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
         certifications: Array.isArray(d.certifications) ? d.certifications : (Array.isArray(existing?.certifications) ? existing.certifications : []),
         memberships: Array.isArray(d.memberships) ? d.memberships : (Array.isArray(existing?.memberships) ? existing.memberships : []),
@@ -587,6 +590,9 @@ export const DataProvider = ({ children }) => {
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
+                    }
                   } catch {}
                   return updated;
                 });
@@ -653,6 +659,10 @@ export const DataProvider = ({ children }) => {
                         faqs: Array.isArray(docData.faqs) ? docData.faqs : (Array.isArray(d.faqs) ? d.faqs : []),
                         reels: Array.isArray(docData.reels) ? docData.reels : d.reels,
                         youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos,
+                        jobTitle: docData.jobTitle !== undefined ? docData.jobTitle : (d.jobTitle || ''),
+                        licenseNumber: docData.licenseNumber !== undefined ? docData.licenseNumber : (d.licenseNumber || ''),
+                        profileCompletion: docData.profileCompletion !== undefined ? Number(docData.profileCompletion) : d.profileCompletion,
+                        isProfileComplete: docData.isProfileComplete !== undefined ? Boolean(docData.isProfileComplete) : d.isProfileComplete,
                         isStarDoctor: docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor)
                       };
 
@@ -691,6 +701,8 @@ export const DataProvider = ({ children }) => {
                       faqs: Array.isArray(docData.faqs) ? docData.faqs : [],
                       phone: ph !== undefined ? ph : (docData.phone || docData.contact_number || ''),
                       contact_number: ph !== undefined ? ph : (docData.contact_number || docData.phone || ''),
+                      profileCompletion: docData.profileCompletion !== undefined ? Number(docData.profileCompletion) : 0,
+                      isProfileComplete: Boolean(docData.isProfileComplete),
                       isStarDoctor: Boolean(docData.isStarDoctor)
                     };
                     const updatedWithNew = [newEntry, ...prev];
@@ -704,6 +716,9 @@ export const DataProvider = ({ children }) => {
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
+                    }
                   } catch {}
                   return updated;
                 });
@@ -797,7 +812,12 @@ export const DataProvider = ({ children }) => {
       const { type, senderTabId, key, data } = event.data || {};
       if (type !== 'SEHAT_SYNC' || !data || senderTabId === CURRENT_TAB_ID) return;
 
-      if (key === STORAGE_KEY_DOCTORS && Array.isArray(data) && data.length > 0) setDoctors(prev => (isSame(prev, data) ? prev : data));
+      if (key === STORAGE_KEY_DOCTORS && Array.isArray(data) && data.length > 0) {
+        setDoctors(prev => (isSame(prev, data) ? prev : data));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: data }));
+        }
+      }
       else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data) && data.length > 0) setHospitals(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(prev => (isSame(prev, data) ? prev : data));
@@ -812,14 +832,19 @@ export const DataProvider = ({ children }) => {
     };
 
     if (broadcastChan) {
-      broadcastChan.onmessage = handleBroadcastMessage;
+      broadcastChan.addEventListener('message', handleBroadcastMessage);
     }
 
     const handleStorageEvent = (e) => {
       if (!e.key || !e.newValue) return;
       try {
         const parsed = JSON.parse(e.newValue);
-        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed) && parsed.length > 0) setDoctors(prev => (isSame(prev, parsed) ? prev : parsed));
+        if (e.key === STORAGE_KEY_DOCTORS && Array.isArray(parsed) && parsed.length > 0) {
+          setDoctors(prev => (isSame(prev, parsed) ? prev : parsed));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: parsed }));
+          }
+        }
         else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed) && parsed.length > 0) setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_BRANDING) setBranding(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_HERO) setHeroContent(prev => (isSame(prev, parsed) ? prev : parsed));
@@ -837,7 +862,7 @@ export const DataProvider = ({ children }) => {
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
-      if (broadcastChan) broadcastChan.onmessage = null;
+      if (broadcastChan) broadcastChan.removeEventListener('message', handleBroadcastMessage);
       window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);
@@ -967,6 +992,7 @@ export const DataProvider = ({ children }) => {
             memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
             careerExperience: updatedData.careerExperience !== undefined ? updatedData.careerExperience : doc.careerExperience,
             licenseNumber: updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : doc.licenseNumber,
+            jobTitle: updatedData.jobTitle !== undefined ? updatedData.jobTitle : (doc.jobTitle || ''),
             reels: updatedData.reels !== undefined ? updatedData.reels : doc.reels,
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : doc.youtube_videos,
             faqs: updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs,
@@ -980,6 +1006,8 @@ export const DataProvider = ({ children }) => {
             slots_booked: updatedData.slots_booked !== undefined ? updatedData.slots_booked : doc.slots_booked,
             image: updatedData.image !== undefined ? updatedData.image : doc.image,
             about: updatedData.about !== undefined ? updatedData.about : doc.about,
+            profileCompletion: updatedData.profileCompletion !== undefined ? Number(updatedData.profileCompletion) : doc.profileCompletion,
+            isProfileComplete: updatedData.isProfileComplete !== undefined ? Boolean(updatedData.isProfileComplete) : doc.isProfileComplete,
             isStarDoctor: updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor)
           };
           return mergedDoctor;
@@ -989,6 +1017,9 @@ export const DataProvider = ({ children }) => {
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
+        }
         const docUserStr = localStorage.getItem('doctor_user');
         if (docUserStr) {
           const docUser = JSON.parse(docUserStr);
@@ -1059,6 +1090,10 @@ export const DataProvider = ({ children }) => {
                 availableDays: res.availableDays ?? doc.availableDays,
                 image: res.image || doc.image,
                 about: res.about !== undefined ? res.about : doc.about,
+                jobTitle: res.jobTitle !== undefined ? res.jobTitle : (updatedData.jobTitle !== undefined ? updatedData.jobTitle : (doc.jobTitle || '')),
+                licenseNumber: res.licenseNumber !== undefined ? res.licenseNumber : (updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : (doc.licenseNumber || '')),
+                profileCompletion: res.profileCompletion !== undefined ? Number(res.profileCompletion) : (updatedData.profileCompletion !== undefined ? Number(updatedData.profileCompletion) : doc.profileCompletion),
+                isProfileComplete: res.isProfileComplete !== undefined ? Boolean(res.isProfileComplete) : (updatedData.isProfileComplete !== undefined ? Boolean(updatedData.isProfileComplete) : doc.isProfileComplete),
                 isStarDoctor: res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor))
               };
 
@@ -1082,6 +1117,9 @@ export const DataProvider = ({ children }) => {
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
             broadcastSync(STORAGE_KEY_DOCTORS, updated);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
+            }
             const docUserStr = localStorage.getItem('doctor_user');
             if (docUserStr) {
               const docUser = JSON.parse(docUserStr);
@@ -1095,7 +1133,20 @@ export const DataProvider = ({ children }) => {
         return res;
       }
     } catch (err) {
-      console.warn('Backend updateDoctor failed, local state retained:', err);
+      console.warn('Backend updateDoctor failed, rolling back local state:', err);
+      if (existingDoc) {
+        setDoctors(prev => {
+          const rolledBack = prev.map(doc => matchesId(doc, id) ? existingDoc : doc);
+          try {
+            localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(rolledBack));
+            broadcastSync(STORAGE_KEY_DOCTORS, rolledBack);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: rolledBack }));
+            }
+          } catch {}
+          return rolledBack;
+        });
+      }
       throw err;
     }
     return mergedDoctor;
@@ -1115,6 +1166,7 @@ export const DataProvider = ({ children }) => {
       const finalDocs = found ? updated : [...updated, freshDoc];
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(finalDocs));
+        broadcastSync(STORAGE_KEY_DOCTORS, finalDocs);
       } catch {}
       return finalDocs;
     });
@@ -1275,6 +1327,7 @@ export const DataProvider = ({ children }) => {
   const updateHospital = async (id, updatedData) => {
     let mergedHospital = null;
     let nextList = [];
+    const prevHospital = hospitals.find(h => matchesId(h, id));
     setHospitals(prev => {
       nextList = prev.map(hosp => {
         if (matchesId(hosp, id)) {
@@ -1352,7 +1405,17 @@ export const DataProvider = ({ children }) => {
       }
       return mergedHospital;
     } catch (err) {
-      console.error('Backend updateHospital failed:', err);
+      console.error('Backend updateHospital failed, rolling back local state:', err);
+      if (prevHospital) {
+        setHospitals(prev => {
+          const reverted = prev.map(h => matchesId(h, id) ? prevHospital : h);
+          try {
+            localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(reverted));
+            broadcastSync(STORAGE_KEY_HOSPITALS, reverted);
+          } catch {}
+          return reverted;
+        });
+      }
       throw err;
     }
   };

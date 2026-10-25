@@ -1111,9 +1111,10 @@
   flex-shrink: 0;
   user-select: none;
   overflow: hidden;
+  will-change: background-color, border-color;
 }
 
-.starActionBtn:hover {
+.starActionBtn:hover:not(:disabled) {
   background: #fefce8;
   border-color: #fde047;
   color: #ca8a04;
@@ -1125,10 +1126,26 @@
   color: #b45309;
 }
 
-.starActionBtnActive:hover {
+.starActionBtnActive:hover:not(:disabled) {
   background: #fde68a;
   border-color: #d97706;
   color: #92400e;
+}
+
+.starActionBtn:disabled,
+.starActionBtnToggling {
+  cursor: wait !important;
+  opacity: 0.82;
+  pointer-events: none !important;
+}
+
+.starActionBtn:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+}
+
+.starActionBtn:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .starIconWrapper {

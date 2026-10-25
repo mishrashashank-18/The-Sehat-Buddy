@@ -52,6 +52,8 @@ import { useData } from '../../context/useData';
 import { broadcastSync, matchesId } from '../../context/DataContext';
 import { api, API_BASE } from '../../services/api';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
+import { getDoctorProfileCompletionDetails, calculateDoctorProfileCompletion, isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
+import { DEFAULT_DOCTOR_AVATARS, isPresetAvatar } from '../../constants/doctorAvatars';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
 
@@ -593,6 +595,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     const initialDoc = (storedUser && (storedUser.name || storedUser._id || storedUser.id)) ? storedUser : activeDoctor;
     return initialDoc || {};
   });
+
+  // Real-time dynamic calculation of doctor profile completion percentage & eligibility (>= 80%)
+  const completionDetails = useMemo(() => {
+    return getDoctorProfileCompletionDetails({
+      ...activeDoctor,
+      ...profileForm
+    });
+  }, [activeDoctor, profileForm]);
   const [isSavingAbout, setIsSavingAbout] = useState(false);
   const [newTagInput, setNewTagInput] = useState('');
   const [newAwardInput, setNewAwardInput] = useState('');
@@ -1129,6 +1139,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         fees: activeDoctor.fees ?? activeDoctor.price ?? 500,
         experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : (activeDoctor.experience || 5),
         licenseNumber: activeDoctor.licenseNumber || '',
+        jobTitle: activeDoctor.jobTitle || '',
         hospital: activeDoctor.hospital || '',
         image: activeDoctor.image || '',
         about: activeDoctor.about || '',
@@ -1140,9 +1151,7 @@ const DoctorDashboard = ({ onNavigate }) => {
           const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
           return raw.length > 10 ? raw.slice(-10) : raw;
         })(),
-        tags: Array.isArray(activeDoctor.tags) && activeDoctor.tags.length > 0
-          ? activeDoctor.tags
-          : getDefaultDoctorTags(activeDoctor),
+        tags: Array.isArray(activeDoctor.tags) ? activeDoctor.tags : [],
         awards: Array.isArray(activeDoctor.awards) ? activeDoctor.awards : [],
         certifications: Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : [],
         memberships: Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : [],
@@ -2448,7 +2457,12 @@ const DoctorDashboard = ({ onNavigate }) => {
     try {
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/doctors');
       setProfileForm(prev => ({ ...prev, image: uploadedUrl }));
-      await updateDoctor(activeDoctor._id || activeDoctor.id, { image: uploadedUrl });
+      const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: uploadedUrl });
+      await updateDoctor(activeDoctor._id || activeDoctor.id, {
+        image: uploadedUrl,
+        profileCompletion: comp,
+        isProfileComplete: comp >= 80
+      });
       showToast('Profile photo uploaded and saved successfully!');
     } catch (err) {
       console.error('Failed to upload doctor photo:', err);
@@ -2456,7 +2470,12 @@ const DoctorDashboard = ({ onNavigate }) => {
       reader.onloadend = async () => {
         const localData = reader.result;
         setProfileForm(prev => ({ ...prev, image: localData }));
-        await updateDoctor(activeDoctor._id || activeDoctor.id, { image: localData });
+        const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: localData });
+        await updateDoctor(activeDoctor._id || activeDoctor.id, {
+          image: localData,
+          profileCompletion: comp,
+          isProfileComplete: comp >= 80
+        });
         showToast('Profile photo updated locally!');
       };
       reader.readAsDataURL(file);
@@ -2467,10 +2486,36 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Remove / Delete profile photo
   const handleRemovePhoto = async () => {
-    const defaultPlaceholder = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+    const defaultPlaceholder = '';
     setProfileForm(prev => ({ ...prev, image: defaultPlaceholder }));
-    await updateDoctor(activeDoctor._id || activeDoctor.id, { image: defaultPlaceholder });
+    const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: defaultPlaceholder });
+    await updateDoctor(activeDoctor._id || activeDoctor.id, {
+      image: defaultPlaceholder,
+      profileCompletion: comp,
+      isProfileComplete: comp >= 80
+    });
     showToast('Profile photo removed!');
+  };
+
+  // Select default avatar (Male or Female) when doctor does not want to upload a photo
+  const handleSelectDefaultAvatar = async (avatarUrl) => {
+    if (!avatarUrl || !activeDoctor) return;
+    setIsUploadingImage(true);
+    try {
+      setProfileForm(prev => ({ ...prev, image: avatarUrl }));
+      const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: avatarUrl });
+      await updateDoctor(activeDoctor._id || activeDoctor.id, {
+        image: avatarUrl,
+        profileCompletion: comp,
+        isProfileComplete: comp >= 80
+      });
+      showToast('Avatar selected and saved to your profile!');
+    } catch (err) {
+      console.error('Failed to select default avatar:', err);
+      showToast('Failed to save avatar');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   // Helper to verify if profile form has any unsaved modifications
@@ -2548,11 +2593,11 @@ const DoctorDashboard = ({ onNavigate }) => {
       fees: Number(profileForm.price ?? profileForm.fees) || 500,
       price: Number(profileForm.price ?? profileForm.fees) || 500,
       experience: parseInt(profileForm.experience, 10) || 0,
-      jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant',
+      jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : (activeDoctor.jobTitle || ''),
       licenseNumber: profileForm.licenseNumber || '',
       hospital: profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || ''),
-      degree: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || 'MBBS',
-      qualifications: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || 'MBBS',
+      degree: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
+      qualifications: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
       image: profileForm.image || activeDoctor.image || '',
       about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
       awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
@@ -2569,6 +2614,10 @@ const DoctorDashboard = ({ onNavigate }) => {
       dayWiseSlots: (profileForm.dayWiseSlots && typeof profileForm.dayWiseSlots === 'object') ? profileForm.dayWiseSlots : (activeDoctor.dayWiseSlots || {}),
       dateWiseSlots: (profileForm.dateWiseSlots && typeof profileForm.dateWiseSlots === 'object') ? profileForm.dateWiseSlots : (activeDoctor.dateWiseSlots || {})
     };
+
+    const compPercent = calculateDoctorProfileCompletion(payload);
+    payload.profileCompletion = compPercent;
+    payload.isProfileComplete = compPercent >= 80;
 
     await updateDoctor(docId, payload);
     isAboutDirtyRef.current = false;
@@ -2602,11 +2651,15 @@ const DoctorDashboard = ({ onNavigate }) => {
     try {
       const docId = activeDoctor._id || activeDoctor.id;
       const aboutText = profileForm.about || '';
+      const mergedAbout = { ...activeDoctor, ...profileForm, about: aboutText };
+      const compPercent = calculateDoctorProfileCompletion(mergedAbout);
       await updateDoctor(docId, {
         _id: activeDoctor._id,
         id: activeDoctor.id,
         email: activeDoctor.email,
-        about: aboutText
+        about: aboutText,
+        profileCompletion: compPercent,
+        isProfileComplete: compPercent >= 80
       });
       isAboutDirtyRef.current = false;
       isEditingAboutRef.current = false;
@@ -3388,7 +3441,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                 onError={(e) => {
-                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80';
+                  e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
                 }}
               />
               <label
@@ -3476,6 +3529,146 @@ const DoctorDashboard = ({ onNavigate }) => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Real-time Profile Completion Progress Bar & Public Listing Status Banner */}
+        <div style={{
+          background: completionDetails.isComplete ? 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)' : 'linear-gradient(135deg, #fffbeb 0%, #ffffff 100%)',
+          border: `1.5px solid ${completionDetails.isComplete ? '#86efac' : '#fde68a'}`,
+          borderRadius: '16px',
+          padding: '20px 24px',
+          marginBottom: '24px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+          transition: 'all 0.3s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: '260px', flex: 1 }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: '14px',
+                background: completionDetails.isComplete ? '#dcfce7' : '#fef3c7',
+                border: `2px solid ${completionDetails.isComplete ? '#4ade80' : '#f59e0b'}`,
+                color: completionDetails.isComplete ? '#15803d' : '#b45309',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <span style={{ fontSize: '1.15rem', fontWeight: 800, lineHeight: 1 }}>{completionDetails.percentage}%</span>
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginTop: '2px' }}>Done</span>
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 800, color: '#0f172a' }}>
+                    Profile Completion & Verification
+                  </h3>
+                  <span style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    padding: '3px 10px',
+                    borderRadius: '999px',
+                    background: completionDetails.isComplete ? '#16a34a' : '#d97706',
+                    color: '#ffffff',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    {completionDetails.isComplete ? (
+                      <>
+                        <CheckCircle2 size={13} />
+                        <span>Publicly Listed on Find Doctors</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={13} />
+                        <span>Private (Needs 80% to Display)</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+                <p style={{ margin: '4px 0 0', fontSize: '0.86rem', color: '#475569', lineHeight: 1.45 }}>
+                  {completionDetails.isComplete
+                    ? 'Congratulations! Your profile has reached 80%+ completion and is currently active and discoverable by patients across the platform in real-time.'
+                    : `Your profile is hidden from the public 'Find Doctors' directory. Complete at least 80% (${80 - completionDetails.percentage}% more required) to go live immediately in real-time without refreshing.`}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('profile')}
+                style={{
+                  padding: '9px 18px',
+                  background: completionDetails.isComplete ? '#10b981' : '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontWeight: 700,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: completionDetails.isComplete ? '0 2px 8px rgba(16,185,129,0.25)' : '0 2px 8px rgba(37,99,235,0.25)'
+                }}
+              >
+                <Edit2 size={14} />
+                <span>{completionDetails.isComplete ? 'Manage Credentials' : 'Complete Profile Now'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Bar Track */}
+          <div style={{
+            width: '100%',
+            height: '10px',
+            background: '#e2e8f0',
+            borderRadius: '999px',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: `${completionDetails.percentage}%`,
+              height: '100%',
+              background: completionDetails.isComplete
+                ? 'linear-gradient(90deg, #10b981, #059669)'
+                : 'linear-gradient(90deg, #f59e0b, #d97706)',
+              borderRadius: '999px',
+              transition: 'width 0.4s ease'
+            }} />
+          </div>
+
+          {/* Missing items helper if incomplete */}
+          {!completionDetails.isComplete && completionDetails.missingFields.length > 0 && (
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#92400e' }}>
+                Quick Checklist to reach 80%:
+              </span>
+              {completionDetails.missingFields.map((field, idx) => (
+                <span
+                  key={idx}
+                  onClick={() => setActiveTab('profile')}
+                  style={{
+                    fontSize: '0.78rem',
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    border: '1px dashed #f59e0b',
+                    padding: '3px 10px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    transition: 'all 0.2s'
+                  }}
+                  title="Click to fill this item in Profile Settings"
+                >
+                  + {field}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* KPI Cards */}
@@ -4430,18 +4623,125 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               </div>
 
+              {/* SECTION: PROFILE COMPLETION CHECKLIST & DIRECTORY ELIGIBILITY */}
+              <div style={{
+                background: completionDetails.isComplete ? '#f0fdf4' : '#fffbeb',
+                border: `1.5px solid ${completionDetails.isComplete ? '#86efac' : '#fde68a'}`,
+                borderRadius: '14px',
+                padding: '20px',
+                marginBottom: '24px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.03)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '42px',
+                      height: '42px',
+                      borderRadius: '10px',
+                      background: completionDetails.isComplete ? '#dcfce7' : '#fef3c7',
+                      color: completionDetails.isComplete ? '#15803d' : '#b45309',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '1.05rem',
+                      flexShrink: 0
+                    }}>
+                      {completionDetails.percentage}%
+                    </div>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                        Profile Verification Checklist
+                      </h4>
+                      <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#475569' }}>
+                        {completionDetails.isComplete
+                          ? '✅ 80% threshold reached. Your profile is publicly listed on the Find Doctors page in real-time.'
+                          : `⚠️ 80% profile completion required to list on Find Doctors. Current: ${completionDetails.percentage}%. Remaining: ${80 - completionDetails.percentage}%.`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    padding: '4px 12px',
+                    borderRadius: '999px',
+                    background: completionDetails.isComplete ? '#15803d' : '#b45309',
+                    color: '#ffffff'
+                  }}>
+                    {completionDetails.isComplete ? 'Live & Listed on Directory' : 'Hidden from Directory'}
+                  </span>
+                </div>
+
+                {/* 10-Item Requirements Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                  gap: '10px',
+                  marginTop: '12px'
+                }}>
+                  {completionDetails.breakdown.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: item.completed ? '#ffffff' : '#fefce8',
+                        border: `1px solid ${item.completed ? '#bbf7d0' : '#fed7aa'}`,
+                        borderRadius: '8px',
+                        fontSize: '0.84rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {item.completed ? (
+                          <CheckCircle2 size={16} color="#16a34a" style={{ flexShrink: 0 }} />
+                        ) : (
+                          <AlertTriangle size={16} color="#d97706" style={{ flexShrink: 0 }} />
+                        )}
+                        <span style={{ fontWeight: item.completed ? 500 : 700, color: item.completed ? '#334155' : '#92400e' }}>
+                          {item.label}
+                        </span>
+                      </div>
+                      <span style={{
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        background: item.completed ? '#dcfce7' : '#ffedd5',
+                        color: item.completed ? '#16a34a' : '#c2410c',
+                        marginLeft: '6px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {item.completed ? `+${item.weight}%` : `Needs +${item.weight}%`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* SECTION: PROFILE PHOTO MANAGEMENT */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px 20px', marginBottom: '22px' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '0.98rem', color: '#0f172a', fontWeight: 700 }}>Profile Photo</h4>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px 20px', marginBottom: '22px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', color: '#0f172a', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Camera size={18} style={{ color: '#2563eb' }} />
+                    <span>Profile Photo & Avatar</span>
+                  </h4>
+                  <span style={{ fontSize: '0.78rem', color: '#16a34a', background: '#dcfce7', padding: '3px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                    +10% Profile Completion
+                  </span>
+                </div>
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
                   <div style={{ position: 'relative' }}>
                     <img 
-                      src={profileForm.image} 
+                      src={profileForm.image || DEFAULT_DOCTOR_AVATARS[0].localSrc} 
                       alt="Doctor Photo" 
                       onClick={() => setIsPhotoZoomOpen(true)}
                       title="Click to zoom preview"
-                      style={{ width: '76px', height: '76px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #2563eb', cursor: 'pointer', transition: 'transform 0.2s' }} 
-                      onError={(e) => e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80'}
+                      style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #2563eb', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.08)' }} 
+                      onError={(e) => { e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc; }}
                     />
                     {isUploadingImage && (
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
@@ -4463,7 +4763,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                         fontSize: '0.84rem',
                         fontWeight: 600,
                         cursor: isUploadingImage ? 'not-allowed' : 'pointer',
-                        boxShadow: '0 2px 6px rgba(37,99,235,0.15)'
+                        boxShadow: '0 2px 6px rgba(37,99,235,0.15)',
+                        transition: 'background 0.2s'
                       }}>
                         <Upload size={14} />
                         <span>{isUploadingImage ? 'Uploading...' : 'Upload New Photo'}</span>
@@ -4479,31 +4780,112 @@ const DoctorDashboard = ({ onNavigate }) => {
                         />
                       </label>
 
-                      <button
-                        type="button"
-                        onClick={handleRemovePhoto}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '8px 14px',
-                          borderRadius: '8px',
-                          border: '1px solid #fca5a5',
-                          background: '#fff1f2',
-                          color: '#e11d48',
-                          fontSize: '0.84rem',
-                          fontWeight: 600,
-                          cursor: 'pointer'
-                        }}
-                        title="Delete current photo and revert to default avatar"
-                      >
-                        <Trash2 size={14} />
-                        <span>Delete Photo</span>
-                      </button>
+                      {profileForm.image && (
+                        <button
+                          type="button"
+                          onClick={handleRemovePhoto}
+                          disabled={isUploadingImage}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid #fca5a5',
+                            background: '#fff1f2',
+                            color: '#e11d48',
+                            fontSize: '0.84rem',
+                            fontWeight: 600,
+                            cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                            transition: 'background 0.2s'
+                          }}
+                          title="Remove custom photo"
+                        >
+                          <Trash2 size={14} />
+                          <span>Remove Photo</span>
+                        </button>
+                      )}
                     </div>
                     <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                      Recommended format: Square JPG or PNG. Stored permanently in Cloudinary.
+                      Recommended format: Square JPG or PNG. You can upload your own photo or choose a default avatar below.
                     </span>
+                  </div>
+                </div>
+
+                {/* Default Avatar Selection for Doctors who don't want to upload personal photo */}
+                <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                    <User size={15} style={{ color: '#2563eb' }} />
+                    <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#1e293b' }}>
+                      Don't want to upload your photo? Choose between these two default avatars:
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                    {DEFAULT_DOCTOR_AVATARS.map((avatar) => {
+                      const isSelected = profileForm.image === avatar.url || 
+                        profileForm.image === avatar.localSrc || 
+                        profileForm.image === avatar.publicPath ||
+                        (profileForm.image && typeof profileForm.image === 'string' && profileForm.image.includes(avatar.key));
+
+                      return (
+                        <div
+                          key={avatar.key}
+                          onClick={() => handleSelectDefaultAvatar(avatar.url)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '14px',
+                            padding: '12px 16px',
+                            borderRadius: '12px',
+                            background: isSelected ? '#eff6ff' : '#ffffff',
+                            border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            boxShadow: isSelected ? '0 4px 12px rgba(37,99,235,0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                            transform: isSelected ? 'translateY(-1px)' : 'none'
+                          }}
+                          title={`Select ${avatar.label}`}
+                        >
+                          <img
+                            src={avatar.localSrc || avatar.url}
+                            alt={avatar.label}
+                            style={{
+                              width: '52px',
+                              height: '52px',
+                              borderRadius: '50%',
+                              objectFit: 'cover',
+                              border: isSelected ? '2.5px solid #2563eb' : '2px solid #cbd5e1',
+                              flexShrink: 0
+                            }}
+                          />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 700, color: isSelected ? '#1d4ed8' : '#0f172a' }}>
+                              {avatar.label}
+                            </div>
+                            <div style={{ fontSize: '0.74rem', color: isSelected ? '#2563eb' : '#64748b', marginTop: '3px' }}>
+                              {isSelected ? '✓ Active Profile Avatar' : 'Click to select this avatar'}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <div style={{ 
+                              background: '#2563eb', 
+                              color: 'white', 
+                              borderRadius: '50%', 
+                              width: '24px', 
+                              height: '24px', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'center', 
+                              flexShrink: 0,
+                              boxShadow: '0 2px 5px rgba(37,99,235,0.3)'
+                            }}>
+                              <Check size={14} strokeWidth={3} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -4543,7 +4925,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <input
                     type="text"
                     placeholder="e.g. Senior consultant"
-                    value={profileForm.jobTitle !== undefined ? profileForm.jobTitle : 'Senior consultant'}
+                    value={profileForm.jobTitle !== undefined ? profileForm.jobTitle : ''}
                     onChange={(e) => setProfileForm({ ...profileForm, jobTitle: e.target.value })}
                     onBlur={handleSaveAllProfileSettings}
                   />
@@ -8146,7 +8528,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                     {activeDoctor.name}
                   </h2>
                   <div style={{ fontSize: '0.86rem', color: '#3b82f6', fontWeight: 600 }}>
-                    {activeDoctor.degree || activeDoctor.qualifications || 'MBBS, MD'} • {activeDoctor.specialty || activeDoctor.specialization}
+                    {activeDoctor.degree || activeDoctor.qualifications || ''}{((activeDoctor.degree || activeDoctor.qualifications) && (activeDoctor.specialty || activeDoctor.specialization)) ? ' • ' : ''}{activeDoctor.specialty || activeDoctor.specialization || ''}
                   </div>
                   {activeDoctor.licenseNumber && (
                     <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '3px' }}>
@@ -8295,7 +8677,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
             <div style={{ background: '#020617', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '340px', padding: '16px' }}>
               <img
-                src={activeDoctor.image}
+                src={profileForm.image || activeDoctor.image || DEFAULT_DOCTOR_AVATARS[0].localSrc}
                 alt={activeDoctor.name}
                 style={{
                   maxWidth: '100%',
@@ -8305,7 +8687,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                   boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
                 }}
                 onError={(e) => {
-                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                  e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
                 }}
               />
             </div>
@@ -8347,6 +8729,34 @@ const DoctorDashboard = ({ onNavigate }) => {
                   }}
                 />
               </label>
+            </div>
+
+            <div style={{ padding: '12px 20px', background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Or choose default avatar:</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {DEFAULT_DOCTOR_AVATARS.map(av => (
+                  <button
+                    key={av.key}
+                    type="button"
+                    onClick={() => handleSelectDefaultAvatar(av.url)}
+                    style={{
+                      background: (profileForm.image === av.url || (profileForm.image && profileForm.image.includes(av.key))) ? '#1d4ed8' : 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: 'white',
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.78rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <img src={av.localSrc || av.url} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+                    <span>{av.label.replace(' Avatar', '')}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

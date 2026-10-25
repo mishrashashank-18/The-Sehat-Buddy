@@ -3,6 +3,7 @@ import Container from '../layout/Container';
 import SectionHeader from '../common/SectionHeader';
 import DoctorCard from './DoctorCard';
 import { useData } from '../../context/useData';
+import { isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
 import styles from './PopularDoctors.module.css';
 
 const PopularDoctors = ({ onNavigate }) => {
@@ -15,15 +16,16 @@ const PopularDoctors = ({ onNavigate }) => {
     }
   }, [doctors, refreshDoctors]);
 
-  // When doctors are marked as Star in admin dashboard, strictly show ONLY those star doctors in Popular Doctors.
-  // Fallback to active doctors only if no doctor has been marked star yet.
+  // Strictly show ONLY doctors marked as Star in admin dashboard who have completed >=80% profile
   const displayDoctors = useMemo(() => {
     const allDocs = Array.isArray(doctors) ? doctors : [];
-    const starDoctors = allDocs.filter(doc => Boolean(doc.isStarDoctor));
-    if (starDoctors.length > 0) {
-      return starDoctors;
-    }
-    return allDocs.filter(doc => doc.available !== false);
+    return allDocs.filter(doc => Boolean(doc.isStarDoctor) && isDoctorProfileEligibleForListing(doc));
+  }, [doctors]);
+
+  // Count total publicly listed doctors (>=80% profile completed)
+  const totalEligibleCount = useMemo(() => {
+    const allDocs = Array.isArray(doctors) ? doctors : [];
+    return allDocs.filter(doc => isDoctorProfileEligibleForListing(doc)).length;
   }, [doctors]);
 
   // Generate seamless marquee cards: exactly two identical halves for smooth infinite runLeft (-50%) loop
@@ -36,33 +38,32 @@ const PopularDoctors = ({ onNavigate }) => {
     return [...half, ...half];
   }, [displayDoctors]);
 
+  // If no doctor is marked as star, do not show popular doctors section
+  if (displayDoctors.length === 0) {
+    return null;
+  }
+
   return (
     <section id="doctors-section" className={styles.section}>
       <Container>
         <SectionHeader
           title="Popular Doctors"
-          linkText={`View All Doctors (${doctors?.length || displayDoctors.length})`}
+          linkText={`View All Doctors (${totalEligibleCount})`}
           onLinkClick={() => onNavigate('find-doctors')}
         />
 
-        {displayDoctors.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '36px 0', color: '#64748b' }}>
-            <p style={{ margin: 0, fontSize: '0.95rem' }}>Loading doctors from directory...</p>
+        <div className={styles.marqueeWrapper}>
+          <div className={styles.marqueeTrackLeft}>
+            {marqueeDoctors.map((doctor, idx) => (
+              <div
+                key={`${doctor.id || doctor._id || doctor.name}-${idx}`}
+                className={styles.cardItem}
+              >
+                <DoctorCard doctor={doctor} onNavigate={onNavigate} />
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className={styles.marqueeWrapper}>
-            <div className={styles.marqueeTrackLeft}>
-              {marqueeDoctors.map((doctor, idx) => (
-                <div
-                  key={`${doctor.id || doctor._id || doctor.name}-${idx}`}
-                  className={styles.cardItem}
-                >
-                  <DoctorCard doctor={doctor} onNavigate={onNavigate} />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        </div>
       </Container>
     </section>
   );
