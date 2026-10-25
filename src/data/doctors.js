@@ -1,7 +1,5 @@
 import doc1 from '../assets/images/doctor-1.png';
 import doc2 from '../assets/images/doctor-2.png';
-import doc3 from '../assets/images/doctor-3.png';
-import doc4 from '../assets/images/doctor-4.png';
 
 export const initialDoctors = [
   {
@@ -102,7 +100,7 @@ export const initialDoctors = [
     rating: 0,
     reviews: '0',
     price: 750,
-    image: doc3,
+    image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=400',
     hospital: 'Fortis Memorial Research Institute',
     degree: 'MBBS, MS (Orthopedics), MCh (Joint Replacement)',
     phone: '+91 98303 45678',
@@ -138,7 +136,7 @@ export const initialDoctors = [
     rating: 0, 
     reviews: '0', 
     price: 600, 
-    image: doc4, 
+    image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=400', 
     hospital: 'Manipal Hospital & Trauma Center', 
     degree: 'MBBS, MD (Pediatrics), DNB', 
     phone: '+91 98404 56789', 

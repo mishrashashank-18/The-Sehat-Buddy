@@ -8,8 +8,6 @@ import { useData } from '../../context/useData';
 import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
 import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
-import doc3 from '../../assets/images/doctor-3.png';
-import doc4 from '../../assets/images/doctor-4.png';
 import { api } from '../../services/api';
 import FaqSymbolSelector from './FaqSymbolSelector';
 import styles from './DoctorFormModal.module.css';
@@ -100,8 +98,6 @@ const PRESET_AVATARS = [
   { label: 'Female Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].localSrc, key: 'female_doctor' },
   { label: 'Male Doctor 1', src: doc1, preview: doc1, key: 'doc1' },
   { label: 'Female Doctor 1', src: doc2, preview: doc2, key: 'doc2' },
-  { label: 'Male Doctor 2', src: doc3, preview: doc3, key: 'doc3' },
-  { label: 'Female Doctor 2', src: doc4, preview: doc4, key: 'doc4' },
 ];
 
 const SPECIALTY_OPTIONS = [
