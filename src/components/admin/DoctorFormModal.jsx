@@ -10,6 +10,7 @@ import doc1 from '../../assets/images/doctor-1.png';
 import doc2 from '../../assets/images/doctor-2.png';
 import { api } from '../../services/api';
 import FaqSymbolSelector from './FaqSymbolSelector';
+import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
 import styles from './DoctorFormModal.module.css';
 
 const DEFAULT_RAHUL_AWARDS = [
@@ -178,7 +179,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       specialty: 'Cardiologist',
       customSpecialty: '',
       hospital: hospitals[0]?.name || '',
-      experienceYears: 0,
+      experienceYears: 5,
       price: 500,
       rating: 0,
       reviews: '0',
@@ -206,10 +207,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   });
 
   const lastSyncedDocRef = useRef(doctorToEdit);
+  const isSubmittingRef = useRef(false);
+  const dirtyFieldsRef = useRef(new Set());
 
   // Realtime synchronization: If doctor updates their profile from Doctor Dashboard, reflect in Admin Form
   useEffect(() => {
-    if (!doctorToEdit) return;
+    if (!doctorToEdit || isSubmittingRef.current) return;
     const prevDoc = lastSyncedDocRef.current;
     lastSyncedDocRef.current = doctorToEdit;
 
@@ -221,20 +224,21 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     const rawPrevPhone = String(prevDoc.phone || prevDoc.contact_number || '').replace(/\D/g, '');
     const cleanPrevPhone = rawPrevPhone.length > 10 ? rawPrevPhone.slice(-10) : rawPrevPhone;
 
-    const remotePhoneChanged = cleanIncomingPhone !== cleanPrevPhone && cleanIncomingPhone !== '';
-    const remoteEmailChanged = doctorToEdit.email !== prevDoc.email && doctorToEdit.email !== undefined;
-    const remoteHospitalChanged = doctorToEdit.hospital !== prevDoc.hospital && doctorToEdit.hospital !== undefined;
+    const remotePhoneChanged = cleanIncomingPhone !== cleanPrevPhone && cleanIncomingPhone !== '' && !dirtyFieldsRef.current.has('phone');
+    const remoteEmailChanged = doctorToEdit.email !== prevDoc.email && doctorToEdit.email !== undefined && !dirtyFieldsRef.current.has('email');
+    const remoteHospitalChanged = doctorToEdit.hospital !== prevDoc.hospital && doctorToEdit.hospital !== undefined && !dirtyFieldsRef.current.has('hospital');
     const remoteSpec = doctorToEdit.specialty || doctorToEdit.specialization || '';
     const prevSpec = prevDoc.specialty || prevDoc.specialization || '';
-    const remoteSpecChanged = remoteSpec !== prevSpec && remoteSpec !== '';
-    const remoteNameChanged = doctorToEdit.name !== prevDoc.name && doctorToEdit.name !== undefined;
-    const remoteAwardsChanged = doctorToEdit.awards && JSON.stringify(doctorToEdit.awards) !== JSON.stringify(prevDoc.awards);
-    const remoteCertsChanged = doctorToEdit.certifications && JSON.stringify(doctorToEdit.certifications) !== JSON.stringify(prevDoc.certifications);
-    const remoteMemsChanged = doctorToEdit.memberships && JSON.stringify(doctorToEdit.memberships) !== JSON.stringify(prevDoc.memberships);
-    const remoteExpChanged = doctorToEdit.careerExperience && JSON.stringify(doctorToEdit.careerExperience) !== JSON.stringify(prevDoc.careerExperience);
-    const remoteTagsChanged = doctorToEdit.tags && JSON.stringify(doctorToEdit.tags) !== JSON.stringify(prevDoc.tags);
+    const remoteSpecChanged = remoteSpec !== prevSpec && remoteSpec !== '' && !dirtyFieldsRef.current.has('specialty');
+    const remoteNameChanged = doctorToEdit.name !== prevDoc.name && doctorToEdit.name !== undefined && !dirtyFieldsRef.current.has('name');
+    const remoteStarChanged = doctorToEdit.isStarDoctor !== prevDoc.isStarDoctor && doctorToEdit.isStarDoctor !== undefined && !dirtyFieldsRef.current.has('isStarDoctor');
+    const remoteAwardsChanged = doctorToEdit.awards && JSON.stringify(doctorToEdit.awards) !== JSON.stringify(prevDoc.awards) && !dirtyFieldsRef.current.has('awards');
+    const remoteCertsChanged = doctorToEdit.certifications && JSON.stringify(doctorToEdit.certifications) !== JSON.stringify(prevDoc.certifications) && !dirtyFieldsRef.current.has('certifications');
+    const remoteMemsChanged = doctorToEdit.memberships && JSON.stringify(doctorToEdit.memberships) !== JSON.stringify(prevDoc.memberships) && !dirtyFieldsRef.current.has('memberships');
+    const remoteExpChanged = doctorToEdit.careerExperience && JSON.stringify(doctorToEdit.careerExperience) !== JSON.stringify(prevDoc.careerExperience) && !dirtyFieldsRef.current.has('careerExperience');
+    const remoteTagsChanged = doctorToEdit.tags && JSON.stringify(doctorToEdit.tags) !== JSON.stringify(prevDoc.tags) && !dirtyFieldsRef.current.has('tags');
 
-    if (!remotePhoneChanged && !remoteEmailChanged && !remoteHospitalChanged && !remoteSpecChanged && !remoteNameChanged && !remoteAwardsChanged && !remoteCertsChanged && !remoteMemsChanged && !remoteExpChanged && !remoteTagsChanged) {
+    if (!remotePhoneChanged && !remoteEmailChanged && !remoteHospitalChanged && !remoteSpecChanged && !remoteNameChanged && !remoteStarChanged && !remoteAwardsChanged && !remoteCertsChanged && !remoteMemsChanged && !remoteExpChanged && !remoteTagsChanged) {
       return;
     }
 
@@ -250,13 +254,14 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         next.customSpecialty = isSpecialtyInOptions ? '' : remoteSpec;
       }
       if (remoteNameChanged) next.name = doctorToEdit.name;
+      if (remoteStarChanged) next.isStarDoctor = Boolean(doctorToEdit.isStarDoctor);
       if (remoteAwardsChanged) next.awards = doctorToEdit.awards;
       if (remoteCertsChanged) next.certifications = doctorToEdit.certifications;
       if (remoteMemsChanged) next.memberships = doctorToEdit.memberships;
       if (remoteExpChanged) next.careerExperience = doctorToEdit.careerExperience;
       if (remoteTagsChanged) next.tags = Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags : [];
-      if (doctorToEdit.jobTitle !== undefined) next.jobTitle = doctorToEdit.jobTitle || '';
-      if (doctorToEdit.licenseNumber !== undefined) next.licenseNumber = doctorToEdit.licenseNumber || '';
+      if (doctorToEdit.jobTitle !== undefined && !dirtyFieldsRef.current.has('jobTitle')) next.jobTitle = doctorToEdit.jobTitle || '';
+      if (doctorToEdit.licenseNumber !== undefined && !dirtyFieldsRef.current.has('licenseNumber')) next.licenseNumber = doctorToEdit.licenseNumber || '';
       return next;
     });
 
@@ -275,11 +280,14 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     doctorToEdit?.email,
     doctorToEdit?.hospital,
     doctorToEdit?.image,
-    doctorToEdit?.awards,
-    doctorToEdit?.certifications,
-    doctorToEdit?.memberships,
-    doctorToEdit?.careerExperience,
-    doctorToEdit?.tags
+    doctorToEdit?.jobTitle,
+    doctorToEdit?.licenseNumber,
+    doctorToEdit?.isStarDoctor,
+    JSON.stringify(doctorToEdit?.awards || []),
+    JSON.stringify(doctorToEdit?.certifications || []),
+    JSON.stringify(doctorToEdit?.memberships || []),
+    JSON.stringify(doctorToEdit?.careerExperience || []),
+    JSON.stringify(doctorToEdit?.tags || [])
   ]);
 
   // Credentials sub-tab navigation
@@ -779,23 +787,27 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.name.trim()) newErrors.name = 'Doctor name is required';
-    if (!formData.email.trim()) {
+    if (!formData.name || !formData.name.trim()) newErrors.name = 'Doctor name is required';
+    if (!formData.email || !formData.email.trim()) {
       newErrors.email = 'Doctor email address is required (for login credentials)';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
     }
-    if (formData.specialty === 'Other' && !formData.customSpecialty.trim()) {
+    if (formData.specialty === 'Other' && (!formData.customSpecialty || !formData.customSpecialty.trim())) {
       newErrors.customSpecialty = 'Please specify specialty';
     }
-    if (!formData.price || Number(formData.price) <= 0) {
+    if (formData.price === '' || formData.price === undefined || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
       newErrors.price = 'Valid consultation fee is required';
     }
-    if (!formData.experienceYears || Number(formData.experienceYears) < 0) {
-      newErrors.experienceYears = 'Experience is required';
+    if (formData.experienceYears === '' || formData.experienceYears === undefined || isNaN(Number(formData.experienceYears)) || Number(formData.experienceYears) < 0) {
+      newErrors.experienceYears = 'Experience is required (0 or greater)';
     }
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    if (Object.keys(newErrors).length > 0) {
+      setSubmitError('Please fix the required fields marked in red above before submitting.');
+      return false;
+    }
+    return true;
   };
 
   const [isUploading, setIsUploading] = useState(false);
@@ -929,6 +941,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     if (!validate()) return;
 
     setIsSubmitting(true);
+    isSubmittingRef.current = true;
     try {
       const finalSpecialty = formData.specialty === 'Other' ? formData.customSpecialty.trim() : formData.specialty;
       const finalImage = imageType === 'url' && customImageUrl ? customImageUrl : formData.image;
@@ -951,6 +964,8 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         phone: formData.phone,
         email: formData.email.trim().toLowerCase(),
         availableDays: formData.availableDays,
+        scheduleDays: parseAvailableDaysAndHours(formData.availableDays, doctorToEdit?.slotDuration || 30).days,
+        availableSlots: parseAvailableDaysAndHours(formData.availableDays, doctorToEdit?.slotDuration || 30).slots,
         about: formData.about,
         image: finalImage,
         instagram: formData.instagram,
@@ -972,7 +987,6 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         qualifications: formData.degree,
         contact_number: formData.phone,
         available: formData.available,
-        isStarDoctor: Boolean(formData.isStarDoctor),
         faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== ''),
         awards: Array.isArray(formData.awards) ? formData.awards.filter(Boolean) : [],
         certifications: Array.isArray(formData.certifications) ? formData.certifications.filter(Boolean) : [],
@@ -980,6 +994,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         careerExperience: Array.isArray(formData.careerExperience) ? formData.careerExperience.filter(Boolean) : [],
         tags: Array.isArray(formData.tags) ? formData.tags.filter(Boolean) : []
       };
+
+      // Only include isStarDoctor if explicitly changed in this form (or creating a new doctor)
+      // to avoid accidentally unstarring or resetting star timestamp during general profile edits
+      const isEditing = Boolean(doctorToEdit);
+      const starChanged = isEditing ? (Boolean(formData.isStarDoctor) !== Boolean(doctorToEdit.isStarDoctor)) : true;
+      if (starChanged) {
+        payload.isStarDoctor = Boolean(formData.isStarDoctor);
+        if (isEditing) {
+          payload.starMutationTimestamp = Date.now();
+        }
+      }
 
       if (doctorToEdit) {
         const docId = doctorToEdit._id || doctorToEdit.id;
@@ -1014,6 +1039,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       setSubmitError(err.message || 'Failed to save doctor. Please check email and details.');
     } finally {
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1036,6 +1062,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
       <form onSubmit={handleSubmit} className={styles.form}>
         <div className={styles.body}>
+          {submitError && (
+            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', fontSize: '0.86rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+              <AlertCircle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+              <span>{submitError}</span>
+            </div>
+          )}
+
           {/* Basic Info */}
           <div className={styles.sectionHeader}>Doctor Details</div>
           
@@ -1046,7 +1079,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 type="text"
                 placeholder="e.g. Dr. Priya Roy"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value });
+                  if (errors.name) setErrors(prev => ({ ...prev, name: '' }));
+                }}
                 className={errors.name ? styles.inputError : ''}
               />
               {errors.name && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.name}</span>}
@@ -1073,7 +1109,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 type="text"
                 placeholder="e.g. Endocrinologist"
                 value={formData.customSpecialty}
-                onChange={(e) => setFormData({ ...formData, customSpecialty: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, customSpecialty: e.target.value });
+                  if (errors.customSpecialty) setErrors(prev => ({ ...prev, customSpecialty: '' }));
+                }}
                 className={errors.customSpecialty ? styles.inputError : ''}
               />
               {errors.customSpecialty && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.customSpecialty}</span>}
@@ -1088,9 +1127,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 min="0"
                 max="60"
                 value={formData.experienceYears}
-                onChange={(e) => setFormData({ ...formData, experienceYears: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, experienceYears: e.target.value });
+                  if (errors.experienceYears) setErrors(prev => ({ ...prev, experienceYears: '' }));
+                }}
                 className={errors.experienceYears ? styles.inputError : ''}
               />
+              {errors.experienceYears && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.experienceYears}</span>}
             </div>
 
             <div className={styles.formGroup}>
@@ -1100,9 +1143,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 min="50"
                 step="50"
                 value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, price: e.target.value });
+                  if (errors.price) setErrors(prev => ({ ...prev, price: '' }));
+                }}
                 className={errors.price ? styles.inputError : ''}
               />
+              {errors.price && <span className={styles.errorMsg}><AlertCircle size={13} /> {errors.price}</span>}
             </div>
 
             <div className={styles.formGroup}>
@@ -1152,12 +1199,26 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               <Building2 size={16} className={styles.fieldIcon} />
               <select
                 value={formData.hospital}
-                onChange={(e) => setFormData({ ...formData, hospital: e.target.value })}
+                autoComplete="off"
+                onChange={(e) => {
+                  dirtyFieldsRef.current.add('hospital');
+                  setFormData({ ...formData, hospital: e.target.value });
+                }}
               >
                 <option value="">Select an affiliated hospital</option>
-                {hospitals.map(hosp => (
-                  <option key={hosp.id} value={hosp.name}>{hosp.name} ({hosp.city})</option>
-                ))}
+                {Boolean(formData.hospital && formData.hospital !== 'Independent Private Clinic' && !hospitals.some(h => (h.name || '').trim().toLowerCase() === (formData.hospital || '').trim().toLowerCase())) && (
+                  <option value={formData.hospital}>
+                    {formData.hospital}
+                  </option>
+                )}
+                {hospitals.map(hosp => {
+                  const hospKey = hosp._id ? String(hosp._id) : (hosp.id ? String(hosp.id) : hosp.name);
+                  return (
+                    <option key={hospKey} value={hosp.name}>
+                      {hosp.name} {hosp.city ? `(${hosp.city})` : ''}
+                    </option>
+                  );
+                })}
                 <option value="Independent Private Clinic">Independent Private Clinic</option>
               </select>
             </div>

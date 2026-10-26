@@ -50,6 +50,8 @@ import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import DoctorFormModal from './DoctorFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import HospitalFaqCard from './HospitalFaqCard';
+import PopularDoctorActionButtons from './PopularDoctorActionButtons';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
 import styles from './AdminHospitalEditPage.module.css';
 
@@ -243,6 +245,7 @@ export const createInitialHospitalFormData = (hosp) => {
     publicationStatus: hosp.publicationStatus || 'draft',
     status: hosp.status || 'active',
     showOnHome: hosp.showOnHome !== undefined ? Boolean(hosp.showOnHome) : true,
+    homeUpdatedAt: Number(hosp.homeUpdatedAt || 0),
     profileCompletion: hosp.profileCompletion || 0,
     rating: hosp.rating !== undefined && hosp.rating !== null && !isNaN(Number(hosp.rating)) ? Number(hosp.rating) : 0,
     reviews: hosp.reviews || '0 Reviews',
@@ -419,6 +422,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [formData, setFormData] = useState(() => (hospital ? createInitialHospitalFormData(hospital) : null));
   const initializedHospitalId = useRef(hospital ? String(hospital.id || hospital._id || '') : null);
   const isDirtyRef = useRef(false);
+  const isHomeStatusDirtyRef = useRef(false);
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('all'); // 'all' | 'star'
@@ -473,6 +477,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [reelUploadProgress, setReelUploadProgress] = useState({});
   const [togglingDoctorIds, setTogglingDoctorIds] = useState(new Set());
   const starTogglingRef = useRef(new Set());
+  const starSeqRef = useRef({});
 
   // Patient Bookings & Visits Management State
   const [appointments, setAppointments] = useState([]);
@@ -484,8 +489,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [selectedDay, setSelectedDay] = useState('all');
   const [selectedPreset, setSelectedPreset] = useState('all'); // 'all' | 'today' | 'this_month' | 'this_year'
 
-  const fetchHospitalAppointments = useCallback(async () => {
-    setLoadingAppointments(true);
+  const fetchHospitalAppointments = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoadingAppointments(true);
     try {
       const data = await api.getAdminAppointments();
       if (Array.isArray(data)) {
@@ -494,18 +499,16 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     } catch (err) {
       console.warn('Failed to fetch hospital appointments:', err);
     } finally {
-      setLoadingAppointments(false);
+      if (!isSilent) setLoadingAppointments(false);
     }
   }, []);
 
   useEffect(() => {
     fetchHospitalAppointments();
-    const handleUpdate = () => fetchHospitalAppointments();
+    const handleUpdate = () => fetchHospitalAppointments(true);
     window.addEventListener('sehat_appointments_changed', handleUpdate);
-    window.addEventListener('sehat_db_change', handleUpdate);
     return () => {
       window.removeEventListener('sehat_appointments_changed', handleUpdate);
-      window.removeEventListener('sehat_db_change', handleUpdate);
     };
   }, [fetchHospitalAppointments]);
 
@@ -833,34 +836,97 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   };
 
+  // Hospital FAQs (memoized unconditionally before any early returns)
+  const hospitalFaqs = useMemo(() => {
+    if (!hospital || !faqs) return [];
+    const hospId = String(hospital.id || hospital._id || '');
+    const hospName = String(hospital.name || '').toLowerCase();
+    return faqs.filter(f => 
+      f.targetType === 'hospital' && (
+        (f.targetId && String(f.targetId) === hospId) ||
+        (f.targetName && hospName && f.targetName.toLowerCase() === hospName)
+      )
+    );
+  }, [faqs, hospital]);
+
+  // Display FAQs filtered by search query and category (memoized)
+  const displayFaqs = useMemo(() => {
+    return hospitalFaqs.filter(faq => {
+      if (faqCategoryFilter !== 'All' && faq.category !== faqCategoryFilter) return false;
+      if (faqSearchQuery && faqSearchQuery.trim()) {
+        const q = faqSearchQuery.toLowerCase().trim();
+        const questionMatch = (faq.question || '').toLowerCase().includes(q);
+        const answerMatch = (faq.answer || '').toLowerCase().includes(q);
+        const noteMatch = (faq.note || '').toLowerCase().includes(q);
+        if (!questionMatch && !answerMatch && !noteMatch) return false;
+      }
+      return true;
+    });
+  }, [hospitalFaqs, faqCategoryFilter, faqSearchQuery]);
+
+  const handleEditFaqClick = useCallback((faq) => {
+    setEditingFaqId(faq.id || faq._id);
+    const isCustom = faq.icon && (
+      faq.icon.startsWith('http') ||
+      faq.icon.startsWith('data:image') ||
+      faq.icon.startsWith('/') ||
+      faq.icon.includes('.')
+    );
+    setFaqForm({
+      question: faq.question || '',
+      answer: faq.answer || '',
+      category: faq.category || 'General',
+      note: faq.note || '',
+      stepsInput: Array.isArray(faq.steps) ? faq.steps.join('\n') : '',
+      icon: faq.icon || 'help-circle'
+    });
+    setCustomFaqIconPreview(isCustom ? faq.icon : null);
+    setIsAddingFaq(true);
+  }, []);
+
+  const handleDeleteFaqClick = useCallback(async (faqId) => {
+    if (window.confirm('Are you sure you want to delete this hospital FAQ?')) {
+      try {
+        await deleteFaq(faqId);
+      } catch (err) {
+        console.error('Failed to delete FAQ:', err);
+        alert('Failed to delete FAQ: ' + (err.message || 'Please check connection.'));
+      }
+    }
+  }, [deleteFaq]);
+
   // Initialize form data when hospital loads
   useEffect(() => {
     if (!hospital) return;
 
     const currentHospId = String(hospital.id || hospital._id || '');
 
-    // If the hospital is already initialized and user has unsaved edits, do not overwrite their edits, only synchronize background aggregates
-    if (initializedHospitalId.current === currentHospId && formData !== null && isDirtyRef.current) {
+    // If the hospital is already initialized, synchronize star_doctors whenever not actively toggling
+    if (initializedHospitalId.current === currentHospId && formData !== null) {
       const incomingStarDocs = (Array.isArray(hospital.star_doctors) ? hospital.star_doctors : [])
         .map(d => typeof d === 'object' && d !== null ? (d._id || d.id) : d)
         .filter(Boolean);
       const curStarStr = (formData.star_doctors || []).map(String).sort().join(',');
       const incStarStr = incomingStarDocs.map(String).sort().join(',');
-      if (curStarStr !== incStarStr) {
+      if (curStarStr !== incStarStr && togglingDoctorIds.size === 0) {
         setFormData(prev => ({ ...prev, star_doctors: incomingStarDocs }));
       }
-      if (hospital.profileCompletion !== undefined && hospital.profileCompletion !== formData.profileCompletion) {
+      const shouldSyncProfile = hospital.profileCompletion !== undefined && hospital.profileCompletion !== formData.profileCompletion;
+      const shouldSyncPub = hospital.publicationStatus !== undefined && hospital.publicationStatus !== formData.publicationStatus;
+      const shouldSyncHome = !isHomeStatusDirtyRef.current && (
+        (hospital.showOnHome !== undefined && Boolean(hospital.showOnHome) !== Boolean(formData.showOnHome)) ||
+        (hospital.homeUpdatedAt !== undefined && Number(hospital.homeUpdatedAt) !== Number(formData.homeUpdatedAt))
+      );
+
+      if (shouldSyncProfile || shouldSyncPub || shouldSyncHome) {
         setFormData(prev => ({
           ...prev,
-          profileCompletion: hospital.profileCompletion,
+          profileCompletion: hospital.profileCompletion !== undefined ? hospital.profileCompletion : prev.profileCompletion,
           publicationStatus: hospital.publicationStatus || prev.publicationStatus,
-          showOnHome: hospital.showOnHome !== undefined ? Boolean(hospital.showOnHome) : prev.showOnHome
+          showOnHome: shouldSyncHome ? Boolean(hospital.showOnHome) : prev.showOnHome,
+          homeUpdatedAt: shouldSyncHome && hospital.homeUpdatedAt !== undefined ? Number(hospital.homeUpdatedAt) : prev.homeUpdatedAt
         }));
       }
-      return;
-    }
-
-    if (initializedHospitalId.current === currentHospId && formData !== null && !isDirtyRef.current) {
       return;
     }
 
@@ -895,17 +961,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     );
   }
 
-  // Hospital FAQs
-  const hospitalFaqs = (faqs || []).filter(f => 
-    f.targetType === 'hospital' && (
-      (f.targetId && String(f.targetId) === String(hospital.id || hospital._id)) ||
-      (f.targetName && hospital.name && f.targetName.toLowerCase() === hospital.name.toLowerCase())
-    )
-  );
-
   // Field change handler
   const handleChange = (field, value) => {
     isDirtyRef.current = true;
+    if (field === 'showOnHome') {
+      isHomeStatusDirtyRef.current = true;
+    }
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -1035,23 +1096,29 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setSaveSuccess(false);
   };
 
-  // Star Doctors toggle with immediate auto-persist across dashboards & public profile (with lock guard & rollback on error)
-  const handleToggleStarDoctor = async (docOrId) => {
+  // Popular / Star Doctors assignment: explicit and idempotent (with sequence tracking & rollback on error)
+  const handleSetHospitalStarDoctor = async (docOrId, shouldBeStar, extraPayload = {}) => {
     const docObj = (typeof docOrId === 'object' && docOrId !== null)
       ? docOrId
       : ((doctors || []).find(d => matchesId(d, docOrId)) || { id: docOrId, _id: docOrId });
 
     const canonicalId = getDoctorCanonicalId(docObj) || String(docOrId);
-    if (!canonicalId || starTogglingRef.current.has(canonicalId)) return;
+    if (!canonicalId) return;
 
-    starTogglingRef.current.add(canonicalId);
+    const targetVal = Boolean(shouldBeStar);
+    const isSelected = isDoctorInStarList(docObj, formData.star_doctors) || Boolean(docObj.isStarDoctor);
+
+    // Idempotent: if already in requested state, no-op
+    if (isSelected === targetVal) return;
+
+    const currentSeq = (starSeqRef.current[canonicalId] || 0) + 1;
+    starSeqRef.current[canonicalId] = currentSeq;
     setTogglingDoctorIds(prev => new Set(prev).add(canonicalId));
 
-    const isSelected = isDoctorInStarList(docObj, formData.star_doctors);
     const prevList = formData.star_doctors || [];
-    const nextList = isSelected
-      ? prevList.filter(sd => !isDoctorInStarList(docObj, [sd]))
-      : [...prevList.filter(sd => !isDoctorInStarList(docObj, [sd])), canonicalId];
+    const nextList = targetVal
+      ? [...prevList.filter(sd => !isDoctorInStarList(docObj, [sd])), canonicalId]
+      : prevList.filter(sd => !isDoctorInStarList(docObj, [sd]));
 
     setFormData(prev => ({
       ...prev,
@@ -1059,41 +1126,51 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }));
     setSaveSuccess(false);
 
-    // Auto-persist immediately to MongoDB Atlas database
+    const clientTimestamp = extraPayload?.starMutationTimestamp || Date.now();
     const targetHospId = hospital?._id || hospitalId || hospital?.id;
-    if (targetHospId) {
-      try {
+
+    try {
+      // 1. Authoritative update of doctor in DataContext & MongoDB Atlas
+      await updateDoctor(canonicalId, {
+        isStarDoctor: targetVal,
+        starMutationTimestamp: clientTimestamp
+      });
+
+      // 2. Persist hospital star_doctors list
+      if (targetHospId) {
         await updateHospital(targetHospId, {
-          ...formData,
           star_doctors: nextList
         });
-        triggerSaveSuccess(3500);
-      } catch (err) {
-        console.warn('Auto-save star doctor failed, rolling back:', err);
-        setFormData(prev => ({
-          ...prev,
-          star_doctors: prevList
-        }));
-      } finally {
-        setTimeout(() => {
-          starTogglingRef.current.delete(canonicalId);
-          setTogglingDoctorIds(prev => {
-            const next = new Set(prev);
-            next.delete(canonicalId);
-            return next;
-          });
-        }, 250);
       }
-    } else {
-      setTimeout(() => {
-        starTogglingRef.current.delete(canonicalId);
+
+      if (currentSeq !== starSeqRef.current[canonicalId]) return;
+      triggerSaveSuccess(3500);
+    } catch (err) {
+      if (currentSeq !== starSeqRef.current[canonicalId]) return;
+      console.warn('Auto-save star doctor failed, rolling back:', err);
+      setFormData(prev => ({
+        ...prev,
+        star_doctors: prevList
+      }));
+      throw err;
+    } finally {
+      if (currentSeq === starSeqRef.current[canonicalId]) {
         setTogglingDoctorIds(prev => {
           const next = new Set(prev);
           next.delete(canonicalId);
           return next;
         });
-      }, 250);
+      }
     }
+  };
+
+  // Backward-compatible toggle fallback
+  const handleToggleStarDoctor = async (docOrId) => {
+    const docObj = (typeof docOrId === 'object' && docOrId !== null)
+      ? docOrId
+      : ((doctors || []).find(d => matchesId(d, docOrId)) || { id: docOrId, _id: docOrId });
+    const isSelected = isDoctorInStarList(docObj, formData.star_doctors);
+    return handleSetHospitalStarDoctor(docOrId, !isSelected);
   };
 
   // Doctor CRUD handlers
@@ -1277,7 +1354,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     if (targetHospId && !isHospitalView) {
       try {
         await updateHospital(targetHospId, {
-          ...formData,
           reels: updatedReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
         });
         triggerSaveSuccess(3500);
@@ -1319,7 +1395,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     if (targetHospId && !isHospitalView) {
       try {
         await updateHospital(targetHospId, {
-          ...formData,
           youtube_videos: updatedVideos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim())))
         });
         triggerSaveSuccess(3500);
@@ -1484,37 +1559,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   };
 
-  const handleEditFaqClick = (faq) => {
-    setEditingFaqId(faq.id || faq._id);
-    const isCustom = faq.icon && (
-      faq.icon.startsWith('http') ||
-      faq.icon.startsWith('data:image') ||
-      faq.icon.startsWith('/') ||
-      faq.icon.includes('.')
-    );
-    setFaqForm({
-      question: faq.question || '',
-      answer: faq.answer || '',
-      category: faq.category || 'General',
-      note: faq.note || '',
-      stepsInput: Array.isArray(faq.steps) ? faq.steps.join('\n') : '',
-      icon: faq.icon || 'help-circle'
-    });
-    setCustomFaqIconPreview(isCustom ? faq.icon : null);
-    setIsAddingFaq(true);
-  };
-
-  const handleDeleteFaqClick = async (faqId) => {
-    if (window.confirm('Are you sure you want to delete this hospital FAQ?')) {
-      try {
-        await deleteFaq(faqId);
-      } catch (err) {
-        console.error('Failed to delete FAQ:', err);
-        alert('Failed to delete FAQ: ' + (err.message || 'Please check connection.'));
-      }
-    }
-  };
-
   // Master Save Function
   const handleSaveAll = async (overridePayload = null) => {
     setIsSaving(true);
@@ -1570,7 +1614,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         isVerified: Boolean(formData.isVerified),
         publicationStatus: formData.publicationStatus || 'draft',
         status: formData.status || 'active',
-        showOnHome: formData.showOnHome !== undefined ? Boolean(formData.showOnHome) : true,
         rating: formData.rating !== undefined && formData.rating !== '' && !isNaN(Number(formData.rating)) ? Number(formData.rating) : 0,
         reviews: formData.reviews || '0 Reviews',
         phone: phoneValidation.normalized || formData.phone,
@@ -1603,10 +1646,16 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         delete payload.youtube_videos;
       }
 
+      if (isHomeStatusDirtyRef.current) {
+        payload.showOnHome = Boolean(formData.showOnHome);
+        payload.homeMutationTimestamp = Date.now();
+      }
+
       const targetHospId = hospital?._id || hospitalId || hospital?.id;
       const res = await updateHospital(targetHospId, payload);
       if (res) {
         isDirtyRef.current = false;
+        isHomeStatusDirtyRef.current = false;
         try {
           const currentHospUser = JSON.parse(localStorage.getItem('hospital_user') || 'null');
           if (currentHospUser) {
@@ -1625,9 +1674,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       }
 
       triggerSaveSuccess(5000);
-      if (typeof refreshHospitals === 'function') {
-        refreshHospitals();
-      }
     } catch (err) {
       console.error('Error updating hospital profile:', err);
       setErrorMessage(err.message || 'Failed to update hospital. Please check backend connection.');
@@ -3152,7 +3198,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
             <div className={styles.doctorSelectGrid}>
               {(doctors || [])
                 .filter(doc => {
-                  const isSelected = isDoctorInStarList(doc, formData.star_doctors);
+                  const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
                   if (doctorFilter === 'star' && !isSelected) return false;
 
                   if (!doctorSearch.trim()) return true;
@@ -3165,7 +3211,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 })
                 .map((doc) => {
                   const docId = doc.id || doc._id;
-                  const isSelected = isDoctorInStarList(doc, formData.star_doctors);
+                  const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
 
                   return (
                     <div
@@ -3212,17 +3258,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
                           const isDocToggling = togglingDoctorIds.has(canonicalDocId);
                           return (
-                            <button
-                              type="button"
-                              className={`${styles.starToggleBtn} ${isSelected ? styles.starToggleActive : styles.starToggleInactive}`}
-                              onClick={() => handleToggleStarDoctor(doc)}
+                            <PopularDoctorActionButtons
+                              doctor={doc}
+                              isPopular={isSelected}
                               disabled={isDocToggling}
-                              aria-busy={isDocToggling}
-                              title={isSelected ? 'Remove from Star Doctors' : 'Set as Star Doctor'}
-                            >
-                              <Sparkles size={13} fill={isSelected ? '#b45309' : 'none'} />
-                              <span>{isSelected ? '⭐ Star Doctor' : 'Set as Star'}</span>
-                            </button>
+                              onSetPopular={(targetVal, extra) => handleSetHospitalStarDoctor(doc, targetVal, extra)}
+                            />
                           );
                         })()}
 
@@ -4506,110 +4547,24 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
             {/* List of Existing FAQs */}
             <div className={styles.faqAdminList}>
-              {(() => {
-                const displayFaqs = hospitalFaqs.filter(faq => {
-                  if (faqCategoryFilter !== 'All' && faq.category !== faqCategoryFilter) return false;
-                  if (faqSearchQuery.trim()) {
-                    const q = faqSearchQuery.toLowerCase().trim();
-                    const questionMatch = (faq.question || '').toLowerCase().includes(q);
-                    const answerMatch = (faq.answer || '').toLowerCase().includes(q);
-                    const noteMatch = (faq.note || '').toLowerCase().includes(q);
-                    if (!questionMatch && !answerMatch && !noteMatch) return false;
-                  }
-                  return true;
-                });
-
-                if (displayFaqs.length === 0) {
-                  return (
-                    <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                      <HelpCircle size={32} color="#cbd5e1" style={{ marginBottom: '8px' }} />
-                      <p>{hospitalFaqs.length === 0 ? 'No hospital-specific FAQs added yet.' : 'No FAQs match your search or category filter.'}</p>
-                    </div>
-                  );
-                }
-
-                return displayFaqs.map((faq) => {
-                  const isCustomIcon = faq.icon && (
-                    faq.icon.startsWith('http') ||
-                    faq.icon.startsWith('data:image') ||
-                    faq.icon.startsWith('/') ||
-                    faq.icon.includes('.')
-                  );
-                  const matchedIcon = FAQ_ICONS_LIST.find(i => i.id === faq.icon);
-                  const IconComp = matchedIcon ? matchedIcon.icon : HelpCircle;
-
-                  return (
-                    <div key={faq.id || faq._id} className={styles.faqAdminCard}>
-                      <div className={styles.faqAdminHeader}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-                          <div style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '8px',
-                            background: isCustomIcon ? '#f8fafc' : (matchedIcon?.bg || '#eff6ff'),
-                            color: isCustomIcon ? '#2563eb' : (matchedIcon?.color || '#2563eb'),
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            border: '1px solid #e2e8f0',
-                            overflow: 'hidden'
-                          }}>
-                            {isCustomIcon ? (
-                              <img src={faq.icon} alt="FAQ icon" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
-                            ) : (
-                              <IconComp size={16} />
-                            )}
-                          </div>
-                          <span className={styles.faqAdminQuestion}>{faq.question}</span>
-                        </div>
-                        <span className={styles.faqAdminCategory}>{faq.category || 'General'}</span>
-                      </div>
-
-                      <p className={styles.faqAdminAnswer}>{faq.answer}</p>
-
-                      {faq.note && (
-                        <div style={{ fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <CheckCircle2 size={14} />
-                          <span>{faq.note}</span>
-                        </div>
-                      )}
-
-                      <div className={styles.faqAdminActions}>
-                        {isHospitalView ? (
-                          <button
-                            type="button"
-                            className={styles.faqPreviewBtn}
-                            onClick={() => setPreviewFaqItem(faq)}
-                          >
-                            <ExternalLink size={13} />
-                            <span>Preview Full FAQ</span>
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className={styles.iconBtn}
-                              onClick={() => handleEditFaqClick(faq)}
-                            >
-                              <Edit3 size={14} />
-                              <span>Edit</span>
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                              onClick={() => handleDeleteFaqClick(faq.id || faq._id)}
-                            >
-                              <Trash2 size={14} />
-                              <span>Delete</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+              {displayFaqs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                  <HelpCircle size={32} color="#cbd5e1" style={{ marginBottom: '8px' }} />
+                  <p>{hospitalFaqs.length === 0 ? 'No hospital-specific FAQs added yet.' : 'No FAQs match your search or category filter.'}</p>
+                </div>
+              ) : (
+                displayFaqs.map((faq) => (
+                  <HospitalFaqCard
+                    key={String(faq._id || faq.id)}
+                    faq={faq}
+                    isHospitalView={isHospitalView}
+                    faqIconsList={FAQ_ICONS_LIST}
+                    onEdit={handleEditFaqClick}
+                    onDelete={handleDeleteFaqClick}
+                    onPreview={setPreviewFaqItem}
+                  />
+                ))
+              )}
             </div>
           </div>
         )}

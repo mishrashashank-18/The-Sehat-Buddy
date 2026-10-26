@@ -35,6 +35,7 @@ const doctorSchema = new mongoose.Schema({
   rating: { type: Number, default: 0 },
   reviews: { type: String, default: '0' },
   isStarDoctor: { type: Boolean, default: false },
+  starUpdatedAt: { type: Number, default: 0 },
   isFirstLogin: { type: Boolean, default: true },
   passwordSet: { type: Boolean, default: false },
   licenseNumber: { type: String, default: '' },

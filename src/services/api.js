@@ -2,15 +2,16 @@ export const resolveApiBase = () => {
   const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL;
   if (typeof window !== 'undefined' && window.location.hostname) {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    if (!envUrl) {
-      return isLocal ? 'http://127.0.0.1:5000/api' : `http://${window.location.hostname}:5000/api`;
+    if (isLocal) {
+      // In local development, use same-origin '/api' to leverage Vite proxy transparently
+      return '/api';
     }
     // If envUrl points to localhost but the page is accessed via LAN IP
-    if (!isLocal && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+    if (!isLocal && envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
       return `http://${window.location.hostname}:5000/api`;
     }
   }
-  if (!envUrl) return 'http://localhost:5000/api';
+  if (!envUrl) return '/api';
   const trimmed = envUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`;
 };
@@ -28,7 +29,18 @@ export const getActiveAuthToken = () => {
     const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
 
     if (storedUser?.role === 'admin' || path.startsWith('/admin') || hash.includes('admin') || localStorage.getItem('admin_logged_in') === 'true') {
-      return localStorage.getItem('admin_token') || localStorage.getItem('token');
+      const adminToken = localStorage.getItem('admin_token');
+      if (adminToken) return adminToken;
+      const genericToken = localStorage.getItem('token');
+      if (genericToken) {
+        try {
+          const payload = JSON.parse(atob(genericToken.split('.')[1]));
+          if (payload?.role === 'admin' || !payload?.role) return genericToken;
+        } catch {
+          return genericToken;
+        }
+      }
+      return null;
     }
     if (storedUser?.role === 'doctor' || path.startsWith('/doctor') || hash.includes('doctor')) {
       return localStorage.getItem('doctor_token') || localStorage.getItem('token');
@@ -54,6 +66,11 @@ const getAuthHeaders = (isFormData = false) => {
 const handleResponse = async (res) => {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      if (typeof window !== 'undefined' && (errorData.message?.includes('no longer exists') || errorData.message?.includes('Not authorized'))) {
+        window.dispatchEvent(new CustomEvent('sehat_auth_unauthorized', { detail: { message: errorData.message } }));
+      }
+    }
     throw new Error(errorData.message || `HTTP error ${res.status}`);
   }
   return res.json();
@@ -118,6 +135,19 @@ export const api = {
       }
     } catch {}
     return null;
+  },
+
+  async getMyDoctor() {
+    const res = await fetch(`${API_BASE}/doctors/me`, {
+      headers: getAuthHeaders()
+    });
+    if (res.status === 401 || res.status === 403 || res.status === 404) {
+      const err = new Error('Doctor session invalid or doctor deleted');
+      err.status = res.status;
+      throw err;
+    }
+    const data = await handleResponse(res);
+    return data.doctor || data.data || data;
   },
 
   async addDoctor(doctorData) {

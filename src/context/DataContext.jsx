@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { DataContext } from './context';
 import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
+import { defaultAcceptedInsurances } from '../data/insurancePartners';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v4';
@@ -394,7 +395,13 @@ export const DataProvider = ({ children }) => {
         dayWiseSlots: (d.dayWiseSlots && typeof d.dayWiseSlots === 'object') ? d.dayWiseSlots : (existing?.dayWiseSlots || {}),
         dateWiseSlots: (d.dateWiseSlots && typeof d.dateWiseSlots === 'object') ? d.dateWiseSlots : (existing?.dateWiseSlots || {}),
         slots_booked: { ...(existing?.slots_booked || {}), ...(d.slots_booked || {}) },
-        isStarDoctor: d.isStarDoctor !== undefined ? Boolean(d.isStarDoctor) : Boolean(existing?.isStarDoctor)
+        isStarDoctor: (() => {
+          const keepExisting = Number(existing?.starUpdatedAt || 0) >= Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined;
+          return keepExisting ? Boolean(existing.isStarDoctor) : (d.isStarDoctor !== undefined ? Boolean(d.isStarDoctor) : Boolean(existing?.isStarDoctor));
+        })(),
+        starUpdatedAt: (Number(existing?.starUpdatedAt || 0) >= Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined)
+          ? Number(existing.starUpdatedAt)
+          : (d.starUpdatedAt !== undefined ? Number(d.starUpdatedAt) : Number(existing?.starUpdatedAt || 0))
       };
     });
 
@@ -420,7 +427,7 @@ export const DataProvider = ({ children }) => {
       return {
         ...existing,
         ...h,
-        id: existing?.id || h.id || h._id,
+        id: String(h._id || h.id || existing?._id || existing?.id || ''),
         _id: h._id || existing?._id || h.id,
         specialties: (Array.isArray(h.specialities || h.specialties) && (h.specialities || h.specialties).length > 0)
           ? (h.specialities || h.specialties)
@@ -440,7 +447,12 @@ export const DataProvider = ({ children }) => {
           preAuthTime: '30 Mins Cashless Pre-Approval'
         },
         insuranceHelpline: h.insuranceHelpline || existing?.insuranceHelpline || '1800-SEHAT-CARE',
-        showOnHome: h.showOnHome !== undefined ? Boolean(h.showOnHome) : (existing?.showOnHome ?? true)
+        showOnHome: (Number(existing?.homeUpdatedAt || 0) >= Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
+          ? Boolean(existing.showOnHome)
+          : (h.showOnHome !== undefined ? Boolean(h.showOnHome) : (existing?.showOnHome ?? true)),
+        homeUpdatedAt: (Number(existing?.homeUpdatedAt || 0) >= Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
+          ? Number(existing.homeUpdatedAt)
+          : (h.homeUpdatedAt !== undefined ? Number(h.homeUpdatedAt) : Number(existing?.homeUpdatedAt || 0))
       };
     });
     // Authoritative database data: never retain deleted or mock hospitals
@@ -593,9 +605,15 @@ export const DataProvider = ({ children }) => {
 
             // Instant targeted update based on modified collection
             if (collection === 'doctors') {
-              if (payload.operation === 'delete' && payload.docId) {
+              if (payload.operation === 'delete' && (payload.docId || payload.fullDocument?.email)) {
+                const deletedEmail = (payload.fullDocument?.email || '').toLowerCase().trim();
+                const deletedId = payload.docId;
                 setDoctors(prev => {
-                  const updated = prev.filter(d => !matchesId(d, payload.docId));
+                  const updated = prev.filter(d => {
+                    if (deletedId && matchesId(d, deletedId)) return false;
+                    if (deletedEmail && (d.email || '').toLowerCase().trim() === deletedEmail) return false;
+                    return true;
+                  });
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
@@ -605,6 +623,16 @@ export const DataProvider = ({ children }) => {
                   } catch {}
                   return updated;
                 });
+
+                if (typeof window !== 'undefined') {
+                  const delDetail = {
+                    id: deletedId,
+                    email: deletedEmail,
+                    timestamp: Date.now()
+                  };
+                  window.dispatchEvent(new CustomEvent('sehat_doctor_deleted', { detail: delDetail }));
+                  broadcastSync('sehat_doctor_deleted', delDetail);
+                }
               } else if (payload.docId && payload.fullDocument) {
                 const docData = payload.fullDocument;
                 const rawSpec = (docData.specialization && docData.specialization !== 'General Medicine')
@@ -633,6 +661,16 @@ export const DataProvider = ({ children }) => {
                     if (matchesId(d, payload.docId) || (d.email && docData.email && d.email.toLowerCase().trim() === docData.email.toLowerCase().trim())) {
                       found = true;
                       const resolvedPh = ph !== undefined ? ph : (d.phone || d.contact_number || '');
+                      const currentStarTs = Number(d.starUpdatedAt || 0);
+                      const incomingStarTs = Number(docData.starUpdatedAt || 0);
+                      const keepCurrentStar = currentStarTs >= incomingStarTs && d.isStarDoctor !== undefined;
+                      const nextStar = keepCurrentStar
+                        ? Boolean(d.isStarDoctor)
+                        : (docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor));
+                      const nextStarTs = keepCurrentStar
+                        ? currentStarTs
+                        : (incomingStarTs || currentStarTs || 0);
+
                       const candidate = {
                         ...d,
                         ...docData,
@@ -672,7 +710,8 @@ export const DataProvider = ({ children }) => {
                         licenseNumber: docData.licenseNumber !== undefined ? docData.licenseNumber : (d.licenseNumber || ''),
                         profileCompletion: docData.profileCompletion !== undefined ? Number(docData.profileCompletion) : d.profileCompletion,
                         isProfileComplete: docData.isProfileComplete !== undefined ? Boolean(docData.isProfileComplete) : d.isProfileComplete,
-                        isStarDoctor: docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor)
+                        isStarDoctor: nextStar,
+                        starUpdatedAt: nextStarTs
                       };
 
                       const isDifferent = Object.keys(candidate).some(k => {
@@ -725,6 +764,16 @@ export const DataProvider = ({ children }) => {
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
+
+                    const currentDocUserStr = localStorage.getItem('doctor_user');
+                    if (currentDocUserStr) {
+                      const currentDocUser = JSON.parse(currentDocUserStr);
+                      const matchingUpdated = updated.find(d => matchesId(d, currentDocUser));
+                      if (matchingUpdated) {
+                        localStorage.setItem('doctor_user', JSON.stringify({ ...currentDocUser, ...matchingUpdated }));
+                      }
+                    }
+
                     if (typeof window !== 'undefined') {
                       window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
                     }
@@ -750,12 +799,23 @@ export const DataProvider = ({ children }) => {
                   let hasDiff = false;
                   const updated = prev.map(h => {
                     if (matchesId(h, payload.docId)) {
+                      const currentHomeTs = Number(h.homeUpdatedAt || 0);
+                      const incomingHomeTs = Number(hospData.homeUpdatedAt || 0);
+                      const keepCurrentHome = currentHomeTs >= incomingHomeTs && h.showOnHome !== undefined;
+                      const nextHome = keepCurrentHome
+                        ? Boolean(h.showOnHome)
+                        : (hospData.showOnHome !== undefined ? Boolean(hospData.showOnHome) : (h.showOnHome ?? true));
+                      const nextHomeTs = keepCurrentHome
+                        ? currentHomeTs
+                        : (incomingHomeTs || currentHomeTs || 0);
+
                       const candidate = {
                         ...h,
                         ...hospData,
                         id: h.id || hospData.id || hospData._id,
                         _id: hospData._id || h._id || hospData.id,
-                        showOnHome: hospData.showOnHome !== undefined ? Boolean(hospData.showOnHome) : (h.showOnHome ?? true)
+                        showOnHome: nextHome,
+                        homeUpdatedAt: nextHomeTs
                       };
                       if (JSON.stringify(candidate) !== JSON.stringify(h)) {
                         hasDiff = true;
@@ -778,26 +838,91 @@ export const DataProvider = ({ children }) => {
             } else if (collection === 'contents') {
               refreshContent();
             } else if (collection === 'faqs') {
-              refreshFaqs();
-            } else if (collection === 'faq_symbols' || collection === 'faqsymbols') {
-              refreshFaqSymbols();
-            } else if (collection === 'reviews') {
-              if (payload.docId && payload.fullDocument) {
-                setReviews(prev => {
-                  const exists = prev.some(r => matchesId(r, payload.docId));
-                  const updated = exists
-                    ? prev.map(r => matchesId(r, payload.docId) ? { ...r, ...payload.fullDocument } : r)
-                    : [{ ...payload.fullDocument, id: payload.docId }, ...prev];
+              if (payload.operation === 'delete' || payload.action === 'delete') {
+                const targetDocId = payload.docId || payload.id;
+                if (targetDocId) {
+                  setFaqs(prev => {
+                    const exists = prev.some(f => matchesId(f, targetDocId));
+                    if (!exists) return prev;
+                    const updated = prev.filter(f => !matchesId(f, targetDocId));
+                    try {
+                      localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(updated));
+                      lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(updated);
+                      broadcastSync(STORAGE_KEY_FAQS, updated);
+                    } catch {}
+                    return updated;
+                  });
+                }
+              } else if (payload.docId && payload.fullDocument) {
+                setFaqs(prev => {
+                  const targetDocId = payload.docId || payload.fullDocument._id || payload.fullDocument.id;
+                  const exists = prev.some(f => matchesId(f, targetDocId));
+                  if (exists) {
+                    const cur = prev.find(f => matchesId(f, targetDocId));
+                    const candidate = { ...cur, ...payload.fullDocument, id: targetDocId, _id: targetDocId };
+                    if (JSON.stringify(cur) === JSON.stringify(candidate)) {
+                      return prev;
+                    }
+                    const updated = prev.map(f => matchesId(f, targetDocId) ? candidate : f);
+                    try {
+                      localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(updated));
+                      lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(updated);
+                      broadcastSync(STORAGE_KEY_FAQS, updated);
+                    } catch {}
+                    return updated;
+                  }
+                  const newFaq = { ...payload.fullDocument, id: targetDocId, _id: targetDocId };
+                  const updated = [newFaq, ...prev];
                   try {
-                    localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                    localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(updated));
+                    lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(updated);
+                    broadcastSync(STORAGE_KEY_FAQS, updated);
                   } catch {}
                   return updated;
                 });
-              } else if (payload.action === 'delete' && payload.docId) {
+              } else {
+                refreshFaqs();
+              }
+            } else if (collection === 'faq_symbols' || collection === 'faqsymbols') {
+              refreshFaqSymbols();
+            } else if (collection === 'reviews') {
+              if (payload.operation === 'delete' || payload.action === 'delete') {
+                const targetDocId = payload.docId || payload.id;
+                if (targetDocId) {
+                  setReviews(prev => {
+                    const exists = prev.some(r => matchesId(r, targetDocId));
+                    if (!exists) return prev;
+                    const updated = prev.filter(r => !matchesId(r, targetDocId));
+                    try {
+                      localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                      lastSyncRef.current[STORAGE_KEY_REVIEWS] = JSON.stringify(updated);
+                      broadcastSync(STORAGE_KEY_REVIEWS, updated);
+                    } catch {}
+                    return updated;
+                  });
+                }
+              } else if (payload.docId && payload.fullDocument) {
                 setReviews(prev => {
-                  const updated = prev.filter(r => !matchesId(r, payload.docId));
+                  const exists = prev.some(r => matchesId(r, payload.docId));
+                  if (exists) {
+                    const cur = prev.find(r => matchesId(r, payload.docId));
+                    const candidate = { ...cur, ...payload.fullDocument };
+                    if (JSON.stringify(cur) === JSON.stringify(candidate)) {
+                      return prev;
+                    }
+                    const updated = prev.map(r => matchesId(r, payload.docId) ? candidate : r);
+                    try {
+                      localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                      lastSyncRef.current[STORAGE_KEY_REVIEWS] = JSON.stringify(updated);
+                      broadcastSync(STORAGE_KEY_REVIEWS, updated);
+                    } catch {}
+                    return updated;
+                  }
+                  const updated = [{ ...payload.fullDocument, id: payload.docId }, ...prev];
                   try {
                     localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+                    lastSyncRef.current[STORAGE_KEY_REVIEWS] = JSON.stringify(updated);
+                    broadcastSync(STORAGE_KEY_REVIEWS, updated);
                   } catch {}
                   return updated;
                 });
@@ -1056,7 +1181,10 @@ export const DataProvider = ({ children }) => {
             about: updatedData.about !== undefined ? updatedData.about : doc.about,
             profileCompletion: updatedData.profileCompletion !== undefined ? Number(updatedData.profileCompletion) : doc.profileCompletion,
             isProfileComplete: updatedData.isProfileComplete !== undefined ? Boolean(updatedData.isProfileComplete) : doc.isProfileComplete,
-            isStarDoctor: updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor)
+            isStarDoctor: updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor),
+            starUpdatedAt: updatedData.isStarDoctor !== undefined
+              ? (updatedData.starMutationTimestamp ? Number(updatedData.starMutationTimestamp) : (updatedData.starUpdatedAt ? Number(updatedData.starUpdatedAt) : Math.max(Number(doc.starUpdatedAt || 0) + 1, Date.now())))
+              : Number(doc.starUpdatedAt || 0)
           };
           return mergedDoctor;
         }
@@ -1086,6 +1214,16 @@ export const DataProvider = ({ children }) => {
           let hasDiff = false;
           const updated = prev.map(doc => {
             if (matchesId(doc, id) || (res._id && matchesId(doc, res._id)) || (res.id && matchesId(doc, res.id))) {
+              const currentStarTs = Number(doc.starUpdatedAt || 0);
+              const incomingStarTs = Number(res.starUpdatedAt || 0);
+              const isStarExplicitlyUpdated = updatedData.isStarDoctor !== undefined || updatedData.starMutationTimestamp !== undefined;
+              const keepCurrentStar = isStarExplicitlyUpdated && currentStarTs > incomingStarTs;
+              const nextStar = keepCurrentStar
+                ? Boolean(doc.isStarDoctor)
+                : (res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor)));
+              const nextStarTs = keepCurrentStar
+                ? currentStarTs
+                : (incomingStarTs || (isStarExplicitlyUpdated && updatedData.starMutationTimestamp ? Number(updatedData.starMutationTimestamp) : currentStarTs));
               const rawResSpec = (res.specialization && res.specialization !== 'General Medicine')
                 ? res.specialization
                 : ((res.specialty && res.specialty !== 'General Medicine') ? res.specialty : (res.specialization || res.specialty));
@@ -1136,13 +1274,14 @@ export const DataProvider = ({ children }) => {
                 dayWiseSlots: (res.dayWiseSlots && typeof res.dayWiseSlots === 'object') ? res.dayWiseSlots : (updatedData.dayWiseSlots !== undefined ? updatedData.dayWiseSlots : (doc.dayWiseSlots || {})),
                 dateWiseSlots: (res.dateWiseSlots && typeof res.dateWiseSlots === 'object') ? res.dateWiseSlots : (updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {})),
                 availableDays: res.availableDays ?? doc.availableDays,
-                image: res.image || doc.image,
+                image: updatedData.image !== undefined ? updatedData.image : (res.image !== undefined ? res.image : (doc.image || '')),
                 about: res.about !== undefined ? res.about : doc.about,
                 jobTitle: res.jobTitle !== undefined ? res.jobTitle : (updatedData.jobTitle !== undefined ? updatedData.jobTitle : (doc.jobTitle || '')),
                 licenseNumber: res.licenseNumber !== undefined ? res.licenseNumber : (updatedData.licenseNumber !== undefined ? updatedData.licenseNumber : (doc.licenseNumber || '')),
                 profileCompletion: res.profileCompletion !== undefined ? Number(res.profileCompletion) : (updatedData.profileCompletion !== undefined ? Number(updatedData.profileCompletion) : doc.profileCompletion),
                 isProfileComplete: res.isProfileComplete !== undefined ? Boolean(res.isProfileComplete) : (updatedData.isProfileComplete !== undefined ? Boolean(updatedData.isProfileComplete) : doc.isProfileComplete),
-                isStarDoctor: res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor))
+                isStarDoctor: nextStar,
+                starUpdatedAt: nextStarTs
               };
 
               const isDifferent = Object.keys(candidate).some(k => {
@@ -1204,16 +1343,48 @@ export const DataProvider = ({ children }) => {
     if (!freshDoc || (!freshDoc.id && !freshDoc._id)) return;
     setDoctors(prev => {
       let found = false;
+      let hasDiff = false;
       const updated = prev.map(doc => {
         if (matchesId(doc, freshDoc)) {
           found = true;
-          return { ...doc, ...freshDoc };
+          const currentStarTs = Number(doc.starUpdatedAt || 0);
+          const incomingStarTs = Number(freshDoc.starUpdatedAt || 0);
+          const keepCurrentStar = currentStarTs > incomingStarTs && doc.isStarDoctor !== undefined;
+          const resolvedStar = keepCurrentStar
+            ? Boolean(doc.isStarDoctor)
+            : (freshDoc.isStarDoctor !== undefined ? Boolean(freshDoc.isStarDoctor) : Boolean(doc.isStarDoctor));
+          const resolvedStarTs = keepCurrentStar
+            ? currentStarTs
+            : (incomingStarTs || currentStarTs || 0);
+
+          const candidate = {
+            ...doc,
+            ...freshDoc,
+            isStarDoctor: resolvedStar,
+            starUpdatedAt: resolvedStarTs
+          };
+
+          const isDifferent = Object.keys(candidate).some(k => {
+            if (k === 'updatedAt' || k === '__v') return false;
+            if (typeof candidate[k] === 'object' && candidate[k] !== null) {
+              return JSON.stringify(candidate[k]) !== JSON.stringify(doc[k]);
+            }
+            return candidate[k] !== doc[k];
+          });
+
+          if (isDifferent) {
+            hasDiff = true;
+            return candidate;
+          }
+          return doc;
         }
         return doc;
       });
+      if (!hasDiff && found) return prev;
       const finalDocs = found ? updated : [...updated, freshDoc];
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(finalDocs));
+        lastSyncRef.current[STORAGE_KEY_DOCTORS] = JSON.stringify(finalDocs);
         broadcastSync(STORAGE_KEY_DOCTORS, finalDocs);
       } catch {}
       return finalDocs;
@@ -1277,6 +1448,16 @@ export const DataProvider = ({ children }) => {
 
     const cleanId = String(resolvedId || '').toLowerCase();
     const cleanEmail = String(resolvedEmail || '').toLowerCase();
+
+    if (typeof window !== 'undefined') {
+      const delDetail = {
+        id: resolvedId,
+        email: cleanEmail,
+        timestamp: Date.now()
+      };
+      window.dispatchEvent(new CustomEvent('sehat_doctor_deleted', { detail: delDetail }));
+      broadcastSync('sehat_doctor_deleted', delDetail);
+    }
 
     setDoctors(prev => {
       const updated = prev.filter(doc => {
@@ -1432,7 +1613,11 @@ export const DataProvider = ({ children }) => {
             latitude: updatedData.latitude !== undefined ? (updatedData.latitude === '' || updatedData.latitude === null ? undefined : Number(updatedData.latitude)) : hosp.latitude,
             longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude,
             instagram: updatedData.instagram !== undefined ? updatedData.instagram : (hosp.instagram || ''),
-            facebook: updatedData.facebook !== undefined ? updatedData.facebook : (hosp.facebook || '')
+            facebook: updatedData.facebook !== undefined ? updatedData.facebook : (hosp.facebook || ''),
+            showOnHome: updatedData.showOnHome !== undefined ? Boolean(updatedData.showOnHome) : (hosp.showOnHome ?? true),
+            homeUpdatedAt: updatedData.showOnHome !== undefined
+              ? (updatedData.homeMutationTimestamp ? Number(updatedData.homeMutationTimestamp) : (updatedData.homeUpdatedAt ? Number(updatedData.homeUpdatedAt) : Math.max(Number(hosp.homeUpdatedAt || 0) + 1, Date.now())))
+              : Number(hosp.homeUpdatedAt || 0)
           };
           return mergedHospital;
         }
@@ -1457,7 +1642,23 @@ export const DataProvider = ({ children }) => {
           let hasDiff = false;
           const synced = prev.map(h => {
             if (matchesId(h, id)) {
-              const cand = { ...h, ...serverResult };
+              const currentHomeTs = Number(h.homeUpdatedAt || 0);
+              const incomingHomeTs = Number(serverResult.homeUpdatedAt || 0);
+              const isHomeExplicitlyUpdated = updatedData.showOnHome !== undefined || updatedData.homeMutationTimestamp !== undefined;
+              const keepCurrentHome = isHomeExplicitlyUpdated && currentHomeTs > incomingHomeTs;
+              const nextHome = keepCurrentHome
+                ? Boolean(h.showOnHome)
+                : (serverResult.showOnHome !== undefined ? Boolean(serverResult.showOnHome) : (updatedData.showOnHome !== undefined ? Boolean(updatedData.showOnHome) : (h.showOnHome ?? true)));
+              const nextHomeTs = keepCurrentHome
+                ? currentHomeTs
+                : (incomingHomeTs || (isHomeExplicitlyUpdated && updatedData.homeMutationTimestamp ? Number(updatedData.homeMutationTimestamp) : currentHomeTs));
+
+              const cand = {
+                ...h,
+                ...serverResult,
+                showOnHome: nextHome,
+                homeUpdatedAt: nextHomeTs
+              };
               if (JSON.stringify(cand) !== JSON.stringify(h)) {
                 hasDiff = true;
                 return cand;
@@ -1703,6 +1904,7 @@ export const DataProvider = ({ children }) => {
         const next = [newFaq, ...prev.filter(f => !matchesId(f, newFaq.id))];
         try {
           localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(next);
           broadcastSync(STORAGE_KEY_FAQS, next);
         } catch {}
         return next;
@@ -1726,6 +1928,7 @@ export const DataProvider = ({ children }) => {
         });
         try {
           localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(next);
           broadcastSync(STORAGE_KEY_FAQS, next);
         } catch {}
         return next;
@@ -1744,6 +1947,7 @@ export const DataProvider = ({ children }) => {
         const next = prev.filter(f => !matchesId(f, id));
         try {
           localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(next);
           broadcastSync(STORAGE_KEY_FAQS, next);
         } catch {}
         return next;
@@ -1859,9 +2063,12 @@ export const DataProvider = ({ children }) => {
   const deleteReview = async (target) => {
     const targetId = (target && typeof target === 'object') ? (target._id || target.id) : target;
     setReviews(prev => {
+      const exists = prev.some(r => matchesId(r, targetId));
+      if (!exists) return prev;
       const updated = prev.filter(r => !matchesId(r, targetId));
       try {
         localStorage.setItem(STORAGE_KEY_REVIEWS, JSON.stringify(updated));
+        lastSyncRef.current[STORAGE_KEY_REVIEWS] = JSON.stringify(updated);
         broadcastSync(STORAGE_KEY_REVIEWS, updated);
       } catch {}
       return updated;

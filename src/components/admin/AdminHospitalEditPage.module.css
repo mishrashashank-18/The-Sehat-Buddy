@@ -1022,20 +1022,38 @@ input:checked + .slider:before {
 .starToggleBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  padding: 5px 10px;
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
+  height: 28px;
+  padding: 0;
+  box-sizing: border-box;
   border-radius: 6px;
   font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
   user-select: none;
+  opacity: 1 !important;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.starToggleBtn:disabled {
-  cursor: wait !important;
-  opacity: 0.85;
-  pointer-events: none !important;
+.starToggleBtn:disabled,
+.starToggleBtn[aria-busy="true"] {
+  cursor: pointer;
+  opacity: 1 !important;
+}
+
+.starToggleBtn:focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 1px;
+}
+
+.starToggleBtn:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .starToggleActive {

@@ -14,6 +14,7 @@ import WriteReviewModal from '../reviews/WriteReviewModal';
 import ReviewFormModal from '../admin/ReviewFormModal';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import { api, API_BASE } from '../../services/api';
+import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
 import styles from './DoctorProfile.module.css';
 
 // Local date string helper matching clinic calendar time (YYYY-MM-DD)
@@ -659,45 +660,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     });
   }, [doctorId, syncDoctorLocally]);
 
-  // Real-time synchronization listener for database changes & cross-tab broadcasts
-  React.useEffect(() => {
-    const handleDbChange = (e) => {
-      const payload = e.detail;
-      if (payload?.collection === 'doctors') {
-        const matchesCurrent = (
-          (payload.docId && matchesId({ _id: payload.docId, id: payload.docId }, doctorId)) ||
-          (payload.fullDocument && matchesId(payload.fullDocument, doctorId))
-        );
-        if (matchesCurrent) {
-          if (payload.fullDocument) {
-            syncDoctorLocally?.(payload.fullDocument);
-          } else {
-            api.getDoctorById(doctorId).then(freshDoc => {
-              if (freshDoc) syncDoctorLocally?.(freshDoc);
-            });
-          }
-        }
-      }
-    };
-    window.addEventListener('sehat_db_change', handleDbChange);
-    const handleDoctorsUpdated = (e) => {
-      const updatedDocs = e.detail;
-      if (Array.isArray(updatedDocs)) {
-        const matching = updatedDocs.find(d => matchesId(d, doctorId));
-        if (matching) {
-          syncDoctorLocally?.(matching);
-        }
-      }
-    };
-    window.addEventListener('sehat_doctors_updated', handleDoctorsUpdated);
-
-    return () => {
-      window.removeEventListener('sehat_db_change', handleDbChange);
-      window.removeEventListener('sehat_doctors_updated', handleDoctorsUpdated);
-    };
-  }, [doctorId, syncDoctorLocally]);
-
   // Restore scroll position on refresh
+  const isRestoringScrollRef = React.useRef(false);
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     const scrollKey = `sehat_doc_profile_scroll_${doctorId || 'default'}`;
@@ -718,23 +683,50 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       }
     })();
 
+    const saveScroll = () => {
+      if (!isRestoringScrollRef.current) {
+        sessionStorage.setItem(scrollKey, String(Math.round(window.scrollY || 0)));
+      }
+    };
+
+    const handleScroll = () => {
+      saveScroll();
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('beforeunload', saveScroll);
+    window.addEventListener('pagehide', saveScroll);
+
+    const timeouts = [];
+
     if (isReload) {
       const saved = sessionStorage.getItem(scrollKey);
       if (saved !== null) {
         const top = parseInt(saved, 10);
-        if (!isNaN(top) && top > 0) {
-          const restore = () => {
-            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-            const target = Math.min(top, maxScroll);
-            window.scrollTo({ top: target, behavior: 'instant' });
-          };
-          requestAnimationFrame(restore);
-          const t1 = setTimeout(restore, 80);
-          const t2 = setTimeout(restore, 200);
-          return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-          };
+        if (!isNaN(top)) {
+          if (top === 0) {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+          } else {
+            isRestoringScrollRef.current = true;
+            const tryRestore = () => {
+              const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+              const target = Math.min(top, maxScroll);
+              window.scrollTo({ top: target, behavior: 'instant' });
+            };
+
+            // Immediate attempt
+            tryRestore();
+
+            // Progressive attempts as doctor data, bio, booking calendar, credentials, and reviews asynchronously hydrate
+            [40, 100, 220, 400, 700].forEach(delay => {
+              timeouts.push(setTimeout(tryRestore, delay));
+            });
+
+            timeouts.push(setTimeout(() => {
+              isRestoringScrollRef.current = false;
+              saveScroll();
+            }, 800));
+          }
         }
       }
     } else {
@@ -742,24 +734,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
 
-    const handleBeforeUnload = () => {
-      sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    let scrollTimer;
-    const handleScroll = () => {
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(() => {
-        sessionStorage.setItem(scrollKey, String(window.scrollY || 0));
-      }, 50);
-    };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollTimer);
+      window.removeEventListener('beforeunload', saveScroll);
+      window.removeEventListener('pagehide', saveScroll);
+      timeouts.forEach(clearTimeout);
     };
   }, [doctorId]);
 
@@ -845,20 +824,28 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
   const [expandedFaq, setExpandedFaq] = useState(null);
 
-  // Doctor's available slots & schedule from database
+  // Doctor's available slots & schedule from database (dynamically synchronized with Available Hours / Days)
   const configuredSlots = React.useMemo(() => {
+    if (doctor?.availableDays) {
+      const parsed = parseAvailableDaysAndHours(doctor.availableDays, doctor.slotDuration || 30);
+      if (parsed.slots.length > 0) return parsed.slots;
+    }
     if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
       return doctor.availableSlots;
     }
-    return ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'];
-  }, [doctor?.availableSlots]);
+    return ['10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM'];
+  }, [doctor?.availableSlots, doctor?.availableDays, doctor?.slotDuration]);
 
   const configuredDays = React.useMemo(() => {
+    if (doctor?.availableDays) {
+      const parsed = parseAvailableDaysAndHours(doctor.availableDays);
+      if (parsed.days.length > 0) return parsed.days;
+    }
     if (Array.isArray(doctor?.scheduleDays) && doctor.scheduleDays.length > 0) {
       return doctor.scheduleDays;
     }
     return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  }, [doctor?.scheduleDays]);
+  }, [doctor?.scheduleDays, doctor?.availableDays]);
 
   // Helper to resolve specific slots for any date (Date-wise > Day-wise > Default Standard)
   const resolveSlotsForDate = React.useCallback((dateObj) => {
@@ -1022,7 +1009,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
   const allBioSentences = React.useMemo(() => {
     return getBioSentences(doctor);
-  }, [doctor]);
+  }, [doctor?.about, doctor?.name, doctor?.specialty, doctor?.specialization, doctor?.experience]);
 
   // Dynamic vertical balancing: adjusts biography sentence count so left profile height aligns with right booking panel
   const updateBalancedBio = React.useCallback(() => {
@@ -1114,11 +1101,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   // Recalculate whenever appointment slots change, the selected date changes, or the biography changes
   React.useEffect(() => {
     const t = setTimeout(() => {
-      lastBookingHeightRef.current = 0; // force fresh measurement on slot change
       updateBalancedBio();
     }, 60);
     return () => clearTimeout(t);
-  }, [currentDaySlots, selectedDateIdx, doctor, allBioSentences, updateBalancedBio]);
+  }, [currentDaySlots, selectedDateIdx, allBioSentences, updateBalancedBio]);
 
   // Viewport resize listener with proper cleanup
   React.useEffect(() => {
@@ -2623,10 +2609,23 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           a: f.answer
                         }));
 
+                      const docHosp = (doctor.hospital || '').toLowerCase().trim();
+                      const hospitalTargetedFaqs = docHosp ? (faqs || [])
+                        .filter(f => f.isActive && f.targetType === 'hospital' && (
+                          (f.targetName && f.targetName.toLowerCase().trim() === docHosp) ||
+                          (doctor.hospitalId && f.targetId && String(f.targetId) === String(doctor.hospitalId))
+                        ))
+                        .map((f, i) => ({
+                          icon: resolveFaqIcon(f, specificDoctorFaqs.length + i),
+                          category: f.category || `${doctor.hospital} FAQ`,
+                          q: f.question,
+                          a: f.answer
+                        })) : [];
+
                       const embeddedDocFaqs = (Array.isArray(doctor?.faqs) && doctor.faqs.length > 0)
                         ? doctor.faqs.map((f, i) => ({
-                            icon: resolveFaqIcon(f, specificDoctorFaqs.length + i),
-                            category: f.category || defaultCategories[(specificDoctorFaqs.length + i) % defaultCategories.length] || 'General FAQ',
+                            icon: resolveFaqIcon(f, specificDoctorFaqs.length + hospitalTargetedFaqs.length + i),
+                            category: f.category || defaultCategories[(specificDoctorFaqs.length + hospitalTargetedFaqs.length + i) % defaultCategories.length] || 'General FAQ',
                             q: f.q || f.question,
                             a: f.a || f.answer,
                             steps: f.steps,
@@ -2634,7 +2633,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           }))
                         : [];
 
-                      const faqsToRender = [...specificDoctorFaqs, ...embeddedDocFaqs];
+                      const faqsToRender = [...specificDoctorFaqs, ...hospitalTargetedFaqs, ...embeddedDocFaqs];
 
                       if (faqsToRender.length === 0) {
                         return (

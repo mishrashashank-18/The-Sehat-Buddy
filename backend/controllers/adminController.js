@@ -10,6 +10,8 @@ import EmailLog from '../models/EmailLog.js';
 import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
+import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
+import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
 
 export const generateStandardDoctorFaqs = (docName) => {
   const cleanName = (docName || '').trim().startsWith('Dr.') ? (docName || '').trim() : `Dr. ${(docName || 'the doctor').trim()}`;
@@ -237,6 +239,10 @@ export const addDoctor = async (req, res) => {
     if (image && image.trim().length > 0) initPct += 10;
     if (availableDays) initPct += 5;
 
+    const parsedSched = parseAvailableDaysAndHours(availableDays || 'Mon - Sat (10am - 4pm)', 30);
+    const finalScheduleDays = (Array.isArray(req.body.scheduleDays) && req.body.scheduleDays.length > 0) ? req.body.scheduleDays : parsedSched.days;
+    const finalAvailableSlots = (Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) ? req.body.availableSlots : parsedSched.slots;
+
     const doctor = await Doctor.create({
       _id: newDocId,
       id: newDocId.toString(),
@@ -267,10 +273,13 @@ export const addDoctor = async (req, res) => {
       phone: docPhone,
       available: available !== undefined ? available : true,
       availableDays: availableDays || 'Mon - Sat (10am - 4pm)',
+      scheduleDays: finalScheduleDays,
+      availableSlots: finalAvailableSlots,
       isStarDoctor: Boolean(isStarDoctor),
+      starUpdatedAt: Date.now(),
       profileCompletion: Math.min(100, initPct),
       isProfileComplete: initPct >= 80,
-      faqs: (Array.isArray(faqs) && faqs.length > 0) ? faqs : generateStandardDoctorFaqs(name),
+      faqs: Array.isArray(faqs) ? faqs.filter(f => (f?.q || f?.question || '').trim() !== '') : [],
       awards: Array.isArray(awards) ? awards.filter(Boolean) : [],
       certifications: Array.isArray(certifications) ? certifications.filter(Boolean) : [],
       memberships: Array.isArray(memberships) ? memberships.filter(Boolean) : [],
@@ -352,10 +361,28 @@ export const getDashboardData = async (req, res) => {
   }
 };
 
+const doctorMutationQueues = new Map();
+
+export const serializeDoctorMutation = (docId, fn) => {
+  const key = String(docId || 'global');
+  const prevPromise = doctorMutationQueues.get(key) || Promise.resolve();
+  const nextPromise = prevPromise
+    .catch(() => {})
+    .then(fn);
+  doctorMutationQueues.set(key, nextPromise);
+  nextPromise.finally(() => {
+    if (doctorMutationQueues.get(key) === nextPromise) {
+      doctorMutationQueues.delete(key);
+    }
+  });
+  return nextPromise;
+};
+
 export const updateDoctor = async (req, res) => {
-  try {
-    let doctor = null;
-    const reqId = String(req.params.id).trim();
+  const reqId = String(req.params.id).trim();
+  return serializeDoctorMutation(reqId, async () => {
+    try {
+      let doctor = null;
     if (mongoose.Types.ObjectId.isValid(reqId)) {
       doctor = await Doctor.findById(reqId);
     }
@@ -422,7 +449,17 @@ export const updateDoctor = async (req, res) => {
         }
       }
 
-      Object.assign(doctor, req.body);
+      const incomingStar = req.body.isStarDoctor;
+      const incomingStarTimestamp = req.body.starMutationTimestamp !== undefined ? Number(req.body.starMutationTimestamp) : null;
+      const existingStar = Boolean(doctor.isStarDoctor);
+      const existingStarTimestamp = Number(doctor.starUpdatedAt || 0);
+
+      const safeBody = { ...req.body };
+      delete safeBody.isStarDoctor;
+      delete safeBody.starMutationTimestamp;
+      delete safeBody.starUpdatedAt;
+
+      Object.assign(doctor, safeBody);
       if (emailChanged) {
         doctor.email = newEmail;
       }
@@ -504,9 +541,64 @@ export const updateDoctor = async (req, res) => {
         doctor.markModified('price');
       }
 
-      if (req.body.isStarDoctor !== undefined) {
-        doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
-        doctor.markModified('isStarDoctor');
+      if (incomingStar !== undefined) {
+        const targetTimestamp = incomingStarTimestamp || Math.max(Date.now(), existingStarTimestamp + 1);
+        if (incomingStarTimestamp && existingStarTimestamp && incomingStarTimestamp <= existingStarTimestamp) {
+          doctor.isStarDoctor = existingStar;
+          doctor.starUpdatedAt = existingStarTimestamp;
+        } else {
+          // Perform atomic conditional write directly on MongoDB Atlas
+          // Guarantees ordering across multi-process Node.js clusters and multiple server instances
+          const atomicStarRes = await Doctor.findOneAndUpdate(
+            {
+              _id: doctor._id,
+              $or: [
+                { starUpdatedAt: { $lt: targetTimestamp } },
+                { starUpdatedAt: { $exists: false } },
+                { starUpdatedAt: null },
+                { starUpdatedAt: 0 }
+              ]
+            },
+            {
+              $set: {
+                isStarDoctor: Boolean(incomingStar),
+                starUpdatedAt: targetTimestamp
+              }
+            },
+            { new: true }
+          );
+
+          if (atomicStarRes) {
+            doctor.isStarDoctor = atomicStarRes.isStarDoctor;
+            doctor.starUpdatedAt = atomicStarRes.starUpdatedAt;
+          } else {
+            // A newer mutation already committed in MongoDB; refresh local doctor instance
+            const latestDoc = await Doctor.findById(doctor._id);
+            doctor.isStarDoctor = latestDoc ? latestDoc.isStarDoctor : existingStar;
+            doctor.starUpdatedAt = latestDoc ? latestDoc.starUpdatedAt : existingStarTimestamp;
+          }
+          doctor.markModified('isStarDoctor');
+          doctor.markModified('starUpdatedAt');
+
+          // Bidirectional synchronization: keep Hospital.star_doctors strictly in sync with Doctor.isStarDoctor
+          try {
+            if (Boolean(doctor.isStarDoctor)) {
+              if (doctor.hospital) {
+                await Hospital.updateMany(
+                  { $or: [{ name: doctor.hospital }, { _id: mongoose.Types.ObjectId.isValid(doctor.hospital) ? doctor.hospital : null }] },
+                  { $addToSet: { star_doctors: doctor._id } }
+                );
+              }
+            } else {
+              await Hospital.updateMany(
+                { star_doctors: doctor._id },
+                { $pull: { star_doctors: doctor._id } }
+              );
+            }
+          } catch (hospSyncErr) {
+            console.warn('Hospital star_doctors sync warning in updateDoctor:', hospSyncErr.message);
+          }
+        }
       }
 
       if (req.body.awards !== undefined) {
@@ -540,14 +632,30 @@ export const updateDoctor = async (req, res) => {
       if (req.body.availableDays !== undefined) {
         doctor.availableDays = req.body.availableDays;
         doctor.markModified('availableDays');
-      }
-      if (req.body.scheduleDays !== undefined) {
-        doctor.scheduleDays = Array.isArray(req.body.scheduleDays) ? req.body.scheduleDays.filter(Boolean) : [];
+
+        const parsedSched = parseAvailableDaysAndHours(req.body.availableDays, doctor.slotDuration || 30);
+        if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays) && req.body.scheduleDays.length > 0) {
+          doctor.scheduleDays = req.body.scheduleDays.filter(Boolean);
+        } else {
+          doctor.scheduleDays = parsedSched.days;
+        }
         doctor.markModified('scheduleDays');
-      }
-      if (req.body.availableSlots !== undefined) {
-        doctor.availableSlots = Array.isArray(req.body.availableSlots) ? req.body.availableSlots.filter(Boolean) : [];
+
+        if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) {
+          doctor.availableSlots = req.body.availableSlots.filter(Boolean);
+        } else if (parsedSched.slots.length > 0) {
+          doctor.availableSlots = parsedSched.slots;
+        }
         doctor.markModified('availableSlots');
+      } else {
+        if (req.body.scheduleDays !== undefined) {
+          doctor.scheduleDays = Array.isArray(req.body.scheduleDays) ? req.body.scheduleDays.filter(Boolean) : [];
+          doctor.markModified('scheduleDays');
+        }
+        if (req.body.availableSlots !== undefined) {
+          doctor.availableSlots = Array.isArray(req.body.availableSlots) ? req.body.availableSlots.filter(Boolean) : [];
+          doctor.markModified('availableSlots');
+        }
       }
       if (req.body.slotDuration !== undefined) {
         const durNum = Number(req.body.slotDuration);
@@ -591,7 +699,7 @@ export const updateDoctor = async (req, res) => {
       }
       
       const incomingImage = req.file ? req.file.path : req.body.image;
-      if (incomingImage && incomingImage !== doctor.image) {
+      if (incomingImage !== undefined && incomingImage !== doctor.image) {
         if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
           const oldPublicId = extractCloudinaryPublicId(doctor.image);
           if (oldPublicId) {
@@ -603,7 +711,8 @@ export const updateDoctor = async (req, res) => {
             }
           }
         }
-        doctor.image = incomingImage;
+        doctor.image = incomingImage || '';
+        doctor.markModified('image');
       }
       // Compute Profile Completion Percentage (0-100%)
       const isRahul = doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'));
@@ -628,6 +737,16 @@ export const updateDoctor = async (req, res) => {
       doctor.isProfileComplete = pct >= 80;
       doctor.markModified('profileCompletion');
       doctor.markModified('isProfileComplete');
+
+      // If this request did NOT explicitly modify star status, re-fetch the latest star values from MongoDB
+      // to ensure concurrent star toggles are never overwritten by doctor.save()
+      if (incomingStar === undefined) {
+        const freshStarState = await Doctor.findById(doctor._id).select('isStarDoctor starUpdatedAt');
+        if (freshStarState) {
+          doctor.isStarDoctor = freshStarState.isStarDoctor;
+          doctor.starUpdatedAt = freshStarState.starUpdatedAt;
+        }
+      }
 
       const updatedDoctor = await doctor.save();
 
@@ -657,107 +776,28 @@ export const updateDoctor = async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
+  });
 };
 
 export const deleteDoctor = async (req, res) => {
   try {
     const rawId = (req.params.id || '').trim();
-    let doctor = null;
-
-    if (mongoose.Types.ObjectId.isValid(rawId)) {
-      doctor = await Doctor.findById(rawId);
-    }
-    if (!doctor) {
-      doctor = await Doctor.findOne({ id: rawId });
-    }
-    if (!doctor && rawId) {
-      const decodedEmail = decodeURIComponent(rawId).toLowerCase().trim();
-      doctor = await Doctor.findOne({ email: decodedEmail });
+    if (!rawId) {
+      return res.status(400).json({ success: false, message: 'Doctor ID or email is required' });
     }
 
-    if (!doctor) {
-      // Check if this might be a staff doctor email referenced in hospitals without standalone Doctor record
-      const cleanEmail = decodeURIComponent(rawId).toLowerCase().trim();
-      if (cleanEmail && cleanEmail.includes('@')) {
-        await Hospital.updateMany(
-          {},
-          {
-            $pull: {
-              staff_doctors: { email: cleanEmail },
-              staff_emails: cleanEmail
-            }
-          }
-        );
-        broadcastDbChange('hospitals', 'update', null);
-        return res.json({ success: true, message: 'Hospital staff doctor removed successfully' });
-      }
+    const result = await purgeDoctorPermanently(rawId);
+    if (result.notFound) {
       return res.status(404).json({ success: false, message: 'Doctor not found in database' });
     }
 
-    if (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))) {
-      return res.status(400).json({
-        success: false,
-        message: 'System protection: Dr. Rahul Verma cannot be deleted.'
-      });
-    }
-
-    const docId = doctor._id;
-    const docEmail = (doctor.email || '').toLowerCase().trim();
-
-    // Permanently remove doctor image from Cloudinary
-    if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
-      const publicId = extractCloudinaryPublicId(doctor.image);
-      if (publicId) {
-        try {
-          const cld = getCloudinary();
-          await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
-        } catch (cldErr) {
-          console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
-        }
-      }
-    }
-
-    // Permanently remove doctor from MongoDB Doctor collection
-    await doctor.deleteOne();
-
-    // Permanently remove doctor references from all hospitals (star_doctors, staff_doctors, staff_emails)
-    try {
-      await Hospital.updateMany(
-        {},
-        {
-          $pull: {
-            star_doctors: docId,
-            staff_doctors: { email: docEmail },
-            staff_emails: docEmail
-          }
-        }
-      );
-      broadcastDbChange('hospitals', 'update', null);
-    } catch (hospErr) {
-      console.warn('Failed to clean up doctor from hospital references in MongoDB:', hospErr.message);
-    }
-
-    // Permanently remove or cancel associated appointments in database
-    try {
-      await Appointment.deleteMany({
-        $or: [
-          { doctorId: docId },
-          { doctorId: docId.toString() },
-          ...(doctor.id ? [{ doctorId: doctor.id }] : []),
-          { 'doctor.email': docEmail },
-          { 'doctor.id': docId.toString() },
-          ...(doctor.id ? [{ 'doctor.id': doctor.id }] : [])
-        ]
-      });
-      broadcastDbChange('appointments', 'delete', null);
-    } catch (aptErr) {
-      console.warn('Failed to clean up appointments for deleted doctor:', aptErr.message);
-    }
-
-    broadcastDbChange('doctors', 'delete', docId);
-    res.json({ success: true, message: 'Doctor and all associated database records deleted permanently' });
+    return res.json({
+      success: true,
+      message: 'Doctor and all associated database records (including email logs, user account, appointments, and hospital roster entries) deleted permanently'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    const status = error.statusCode || 500;
+    return res.status(status).json({ success: false, message: error.message });
   }
 };
 

@@ -7,6 +7,7 @@ import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
+import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { calculateHospitalProfileCompletion, normalizeAndValidatePhone, validateBedCapacity, MIN_PROFILE_COMPLETION_THRESHOLD } from '../utils/hospitalProfileCompletion.js';
 
 export const authHospital = async (req, res) => {
@@ -524,6 +525,7 @@ export const registerHospital = async (req, res) => {
       emergency24x7: emergency24x7 !== undefined ? Boolean(emergency24x7) : false,
       establishedYear: establishedYear ? Number(establishedYear) : undefined,
       showOnHome: req.body.showOnHome !== undefined ? Boolean(req.body.showOnHome) : true,
+      homeUpdatedAt: Date.now(),
       isVerified: Boolean(req.body.isVerified),
       isFirstLogin: false,
       passwordSet: true,
@@ -875,8 +877,51 @@ export const updateHospital = async (req, res) => {
         hospital.markModified('status');
       }
       if (req.body.showOnHome !== undefined) {
-        hospital.showOnHome = Boolean(req.body.showOnHome);
-        hospital.markModified('showOnHome');
+        const incomingHomeTs = req.body.homeMutationTimestamp !== undefined ? Number(req.body.homeMutationTimestamp) : null;
+        const existingHomeTs = Number(hospital.homeUpdatedAt || 0);
+        const targetVal = Boolean(req.body.showOnHome);
+        const existingVal = hospital.showOnHome !== false;
+
+        // If showOnHome value is identical and no explicit timestamp was provided, skip updating homeUpdatedAt
+        if (incomingHomeTs === null && targetVal === existingVal) {
+          // No-op: value unchanged, avoid creating artificial timestamp drift
+        } else if (incomingHomeTs && existingHomeTs && incomingHomeTs <= existingHomeTs) {
+          // Stale request discarded
+        } else {
+          const targetHomeTs = incomingHomeTs || Math.max(Date.now(), existingHomeTs + 1);
+          // Atomic conditional update directly on MongoDB Atlas
+          const atomicHomeRes = await Hospital.findOneAndUpdate(
+            {
+              _id: hospital._id,
+              $or: [
+                { homeUpdatedAt: { $lt: targetHomeTs } },
+                { homeUpdatedAt: { $exists: false } },
+                { homeUpdatedAt: null },
+                { homeUpdatedAt: 0 }
+              ]
+            },
+            {
+              $set: {
+                showOnHome: targetVal,
+                homeUpdatedAt: targetHomeTs
+              }
+            },
+            { returnDocument: 'after' }
+          );
+
+          if (atomicHomeRes) {
+            hospital.showOnHome = atomicHomeRes.showOnHome;
+            hospital.homeUpdatedAt = atomicHomeRes.homeUpdatedAt;
+          } else {
+            const latestHosp = await Hospital.findById(hospital._id);
+            if (latestHosp) {
+              hospital.showOnHome = latestHosp.showOnHome;
+              hospital.homeUpdatedAt = latestHosp.homeUpdatedAt;
+            }
+          }
+          hospital.markModified('showOnHome');
+          hospital.markModified('homeUpdatedAt');
+        }
       }
     } else if (isHospitalAdmin) {
       if (req.body.publicationStatus === 'pending_review' || req.body.publicationStatus === 'published') {
@@ -1052,8 +1097,44 @@ export const updateHospital = async (req, res) => {
         }
       }
 
+      // Identify added and removed doctor IDs for bidirectional synchronization
+      const oldStarDoctors = (hospital.star_doctors || []).map(sid => String(sid));
+      const newStarDoctorStrings = new Set(uniqueStarDoctors.map(sid => String(sid)));
+      const removedDoctorIds = oldStarDoctors.filter(oldId => !newStarDoctorStrings.has(oldId));
+
       hospital.star_doctors = uniqueStarDoctors;
       hospital.markModified('star_doctors');
+
+      // Bidirectional synchronization: keep Doctor.isStarDoctor strictly aligned with Hospital.star_doctors
+      const nowTs = Date.now();
+      if (uniqueStarDoctors.length > 0) {
+        Doctor.updateMany(
+          { _id: { $in: uniqueStarDoctors } },
+          { $set: { isStarDoctor: true, starUpdatedAt: nowTs } }
+        ).catch(err => console.warn('Sync Doctor.isStarDoctor true failed:', err.message));
+      }
+
+      if (removedDoctorIds.length > 0) {
+        (async () => {
+          for (const remId of removedDoctorIds) {
+            if (!mongoose.Types.ObjectId.isValid(remId)) continue;
+            try {
+              const otherHospitalHas = await Hospital.exists({
+                _id: { $ne: hospital._id },
+                star_doctors: remId
+              });
+              if (!otherHospitalHas) {
+                await Doctor.updateOne(
+                  { _id: remId },
+                  { $set: { isStarDoctor: false, starUpdatedAt: nowTs } }
+                );
+              }
+            } catch (syncErr) {
+              console.warn('Sync Doctor.isStarDoctor false failed:', syncErr.message);
+            }
+          }
+        })();
+      }
     }
     if (req.body.photos !== undefined) {
       hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
@@ -1103,6 +1184,16 @@ export const updateHospital = async (req, res) => {
       hospital.markModified('publicationStatus');
     }
     
+    // If this request did not explicitly modify showOnHome, re-fetch the latest state from MongoDB
+    // to guarantee concurrent Running/Hidden toggles are never overwritten by hospital.save()
+    if (req.body.showOnHome === undefined) {
+      const freshHomeState = await Hospital.findById(hospital._id).select('showOnHome homeUpdatedAt');
+      if (freshHomeState) {
+        hospital.showOnHome = freshHomeState.showOnHome;
+        hospital.homeUpdatedAt = freshHomeState.homeUpdatedAt;
+      }
+    }
+
     let updatedHospital;
     try {
       updatedHospital = await hospital.save();
@@ -1113,7 +1204,10 @@ export const updateHospital = async (req, res) => {
           allowedFields.forEach((field) => {
             if (req.body[field] !== undefined) fresh[field] = req.body[field];
           });
-          if (isAdmin && req.body.showOnHome !== undefined) fresh.showOnHome = Boolean(req.body.showOnHome);
+          if (isAdmin && req.body.showOnHome !== undefined) {
+            fresh.showOnHome = Boolean(req.body.showOnHome);
+            if (hospital.homeUpdatedAt) fresh.homeUpdatedAt = hospital.homeUpdatedAt;
+          }
           if (isAdmin && req.body.publicationStatus !== undefined) fresh.publicationStatus = req.body.publicationStatus;
           if (isAdmin && req.body.status !== undefined) fresh.status = req.body.status;
           if (req.body.totalBeds !== undefined) fresh.totalBeds = Number(req.body.totalBeds);
@@ -1448,7 +1542,7 @@ export const removeDoctorFromHospital = async (req, res) => {
       hospital.markModified('staff_emails');
     }
 
-    // 3. If doctor was created specifically for this hospital and has no other hospital affiliations, delete doctor permanently
+    // 3. If doctor was created specifically for this hospital or has no other hospital affiliations, permanently purge doctor, email logs, and account
     if (doctor) {
       const docHosp = String(doctor.hospital || '').trim().toLowerCase();
       const thisHospName = String(hospital.name || '').trim().toLowerCase();
@@ -1463,10 +1557,11 @@ export const removeDoctorFromHospital = async (req, res) => {
         ]
       });
 
-      if ((docHosp === thisHospName || docHosp === thisHospId) && otherHospitalCount === 0) {
-        if (doctor.email !== 'dr.rahul@sehatbuddy.com' && (!doctor.name || !doctor.name.toLowerCase().includes('rahul verma'))) {
-          await doctor.deleteOne();
-          broadcastDbChange('doctors', 'delete', doctor._id);
+      if ((docHosp === thisHospName || docHosp === thisHospId || !docHosp) && otherHospitalCount === 0) {
+        try {
+          await purgeDoctorPermanently(doctor);
+        } catch (purgeErr) {
+          console.warn('Purge doctor notice on hospital roster removal:', purgeErr.message);
         }
       }
     }
