@@ -85,4 +85,4 @@ In the project root:
 
 ## 📄 License
 
-Proprietary © The Sehat Buddy. All rights reserved.
+Proprietary © The Sehat Buddy. All rights are reserved.
