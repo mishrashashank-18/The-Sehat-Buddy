@@ -55,7 +55,7 @@ export const protect = async (req, res, next) => {
             } else {
               user = await User.findById(decoded.id);
               if (user) {
-                role = 'user';
+                role = user.role || (decoded.role === 'admin' ? 'admin' : 'user');
               }
             }
           }

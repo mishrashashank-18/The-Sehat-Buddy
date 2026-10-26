@@ -60,6 +60,17 @@ const LoginPage = ({ role, setView }) => {
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
+  // Display notice if automatically logged out due to account removal
+  useEffect(() => {
+    try {
+      const notice = sessionStorage.getItem('doctor_logged_out_notice');
+      if (notice && role === 'doctor') {
+        sessionStorage.removeItem('doctor_logged_out_notice');
+        setError(notice);
+      }
+    } catch {}
+  }, [role]);
+
   // Hospital specialized login step: 'email' -> 'set-password' (first login) OR 'password' (returning) OR 'reset-otp' / 'reset-new-password'
   const [hospStep, setHospStep] = useState('email');
   const [hospInfo, setHospInfo] = useState(null);

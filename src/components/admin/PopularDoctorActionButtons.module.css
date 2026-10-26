@@ -1,0 +1,104 @@
+.popularBtnGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.popularActionBtn {
+  width: 30px;
+  min-width: 30px;
+  max-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0;
+  box-sizing: border-box;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  position: relative;
+  text-decoration: none;
+  outline: none;
+}
+
+.popularActionBtn:disabled,
+.popularActionBtn[aria-busy="true"] {
+  cursor: pointer;
+  opacity: 1 !important;
+}
+
+.popularActionBtn:focus-visible {
+  outline: 2px solid;
+  outline-offset: 1px;
+}
+
+.popularActionBtn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Green Tick (✓) Button */
+.popularTickBtn {
+  border: 1.5px solid #86efac;
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.popularTickBtn:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #22c55e;
+  color: #15803d;
+}
+
+.popularTickBtn:focus-visible {
+  outline-color: #16a34a;
+}
+
+.popularTickActive {
+  background: #16a34a !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.25);
+}
+
+.popularTickActive:hover:not(:disabled) {
+  background: #15803d !important;
+  border-color: #166534 !important;
+  color: #ffffff !important;
+}
+
+/* Red Cross (✕) Button */
+.popularCrossBtn {
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.popularCrossBtn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #ef4444;
+  color: #b91c1c;
+}
+
+.popularCrossBtn:focus-visible {
+  outline-color: #dc2626;
+}
+
+.popularCrossActive {
+  background: #dc2626 !important;
+  border-color: #b91c1c !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.25);
+}
+
+.popularCrossActive:hover:not(:disabled) {
+  background: #b91c1c !important;
+  border-color: #991b1b !important;
+  color: #ffffff !important;
+}

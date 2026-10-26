@@ -36,6 +36,53 @@ import {
 } from '../doctor-dashboard/DoctorDashboard';
 import styles from './DoctorHistoryModal.module.css';
 
+export const extractDateParts = (item) => {
+  if (!item) return { year: '', month: '', day: '', fullDate: '' };
+  const raw = String(item.slotDate || item.dateStr || item.date || item.createdAt || item.bookedAt || '').trim();
+  if (!raw) return { year: '', month: '', day: '', fullDate: '' };
+
+  // 1. Direct YYYY-MM-DD pattern (e.g. "2026-10-26" or "2026-10-26T...")
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return {
+      year: isoMatch[1],
+      month: isoMatch[2],
+      day: isoMatch[3],
+      fullDate: `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+    };
+  }
+
+  // 2. DD-MM-YYYY or DD/MM/YYYY pattern
+  const dmyMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return {
+      year,
+      month,
+      day,
+      fullDate: `${year}-${month}-${day}`
+    };
+  }
+
+  // 3. Native Date parse
+  const parsed = new Date(raw);
+  if (!isNaN(parsed.getTime())) {
+    const year = parsed.getFullYear().toString();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return {
+      year,
+      month,
+      day,
+      fullDate: `${year}-${month}-${day}`
+    };
+  }
+
+  return { year: '', month: '', day: '', fullDate: '' };
+};
+
 const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
   const { doctors, reviews, addReview, updateReview, deleteReview } = useData();
   const liveDoc = useMemo(() => {
@@ -192,9 +239,14 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
     return { appointments: deduped, prescriptions: initialRx };
   }, [doctor, storageKeys, initialAppointments]);
 
-  const [activeTab, setActiveTab] = useState('consultations'); // 'consultations' | 'prescriptions'
+  const [activeTab, setActiveTab] = useState('consultations'); // 'consultations' | 'prescriptions' | 'reviews'
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedYear, setSelectedYear] = useState('all');
+  const [selectedMonth, setSelectedMonth] = useState('all');
+  const [selectedDay, setSelectedDay] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(''); // exact 'YYYY-MM-DD'
+  const [selectedPreset, setSelectedPreset] = useState('all'); // 'all' | 'today' | 'this_month' | 'this_year'
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [appointments, setAppointments] = useState(initialDoctorData.appointments);
@@ -363,7 +415,18 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
     return appointments.filter(a => !a.isCompleted && a.status !== 'Completed' && a.status !== 'Cancelled').length;
   }, [appointments]);
 
-  // Filtered consultations
+  // Available Years collected from actual appointments
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    appointments.forEach(apt => {
+      const { year } = extractDateParts(apt);
+      if (year && year.length === 4) years.add(year);
+    });
+    years.add(new Date().getFullYear().toString());
+    return Array.from(years).sort().reverse();
+  }, [appointments]);
+
+  // Filtered consultations according to Status, Date/Month/Year presets, and Search
   const filteredAppointments = useMemo(() => {
     return appointments.filter(apt => {
       // Status filter
@@ -372,6 +435,32 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
         if (statusFilter === 'Confirmed' && (apt.isCompleted || apt.status === 'Completed' || apt.status === 'Cancelled')) return false;
         if (statusFilter === 'Cancelled' && apt.status !== 'Cancelled') return false;
       }
+
+      // Date filtering
+      const { year, month, day, fullDate } = extractDateParts(apt);
+      const now = new Date();
+
+      if (selectedPreset === 'today') {
+        const curY = now.getFullYear().toString();
+        const curM = String(now.getMonth() + 1).padStart(2, '0');
+        const curD = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${curY}-${curM}-${curD}`;
+        if (fullDate !== todayStr) return false;
+      } else if (selectedPreset === 'this_month') {
+        const curY = now.getFullYear().toString();
+        const curM = String(now.getMonth() + 1).padStart(2, '0');
+        if (year !== curY || month !== curM) return false;
+      } else if (selectedPreset === 'this_year') {
+        const curY = now.getFullYear().toString();
+        if (year !== curY) return false;
+      } else if (selectedDate) {
+        if (fullDate !== selectedDate) return false;
+      } else {
+        if (selectedYear !== 'all' && year !== selectedYear) return false;
+        if (selectedMonth !== 'all' && month !== selectedMonth) return false;
+        if (selectedDay !== 'all' && day !== selectedDay) return false;
+      }
+
       // Search filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -382,7 +471,64 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
       }
       return true;
     });
-  }, [appointments, statusFilter, searchQuery]);
+  }, [appointments, statusFilter, selectedPreset, selectedDate, selectedYear, selectedMonth, selectedDay, searchQuery]);
+
+  // Filtered prescriptions according to Date/Month/Year presets, and Search
+  const filteredPrescriptions = useMemo(() => {
+    return prescriptions.filter(rx => {
+      // Date filtering
+      const { year, month, day, fullDate } = extractDateParts(rx);
+      const now = new Date();
+
+      if (selectedPreset === 'today') {
+        const curY = now.getFullYear().toString();
+        const curM = String(now.getMonth() + 1).padStart(2, '0');
+        const curD = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${curY}-${curM}-${curD}`;
+        if (fullDate && fullDate !== todayStr) return false;
+      } else if (selectedPreset === 'this_month') {
+        const curY = now.getFullYear().toString();
+        const curM = String(now.getMonth() + 1).padStart(2, '0');
+        if (year && (year !== curY || month !== curM)) return false;
+      } else if (selectedPreset === 'this_year') {
+        const curY = now.getFullYear().toString();
+        if (year && year !== curY) return false;
+      } else if (selectedDate) {
+        if (fullDate && fullDate !== selectedDate) return false;
+      } else {
+        if (selectedYear !== 'all' && year && year !== selectedYear) return false;
+        if (selectedMonth !== 'all' && month && month !== selectedMonth) return false;
+        if (selectedDay !== 'all' && day && day !== selectedDay) return false;
+      }
+
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const pName = (rx.patientName || '').toLowerCase();
+        const diag = (rx.diagnosis || '').toLowerCase();
+        return pName.includes(q) || diag.includes(q);
+      }
+      return true;
+    });
+  }, [prescriptions, selectedPreset, selectedDate, selectedYear, selectedMonth, selectedDay, searchQuery]);
+
+  const isFilterActive = selectedYear !== 'all' ||
+    selectedMonth !== 'all' ||
+    selectedDay !== 'all' ||
+    Boolean(selectedDate) ||
+    selectedPreset !== 'all' ||
+    statusFilter !== 'all' ||
+    Boolean(searchQuery.trim());
+
+  const handleResetFilters = () => {
+    setSelectedYear('all');
+    setSelectedMonth('all');
+    setSelectedDay('all');
+    setSelectedDate('');
+    setSelectedPreset('all');
+    setStatusFilter('all');
+    setSearchQuery('');
+  };
 
   if (!doctor) return null;
 
@@ -515,68 +661,259 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
           </div>
 
           {/* Toolbar: Tabs, Search, Filter & Refresh */}
-          <div className={styles.toolbarRow}>
-            <div className={styles.tabList}>
-              <button
-                type="button"
-                className={`${styles.tabBtn} ${activeTab === 'consultations' ? styles.tabBtnActive : ''}`}
-                onClick={() => setActiveTab('consultations')}
-              >
-                <Users size={15} />
-                <span>Patient Consultations ({appointments.length})</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.tabBtn} ${activeTab === 'prescriptions' ? styles.tabBtnActive : ''}`}
-                onClick={() => setActiveTab('prescriptions')}
-              >
-                <Pill size={15} />
-                <span>Prescriptions ({prescriptions.length})</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.tabBtn} ${activeTab === 'reviews' ? styles.tabBtnActive : ''}`}
-                onClick={() => setActiveTab('reviews')}
-              >
-                <Star size={15} color="#d97706" />
-                <span>Patient Reviews ({doctorReviews.length})</span>
-              </button>
-            </div>
-
-            <div className={styles.searchFilterGroup}>
-              <div className={styles.searchBox}>
-                <Search size={15} color="#94a3b8" />
-                <input
-                  type="text"
-                  placeholder="Search patient, symptoms..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+          <div className={styles.toolbarSection}>
+            <div className={styles.toolbarRow}>
+              <div className={styles.tabList}>
+                <button
+                  type="button"
+                  className={`${styles.tabBtn} ${activeTab === 'consultations' ? styles.tabBtnActive : ''}`}
+                  onClick={() => setActiveTab('consultations')}
+                >
+                  <Users size={15} />
+                  <span>
+                    Patient Consultations ({filteredAppointments.length !== appointments.length ? `${filteredAppointments.length}/${appointments.length}` : appointments.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.tabBtn} ${activeTab === 'prescriptions' ? styles.tabBtnActive : ''}`}
+                  onClick={() => setActiveTab('prescriptions')}
+                >
+                  <Pill size={15} />
+                  <span>
+                    Prescriptions ({filteredPrescriptions.length !== prescriptions.length ? `${filteredPrescriptions.length}/${prescriptions.length}` : prescriptions.length})
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.tabBtn} ${activeTab === 'reviews' ? styles.tabBtnActive : ''}`}
+                  onClick={() => setActiveTab('reviews')}
+                >
+                  <Star size={15} color="#d97706" />
+                  <span>Patient Reviews ({doctorReviews.length})</span>
+                </button>
               </div>
 
-              {activeTab === 'consultations' && (
-                <select
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className={styles.statusSelect}
-                >
-                  <option value="all">All Statuses ({appointments.length})</option>
-                  <option value="Completed">Completed ({completedConsultations.length})</option>
-                  <option value="Confirmed">Confirmed / Upcoming ({confirmedCount})</option>
-                  <option value="Cancelled">Cancelled</option>
-                </select>
-              )}
+              <div className={styles.searchFilterGroup}>
+                <div className={styles.searchBox}>
+                  <Search size={15} color="#94a3b8" />
+                  <input
+                    type="text"
+                    placeholder="Search patient, symptoms..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#94a3b8', display: 'flex' }}
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
 
-              <button
-                type="button"
-                onClick={() => loadDoctorData(true)}
-                className={styles.closeBtn}
-                title="Refresh history data"
-                style={{ width: '32px', height: '32px' }}
-              >
-                <RefreshCw size={14} className={isLoading || isSyncing ? 'animate-spin' : ''} />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => loadDoctorData(true)}
+                  className={styles.closeBtn}
+                  title="Refresh history data"
+                  style={{ width: '32px', height: '32px' }}
+                >
+                  <RefreshCw size={14} className={isLoading || isSyncing ? 'animate-spin' : ''} />
+                </button>
+              </div>
             </div>
+
+            {/* Row 2: Date, Month, Year & Status Filter Bar */}
+            {(activeTab === 'consultations' || activeTab === 'prescriptions') && (
+              <div className={styles.dateFilterBar}>
+                {/* Quick Period Presets */}
+                <div className={styles.periodPresets}>
+                  <button
+                    type="button"
+                    className={`${styles.presetPill} ${selectedPreset === 'all' && selectedYear === 'all' && selectedMonth === 'all' && selectedDay === 'all' && !selectedDate ? styles.presetPillActive : ''}`}
+                    onClick={() => {
+                      setSelectedPreset('all');
+                      setSelectedYear('all');
+                      setSelectedMonth('all');
+                      setSelectedDay('all');
+                      setSelectedDate('');
+                    }}
+                  >
+                    All Time
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.presetPill} ${selectedPreset === 'today' ? styles.presetPillActive : ''}`}
+                    onClick={() => {
+                      setSelectedPreset('today');
+                      setSelectedYear('all');
+                      setSelectedMonth('all');
+                      setSelectedDay('all');
+                      setSelectedDate('');
+                    }}
+                  >
+                    Today
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.presetPill} ${selectedPreset === 'this_month' ? styles.presetPillActive : ''}`}
+                    onClick={() => {
+                      setSelectedPreset('this_month');
+                      setSelectedYear('all');
+                      setSelectedMonth('all');
+                      setSelectedDay('all');
+                      setSelectedDate('');
+                    }}
+                  >
+                    This Month
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.presetPill} ${selectedPreset === 'this_year' ? styles.presetPillActive : ''}`}
+                    onClick={() => {
+                      setSelectedPreset('this_year');
+                      setSelectedYear('all');
+                      setSelectedMonth('all');
+                      setSelectedDay('all');
+                      setSelectedDate('');
+                    }}
+                  >
+                    This Year
+                  </button>
+                </div>
+
+                <div className={styles.dividerVertical} />
+
+                {/* Date Selectors: Year, Month, Day/Date */}
+                <div className={styles.selectorsGroup}>
+                  {/* Year Filter */}
+                  <div className={styles.filterControlItem}>
+                    <label className={styles.filterControlLabel}>
+                      <Calendar size={12} color="#64748b" /> Year
+                    </label>
+                    <select
+                      className={styles.filterControlSelect}
+                      value={selectedPreset !== 'all' ? 'preset' : selectedYear}
+                      onChange={(e) => {
+                        setSelectedPreset('all');
+                        setSelectedYear(e.target.value);
+                        if (selectedDate) setSelectedDate('');
+                      }}
+                    >
+                      <option value="all">All Years</option>
+                      {availableYears.map(yr => (
+                        <option key={yr} value={yr}>{yr}</option>
+                      ))}
+                      {selectedPreset !== 'all' && <option value="preset" disabled>Preset Active</option>}
+                    </select>
+                  </div>
+
+                  {/* Month Filter */}
+                  <div className={styles.filterControlItem}>
+                    <label className={styles.filterControlLabel}>Month</label>
+                    <select
+                      className={styles.filterControlSelect}
+                      value={selectedPreset !== 'all' ? 'preset' : selectedMonth}
+                      onChange={(e) => {
+                        setSelectedPreset('all');
+                        setSelectedMonth(e.target.value);
+                        if (selectedDate) setSelectedDate('');
+                      }}
+                    >
+                      <option value="all">All Months</option>
+                      <option value="01">01 - Jan</option>
+                      <option value="02">02 - Feb</option>
+                      <option value="03">03 - Mar</option>
+                      <option value="04">04 - Apr</option>
+                      <option value="05">05 - May</option>
+                      <option value="06">06 - Jun</option>
+                      <option value="07">07 - Jul</option>
+                      <option value="08">08 - Aug</option>
+                      <option value="09">09 - Sep</option>
+                      <option value="10">10 - Oct</option>
+                      <option value="11">11 - Nov</option>
+                      <option value="12">12 - Dec</option>
+                      {selectedPreset !== 'all' && <option value="preset" disabled>Preset Active</option>}
+                    </select>
+                  </div>
+
+                  {/* Day Filter */}
+                  <div className={styles.filterControlItem}>
+                    <label className={styles.filterControlLabel}>Day</label>
+                    <select
+                      className={styles.filterControlSelect}
+                      value={selectedPreset !== 'all' ? 'preset' : selectedDay}
+                      onChange={(e) => {
+                        setSelectedPreset('all');
+                        setSelectedDay(e.target.value);
+                        if (selectedDate) setSelectedDate('');
+                      }}
+                    >
+                      <option value="all">All Days</option>
+                      {Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0')).map(d => (
+                        <option key={d} value={d}>Day {d}</option>
+                      ))}
+                      {selectedPreset !== 'all' && <option value="preset" disabled>Preset Active</option>}
+                    </select>
+                  </div>
+
+                  {/* Exact Date Picker */}
+                  <div className={styles.filterControlItem}>
+                    <label className={styles.filterControlLabel}>Exact Date</label>
+                    <input
+                      type="date"
+                      className={styles.filterControlDate}
+                      value={selectedDate}
+                      title="Select exact date"
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedDate(val);
+                        setSelectedPreset('all');
+                        if (val) {
+                          const [y, m, d] = val.split('-');
+                          setSelectedYear(y || 'all');
+                          setSelectedMonth(m || 'all');
+                          setSelectedDay(d || 'all');
+                        }
+                      }}
+                    />
+                  </div>
+
+                  {/* Status Filter (Consultations) */}
+                  {activeTab === 'consultations' && (
+                    <div className={styles.filterControlItem}>
+                      <label className={styles.filterControlLabel}>Status</label>
+                      <select
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className={styles.filterControlSelect}
+                      >
+                        <option value="all">All Statuses ({appointments.length})</option>
+                        <option value="Completed">Completed ({completedConsultations.length})</option>
+                        <option value="Confirmed">Confirmed ({confirmedCount})</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Reset Filters */}
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      className={styles.resetFiltersBtn}
+                      onClick={handleResetFilters}
+                      title="Clear all date and search filters"
+                    >
+                      <X size={13} />
+                      <span>Clear Filters</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* TAB 1: Patient Consultations Table */}
@@ -587,10 +924,21 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                   <Users size={40} className={styles.emptyIcon} />
                   <h4 className={styles.emptyTitle}>No Consultations Found</h4>
                   <p className={styles.emptySubtitle}>
-                    {searchQuery || statusFilter !== 'all'
-                      ? 'No patient consultations match your current search or status filter.'
+                    {isFilterActive
+                      ? 'No patient consultations match your current date, month, year, status, or search filters.'
                       : `Dr. ${doctor.name.replace('Dr. ', '')} does not have any recorded consultations yet. Any patients booked online or registered at clinic will appear here automatically.`}
                   </p>
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className={styles.resetFiltersBtn}
+                      style={{ marginTop: '12px' }}
+                    >
+                      <X size={13} />
+                      <span>Clear All Filters</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className={styles.table}>
@@ -686,13 +1034,26 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
           {/* TAB 2: Prescriptions Table */}
           {activeTab === 'prescriptions' && (
             <div className={styles.tableContainer}>
-              {prescriptions.length === 0 ? (
+              {filteredPrescriptions.length === 0 ? (
                 <div className={styles.emptyState}>
                   <FileText size={40} className={styles.emptyIcon} />
                   <h4 className={styles.emptyTitle}>No Prescriptions Recorded</h4>
                   <p className={styles.emptySubtitle}>
-                    Dr. {doctor.name.replace('Dr. ', '')} has not issued any electronic prescriptions yet.
+                    {isFilterActive
+                      ? 'No electronic prescriptions match your current date or search filters.'
+                      : `Dr. ${doctor.name.replace('Dr. ', '')} has not issued any electronic prescriptions yet.`}
                   </p>
+                  {isFilterActive && (
+                    <button
+                      type="button"
+                      onClick={handleResetFilters}
+                      className={styles.resetFiltersBtn}
+                      style={{ marginTop: '12px' }}
+                    >
+                      <X size={13} />
+                      <span>Clear All Filters</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <table className={styles.table}>
@@ -706,7 +1067,7 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {prescriptions.map((rx, idx) => (
+                    {filteredPrescriptions.map((rx, idx) => (
                       <tr key={rx.id || rx._id || idx}>
                         <td>
                           <div style={{ fontWeight: 700, color: '#0f172a' }}>{rx.patientName}</div>

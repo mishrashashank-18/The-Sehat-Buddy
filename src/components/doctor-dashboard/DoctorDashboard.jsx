@@ -54,6 +54,7 @@ import { api, API_BASE } from '../../services/api';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import { getDoctorProfileCompletionDetails, calculateDoctorProfileCompletion, isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
 import { DEFAULT_DOCTOR_AVATARS, isPresetAvatar } from '../../constants/doctorAvatars';
+import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
 
@@ -366,6 +367,23 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
   }, []);
 
+  const executeDoctorLogout = useCallback((reason = 'Your doctor account has been removed. You have been logged out automatically.') => {
+    localStorage.removeItem('doctor_token');
+    localStorage.removeItem('doctor_user');
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      if (u.role === 'doctor' || !u.role) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
+    } catch {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
+    sessionStorage.setItem('doctor_logged_out_notice', reason);
+    window.location.href = '/doctor';
+  }, []);
+
   const activeDoctor = React.useMemo(() => {
     let candidate = null;
     if (storedUser && (storedUser._id || storedUser.id)) {
@@ -390,6 +408,151 @@ const DoctorDashboard = ({ onNavigate }) => {
     };
   }, [doctors, storedUser]);
 
+  // Real-time automatic logout if doctor is deleted by Admin or Hospital
+  useEffect(() => {
+    const checkTargetMatchesCurrentDoctor = (targetId, targetEmail) => {
+      const tId = String(targetId || '').toLowerCase().trim();
+      const tEmail = String(targetEmail || '').toLowerCase().trim();
+      const myId = String(storedUser?._id || storedUser?.id || activeDoctor?._id || activeDoctor?.id || '').toLowerCase().trim();
+      const myEmail = String(storedUser?.email || activeDoctor?.email || '').toLowerCase().trim();
+
+      if (tId && (tId === myId || (activeDoctor?._id && tId === String(activeDoctor._id).toLowerCase()) || (activeDoctor?.id && tId === String(activeDoctor.id).toLowerCase()))) {
+        return true;
+      }
+      if (tEmail && (tEmail === myEmail || (activeDoctor?.email && tEmail === activeDoctor.email.toLowerCase().trim()))) {
+        return true;
+      }
+      return false;
+    };
+
+    // 1. Direct doctor deleted custom event from DataContext / SSE
+    const handleDoctorDeleted = (e) => {
+      const { id, email } = e.detail || {};
+      if (checkTargetMatchesCurrentDoctor(id, email)) {
+        executeDoctorLogout('Your doctor profile has been removed by the hospital or administrator. You have been logged out automatically.');
+      }
+    };
+
+    // 2. Real-time db_change event
+    const handleDbChange = (e) => {
+      const payload = e.detail || {};
+      if (payload.collection === 'doctors' && payload.operation === 'delete') {
+        const docId = payload.docId;
+        const docEmail = payload.fullDocument?.email;
+        if (checkTargetMatchesCurrentDoctor(docId, docEmail)) {
+          executeDoctorLogout('Your doctor profile has been removed by the hospital or administrator. You have been logged out automatically.');
+        }
+      }
+    };
+
+    // 3. Storage event for cross-tab synchronizations
+    const handleStorageEvent = (e) => {
+      if (e.key === 'sehat_doctor_deleted' && e.newValue) {
+        try {
+          const detail = JSON.parse(e.newValue);
+          if (checkTargetMatchesCurrentDoctor(detail.id, detail.email)) {
+            executeDoctorLogout('Your doctor profile has been removed by the hospital or administrator. You have been logged out automatically.');
+          }
+        } catch {}
+      }
+    };
+
+    // 4. Unauthorized 401 handler
+    const handleUnauthorized = (e) => {
+      executeDoctorLogout('Your session has ended because your doctor account was deleted. You have been logged out automatically.');
+    };
+
+    // 5. Real-time doctor update handler (Available Hours / Days reflection in dashboard)
+    const handleDoctorsUpdated = (e) => {
+      const updatedList = Array.isArray(e.detail) ? e.detail : [];
+      const myId = storedUser?._id || storedUser?.id || activeDoctor?._id || activeDoctor?.id;
+      const myEmail = (storedUser?.email || activeDoctor?.email || '').toLowerCase().trim();
+      const meUpdated = updatedList.find(d => 
+        (myId && matchesId(d, myId)) || 
+        (myEmail && (d.email || '').toLowerCase().trim() === myEmail)
+      );
+      if (meUpdated && meUpdated.availableDays) {
+        try {
+          const currentDocUser = JSON.parse(localStorage.getItem('doctor_user') || '{}');
+          localStorage.setItem('doctor_user', JSON.stringify({ ...currentDocUser, ...meUpdated }));
+        } catch {}
+        if (!isEditingAvailableDaysRef.current && (Date.now() - isLocalSlotUpdateRef.current >= 2000)) {
+          const parsed = parseAvailableDaysAndHours(meUpdated.availableDays, meUpdated.slotDuration || 30);
+          setProfileForm(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              availableDays: meUpdated.availableDays,
+              scheduleDays: parsed.days,
+              availableSlots: parsed.slots
+            };
+          });
+        }
+      }
+    };
+
+    window.addEventListener('sehat_doctor_deleted', handleDoctorDeleted);
+    window.addEventListener('sehat_db_change', handleDbChange);
+    window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('sehat_auth_unauthorized', handleUnauthorized);
+    window.addEventListener('sehat_doctors_updated', handleDoctorsUpdated);
+
+    // Initial and periodic backend session verification
+    let isMounted = true;
+    const verifyDoctorSessionWithBackend = async () => {
+      try {
+        const token = localStorage.getItem('doctor_token') || localStorage.getItem('token');
+        if (!token) {
+          executeDoctorLogout('Session expired. Please log in again.');
+          return;
+        }
+        const fresh = await api.getMyDoctor();
+        if (fresh && isMounted) {
+          try {
+            localStorage.setItem('doctor_user', JSON.stringify(fresh));
+          } catch {}
+          if (fresh.availableDays && !isEditingAvailableDaysRef.current) {
+            setProfileForm(prev => {
+              if (prev?.availableDays === fresh.availableDays) return prev;
+              const parsed = parseAvailableDaysAndHours(fresh.availableDays, fresh.slotDuration || 30);
+              return {
+                ...prev,
+                availableDays: fresh.availableDays,
+                scheduleDays: parsed.days,
+                availableSlots: parsed.slots
+              };
+            });
+          }
+        }
+      } catch (err) {
+        if (isMounted && (err?.status === 401 || err?.status === 403 || err?.status === 404 || err?.message?.includes('deleted') || err?.message?.includes('no longer exists'))) {
+          executeDoctorLogout('Your doctor account has been removed. You have been logged out automatically.');
+        }
+      }
+    };
+
+    // Run verification immediately on mount
+    verifyDoctorSessionWithBackend();
+
+    // Re-verify when doctor tabs back into the page
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        verifyDoctorSessionWithBackend();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('sehat_doctor_deleted', handleDoctorDeleted);
+      window.removeEventListener('sehat_db_change', handleDbChange);
+      window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('sehat_auth_unauthorized', handleUnauthorized);
+      window.removeEventListener('sehat_doctors_updated', handleDoctorsUpdated);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [storedUser, activeDoctor, executeDoctorLogout]);
+
   // Real-time verified patient reviews & rating calculation (strictly synchronized with public Doctor Profile)
   const doctorVerifiedReviews = React.useMemo(() => {
     return getDoctorVerifiedReviews(activeDoctor, reviews);
@@ -406,6 +569,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const doctorLiveFaqs = React.useMemo(() => {
     const docId = String(activeDoctor?._id || activeDoctor?.id || '');
     const docName = (activeDoctor?.name || '').toLowerCase().trim();
+    const docHosp = (activeDoctor?.hospital || '').toLowerCase().trim();
 
     // 1. FAQs from platform Admin FAQs manager targeted specifically to this doctor
     const specificTargeted = (faqs || [])
@@ -416,10 +580,22 @@ const DoctorDashboard = ({ onNavigate }) => {
       .map(f => ({
         q: f.question || f.q,
         a: f.answer || f.a,
-        source: 'Admin FAQs'
+        source: 'Doctor FAQ'
       }));
 
-    // 2. Embedded FAQs configured directly on the doctor profile by Admin
+    // 2. FAQs from platform Admin FAQs manager targeted to the doctor's affiliated hospital
+    const hospitalTargeted = (faqs || [])
+      .filter(f => f.isActive !== false && f.targetType === 'hospital' && docHosp && (
+        (f.targetName && f.targetName.toLowerCase().trim() === docHosp) ||
+        (activeDoctor?.hospitalId && f.targetId && String(f.targetId) === String(activeDoctor.hospitalId))
+      ))
+      .map(f => ({
+        q: f.question || f.q,
+        a: f.answer || f.a,
+        source: `${activeDoctor?.hospital || 'Hospital'} FAQ`
+      }));
+
+    // 3. Embedded FAQs configured directly on the doctor profile by Admin
     const embedded = (Array.isArray(activeDoctor?.faqs) && activeDoctor.faqs.length > 0)
       ? activeDoctor.faqs.map(f => ({
           q: f.q || f.question,
@@ -428,17 +604,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         }))
       : [];
 
-    const merged = [...specificTargeted, ...embedded];
-    if (merged.length > 0) return merged;
-
-    // 3. Default standard clinical policy FAQs
-    return [
-      { q: `How can I book an appointment with ${activeDoctor.name ? (activeDoctor.name.startsWith('Dr.') ? activeDoctor.name : `Dr. ${activeDoctor.name}`) : 'the doctor'}?`, a: 'You can book an in-clinic or video consultation directly on The Sehat Buddy platform with instant confirmation.' },
-      { q: 'What do I need to show at the clinic?', a: 'Carry a valid government photo ID, health insurance policy e-card (if claiming cashless coverage), and previous doctor prescriptions or test reports.' },
-      { q: 'Is my consultation private with the doctor?', a: 'Yes, 100%. All consultations, patient notes, and medical discussions are strictly confidential.' },
-      { q: 'Can I reschedule my appointment?', a: 'Yes, you can easily reschedule or cancel prior to your slot time through your patient account.' },
-      { q: 'Does the doctor accept health insurance or cashless claims?', a: 'Yes, consultations and hospital procedures qualify for cashless mediclaim pre-authorization with all leading TPAs.' }
-    ];
+    return [...specificTargeted, ...hospitalTargeted, ...embedded];
   }, [activeDoctor, faqs]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
@@ -676,6 +842,8 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
 
   // Track and restore scroll position reliably across refreshes and tab reloads
+  const isRestoringDashboardScrollRef = React.useRef(false);
+
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -695,23 +863,49 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
     })();
 
+    const saveScroll = () => {
+      if (!isRestoringDashboardScrollRef.current) {
+        sessionStorage.setItem('sehat_doctor_scroll_pos', String(Math.round(window.scrollY || 0)));
+        sessionStorage.setItem('sehat_doctor_scroll_tab', activeTab);
+      }
+    };
+
+    const onScroll = () => {
+      saveScroll();
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('beforeunload', saveScroll);
+    window.addEventListener('pagehide', saveScroll);
+
+    const timeouts = [];
+
     if (isReload) {
       const savedScroll = sessionStorage.getItem('sehat_doctor_scroll_pos');
       if (savedScroll !== null) {
         const top = parseInt(savedScroll, 10);
-        if (!isNaN(top) && top > 0) {
-          const restore = () => {
-            const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-            const target = Math.min(top, maxScroll);
-            window.scrollTo({ top: target, behavior: 'instant' });
-          };
-          requestAnimationFrame(restore);
-          const t1 = setTimeout(restore, 80);
-          const t2 = setTimeout(restore, 200);
-          return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-          };
+        if (!isNaN(top)) {
+          if (top === 0) {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+          } else {
+            isRestoringDashboardScrollRef.current = true;
+            const restore = () => {
+              const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+              const target = Math.min(top, maxScroll);
+              window.scrollTo({ top: target, behavior: 'instant' });
+            };
+
+            restore();
+
+            [40, 100, 220, 400, 700].forEach(delay => {
+              timeouts.push(setTimeout(restore, delay));
+            });
+
+            timeouts.push(setTimeout(() => {
+              isRestoringDashboardScrollRef.current = false;
+              saveScroll();
+            }, 800));
+          }
         }
       }
     } else {
@@ -719,29 +913,13 @@ const DoctorDashboard = ({ onNavigate }) => {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
 
-    // Save scroll on page unload (before refresh)
-    const handleBeforeUnload = () => {
-      sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY || 0));
-      sessionStorage.setItem('sehat_doctor_scroll_tab', activeTab);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    // Debounced scroll listener during user scrolling
-    let scrollDebounce;
-    const onScroll = () => {
-      clearTimeout(scrollDebounce);
-      scrollDebounce = setTimeout(() => {
-        sessionStorage.setItem('sehat_doctor_scroll_pos', String(window.scrollY || 0));
-      }, 50);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('beforeunload', saveScroll);
+      window.removeEventListener('pagehide', saveScroll);
       window.removeEventListener('scroll', onScroll);
-      clearTimeout(scrollDebounce);
+      timeouts.forEach(clearTimeout);
     };
-  }, []);
+  }, [activeTab]);
 
   // Multi-day Planned Leave state
   const [leaveStartDate, setLeaveStartDate] = useState(() => {
@@ -811,6 +989,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   const initialDoctorEmailRef = React.useRef(null);
   const currentLoadedDocIdRef = React.useRef(null);
   const isLocalCredentialUpdateRef = React.useRef(0);
+  const isLocalSlotUpdateRef = React.useRef(0);
   const isEditingAvailableDaysRef = React.useRef(false);
   const isEditingAboutRef = React.useRef(false);
   const isAboutDirtyRef = React.useRef(false);
@@ -1263,11 +1442,14 @@ const DoctorDashboard = ({ onNavigate }) => {
         !isEditingAvailableDaysRef.current
       ) {
         next.availableDays = activeDoctor.availableDays;
+        const parsed = parseAvailableDaysAndHours(activeDoctor.availableDays, activeDoctor.slotDuration || 30);
+        next.scheduleDays = parsed.days;
+        next.availableSlots = parsed.slots;
         changed = true;
       }
 
       // 11. Profile Photo / Avatar
-      if (activeDoctor.image && activeDoctor.image !== prevRemote.image) {
+      if (activeDoctor.image !== undefined && activeDoctor.image !== prevRemote.image) {
         next.image = activeDoctor.image;
         changed = true;
       }
@@ -1312,13 +1494,9 @@ const DoctorDashboard = ({ onNavigate }) => {
         changed = true;
       }
 
-      // 15. Availability & Star Doctor
+      // 15. Availability (Platform star doctor is admin-curated only)
       if (activeDoctor.available !== undefined && activeDoctor.available !== prevRemote.available) {
         next.available = activeDoctor.available;
-        changed = true;
-      }
-      if (activeDoctor.isStarDoctor !== undefined && activeDoctor.isStarDoctor !== prevRemote.isStarDoctor) {
-        next.isStarDoctor = activeDoctor.isStarDoctor;
         changed = true;
       }
 
@@ -1328,26 +1506,28 @@ const DoctorDashboard = ({ onNavigate }) => {
         changed = true;
       }
 
-      // 17. Schedule & Slots
-      if (Array.isArray(activeDoctor.availableSlots) && JSON.stringify(activeDoctor.availableSlots) !== JSON.stringify(prevRemote.availableSlots)) {
-        next.availableSlots = activeDoctor.availableSlots;
-        changed = true;
-      }
-      if (activeDoctor.dayWiseSlots && JSON.stringify(activeDoctor.dayWiseSlots) !== JSON.stringify(prevRemote.dayWiseSlots)) {
-        next.dayWiseSlots = activeDoctor.dayWiseSlots;
-        changed = true;
-      }
-      if (activeDoctor.dateWiseSlots && JSON.stringify(activeDoctor.dateWiseSlots) !== JSON.stringify(prevRemote.dateWiseSlots)) {
-        next.dateWiseSlots = activeDoctor.dateWiseSlots;
-        changed = true;
-      }
-      if (Array.isArray(activeDoctor.scheduleDays) && JSON.stringify(activeDoctor.scheduleDays) !== JSON.stringify(prevRemote.scheduleDays)) {
-        next.scheduleDays = activeDoctor.scheduleDays;
-        changed = true;
-      }
-      if (activeDoctor.slotDuration && activeDoctor.slotDuration !== prevRemote.slotDuration) {
-        next.slotDuration = activeDoctor.slotDuration;
-        changed = true;
+      // 17. Schedule & Slots (guarded against local feedback loop)
+      if (Date.now() - isLocalSlotUpdateRef.current >= 2000) {
+        if (Array.isArray(activeDoctor.availableSlots) && JSON.stringify(activeDoctor.availableSlots) !== JSON.stringify(prevRemote.availableSlots)) {
+          next.availableSlots = activeDoctor.availableSlots;
+          changed = true;
+        }
+        if (activeDoctor.dayWiseSlots && JSON.stringify(activeDoctor.dayWiseSlots) !== JSON.stringify(prevRemote.dayWiseSlots)) {
+          next.dayWiseSlots = activeDoctor.dayWiseSlots;
+          changed = true;
+        }
+        if (activeDoctor.dateWiseSlots && JSON.stringify(activeDoctor.dateWiseSlots) !== JSON.stringify(prevRemote.dateWiseSlots)) {
+          next.dateWiseSlots = activeDoctor.dateWiseSlots;
+          changed = true;
+        }
+        if (Array.isArray(activeDoctor.scheduleDays) && JSON.stringify(activeDoctor.scheduleDays) !== JSON.stringify(prevRemote.scheduleDays)) {
+          next.scheduleDays = activeDoctor.scheduleDays;
+          changed = true;
+        }
+        if (activeDoctor.slotDuration && activeDoctor.slotDuration !== prevRemote.slotDuration) {
+          next.slotDuration = activeDoctor.slotDuration;
+          changed = true;
+        }
       }
 
       // 18. Credentials (Awards, Certifications, Memberships, Career, Tags)
@@ -2113,6 +2293,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
 
     if (!slot) return;
+    isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'date') {
@@ -2124,7 +2305,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       const updated = [...currentSlots, slot];
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
       showToast(`Slot "${slot}" added for date ${selectedScheduleDate}!`);
     } else {
       // Day mode: Adds strictly to the selected day!
@@ -2141,13 +2322,14 @@ const DoctorDashboard = ({ onNavigate }) => {
         newScheduleDays.push(targetDay);
       }
       setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }).catch(() => {});
       showToast(`Slot "${slot}" added to ${DAY_NAME_MAP[targetDay] || targetDay}!`);
     }
     setNewSlotTime('');
   };
 
   const handleDeleteSlot = async (slotToRemove) => {
+    isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'date') {
@@ -2155,27 +2337,26 @@ const DoctorDashboard = ({ onNavigate }) => {
       const updated = currentSlots.filter(s => s !== slotToRemove);
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
-      showToast(`Slot "${slotToRemove}" removed from date ${selectedScheduleDate}`);
+      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
     } else {
-      // Day mode: Removes strictly from the selected day!
+      // Day mode: Removes strictly from the selected day without layout flickering
       const targetDay = selectedScheduleDay;
       const currentSlots = getDaySlots(targetDay);
       const updated = currentSlots.filter(s => s !== slotToRemove);
       const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: updated };
       setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
-      showToast(`Slot "${slotToRemove}" removed from ${DAY_NAME_MAP[targetDay] || targetDay}.`);
+      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise }).catch(() => {});
     }
   };
 
   const handleApplySlotPreset = async (presetSlots, presetTitle) => {
+    isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'date') {
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: presetSlots };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
       showToast(`Applied "${presetTitle}" to date ${selectedScheduleDate} (${presetSlots.length} slots)`);
     } else {
       // Day mode: Applies strictly to the selected day!
@@ -2186,31 +2367,33 @@ const DoctorDashboard = ({ onNavigate }) => {
         newScheduleDays.push(targetDay);
       }
       setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
+      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }).catch(() => {});
       showToast(`Applied "${presetTitle}" to ${DAY_NAME_MAP[targetDay] || targetDay} (${presetSlots.length} slots)!`);
     }
   };
 
   const handleClearAllSlots = async () => {
+    isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
 
     if (slotConfigMode === 'date') {
       if (!window.confirm(`Are you sure you want to clear all slots for date ${selectedScheduleDate}?`)) return;
       const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: [] };
       setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
       showToast(`Cleared all slots for date ${selectedScheduleDate}.`);
     } else {
       const targetDay = selectedScheduleDay;
       if (!window.confirm(`Are you sure you want to clear all slots for ${DAY_NAME_MAP[targetDay] || targetDay}?`)) return;
       const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: [] };
       setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise });
+      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise }).catch(() => {});
       showToast(`Cleared all slots for ${DAY_NAME_MAP[targetDay] || targetDay}.`);
     }
   };
 
   const handleCopyDaySlotsToAll = async (sourceDay) => {
+    isLocalSlotUpdateRef.current = Date.now();
     const sourceSlots = getDaySlots(sourceDay);
     if (!sourceSlots || sourceSlots.length === 0) {
       showToast(`No slots configured on ${DAY_NAME_MAP[sourceDay] || sourceDay} to copy!`);
@@ -2488,6 +2671,9 @@ const DoctorDashboard = ({ onNavigate }) => {
   const handleRemovePhoto = async () => {
     const defaultPlaceholder = '';
     setProfileForm(prev => ({ ...prev, image: defaultPlaceholder }));
+    if (activeDoctor) {
+      activeDoctor.image = defaultPlaceholder;
+    }
     const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: defaultPlaceholder });
     await updateDoctor(activeDoctor._id || activeDoctor.id, {
       image: defaultPlaceholder,
@@ -2598,7 +2784,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       hospital: profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || ''),
       degree: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
       qualifications: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
-      image: profileForm.image || activeDoctor.image || '',
+      image: profileForm.image !== undefined ? profileForm.image : (activeDoctor.image || ''),
       about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
       awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
       certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : (Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : []),
@@ -3352,7 +3538,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Clinic timing display info
   const clinicTimingInfo = useMemo(() => {
-    const rawTiming = String(activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)').trim();
+    const rawTiming = String(profileForm?.availableDays || activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)').trim();
     let daysText = rawTiming;
     let hoursText = null;
 
@@ -3366,9 +3552,9 @@ const DoctorDashboard = ({ onNavigate }) => {
       hoursText = parts.slice(1).join(':').trim();
     }
 
-    const timingSub = hoursText || `${activeDoctor?.slotDuration || 20} mins slot`;
+    const timingSub = hoursText || `${activeDoctor?.slotDuration || profileForm?.slotDuration || 20} mins slot`;
     return { rawTiming, daysText, timingSub };
-  }, [activeDoctor?.availableDays, activeDoctor?.slotDuration]);
+  }, [profileForm?.availableDays, activeDoctor?.availableDays, activeDoctor?.slotDuration, profileForm?.slotDuration]);
 
   return (
     <div className={styles.dashboardContainer}>
@@ -3431,19 +3617,36 @@ const DoctorDashboard = ({ onNavigate }) => {
         <div className={styles.profileBanner}>
           <div className={styles.doctorCardMini}>
             <div style={{ position: 'relative', display: 'inline-block' }}>
-              <img
-                src={profileForm.image || activeDoctor.image}
-                alt={activeDoctor.name || 'Doctor'}
-                className={styles.doctorAvatar}
-                onClick={() => setIsPhotoZoomOpen(true)}
-                title="Click to view full photo"
-                style={{ cursor: 'pointer', transition: 'transform 0.2s, opacity 0.2s' }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
-                onError={(e) => {
-                  e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
-                }}
-              />
+              {(profileForm.image || activeDoctor.image) ? (
+                <img
+                  src={profileForm.image || activeDoctor.image}
+                  alt={activeDoctor.name || 'Doctor'}
+                  className={styles.doctorAvatar}
+                  onClick={() => setIsPhotoZoomOpen(true)}
+                  title="Click to view full photo"
+                  style={{ cursor: 'pointer', transition: 'transform 0.2s, opacity 0.2s' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div
+                  className={styles.doctorAvatar}
+                  style={{
+                    background: '#f1f5f9',
+                    border: '2px dashed #94a3b8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#94a3b8'
+                  }}
+                  title="No photo uploaded (Blank)"
+                >
+                  <User size={34} color="#94a3b8" />
+                </div>
+              )}
               <label
                 style={{
                   position: 'absolute',
@@ -4735,14 +4938,34 @@ const DoctorDashboard = ({ onNavigate }) => {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap' }}>
                   <div style={{ position: 'relative' }}>
-                    <img 
-                      src={profileForm.image || DEFAULT_DOCTOR_AVATARS[0].localSrc} 
-                      alt="Doctor Photo" 
-                      onClick={() => setIsPhotoZoomOpen(true)}
-                      title="Click to zoom preview"
-                      style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #2563eb', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.08)' }} 
-                      onError={(e) => { e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc; }}
-                    />
+                    {profileForm.image ? (
+                      <img 
+                        src={profileForm.image} 
+                        alt="Doctor Photo" 
+                        onClick={() => setIsPhotoZoomOpen(true)}
+                        title="Click to zoom preview"
+                        style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #2563eb', cursor: 'pointer', transition: 'transform 0.2s', boxShadow: '0 4px 10px rgba(0,0,0,0.08)' }} 
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: '80px',
+                          height: '80px',
+                          borderRadius: '50%',
+                          background: '#f1f5f9',
+                          border: '2px dashed #94a3b8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#94a3b8',
+                          boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.04)'
+                        }}
+                        title="No photo uploaded (Blank)"
+                      >
+                        <User size={38} color="#94a3b8" />
+                      </div>
+                    )}
                     {isUploadingImage && (
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
                         <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
@@ -5529,9 +5752,9 @@ const DoctorDashboard = ({ onNavigate }) => {
                         {/* Active Slots Chips */}
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '16px', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                           {getDaySlots(selectedScheduleDay).length > 0 ? (
-                            getDaySlots(selectedScheduleDay).map((slot, sIdx) => (
+                            getDaySlots(selectedScheduleDay).map((slot) => (
                               <div
-                                key={sIdx}
+                                key={`${selectedScheduleDay}_${slot}`}
                                 style={{
                                   display: 'inline-flex',
                                   alignItems: 'center',
@@ -5543,14 +5766,19 @@ const DoctorDashboard = ({ onNavigate }) => {
                                   fontSize: '0.82rem',
                                   fontWeight: 700,
                                   color: '#1e3a8a',
-                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                                  contain: 'layout style'
                                 }}
                               >
                                 <Clock size={12} color="#2563eb" />
                                 <span>{slot}</span>
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteSlot(slot)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDeleteSlot(slot);
+                                  }}
                                   title={`Remove ${slot} from ${DAY_NAME_MAP[selectedScheduleDay]}`}
                                   style={{
                                     background: '#fee2e2',
@@ -6017,9 +6245,9 @@ const DoctorDashboard = ({ onNavigate }) => {
                                 {/* Active Slots Chips */}
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '14px', background: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                   {activeSlots.length > 0 ? (
-                                    activeSlots.map((slot, sIdx) => (
+                                    activeSlots.map((slot) => (
                                       <div
-                                        key={sIdx}
+                                        key={`${selectedScheduleDate}_${slot}`}
                                         style={{
                                           display: 'inline-flex',
                                           alignItems: 'center',
@@ -6030,14 +6258,19 @@ const DoctorDashboard = ({ onNavigate }) => {
                                           padding: '5px 10px',
                                           fontSize: '0.8rem',
                                           fontWeight: 700,
-                                          color: '#1e3a8a'
+                                          color: '#1e3a8a',
+                                          contain: 'layout style'
                                         }}
                                       >
                                         <Clock size={12} color="#2563eb" />
                                         <span>{slot}</span>
                                         <button
                                           type="button"
-                                          onClick={() => handleDeleteSlot(slot)}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleDeleteSlot(slot);
+                                          }}
                                           title={`Remove slot ${slot}`}
                                           style={{
                                             background: '#fee2e2',
@@ -8141,33 +8374,52 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
 
                 {/* Display Current Live Real-Time FAQs */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {doctorLiveFaqs.map((faq, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        background: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '8px',
-                        padding: '10px 14px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', gap: '8px' }}>
-                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.86rem' }}>
-                          Q{idx + 1}: {faq.q || faq.question}
-                        </div>
-                        {faq.source && (
-                          <span style={{ fontSize: '0.68rem', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: '4px', flexShrink: 0 }}>
-                            {faq.source}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.4 }}>
-                        {faq.a || faq.answer}
-                      </div>
+                {doctorLiveFaqs.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center',
+                    padding: '28px 16px',
+                    background: '#f8fafc',
+                    borderRadius: '10px',
+                    border: '1.5px dashed #cbd5e1',
+                    color: '#64748b'
+                  }}>
+                    <HelpCircle size={32} color="#94a3b8" style={{ marginBottom: '8px' }} />
+                    <div style={{ fontWeight: 600, color: '#334155', fontSize: '0.92rem', marginBottom: '4px' }}>
+                      No FAQs Assigned Yet
                     </div>
-                  ))}
-                </div>
+                    <div style={{ fontSize: '0.82rem', color: '#64748b', maxWidth: '440px', margin: '0 auto', lineHeight: 1.4 }}>
+                      Platform Administrators can add FAQs specifically tailored to this doctor and their affiliated hospital.
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {doctorLiveFaqs.map((faq, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                          padding: '10px 14px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', gap: '8px' }}>
+                          <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.86rem' }}>
+                            Q{idx + 1}: {faq.q || faq.question}
+                          </div>
+                          {faq.source && (
+                            <span style={{ fontSize: '0.68rem', color: '#64748b', background: '#ffffff', border: '1px solid #e2e8f0', padding: '1px 6px', borderRadius: '4px', flexShrink: 0 }}>
+                              {faq.source}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ color: '#64748b', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                          {faq.a || faq.answer}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* DANGER ZONE: RESET INFO & DELETE DOCTOR PROFILE */}
@@ -8676,20 +8928,27 @@ const DoctorDashboard = ({ onNavigate }) => {
             </button>
 
             <div style={{ background: '#020617', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '340px', padding: '16px' }}>
-              <img
-                src={profileForm.image || activeDoctor.image || DEFAULT_DOCTOR_AVATARS[0].localSrc}
-                alt={activeDoctor.name}
-                style={{
-                  maxWidth: '100%',
-                  maxHeight: '65vh',
-                  objectFit: 'contain',
-                  borderRadius: '12px',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
-                }}
-                onError={(e) => {
-                  e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
-                }}
-              />
+              {(profileForm.image || activeDoctor.image) ? (
+                <img
+                  src={profileForm.image || activeDoctor.image}
+                  alt={activeDoctor.name}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '65vh',
+                    objectFit: 'contain',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: '#94a3b8' }}>
+                  <User size={64} color="#64748b" />
+                  <p style={{ margin: 0, fontSize: '0.95rem' }}>No profile photo uploaded (Blank)</p>
+                </div>
+              )}
             </div>
 
             <div style={{ padding: '16px 20px', background: '#0f172a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.08)' }}>

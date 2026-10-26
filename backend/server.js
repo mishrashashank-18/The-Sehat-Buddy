@@ -391,7 +391,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start Server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`🩺 The Sehat Buddy Backend API running in [${NODE_ENV}] mode at port ${PORT}`);
 });
 

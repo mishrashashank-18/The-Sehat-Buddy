@@ -8,6 +8,8 @@ import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
+import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
+import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -427,7 +429,7 @@ export const addDoctorByHospital = async (req, res) => {
 
     if (doctor) {
       if (hospitalName) doctor.hospital = hospitalName;
-      if (isStarDoctor !== undefined) doctor.isStarDoctor = Boolean(isStarDoctor);
+      // Do NOT mutate doctor.isStarDoctor or starUpdatedAt here: platform-wide star doctor status is managed solely by administrators
       await doctor.save();
     } else {
       const docName = name && name.trim() ? name.trim() : ('Dr. ' + cleanEmail.split('@')[0].replace(/[._-]/g, ' '));
@@ -447,6 +449,7 @@ export const addDoctorByHospital = async (req, res) => {
         price: Number(fees) || 500,
         hospital: hospitalName || '',
         isStarDoctor: Boolean(isStarDoctor),
+        starUpdatedAt: Date.now(),
         isFirstLogin: true,
         passwordSet: false,
         about: `Clinical specialist affiliated with ${hospitalName || 'hospital'}.`
@@ -851,7 +854,7 @@ export const updateDoctorProfile = async (req, res) => {
       'address', 'hospital', 'qualifications', 'degree', 'contact_number', 'phone', 'instagram',
       'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus',
       'licenseNumber', 'awards', 'certifications', 'memberships',
-      'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews', 'isStarDoctor',
+      'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews',
       'availableDays', 'scheduleDays', 'availableSlots', 'slotDuration', 'slots_booked', 'dayWiseSlots', 'dateWiseSlots', 'image'
     ];
 
@@ -886,8 +889,6 @@ export const updateDoctorProfile = async (req, res) => {
         } else if (field === 'slotDuration') {
           const durNum = Number(req.body.slotDuration);
           doctor.slotDuration = !isNaN(durNum) ? durNum : (doctor.slotDuration || 20);
-        } else if (field === 'isStarDoctor') {
-          doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
         } else if (
           field !== 'awards' &&
           field !== 'certifications' &&
@@ -942,17 +943,38 @@ export const updateDoctorProfile = async (req, res) => {
         : [];
       doctor.markModified('youtube_videos');
     }
-    if (req.body.availableSlots !== undefined) {
-      doctor.availableSlots = Array.isArray(req.body.availableSlots)
-        ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
-        : [];
+    if (req.body.availableDays !== undefined) {
+      const parsedSched = parseAvailableDaysAndHours(req.body.availableDays, doctor.slotDuration || 30);
+      if (req.body.availableSlots !== undefined) {
+        doctor.availableSlots = Array.isArray(req.body.availableSlots)
+          ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
+          : [];
+      } else if (parsedSched.slots.length > 0) {
+        doctor.availableSlots = parsedSched.slots;
+      }
       doctor.markModified('availableSlots');
-    }
-    if (req.body.scheduleDays !== undefined) {
-      doctor.scheduleDays = Array.isArray(req.body.scheduleDays)
-        ? req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
-        : [];
+
+      if (req.body.scheduleDays !== undefined) {
+        doctor.scheduleDays = Array.isArray(req.body.scheduleDays)
+          ? req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
+          : [];
+      } else {
+        doctor.scheduleDays = parsedSched.days;
+      }
       doctor.markModified('scheduleDays');
+    } else {
+      if (req.body.availableSlots !== undefined) {
+        doctor.availableSlots = Array.isArray(req.body.availableSlots)
+          ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
+          : [];
+        doctor.markModified('availableSlots');
+      }
+      if (req.body.scheduleDays !== undefined) {
+        doctor.scheduleDays = Array.isArray(req.body.scheduleDays)
+          ? req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
+          : [];
+        doctor.markModified('scheduleDays');
+      }
     }
     if (req.body.slots_booked !== undefined) {
       doctor.slots_booked = typeof req.body.slots_booked === 'object' && req.body.slots_booked !== null ? req.body.slots_booked : {};
@@ -968,7 +990,7 @@ export const updateDoctorProfile = async (req, res) => {
     }
 
     const incomingImage = req.file ? req.file.path : req.body.image;
-    if (incomingImage && incomingImage !== doctor.image) {
+    if (incomingImage !== undefined && incomingImage !== doctor.image) {
       if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
         const oldPublicId = extractCloudinaryPublicId(doctor.image);
         if (oldPublicId) {
@@ -980,7 +1002,8 @@ export const updateDoctorProfile = async (req, res) => {
           }
         }
       }
-      doctor.image = incomingImage;
+      doctor.image = incomingImage || '';
+      doctor.markModified('image');
     }
 
     // Ensure core flagship doctor (Dr. Rahul Verma) always stays available / listed in directory
@@ -1013,6 +1036,14 @@ export const updateDoctorProfile = async (req, res) => {
     doctor.isProfileComplete = pct >= 80;
     doctor.markModified('profileCompletion');
     doctor.markModified('isProfileComplete');
+
+    // Doctor self-service profile updates must never alter or overwrite platform-wide star doctor status.
+    // Re-fetch the latest star values directly from MongoDB to guarantee integrity against concurrent admin updates.
+    const freshStarState = await Doctor.findById(doctor._id).select('isStarDoctor starUpdatedAt');
+    if (freshStarState) {
+      doctor.isStarDoctor = freshStarState.isStarDoctor;
+      doctor.starUpdatedAt = freshStarState.starUpdatedAt;
+    }
 
     let updated;
     try {
@@ -1061,25 +1092,48 @@ export const updateDoctorProfile = async (req, res) => {
   }
 };
 
+/**
+ * Get authenticated doctor's profile.
+ * Rejects with 401 if doctor account has been deleted by Admin or Hospital.
+ */
+export const getMyDoctorProfile = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Not authorized: No doctor session found' });
+    }
+    const doctor = await Doctor.findById(req.user.id).select('-password -otp -otpExpires -otpAttempts');
+    if (!doctor) {
+      return res.status(401).json({ success: false, message: 'Not authorized: Doctor account no longer exists in database' });
+    }
+    return res.json({ success: true, doctor });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 export const deleteDoctorProfile = async (req, res) => {
   try {
+    const rawId = (req.params.id || '').trim();
+    if (!rawId) {
+      return res.status(400).json({ success: false, message: 'Doctor ID is required' });
+    }
+
     let doctor = null;
-    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-      doctor = await Doctor.findById(req.params.id);
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      doctor = await Doctor.findById(rawId);
     }
     if (!doctor) {
-      doctor = await Doctor.findOne({ id: req.params.id });
+      doctor = await Doctor.findOne({ id: rawId });
     }
-    if (!doctor && req.params.id) {
-      const decoded = decodeURIComponent(req.params.id).toLowerCase().trim();
+    if (!doctor) {
+      const decoded = decodeURIComponent(rawId).toLowerCase().trim();
       doctor = await Doctor.findOne({ email: decoded });
     }
 
     if (!doctor) {
       // Check if this is a staff doctor email referenced in hospitals
-      const cleanEmail = decodeURIComponent(req.params.id || '').toLowerCase().trim();
+      const cleanEmail = decodeURIComponent(rawId).toLowerCase().trim();
       if (cleanEmail && cleanEmail.includes('@')) {
-        const Hospital = mongoose.model('Hospital');
         await Hospital.updateMany(
           {},
           {
@@ -1092,7 +1146,7 @@ export const deleteDoctorProfile = async (req, res) => {
         broadcastDbChange('hospitals', 'update', null);
         return res.json({ success: true, message: 'Hospital staff doctor removed successfully' });
       }
-      return res.status(404).json({ success: false, message: 'Doctor not found' });
+      return res.status(404).json({ success: false, message: 'Doctor not found in database' });
     }
 
     if (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))) {
@@ -1117,63 +1171,16 @@ export const deleteDoctorProfile = async (req, res) => {
       });
     }
 
-    const docId = doctor._id;
-    const docEmail = (doctor.email || '').toLowerCase().trim();
+    // Permanently purge doctor across all collections
+    const result = await purgeDoctorPermanently(doctor);
 
-    // Permanently remove doctor image from Cloudinary
-    if (doctor.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
-      const publicId = extractCloudinaryPublicId(doctor.image);
-      if (publicId) {
-        try {
-          const cld = getCloudinary();
-          await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
-        } catch (cldErr) {
-          console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
-        }
-      }
-    }
-
-    await doctor.deleteOne();
-
-    // Also remove from any hospitals' star_doctors, staff_doctors, staff_emails in MongoDB
-    try {
-      const Hospital = mongoose.model('Hospital');
-      await Hospital.updateMany(
-        {},
-        {
-          $pull: {
-            star_doctors: docId,
-            staff_doctors: { email: docEmail },
-            staff_emails: docEmail
-          }
-        }
-      );
-      broadcastDbChange('hospitals', 'update', null);
-    } catch (hospErr) {
-      console.warn('Could not clean up doctor from hospital references:', hospErr.message);
-    }
-
-    // Permanently remove associated appointments from database
-    try {
-      await Appointment.deleteMany({
-        $or: [
-          { doctorId: docId },
-          { doctorId: docId.toString() },
-          ...(doctor.id ? [{ doctorId: doctor.id }] : []),
-          { 'doctor.email': docEmail },
-          { 'doctor.id': docId.toString() },
-          ...(doctor.id ? [{ 'doctor.id': doctor.id }] : [])
-        ]
-      });
-      broadcastDbChange('appointments', 'delete', null);
-    } catch (aptErr) {
-      console.warn('Could not clean up appointments for deleted doctor:', aptErr.message);
-    }
-
-    broadcastDbChange('doctors', 'delete', docId);
-    return res.json({ success: true, message: 'Doctor profile and associated assets deleted permanently from database' });
+    return res.json({
+      success: true,
+      message: 'Doctor profile and all associated database records (including email logs and user account) deleted permanently'
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    const status = error.statusCode || 500;
+    return res.status(status).json({ success: false, message: error.message });
   }
 };
 

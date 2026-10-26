@@ -15,7 +15,8 @@ import {
   createDoctorAppointment,
   deleteDoctorAppointment,
   updateDoctorProfile,
-  deleteDoctorProfile
+  deleteDoctorProfile,
+  getMyDoctorProfile
 } from '../controllers/doctorController.js';
 import { protect, optionalProtect } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
@@ -25,6 +26,7 @@ const router = express.Router();
 // Public read routes & Dashboard
 router.get('/', getDoctors);
 router.get('/list', getDoctors);
+router.get('/me', protect, getMyDoctorProfile);
 router.get('/dashboard', optionalProtect, doctorDashboard);
 router.get('/:id', getDoctorById);
 

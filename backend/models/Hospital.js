@@ -41,6 +41,11 @@ const hospitalSchema = new mongoose.Schema({
     default: true,
     index: true
   },
+  homeUpdatedAt: {
+    type: Number,
+    default: 0,
+    index: true
+  },
   rating: { type: Number, default: 0 },
   reviews: { type: String, default: '0 Reviews' },
   totalBeds: { type: Number, default: 0 },

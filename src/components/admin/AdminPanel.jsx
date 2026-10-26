@@ -58,6 +58,9 @@ import ReviewFormModal from './ReviewFormModal';
 import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
 import DoctorHistoryModal from './DoctorHistoryModal';
+import PopularDoctorActionButtons from './PopularDoctorActionButtons';
+import HospitalHomeStatusControl from './HospitalHomeStatusControl';
+import AdminReviewCard from './AdminReviewCard';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import logoImg from '../../assets/images/logo.png';
 import styles from './AdminPanel.module.css';
@@ -142,7 +145,46 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   const [isHospitalModalOpen, setIsHospitalModalOpen] = useState(false);
   const [hospitalToEdit, setHospitalToEdit] = useState(null);
-  const [togglingHospHomeId, setTogglingHospHomeId] = useState(null);
+
+  const isAnyModalOpenRef = useRef(false);
+  useEffect(() => {
+    isAnyModalOpenRef.current = Boolean(isDoctorModalOpen || isHospitalModalOpen || isReviewModalOpen || selectedDoctorForHistory);
+  });
+
+  // Toast feedback with collision-safe timeout reference
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
+  const toastTimeoutRef = useRef(null);
+
+  const dismissToast = useCallback(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToastMessage('');
+  }, []);
+
+  const showToast = useCallback((msg, type = 'success', duration = 4200) => {
+    if (!msg) return;
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+    setToastMessage(msg);
+    setToastType(type);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage('');
+      toastTimeoutRef.current = null;
+    }, duration);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Appointments Management State
   const [appointments, setAppointments] = useState(() => {
@@ -221,6 +263,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       showToast('Failed to delete appointment', 'error');
     }
   };
+
+  const handleToggleHospitalHomeStatus = useCallback(async (id, nextVal, extra) => {
+    return await updateHospital(id, { showOnHome: nextVal, ...extra });
+  }, [updateHospital]);
 
   const availableAppointmentYears = React.useMemo(() => {
     const years = new Set();
@@ -347,80 +393,24 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     item: null
   });
 
-  // Toast feedback with collision-safe timeout reference
-  const [toastMessage, setToastMessage] = useState('');
-  const [toastType, setToastType] = useState('success');
-  const toastTimeoutRef = useRef(null);
-
-  const dismissToast = useCallback(() => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToastMessage('');
+  const handleEditReview = useCallback((rev) => {
+    setReviewToEdit(rev);
+    setPreselectedReviewDoctor(null);
+    setIsReviewModalOpen(true);
   }, []);
 
-  const showToast = useCallback((msg, type = 'success', duration = 4200) => {
-    if (!msg) return;
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = null;
-    }
-    setToastMessage(msg);
-    setToastType(type);
-    toastTimeoutRef.current = setTimeout(() => {
-      setToastMessage('');
-      toastTimeoutRef.current = null;
-    }, duration);
+  const handleDeleteReviewClick = useCallback((rev) => {
+    setDeleteModalState({
+      isOpen: true,
+      type: 'review',
+      item: { ...rev, name: (rev.patientName || 'Patient') + "'s review" }
+    });
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  // In-flight guard and state tracking for star doctor toggling to prevent double-clicks, racing requests, and UI flickering
-  const starTogglingRef = useRef(new Set());
-  const [togglingDoctorIds, setTogglingDoctorIds] = useState(new Set());
-
-  const handleToggleStarDoctor = useCallback(async (doc, e) => {
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-    const docId = String(doc._id || doc.id);
-    if (!docId || starTogglingRef.current.has(docId)) return;
-
-    // Synchronously lock this doctor ID against rapid clicks
-    starTogglingRef.current.add(docId);
-    setTogglingDoctorIds(prev => new Set(prev).add(docId));
-
-    const nextVal = !Boolean(doc.isStarDoctor);
-
-    try {
-      await updateDoctor(docId, { isStarDoctor: nextVal });
-      showToast(
-        nextVal
-          ? `⭐ ${doc.name} marked as Star Doctor! Featured in Popular Doctors on homepage.`
-          : `Removed ${doc.name} from Star Doctors.`,
-        'success',
-        3000
-      );
-    } catch (err) {
-      showToast(err.message || 'Failed to update star doctor status', 'error', 5000);
-    } finally {
-      // Small 250ms cooldown prevents rapid multi-click jitter while state settles
-      setTimeout(() => {
-        starTogglingRef.current.delete(docId);
-        setTogglingDoctorIds(prev => {
-          const next = new Set(prev);
-          next.delete(docId);
-          return next;
-        });
-      }, 250);
-    }
-  }, [updateDoctor, showToast]);
+  const handleApproveReview = useCallback((rev) => {
+    updateReview(rev.id || rev._id, { status: 'approved' });
+    showToast(`Review by ${rev.patientName} approved!`);
+  }, [updateReview, showToast]);
 
   // Realtime Cloud Quota & Storage Stats (MongoDB, Cloudinary & Brevo)
   const [storageData, setStorageData] = useState(null);
@@ -503,10 +493,12 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
     // Refresh when app mutations happen or window is re-focused
     const handleMutationSync = () => {
+      if (isAnyModalOpenRef.current) return;
       fetchStorageStats(true);
     };
 
     const handleVisibilitySync = () => {
+      if (isAnyModalOpenRef.current) return;
       if (document.visibilityState === 'visible') {
         fetchStorageStats(true);
       }
@@ -537,9 +529,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     }
   }, [activeTab, fetchStorageStats]);
 
-  // Background synchronization on tab focus and visibility
+  // Background synchronization on tab focus and visibility (strictly suspended while editing modals are open)
   useEffect(() => {
     const handleFocusSync = () => {
+      // Never trigger background refetches or UI reset while any editing modal is open
+      if (isDoctorModalOpen || isHospitalModalOpen || isReviewModalOpen || selectedDoctorForHistory) {
+        return;
+      }
       if (activeTab === 'doctors') {
         refreshDoctors?.();
       } else if (activeTab === 'hospitals') {
@@ -557,7 +553,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [activeTab, refreshDoctors, refreshHospitals]);
+  }, [activeTab, isDoctorModalOpen, isHospitalModalOpen, isReviewModalOpen, selectedDoctorForHistory, refreshDoctors, refreshHospitals]);
 
   // Pre-calculate doctor ratings map for zero-lag O(1) lookups
   const doctorRatingsMap = useMemo(() => {
@@ -802,39 +798,43 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   };
 
   const handleConfirmDelete = async () => {
-    if (deleteModalState.type === 'doctor' && deleteModalState.item) {
+    const itemToDelete = deleteModalState.item;
+    const typeToDelete = deleteModalState.type;
+    if (!typeToDelete || !itemToDelete) return;
+
+    if (typeToDelete === 'doctor') {
       try {
-        await deleteDoctor(deleteModalState.item);
-        showToast(`Doctor "${deleteModalState.item.name || 'Doctor'}" deleted permanently from database.`);
+        await deleteDoctor(itemToDelete);
+        showToast(`Doctor "${itemToDelete.name || 'Doctor'}" deleted permanently from database.`);
       } catch (err) {
         showToast(err.message || 'Failed to delete doctor from database', 'error');
       }
-    } else if (deleteModalState.type === 'hospital' && deleteModalState.item) {
-      deleteHospital(deleteModalState.item.id || deleteModalState.item._id);
-      showToast(`Hospital "${deleteModalState.item.name}" deleted successfully.`);
-    } else if (deleteModalState.type === 'faq' && deleteModalState.item) {
-      if (deleteModalState.item.isEmbeddedDoctorFaq && deleteModalState.item.doctorId) {
-        const doc = doctors.find(d => matchesId(d, deleteModalState.item.doctorId));
+    } else if (typeToDelete === 'hospital') {
+      deleteHospital(itemToDelete.id || itemToDelete._id);
+      showToast(`Hospital "${itemToDelete.name}" deleted successfully.`);
+    } else if (typeToDelete === 'faq') {
+      if (itemToDelete.isEmbeddedDoctorFaq && itemToDelete.doctorId) {
+        const doc = doctors.find(d => matchesId(d, itemToDelete.doctorId));
         if (doc && Array.isArray(doc.faqs)) {
-          const updatedFaqs = doc.faqs.filter((_, idx) => idx !== deleteModalState.item.doctorFaqIndex);
+          const updatedFaqs = doc.faqs.filter((_, idx) => idx !== itemToDelete.doctorFaqIndex);
           await updateDoctor(doc._id || doc.id, { faqs: updatedFaqs });
           showToast(`Doctor FAQ deleted successfully.`);
         }
       } else {
-        deleteFaq(deleteModalState.item.id || deleteModalState.item._id);
+        deleteFaq(itemToDelete.id || itemToDelete._id);
         showToast('FAQ deleted successfully.');
       }
-    } else if (deleteModalState.type === 'review' && deleteModalState.item) {
+    } else if (typeToDelete === 'review') {
       try {
-        await deleteReview(deleteModalState.item._id || deleteModalState.item.id || deleteModalState.item);
-        showToast(`Review by "${deleteModalState.item.patientName || 'Patient'}" deleted permanently.`);
+        await deleteReview(itemToDelete._id || itemToDelete.id || itemToDelete);
+        showToast(`Review by "${itemToDelete.patientName || 'Patient'}" deleted permanently.`);
       } catch (err) {
         showToast(err.message || 'Failed to delete review', 'error');
       }
-    } else if (deleteModalState.type === 'speciality' && deleteModalState.item) {
-      deleteSpecialityProcedure(deleteModalState.item.id || deleteModalState.item._id);
+    } else if (typeToDelete === 'speciality') {
+      deleteSpecialityProcedure(itemToDelete.id || itemToDelete._id);
       showToast('Speciality / Surgery deleted successfully.');
-    } else if (deleteModalState.type === 'reset') {
+    } else if (typeToDelete === 'reset') {
       resetToDefaults();
       showToast('All doctors, hospitals, FAQs, reviews, and specialities reset to demo defaults.');
     }
@@ -1521,14 +1521,23 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <div className={styles.boxList}>
                     {doctors.map(doc => (
                       <div key={doc.id || doc._id} className={styles.boxItem}>
-                        <img
-                          src={doc.image}
-                          alt={doc.name}
-                          className={styles.docAvatarSmall}
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
-                          }}
-                        />
+                        {doc.image ? (
+                          <img
+                            src={doc.image}
+                            alt={doc.name}
+                            className={styles.docAvatarSmall}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={styles.docAvatarSmallFallback}
+                          style={{ display: doc.image ? 'none' : 'flex' }}
+                        >
+                          <Stethoscope size={16} color="#00a896" />
+                        </div>
                         <div className={styles.boxItemInfo}>
                           <h4>{doc.name}</h4>
                           <p>{doc.specialty} • {doc.experience}</p>
@@ -1564,14 +1573,23 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <div className={styles.boxList}>
                     {hospitals.map(hosp => (
                       <div key={hosp.id || hosp._id} className={styles.boxItem}>
-                        <img
-                          src={hosp.image}
-                          alt={hosp.name}
-                          className={styles.hospThumbSmall}
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=150&q=80';
-                          }}
-                        />
+                        {hosp.image ? (
+                          <img
+                            src={hosp.image}
+                            alt={hosp.name}
+                            className={styles.hospThumbSmall}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={styles.docAvatarSmallFallback}
+                          style={{ display: hosp.image ? 'none' : 'flex' }}
+                        >
+                          <Building2 size={16} color="#2563eb" />
+                        </div>
                         <div className={styles.boxItemInfo}>
                           <h4>{hosp.name}</h4>
                           <p><MapPin size={12} /> {hosp.city} • {hosp.totalBeds} Beds</p>
@@ -1658,32 +1676,41 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <table className={styles.dataTable}>
                     <thead>
                       <tr>
-                        <th style={{ minWidth: '240px' }}>Doctor</th>
-                        <th style={{ minWidth: '175px' }}>Specialty & Experience</th>
-                        <th style={{ minWidth: '190px' }}>Affiliated Hospital</th>
-                        <th style={{ minWidth: '150px' }}>Consultation Fee</th>
-                        <th style={{ minWidth: '130px' }}>Rating</th>
-                        <th style={{ minWidth: '180px' }}>Availability</th>
-                        <th style={{ minWidth: '440px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
+                        <th style={{ width: '240px', minWidth: '240px' }}>Doctor</th>
+                        <th style={{ width: '175px', minWidth: '175px' }}>Specialty & Experience</th>
+                        <th style={{ width: '220px', minWidth: '220px' }}>Affiliated Hospital</th>
+                        <th style={{ width: '140px', minWidth: '140px' }}>Consultation Fee</th>
+                        <th style={{ width: '130px', minWidth: '130px' }}>Rating</th>
+                        <th style={{ width: '180px', minWidth: '180px' }}>Availability</th>
+                        <th style={{ width: '400px', minWidth: '400px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDoctors.map(doc => (
-                        <tr key={doc.id || doc._id}>
-                          <td style={{ minWidth: '240px' }}>
+                        <tr key={String(doc._id || doc.id)}>
+                          <td style={{ width: '240px', minWidth: '240px' }}>
                             <div
                               className={`${styles.tableDocProfile} ${styles.tableDocProfileClickable}`}
                               onClick={() => setSelectedDoctorForHistory(doc)}
                               title="Click to view patient consultations history & public profile"
                             >
-                              <img
-                                src={doc.image}
-                                alt={doc.name}
-                                className={styles.tableDocAvatar}
-                                onError={(e) => {
-                                  e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
-                                }}
-                              />
+                              {doc.image ? (
+                                <img
+                                  src={doc.image}
+                                  alt={doc.name}
+                                  className={styles.tableDocAvatar}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              <div
+                                className={styles.tableDocAvatarFallback}
+                                style={{ display: doc.image ? 'none' : 'flex' }}
+                              >
+                                <Stethoscope size={20} color="#00a896" />
+                              </div>
                               <div className={styles.tableDocInfo}>
                                 <span className={styles.tableDocName}>{doc.name}</span>
                                 {(doc.degree || doc.qualifications) && (
@@ -1692,7 +1719,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ minWidth: '175px' }}>
+                          <td style={{ width: '175px', minWidth: '175px' }}>
                             <div className={styles.tableSpecialtyCell}>
                               <span className={styles.specialtyBadge}>{doc.specialization || doc.specialty || 'General Physician'}</span>
                               <div className={styles.tableSubText}>
@@ -1700,16 +1727,18 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </div>
                             </div>
                           </td>
-                          <td style={{ minWidth: '190px' }}>
-                            <div className={styles.tableHospitalCell}>
-                              <Building2 size={15} />
-                              <span>{doc.hospital || 'Private Clinic'}</span>
+                          <td style={{ width: '220px', minWidth: '220px' }}>
+                            <div className={styles.tableHospitalCell} style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <Building2 size={15} style={{ flexShrink: 0 }} />
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                {doc.hospital || 'Private Clinic'}
+                              </span>
                             </div>
                           </td>
-                          <td style={{ minWidth: '150px' }}>
+                          <td style={{ width: '140px', minWidth: '140px' }}>
                             <span className={styles.priceHighlight}>₹{doc.price}</span>
                           </td>
-                          <td style={{ minWidth: '130px' }}>
+                          <td style={{ width: '130px', minWidth: '130px' }}>
                             {(() => {
                               const liveRating = getDoctorDisplayRating(doc);
                               const cNum = Number(liveRating.count) || 0;
@@ -1722,7 +1751,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               );
                             })()}
                           </td>
-                          <td style={{ minWidth: '180px' }}>
+                          <td style={{ width: '180px', minWidth: '180px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span
@@ -1759,7 +1788,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </span>
                             </div>
                           </td>
-                          <td style={{ minWidth: '440px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
+                          <td style={{ width: '400px', minWidth: '400px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
                               <button
                                 className={styles.historyActionBtn}
@@ -1794,26 +1823,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               >
                                 <History size={14} /> History
                               </button>
-                              {(() => {
-                                const docKey = String(doc._id || doc.id);
-                                const isToggling = togglingDoctorIds.has(docKey);
-                                const isStarred = Boolean(doc.isStarDoctor);
-                                return (
-                                  <button
-                                    type="button"
-                                    className={`${styles.starActionBtn} ${isStarred ? styles.starActionBtnActive : ''} ${isToggling ? styles.starActionBtnToggling : ''}`}
-                                    onClick={(e) => handleToggleStarDoctor(doc, e)}
-                                    disabled={isToggling}
-                                    aria-busy={isToggling}
-                                    title={isStarred ? "Remove from Popular Doctors on homepage" : "Mark as Star Doctor (Feature on Homepage)"}
-                                  >
-                                    <span className={styles.starIconWrapper}>
-                                      <Star size={15} fill={isStarred ? "#F59E0B" : "none"} color={isStarred ? "#D97706" : "#64748B"} />
-                                    </span>
-                                    <span className={styles.starTextWrapper}>{isStarred ? "Starred" : "Star"}</span>
-                                  </button>
-                                );
-                              })()}
+                              <PopularDoctorActionButtons
+                                doctor={doc}
+                                onToggle={(id, nextVal, extra) => updateDoctor(id, { isStarDoctor: nextVal, ...extra })}
+                                showToast={showToast}
+                              />
                               <button
                                 className={styles.editActionBtn}
                                 onClick={() => handleOpenEditDoctor(doc)}
@@ -1939,7 +1953,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               ) : (
                 <div className={styles.hospitalsGrid}>
                   {filteredHospitals.map(hosp => (
-                    <div key={hosp.id || hosp._id} className={styles.hospitalAdminCard}>
+                    <div key={String(hosp._id || hosp.id)} className={styles.hospitalAdminCard}>
                       <div className={styles.cardImageContainer}>
                         <img
                           src={hosp.image}
@@ -2063,84 +2077,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         </div>
 
                         {/* Admin-Only: Home Page Marquee Running Control */}
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '8px 12px',
-                          background: hosp.showOnHome !== false ? '#f0fdf4' : '#f8fafc',
-                          border: `1px solid ${hosp.showOnHome !== false ? '#bbf7d0' : '#e2e8f0'}`,
-                          borderRadius: '8px',
-                          margin: '10px 0 12px'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '1rem' }}>{hosp.showOnHome !== false ? '⚡' : '⏸️'}</span>
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: hosp.showOnHome !== false ? '#15803d' : '#64748b' }}>
-                                  {hosp.showOnHome !== false ? 'Running on Home Page' : 'Hidden from Home Page'}
-                                </span>
-                                <span style={{ fontSize: '0.62rem', background: '#e0e7ff', color: '#4338ca', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-                                  Admin Only
-                                </span>
-                              </div>
-                              <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                                {hosp.showOnHome !== false ? 'Active in homepage carousel marquee' : 'Not featured on homepage carousel'}
-                              </span>
-                            </div>
-                          </div>
-                          {(() => {
-                            const hospKey = String(hosp._id || hosp.id);
-                            const isToggling = togglingHospHomeId === hospKey;
-                            const isRunning = hosp.showOnHome !== false;
-
-                            return (
-                              <button
-                                type="button"
-                                disabled={isToggling}
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (isToggling) return;
-                                  const newStatus = !isRunning;
-                                  setTogglingHospHomeId(hospKey);
-                                  try {
-                                    await updateHospital(hospKey, { showOnHome: newStatus });
-                                  } catch (err) {
-                                    alert(err.message || 'Failed to update home page visibility');
-                                  } finally {
-                                    setTogglingHospHomeId(null);
-                                  }
-                                }}
-                                style={{
-                                  background: isRunning ? '#16a34a' : '#94a3b8',
-                                  color: '#ffffff',
-                                  border: 'none',
-                                  borderRadius: '20px',
-                                  padding: '5px 12px',
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700,
-                                  cursor: isToggling ? 'wait' : 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '5px',
-                                  boxShadow: isRunning ? '0 1px 3px rgba(22, 163, 74, 0.3)' : 'none',
-                                  opacity: isToggling ? 0.75 : 1,
-                                  transition: 'background-color 0.2s ease, opacity 0.2s ease'
-                                }}
-                                title="Toggle home page marquee display (Admin only)"
-                              >
-                                {isToggling ? (
-                                  <>
-                                    <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
-                                    <span>Updating...</span>
-                                  </>
-                                ) : (
-                                  <span>{isRunning ? '✓ Running' : '✕ Hidden'}</span>
-                                )}
-                              </button>
-                            );
-                          })()}
-                        </div>
+                        <HospitalHomeStatusControl
+                          hospital={hosp}
+                          onToggle={handleToggleHospitalHomeStatus}
+                          showToast={showToast}
+                        />
 
                         <div className={styles.cardFooterActions}>
                           {hosp.publicationStatus === 'pending_review' && (
@@ -3344,137 +3285,13 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   </div>
                 ) : (
                   filteredReviews.map((rev) => (
-                    <div
-                      key={rev.id || rev._id}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '14px',
-                        padding: '18px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px',
-                        boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <strong style={{ fontSize: '0.98rem', color: '#0f172a' }}>{rev.patientName}</strong>
-                          <span style={{ fontSize: '0.78rem', color: '#94a3b8', display: 'block' }}>
-                            {rev.patientCity || 'Bengaluru'} {rev.createdAt ? `• ${new Date(rev.createdAt).toLocaleDateString()}` : ''}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: '2px' }}>
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star
-                              key={s}
-                              size={14}
-                              fill={s <= Number(rev.rating) ? '#f59e0b' : '#e2e8f0'}
-                              color={s <= Number(rev.rating) ? '#f59e0b' : '#cbd5e1'}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '10px 12px', borderRadius: '8px', color: '#334155', border: '1px solid #f1f5f9' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{
-                            fontSize: '0.74rem',
-                            fontWeight: 700,
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: rev.targetType === 'doctor' ? '#f5f3ff' : '#eff6ff',
-                            color: rev.targetType === 'doctor' ? '#7c3aed' : '#2563eb',
-                            border: `1px solid ${rev.targetType === 'doctor' ? '#ddd6fe' : '#bfdbfe'}`
-                          }}>
-                            {rev.targetType === 'doctor' ? '👨‍⚕️ Doctor Review' : '🏥 Hospital Review'}
-                          </span>
-                          <strong style={{ color: '#0f172a' }}>{rev.targetName || rev.doctorName}</strong>
-                        </div>
-                        {rev.treatment && <span style={{ display: 'block', color: '#2563eb' }}>Treatment: {rev.treatment}</span>}
-                        {rev.insuranceUsed && <span style={{ display: 'block', color: '#059669' }}>Insurance: {rev.insuranceUsed}</span>}
-                      </div>
-
-                      {rev.title && (
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>
-                          {rev.title}
-                        </div>
-                      )}
-
-                      <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
-                        {rev.comment}
-                      </p>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            padding: '3px 8px',
-                            borderRadius: '4px',
-                            background: rev.status === 'approved' ? '#ecfdf5' : rev.status === 'pending' ? '#fef3c7' : '#fef2f2',
-                            color: rev.status === 'approved' ? '#059669' : rev.status === 'pending' ? '#b45309' : '#ef4444'
-                          }}>
-                            {rev.status}
-                          </span>
-                          {rev.status === 'pending' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                updateReview(rev.id || rev._id, { status: 'approved' });
-                                showToast(`Review by ${rev.patientName} approved!`);
-                              }}
-                              style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', borderRadius: '4px', fontSize: '0.72rem', padding: '2px 6px', fontWeight: 700, cursor: 'pointer' }}
-                            >
-                              Approve
-                            </button>
-                          )}
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReviewToEdit(rev);
-                              setPreselectedReviewDoctor(null);
-                              setIsReviewModalOpen(true);
-                            }}
-                            style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '5px 10px', fontSize: '0.78rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
-                            title="Edit / Modify review details"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleteModalState({
-                                isOpen: true,
-                                type: 'review',
-                                item: { ...rev, name: rev.patientName + "'s review" }
-                              });
-                            }}
-                            style={{
-                              background: '#fef2f2',
-                              border: '1px solid #fee2e2',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              color: '#ef4444',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Delete this review permanently"
-                          >
-                            <Trash2 size={13} />
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <AdminReviewCard
+                      key={String(rev._id || rev.id)}
+                      review={rev}
+                      onEdit={handleEditReview}
+                      onDelete={handleDeleteReviewClick}
+                      onApprove={handleApproveReview}
+                    />
                   ))
                 )}
               </div>
@@ -3624,8 +3441,11 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       {/* Modals */}
       <DoctorFormModal
         isOpen={isDoctorModalOpen}
-        onClose={() => setIsDoctorModalOpen(false)}
-        doctorToEdit={doctorToEdit ? (doctors.find(d => String(d._id || d.id) === String(doctorToEdit._id || doctorToEdit.id)) || doctorToEdit) : null}
+        onClose={() => {
+          setIsDoctorModalOpen(false);
+          setDoctorToEdit(null);
+        }}
+        doctorToEdit={doctorToEdit ? (doctors.find(d => matchesId(d, doctorToEdit._id || doctorToEdit.id)) || doctorToEdit) : null}
         onSuccess={showToast}
       />
 
