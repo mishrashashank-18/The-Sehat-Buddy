@@ -3898,39 +3898,56 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
                         {reel.url && reel.url.includes('instagram.com') && !reel.url.includes('cloudinary') && (
                           <div style={{ marginTop: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleConvertInstagramReel(idx)}
-                              disabled={uploadingMediaKey === `convert-ig-${idx}`}
-                              style={{
-                                background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
-                                color: '#ffffff',
-                                border: 'none',
-                                padding: '6px 12px',
-                                borderRadius: '8px',
-                                fontSize: '0.76rem',
-                                fontWeight: 700,
-                                cursor: uploadingMediaKey === `convert-ig-${idx}` ? 'not-allowed' : 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                width: 'fit-content'
-                              }}
-                            >
-                              {uploadingMediaKey === `convert-ig-${idx}` ? (
-                                <>
-                                  <Loader2 size={12} className={styles.spinAnimation} />
-                                  <span>Extracting & Uploading to Cloudinary...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Sparkles size={12} />
-                                  <span>Auto-Upload to Cloudinary (Enables Hover Autoplay & Native Player)</span>
-                                </>
-                              )}
-                            </button>
+                            <div style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: '#f0fdf4',
+                              color: '#166534',
+                              border: '1px solid #bbf7d0',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              fontSize: '0.78rem',
+                              fontWeight: 600,
+                              marginBottom: '6px'
+                            }}>
+                              ✓ Instagram Reel link & thumbnail active — ready to save!
+                            </div>
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => handleConvertInstagramReel(idx)}
+                                disabled={uploadingMediaKey === `convert-ig-${idx}`}
+                                style={{
+                                  background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                                  color: '#ffffff',
+                                  border: 'none',
+                                  padding: '6px 12px',
+                                  borderRadius: '8px',
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600,
+                                  cursor: uploadingMediaKey === `convert-ig-${idx}` ? 'not-allowed' : 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  width: 'fit-content'
+                                }}
+                              >
+                                {uploadingMediaKey === `convert-ig-${idx}` ? (
+                                  <>
+                                    <Loader2 size={12} className={styles.spinAnimation} />
+                                    <span>Extracting & Uploading to Cloudinary...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Sparkles size={12} />
+                                    <span>Auto-Upload to Cloudinary (Optional MP4 conversion)</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                             <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
-                              💡 <em>Optional:</em> You can keep this Instagram link as-is (plays via Instagram player) and click <strong>Save Changes</strong>, or click <strong>Upload Video</strong> to upload an MP4 directly.
+                              💡 <em>Tip:</em> You don't need to convert to Cloudinary. You can keep this Instagram link as-is and click <strong>Save Changes</strong> (plays smoothly via Instagram player), or click <strong>Upload Video</strong> to upload an MP4 directly.
                             </div>
                           </div>
                         )}

@@ -348,15 +348,19 @@ router.post('/instagram-reel', protect, async (req, res) => {
     const cleanUrl = String(url).trim().split('?')[0];
 
     // Download reel locally using yt-dlp across available runtime environments
+    const isWindows = process.platform === 'win32';
     const commands = [
       `yt-dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
       `python3 -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
-      `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
-      `py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`
+      `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`
     ];
+    if (isWindows) {
+      commands.push(`py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`);
+    }
 
     let downloaded = false;
     let lastErr = null;
+    let meaningfulErr = null;
     for (const cmd of commands) {
       try {
         await execPromise(cmd, { timeout: 40000 });
@@ -366,6 +370,10 @@ router.post('/instagram-reel', protect, async (req, res) => {
         }
       } catch (e) {
         lastErr = e;
+        const errMsg = e.message || String(e);
+        if (errMsg.includes('Instagram') || errMsg.includes('empty media') || errMsg.includes('login') || errMsg.includes('cookies')) {
+          meaningfulErr = e;
+        }
       }
     }
 
@@ -373,15 +381,10 @@ router.post('/instagram-reel', protect, async (req, res) => {
       if (fs.existsSync(tempFilePath)) {
         try { fs.unlinkSync(tempFilePath); } catch {}
       }
-      const rawMsg = lastErr ? (lastErr.message || String(lastErr)) : '';
-      let friendlyMessage = 'Direct extraction is unavailable for this Instagram reel. ';
-      if (rawMsg.includes('empty media response') || rawMsg.includes('login') || rawMsg.includes('cookies') || rawMsg.includes('429')) {
-        friendlyMessage += 'Instagram requires authentication or blocks automated scraping for this media. You can still save this Instagram reel link directly (it will play natively via the Instagram player), or upload your video file directly using "Upload Video".';
-      } else if (rawMsg.includes('not found') || rawMsg.includes('ENOENT')) {
-        friendlyMessage += 'Media processing runtime is not installed or available on the host. You can still save this Instagram link directly, or upload the MP4 video directly using "Upload Video".';
-      } else {
-        friendlyMessage += 'You can still save this Instagram reel link directly, or upload the MP4 video directly using "Upload Video".';
-      }
+      const errToUse = meaningfulErr || lastErr;
+      const rawMsg = errToUse ? (errToUse.message || String(errToUse)) : '';
+      let friendlyMessage = 'Instagram restricts direct automated video extraction for this reel without login authentication. ';
+      friendlyMessage += 'Your Instagram reel link and cover thumbnail are already active! Simply click "Save Changes" to save this reel to your hospital profile (it will play smoothly in the built-in Instagram player). If you prefer a native MP4 file, use the "Upload Video" button.';
       return res.status(400).json({ success: false, fallbackSupported: true, message: friendlyMessage });
     }
 
