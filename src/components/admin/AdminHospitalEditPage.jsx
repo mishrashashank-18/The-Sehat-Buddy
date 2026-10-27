@@ -45,7 +45,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { useData } from '../../context/useData';
-import { isDoctorInStarList, getDoctorCanonicalId, matchesId } from '../../context/DataContext';
+import { isDoctorInStarList, isDoctorAffiliatedWithHospital, getDoctorCanonicalId, matchesId } from '../../context/DataContext';
 import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import DoctorFormModal from './DoctorFormModal';
@@ -425,7 +425,46 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const isHomeStatusDirtyRef = useRef(false);
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
-  const [doctorFilter, setDoctorFilter] = useState('all'); // 'all' | 'star'
+  const [doctorFilter, setDoctorFilter] = useState('hospital'); // 'hospital' | 'star' | 'all'
+
+  // Affiliated doctors resolution for THIS specific hospital
+  const currentHospitalTarget = useMemo(() => {
+    return {
+      ...(hospital || {}),
+      ...(formData || {}),
+      name: formData?.name || hospital?.name || '',
+      _id: hospital?._id || currentHospId,
+      id: hospital?.id || hospital?._id || currentHospId
+    };
+  }, [hospital, formData?.name, formData?.star_doctors, formData?.staff_emails, formData?.staff_doctors, currentHospId]);
+
+  // Doctors affiliated with THIS hospital
+  const hospitalDoctors = useMemo(() => {
+    return (doctors || []).filter(doc => isDoctorAffiliatedWithHospital(doc, currentHospitalTarget));
+  }, [doctors, currentHospitalTarget]);
+
+  // Star doctors for THIS hospital
+  const hospitalStarDoctors = useMemo(() => {
+    return hospitalDoctors.filter(doc => isDoctorInStarList(doc, formData?.star_doctors) || Boolean(doc.isStarDoctor));
+  }, [hospitalDoctors, formData?.star_doctors]);
+
+  // Doctors to display based on selected filter pill and search query
+  const displayedDoctors = useMemo(() => {
+    const sourceList = doctorFilter === 'all' ? (doctors || []) : hospitalDoctors;
+
+    return sourceList.filter(doc => {
+      const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData?.star_doctors);
+      if (doctorFilter === 'star' && !isSelected) return false;
+
+      if (!doctorSearch.trim()) return true;
+      const query = doctorSearch.toLowerCase();
+      return (
+        (doc.name || '').toLowerCase().includes(query) ||
+        (doc.specialty || doc.specialization || '').toLowerCase().includes(query) ||
+        (doc.hospital || '').toLowerCase().includes(query)
+      );
+    });
+  }, [doctorFilter, doctors, hospitalDoctors, formData?.star_doctors, doctorSearch]);
 
   // Insurance State
   const [newInsuranceInput, setNewInsuranceInput] = useState('');
@@ -2084,7 +2123,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <span className={styles.metricCardSub}>Star Docs</span>
                 </div>
                 <span className={styles.metricCardHint}>
-                  {(doctors || []).length} registered clinicians
+                  {hospitalDoctors.length} registered clinicians
                 </span>
               </div>
             </div>
@@ -3150,10 +3189,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div>
                 <h2 className={styles.sectionTitle}>
                   <Sparkles size={20} color="#f59e0b" />
-                  Doctors & Clinical Specialists ({formData.star_doctors.length} Star Doctors)
+                  Doctors & Clinical Specialists ({hospitalDoctors.length} Hospital Doctors, {hospitalStarDoctors.length} Star Doctors)
                 </h2>
                 <p className={styles.sectionSubtitle}>
-                  Add, edit, or delete doctors for this hospital. Highlight your top specialists to showcase in the "Star Doctors & Clinical Leaders" section.
+                  Doctors affiliated with {formData.name || hospital?.name || 'this hospital'}. Highlight your top specialists to showcase in the "Star Doctors & Clinical Leaders" section.
                 </p>
               </div>
 
@@ -3184,136 +3223,130 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div className={styles.doctorFilterPills}>
                 <button
                   type="button"
-                  className={`${styles.doctorFilterPill} ${doctorFilter === 'all' ? styles.doctorFilterPillActive : ''}`}
-                  onClick={() => setDoctorFilter('all')}
+                  className={`${styles.doctorFilterPill} ${doctorFilter === 'hospital' ? styles.doctorFilterPillActive : ''}`}
+                  onClick={() => setDoctorFilter('hospital')}
                 >
-                  All Doctors ({(doctors || []).length})
+                  Hospital Doctors ({hospitalDoctors.length})
                 </button>
                 <button
                   type="button"
                   className={`${styles.doctorFilterPill} ${doctorFilter === 'star' ? styles.doctorFilterPillActive : ''}`}
                   onClick={() => setDoctorFilter('star')}
                 >
-                  ⭐ Star Doctors ({formData.star_doctors.length})
+                  ⭐ Star Doctors ({hospitalStarDoctors.length})
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.doctorFilterPill} ${doctorFilter === 'all' ? styles.doctorFilterPillActive : ''}`}
+                  onClick={() => setDoctorFilter('all')}
+                  title="View all registered doctors in the system"
+                >
+                  All System Doctors ({(doctors || []).length})
                 </button>
               </div>
             </div>
 
             {/* Doctors Grid */}
             <div className={styles.doctorSelectGrid}>
-              {(doctors || [])
-                .filter(doc => {
-                  const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
-                  if (doctorFilter === 'star' && !isSelected) return false;
+              {displayedDoctors.map((doc) => {
+                const docId = doc.id || doc._id;
+                const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
 
-                  if (!doctorSearch.trim()) return true;
-                  const query = doctorSearch.toLowerCase();
-                  return (
-                    (doc.name || '').toLowerCase().includes(query) ||
-                    (doc.specialty || doc.specialization || '').toLowerCase().includes(query) ||
-                    (doc.hospital || '').toLowerCase().includes(query)
-                  );
-                })
-                .map((doc) => {
-                  const docId = doc.id || doc._id;
-                  const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
-
-                  return (
-                    <div
-                      key={docId}
-                      className={`${styles.doctorCard} ${isSelected ? styles.doctorCardSelected : ''}`}
-                    >
-                      <div className={styles.docCardTop}>
-                        <img
-                          src={doc.image || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80'}
-                          alt={doc.name}
-                          className={styles.docAvatar}
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
-                          }}
-                        />
-                        <div className={styles.docInfo}>
-                          <h4 className={styles.docName}>{doc.name}</h4>
-                          <p className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Consultant'}</p>
-                          <div className={styles.docMetaRow}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#f59e0b', fontWeight: 600 }}>
-                              <Star size={12} fill="#f59e0b" />
-                              {doc.rating || 4.8}
-                            </span>
-                            <span>•</span>
-                            <span>{doc.experience || '5+ Years'}</span>
-                            {doc.price && (
-                              <>
-                                <span>•</span>
-                                <span style={{ fontWeight: 600, color: '#0f172a' }}>₹{doc.price}</span>
-                              </>
-                            )}
-                          </div>
-                          {doc.hospital && (
-                            <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Building2 size={11} />
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.hospital}</span>
-                            </div>
+                return (
+                  <div
+                    key={docId}
+                    className={`${styles.doctorCard} ${isSelected ? styles.doctorCardSelected : ''}`}
+                  >
+                    <div className={styles.docCardTop}>
+                      <img
+                        src={doc.image || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80'}
+                        alt={doc.name}
+                        className={styles.docAvatar}
+                        onError={(e) => {
+                          e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                        }}
+                      />
+                      <div className={styles.docInfo}>
+                        <h4 className={styles.docName}>{doc.name}</h4>
+                        <p className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Consultant'}</p>
+                        <div className={styles.docMetaRow}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '3px', color: '#f59e0b', fontWeight: 600 }}>
+                            <Star size={12} fill="#f59e0b" />
+                            {doc.rating || 4.8}
+                          </span>
+                          <span>•</span>
+                          <span>{doc.experience || '5+ Years'}</span>
+                          {doc.price && (
+                            <>
+                              <span>•</span>
+                              <span style={{ fontWeight: 600, color: '#0f172a' }}>₹{doc.price}</span>
+                            </>
                           )}
                         </div>
-                      </div>
-
-                      <div className={styles.docCardActions}>
-                        {(() => {
-                          const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
-                          const isDocToggling = togglingDoctorIds.has(canonicalDocId);
-                          return (
-                            <PopularDoctorActionButtons
-                              doctor={doc}
-                              isPopular={isSelected}
-                              disabled={isDocToggling}
-                              onSetPopular={(targetVal, extra) => handleSetHospitalStarDoctor(doc, targetVal, extra)}
-                            />
-                          );
-                        })()}
-
-                        <div className={styles.docBtnGroup}>
-                          <button
-                            type="button"
-                            className={styles.docActionBtn}
-                            onClick={() => handleOpenEditDoctor(doc)}
-                            title="Edit doctor details, reels, videos & FAQs"
-                          >
-                            <Edit3 size={13} />
-                            <span>Edit</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            className={`${styles.docActionBtn} ${styles.docDeleteBtn}`}
-                            onClick={() => handleOpenDeleteDoctor(doc)}
-                            title="Delete doctor"
-                          >
-                            <Trash2 size={13} />
-                            <span>Delete</span>
-                          </button>
-                        </div>
+                        {doc.hospital && (
+                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Building2 size={11} />
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.hospital}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })}
+
+                    <div className={styles.docCardActions}>
+                      {(() => {
+                        const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
+                        const isDocToggling = togglingDoctorIds.has(canonicalDocId);
+                        return (
+                          <PopularDoctorActionButtons
+                            doctor={doc}
+                            isPopular={isSelected}
+                            disabled={isDocToggling}
+                            onSetPopular={(targetVal, extra) => handleSetHospitalStarDoctor(doc, targetVal, extra)}
+                          />
+                        );
+                      })()}
+
+                      <div className={styles.docBtnGroup}>
+                        <button
+                          type="button"
+                          className={styles.docActionBtn}
+                          onClick={() => handleOpenEditDoctor(doc)}
+                          title="Edit doctor details, reels, videos & FAQs"
+                        >
+                          <Edit3 size={13} />
+                          <span>Edit</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className={`${styles.docActionBtn} ${styles.docDeleteBtn}`}
+                          onClick={() => handleOpenDeleteDoctor(doc)}
+                          title="Delete doctor"
+                        >
+                          <Trash2 size={13} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Empty state when no doctor matches search */}
-            {(doctors || []).filter(doc => {
-              const isSelected = isDoctorInStarList(doc, formData.star_doctors);
-              if (doctorFilter === 'star' && !isSelected) return false;
-              if (!doctorSearch.trim()) return true;
-              const query = doctorSearch.toLowerCase();
-              return (
-                (doc.name || '').toLowerCase().includes(query) ||
-                (doc.specialty || doc.specialization || '').toLowerCase().includes(query) ||
-                (doc.hospital || '').toLowerCase().includes(query)
-              );
-            }).length === 0 && (
+            {displayedDoctors.length === 0 && (
               <div style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b', background: '#f8fafc', borderRadius: '10px', marginTop: '16px' }}>
                 <Stethoscope size={36} color="#cbd5e1" style={{ marginBottom: '8px' }} />
-                <p style={{ margin: 0, fontWeight: 600 }}>No doctors found matching your criteria.</p>
+                <p style={{ margin: 0, fontWeight: 600 }}>
+                  {doctorFilter === 'hospital'
+                    ? `No doctors are currently affiliated with ${formData.name || hospital?.name || 'this hospital'}.`
+                    : (doctorFilter === 'star' ? 'No star doctors selected for this hospital yet.' : 'No doctors found matching your criteria.')}
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#94a3b8' }}>
+                  {doctorFilter === 'hospital'
+                    ? 'Click "+ Add New Doctor" to create doctors for this hospital, or switch to "All System Doctors" to link an existing doctor.'
+                    : 'Click "+ Add Doctor Now" or select doctors from the list.'}
+                </p>
                 <button
                   type="button"
                   className={styles.quickPickBtn}

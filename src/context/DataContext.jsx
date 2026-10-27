@@ -135,6 +135,61 @@ export const isDoctorInStarList = (doctor, starList) => {
   });
 };
 
+// Robust helper to check if a doctor belongs to or is affiliated with a specific hospital
+export const isDoctorAffiliatedWithHospital = (doctor, hospital) => {
+  if (!doctor || !hospital) return false;
+
+  const currentHospitalName = String(hospital.name || '').toLowerCase().trim();
+  const hospId = String(hospital._id || hospital.id || '').trim();
+
+  // 1. Direct MongoDB ID / ObjectId match
+  if (hospId) {
+    if (doctor.hospitalId && String(doctor.hospitalId).trim() === hospId) return true;
+    if (doctor.hospital_id && String(doctor.hospital_id).trim() === hospId) return true;
+    if (doctor.hospital && String(doctor.hospital).trim() === hospId) return true;
+  }
+
+  // 2. Doctor is designated in hospital's star_doctors list
+  if (Array.isArray(hospital.star_doctors) && isDoctorInStarList(doctor, hospital.star_doctors)) {
+    return true;
+  }
+
+  // 3. Doctor's email is in hospital staff_emails or staff_doctors
+  const docEmail = (doctor.email || '').toLowerCase().trim();
+  if (docEmail) {
+    if (Array.isArray(hospital.staff_emails) && hospital.staff_emails.some(e => (typeof e === 'string' ? e : e?.email)?.toLowerCase().trim() === docEmail)) {
+      return true;
+    }
+    if (Array.isArray(hospital.staff_doctors) && hospital.staff_doctors.some(sd => (typeof sd === 'string' ? sd : sd?.email)?.toLowerCase().trim() === docEmail)) {
+      return true;
+    }
+  }
+
+  // 4. Doctor's hospital property name match
+  const docHosp = String(doctor.hospital || '').toLowerCase().trim();
+  if (!docHosp || !currentHospitalName) return false;
+
+  // Exact match
+  if (docHosp === currentHospitalName) return true;
+
+  // Substring containment if both are non-trivial length
+  if (docHosp.length > 5 && currentHospitalName.length > 5) {
+    if (docHosp.includes(currentHospitalName) || currentHospitalName.includes(docHosp)) return true;
+  }
+
+  // Primary brand / root word comparison (e.g. "Manipal", "Fortis", "Apollo", "Aster", "S2 Health")
+  const genericWords = new Set(['hospital', 'hospitals', 'super', 'speciality', 'specialty', 'center', 'centre', 'city', 'clinic', 'medical', 'care', 'healthcare', 'research', 'institute']);
+  const clean = (s) => s.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  const docWords = clean(docHosp).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
+  const hospWords = clean(currentHospitalName).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
+
+  if (docWords.length > 0 && hospWords.length > 0) {
+    if (docWords[0] === hospWords[0]) return true;
+  }
+
+  return false;
+};
+
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB / cached)
   const [doctors, setDoctors] = useState(() => {

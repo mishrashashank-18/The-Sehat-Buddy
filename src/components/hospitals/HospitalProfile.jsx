@@ -34,7 +34,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useData } from '../../context/useData';
-import { isDoctorInStarList, matchesId } from '../../context/DataContext';
+import { isDoctorInStarList, isDoctorAffiliatedWithHospital, matchesId } from '../../context/DataContext';
 import Container from '../layout/Container';
 import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
@@ -1025,6 +1025,20 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
       return null;
     }).filter(Boolean);
+  }
+
+  // Fallback: If no explicit star doctors were selected, display doctors affiliated with this hospital
+  if (starDoctorsList.length === 0 && doctors && doctors.length > 0 && hospital) {
+    starDoctorsList = doctors
+      .filter(d => isDoctorAffiliatedWithHospital(d, hospital))
+      .map(matchedGlobal => ({
+        ...matchedGlobal,
+        id: matchedGlobal._id || matchedGlobal.id,
+        _id: matchedGlobal._id || matchedGlobal.id,
+        specialty: matchedGlobal.specialization || matchedGlobal.specialty || 'Specialist',
+        price: matchedGlobal.fees || matchedGlobal.price || 750,
+        experience: typeof matchedGlobal.experience === 'number' ? `${matchedGlobal.experience}+ Years Experience` : (matchedGlobal.experience || '10+ Years Experience')
+      }));
   }
 
 

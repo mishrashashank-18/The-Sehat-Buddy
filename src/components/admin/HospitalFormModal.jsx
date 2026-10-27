@@ -19,7 +19,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
-import { isDoctorInStarList, getDoctorCanonicalId } from '../../context/DataContext';
+import { isDoctorInStarList, isDoctorAffiliatedWithHospital, getDoctorCanonicalId } from '../../context/DataContext';
 import { api } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
@@ -577,11 +577,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       const docIdStr = String(doc.id || doc._id || '');
 
       const isStaff = staffEmailSet.has(docEmail);
-      const isHospitalMatch = currentHospitalName && docHosp && (
-        docHosp === currentHospitalName ||
-        docHosp.includes(currentHospitalName) ||
-        currentHospitalName.includes(docHosp)
-      );
+      const isHospitalMatch = isDoctorAffiliatedWithHospital(doc, {
+        ...(hospitalToEdit || {}),
+        name: currentHospitalName,
+        staff_emails: formData.staff_emails,
+        staff_doctors: formData.staff_doctors
+      });
 
       if (isStaff || isHospitalMatch) {
         // Fetch doctor name from staff_doctors if defined, else doctor's DB name
