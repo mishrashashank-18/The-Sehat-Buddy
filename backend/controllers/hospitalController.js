@@ -992,17 +992,18 @@ export const updateHospital = async (req, res) => {
                 const fs = await import('fs');
 
                 const tempFilePath = path.join(os.tmpdir(), `sehat_bg_reel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+                const cleanReelUrl = String(rUrl).trim().split('?')[0];
 
                 const commands = [
-                  `py -m yt_dlp -o "${tempFilePath}" "${rUrl}"`,
-                  `yt-dlp -o "${tempFilePath}" "${rUrl}"`,
-                  `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -o "${tempFilePath}" "${rUrl}"`,
-                  `python -m yt_dlp -o "${tempFilePath}" "${rUrl}"`
+                  `yt-dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanReelUrl}"`,
+                  `python3 -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanReelUrl}"`,
+                  `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanReelUrl}"`,
+                  `py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanReelUrl}"`
                 ];
                 let downloaded = false;
                 for (const cmd of commands) {
                   try {
-                    await execPromise(cmd, { timeout: 35000 });
+                    await execPromise(cmd, { timeout: 20000 });
                     if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
                       downloaded = true;
                       break;

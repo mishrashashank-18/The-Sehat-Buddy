@@ -345,13 +345,14 @@ router.post('/instagram-reel', protect, async (req, res) => {
     const fs = await import('fs');
 
     const tempFilePath = path.join(os.tmpdir(), `sehat_reel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
+    const cleanUrl = String(url).trim().split('?')[0];
 
-    // Download reel locally using yt-dlp across available Python / yt-dlp environments
+    // Download reel locally using yt-dlp across available runtime environments
     const commands = [
-      `py -m yt_dlp -o "${tempFilePath}" "${url}"`,
-      `yt-dlp -o "${tempFilePath}" "${url}"`,
-      `"C:\\Users\\Sarthak\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\yt-dlp.exe" -o "${tempFilePath}" "${url}"`,
-      `python -m yt_dlp -o "${tempFilePath}" "${url}"`
+      `yt-dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+      `python3 -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+      `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+      `py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`
     ];
 
     let downloaded = false;
@@ -369,7 +370,19 @@ router.post('/instagram-reel', protect, async (req, res) => {
     }
 
     if (!downloaded || !fs.existsSync(tempFilePath)) {
-      return res.status(400).json({ success: false, message: lastErr ? lastErr.message : 'Could not download reel video locally' });
+      if (fs.existsSync(tempFilePath)) {
+        try { fs.unlinkSync(tempFilePath); } catch {}
+      }
+      const rawMsg = lastErr ? (lastErr.message || String(lastErr)) : '';
+      let friendlyMessage = 'Direct extraction is unavailable for this Instagram reel. ';
+      if (rawMsg.includes('empty media response') || rawMsg.includes('login') || rawMsg.includes('cookies') || rawMsg.includes('429')) {
+        friendlyMessage += 'Instagram requires authentication or blocks automated scraping for this media. You can still save this Instagram reel link directly (it will play natively via the Instagram player), or upload your video file directly using "Upload Video".';
+      } else if (rawMsg.includes('not found') || rawMsg.includes('ENOENT')) {
+        friendlyMessage += 'Media processing runtime is not installed or available on the host. You can still save this Instagram link directly, or upload the MP4 video directly using "Upload Video".';
+      } else {
+        friendlyMessage += 'You can still save this Instagram reel link directly, or upload the MP4 video directly using "Upload Video".';
+      }
+      return res.status(400).json({ success: false, fallbackSupported: true, message: friendlyMessage });
     }
 
     try {

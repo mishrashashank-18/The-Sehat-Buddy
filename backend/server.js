@@ -314,6 +314,8 @@ app.get('/api/reel-video', async (req, res) => {
           // Fast direct commands with socket-timeout
           const commands = [
             `yt-dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`,
+            `python3 -m yt_dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`,
+            `python -m yt_dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`,
             `py -m yt_dlp --no-warnings --no-check-certificates --socket-timeout 8 -g "${targetReelUrl}"`
           ];
 

@@ -370,6 +370,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     const nextReels = [...formData.reels];
     const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
     nextReels[index] = { ...cur, [field]: value };
+    if (field === 'url' && value && value.includes('instagram.com') && !cur.coverPhoto) {
+      const match = String(value).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1]) {
+        nextReels[index].coverPhoto = `https://www.instagram.com/p/${match[1]}/media/?size=l`;
+      }
+    }
     setFormData(prev => ({ ...prev, reels: nextReels }));
   };
 

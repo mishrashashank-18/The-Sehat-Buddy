@@ -1489,8 +1489,13 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         throw new Error('Conversion succeeded but no video URL was returned');
       }
     } catch (err) {
-      console.error('Failed to convert Instagram reel:', err);
-      alert(err.message || 'Failed to convert reel to Cloudinary video');
+      console.warn('Failed to convert Instagram reel:', err);
+      // Auto-extract shortcode to populate cover photo thumbnail if not already present
+      const match = String(raw).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1] && !formData.reels[idx]?.coverPhoto) {
+        handleUpdateReel(idx, 'coverPhoto', `https://www.instagram.com/p/${match[1]}/media/?size=l`);
+      }
+      alert(err.message || 'Instagram video auto-extraction is unavailable. You can still save this Instagram Reel link directly, or click "Upload Video" to upload an MP4 file.');
     } finally {
       setUploadingMediaKey(null);
     }
@@ -3838,7 +3843,16 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                             type="text"
                             className={styles.inputField}
                             value={reel.url}
-                            onChange={(e) => handleUpdateReel(idx, 'url', e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              handleUpdateReel(idx, 'url', val);
+                              if (val && val.includes('instagram.com') && !reel.coverPhoto) {
+                                const match = String(val).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                                if (match && match[1]) {
+                                  handleUpdateReel(idx, 'coverPhoto', `https://www.instagram.com/p/${match[1]}/media/?size=l`);
+                                }
+                              }
+                            }}
                             placeholder="Upload video file or paste Cloudinary / Instagram video URL"
                             style={{ flex: 1 }}
                           />
@@ -3883,38 +3897,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                         </div>
 
                         {reel.url && reel.url.includes('instagram.com') && !reel.url.includes('cloudinary') && (
-                          <button
-                            type="button"
-                            onClick={() => handleConvertInstagramReel(idx)}
-                            disabled={uploadingMediaKey === `convert-ig-${idx}`}
-                            style={{
-                              background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
-                              color: '#ffffff',
-                              border: 'none',
-                              padding: '6px 12px',
-                              borderRadius: '8px',
-                              fontSize: '0.76rem',
-                              fontWeight: 700,
-                              cursor: uploadingMediaKey === `convert-ig-${idx}` ? 'not-allowed' : 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              marginTop: '6px',
-                              width: 'fit-content'
-                            }}
-                          >
-                            {uploadingMediaKey === `convert-ig-${idx}` ? (
-                              <>
-                                <Loader2 size={12} className={styles.spinAnimation} />
-                                <span>Extracting & Uploading to Cloudinary...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles size={12} />
-                                <span>Auto-Upload to Cloudinary (Enables Hover Autoplay & Native Player)</span>
-                              </>
-                            )}
-                          </button>
+                          <div style={{ marginTop: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleConvertInstagramReel(idx)}
+                              disabled={uploadingMediaKey === `convert-ig-${idx}`}
+                              style={{
+                                background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+                                color: '#ffffff',
+                                border: 'none',
+                                padding: '6px 12px',
+                                borderRadius: '8px',
+                                fontSize: '0.76rem',
+                                fontWeight: 700,
+                                cursor: uploadingMediaKey === `convert-ig-${idx}` ? 'not-allowed' : 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                width: 'fit-content'
+                              }}
+                            >
+                              {uploadingMediaKey === `convert-ig-${idx}` ? (
+                                <>
+                                  <Loader2 size={12} className={styles.spinAnimation} />
+                                  <span>Extracting & Uploading to Cloudinary...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={12} />
+                                  <span>Auto-Upload to Cloudinary (Enables Hover Autoplay & Native Player)</span>
+                                </>
+                              )}
+                            </button>
+                            <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
+                              💡 <em>Optional:</em> You can keep this Instagram link as-is (plays via Instagram player) and click <strong>Save Changes</strong>, or click <strong>Upload Video</strong> to upload an MP4 directly.
+                            </div>
+                          </div>
                         )}
                       </div>
 
