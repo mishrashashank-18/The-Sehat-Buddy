@@ -848,10 +848,14 @@
 
 .dataTable {
   width: 100%;
-  min-width: 1485px;
+  min-width: 1100px;
   border-collapse: collapse;
   text-align: left;
   table-layout: fixed;
+}
+
+.doctorsTable {
+  min-width: 1675px;
 }
 
 .dataTable th {
@@ -1030,7 +1034,10 @@
 .availabilityText {
   font-size: 0.79rem;
   color: #64748b;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+  display: block;
 }
 
 .actionBtnGroup {
@@ -1039,6 +1046,7 @@
   justify-content: flex-end;
   gap: 6px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .historyActionBtn {

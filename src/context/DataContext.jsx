@@ -3,6 +3,7 @@ import { DataContext } from './context';
 import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
 import { defaultAcceptedInsurances } from '../data/insurancePartners';
+import { formatDoctorAvailability } from '../utils/doctorScheduleUtils';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v4';
@@ -388,7 +389,7 @@ export const DataProvider = ({ children }) => {
         tags: Array.isArray(d.tags) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
         reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
         youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
-        availableDays: d.availableDays || existing?.availableDays || 'Mon - Sat (10am - 4pm)',
+        availableDays: formatDoctorAvailability(d) || formatDoctorAvailability(existing) || 'Mon - Sat (10:00 AM - 04:00 PM)',
         scheduleDays: (Array.isArray(d.scheduleDays) && d.scheduleDays.length > 0) ? d.scheduleDays : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
         availableSlots: (Array.isArray(d.availableSlots) && d.availableSlots.length > 0) ? d.availableSlots : (Array.isArray(existing?.availableSlots) ? existing.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM']),
         slotDuration: d.slotDuration || existing?.slotDuration || 20,
@@ -689,7 +690,7 @@ export const DataProvider = ({ children }) => {
                         fees: pr !== undefined ? pr : (d.fees ?? d.price),
                         rating: rtg !== undefined ? rtg : d.rating,
                         reviews: revs !== undefined ? revs : d.reviews,
-                        availableDays: avDays !== undefined ? avDays : d.availableDays,
+                        availableDays: avDays !== undefined ? formatDoctorAvailability({ ...d, ...docData, availableDays: avDays }) : d.availableDays,
                         availabilityStatus: avStatus !== undefined ? avStatus : d.availabilityStatus,
                         available: avBool !== undefined ? avBool : d.available,
                         scheduleDays: docData.scheduleDays !== undefined ? docData.scheduleDays : d.scheduleDays,
@@ -743,7 +744,7 @@ export const DataProvider = ({ children }) => {
                       fees: pr || 500,
                       rating: rtg !== undefined ? rtg : 0,
                       reviews: revs !== undefined ? revs : '0',
-                      availableDays: avDays || 'Mon - Sat (10am - 4pm)',
+                      availableDays: formatDoctorAvailability(docData) || 'Mon - Sat (10:00 AM - 04:00 PM)',
                       availabilityStatus: avStatus || 'Available',
                       available: avBool !== undefined ? avBool : true,
                       faqs: Array.isArray(docData.faqs) ? docData.faqs : [],
@@ -1169,7 +1170,7 @@ export const DataProvider = ({ children }) => {
             reels: updatedData.reels !== undefined ? updatedData.reels : doc.reels,
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : doc.youtube_videos,
             faqs: updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs,
-            availableDays: updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays,
+            availableDays: formatDoctorAvailability({ ...doc, ...updatedData, availableDays: updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays }),
             scheduleDays: updatedData.scheduleDays !== undefined ? updatedData.scheduleDays : doc.scheduleDays,
             availableSlots: updatedData.availableSlots !== undefined ? updatedData.availableSlots : doc.availableSlots,
             slotDuration: updatedData.slotDuration !== undefined ? updatedData.slotDuration : doc.slotDuration,
@@ -1256,7 +1257,12 @@ export const DataProvider = ({ children }) => {
                 fees: resPrice,
                 rating: res.rating !== undefined ? parseFloat(res.rating) || doc.rating : (updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating),
                 reviews: res.reviews !== undefined ? res.reviews : (updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews),
-                availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays),
+                availableDays: formatDoctorAvailability({
+                  ...doc,
+                  ...updatedData,
+                  ...res,
+                  availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays)
+                }),
                 availabilityStatus: res.availabilityStatus !== undefined ? res.availabilityStatus : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus),
                 available: res.available !== undefined ? res.available : (updatedData.available !== undefined ? updatedData.available : doc.available),
                 experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (parseInt(String(res.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
@@ -1273,7 +1279,6 @@ export const DataProvider = ({ children }) => {
                 slotDuration: res.slotDuration ?? doc.slotDuration,
                 dayWiseSlots: (res.dayWiseSlots && typeof res.dayWiseSlots === 'object') ? res.dayWiseSlots : (updatedData.dayWiseSlots !== undefined ? updatedData.dayWiseSlots : (doc.dayWiseSlots || {})),
                 dateWiseSlots: (res.dateWiseSlots && typeof res.dateWiseSlots === 'object') ? res.dateWiseSlots : (updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {})),
-                availableDays: res.availableDays ?? doc.availableDays,
                 image: updatedData.image !== undefined ? updatedData.image : (res.image !== undefined ? res.image : (doc.image || '')),
                 about: res.about !== undefined ? res.about : doc.about,
                 jobTitle: res.jobTitle !== undefined ? res.jobTitle : (updatedData.jobTitle !== undefined ? updatedData.jobTitle : (doc.jobTitle || '')),

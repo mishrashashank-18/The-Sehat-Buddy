@@ -136,3 +136,50 @@ export const parseAvailableDaysAndHours = (str, slotDuration = 30) => {
 
   return { days: resolvedDays, slots: resolvedSlots };
 };
+
+/**
+ * Safely formats doctor availability schedule for display,
+ * preventing 'None', raw nulls, or broken placeholders.
+ */
+export const formatDoctorAvailability = (doctor) => {
+  if (!doctor) return 'Mon - Sat (10:00 AM - 04:00 PM)';
+
+  const raw = typeof doctor === 'string' 
+    ? doctor.trim() 
+    : (typeof doctor?.availableDays === 'string' ? doctor.availableDays.trim() : '');
+
+  const isInvalid = !raw || ['none', 'null', 'undefined', 'n/a', '-'].includes(raw.toLowerCase());
+
+  if (!isInvalid) {
+    return raw;
+  }
+
+  // Attempt to construct from scheduleDays and availableSlots if present on doctor object
+  if (typeof doctor === 'object' && doctor !== null) {
+    const days = Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0 ? doctor.scheduleDays : [];
+    const slots = Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0 ? doctor.availableSlots : [];
+
+    if (days.length > 0 && slots.length > 0) {
+      let daysLabel = '';
+      if (days.length === 7) {
+        daysLabel = 'All Days';
+      } else if (days.length === 6 && !days.includes('Sun')) {
+        daysLabel = 'Mon - Sat';
+      } else if (days.length === 5 && !days.includes('Sat') && !days.includes('Sun')) {
+        daysLabel = 'Mon - Fri';
+      } else {
+        daysLabel = days.join(', ');
+      }
+
+      const startSlot = slots[0];
+      const endSlot = slots[slots.length - 1];
+      return `${daysLabel} (${startSlot} - ${endSlot})`;
+    }
+
+    if (days.length > 0) {
+      return `${days.join(', ')} (Scheduled Slots)`;
+    }
+  }
+
+  return 'Mon - Sat (10:00 AM - 04:00 PM)';
+};

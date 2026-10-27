@@ -62,6 +62,7 @@ import PopularDoctorActionButtons from './PopularDoctorActionButtons';
 import HospitalHomeStatusControl from './HospitalHomeStatusControl';
 import AdminReviewCard from './AdminReviewCard';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
+import { formatDoctorAvailability } from '../../utils/doctorScheduleUtils';
 import logoImg from '../../assets/images/logo.png';
 import styles from './AdminPanel.module.css';
 
@@ -1673,7 +1674,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                 </div>
               ) : (
                 <div className={styles.tableContainer}>
-                  <table className={styles.dataTable}>
+                  <table className={`${styles.dataTable} ${styles.doctorsTable}`}>
                     <thead>
                       <tr>
                         <th style={{ width: '240px', minWidth: '240px' }}>Doctor</th>
@@ -1681,8 +1682,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         <th style={{ width: '220px', minWidth: '220px' }}>Affiliated Hospital</th>
                         <th style={{ width: '140px', minWidth: '140px' }}>Consultation Fee</th>
                         <th style={{ width: '130px', minWidth: '130px' }}>Rating</th>
-                        <th style={{ width: '180px', minWidth: '180px' }}>Availability</th>
-                        <th style={{ width: '400px', minWidth: '400px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
+                        <th style={{ width: '250px', minWidth: '250px' }}>Availability</th>
+                        <th style={{ width: '520px', minWidth: '520px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1751,7 +1752,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               );
                             })()}
                           </td>
-                          <td style={{ width: '180px', minWidth: '180px' }}>
+                          <td style={{ width: '250px', minWidth: '250px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                 <span
@@ -1783,12 +1784,12 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                   {doc.available === false || doc.availabilityStatus === 'On Leave' ? 'On Leave' : (doc.availabilityStatus === 'Busy' ? 'In Surgery / Busy' : 'Available')}
                                 </span>
                               </div>
-                              <span className={styles.availabilityText} style={{ fontSize: '0.79rem', color: '#475569' }}>
-                                {doc.availableDays || 'Mon - Sat (10am - 4pm)'}
+                              <span className={styles.availabilityText} style={{ fontSize: '0.79rem', color: '#475569' }} title={formatDoctorAvailability(doc)}>
+                                {formatDoctorAvailability(doc)}
                               </span>
                             </div>
                           </td>
-                          <td style={{ width: '400px', minWidth: '400px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
+                          <td style={{ width: '520px', minWidth: '520px', textAlign: 'right', whiteSpace: 'nowrap', paddingRight: '18px' }}>
                             <div className={styles.actionBtnGroup}>
                               <button
                                 className={styles.historyActionBtn}
