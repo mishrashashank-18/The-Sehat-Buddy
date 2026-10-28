@@ -1,97 +1,41 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 
 /**
- * High-performance, zero-flicker Hospital Home Status Control (Running on Home Page / Hidden from Home Page).
- * - Zero visual jumping: Strictly stable 88px x 28px button layout
- * - Instant 0ms optimistic UI update across container, icon, text, and button
- * - Request sequence tracking prevents stale/out-of-order network responses from reverting newer user actions
- * - Monotonic timestamp tracking guarantees backend database convergence
- * - Ref-tracked latest intent avoids stale closures during rapid consecutive clicks
- * - Protects against background polling and SSE overwriting in-flight user interactions
- * - Graceful rollback with error toast only on genuine failure of the latest request
+ * Hospital Home Status Control (Running on Home Page / Hidden from Home Page).
+ * - Single source of truth: Renders directly from props (hospital.showOnHome !== false).
+ * - Strictly idempotent: Writes an explicit boolean value (!isRunning).
+ * - In-flight protection: Disables the button while a mutation is in progress to prevent double-fires.
+ * - Single toast per user action on success/failure.
  */
-let lastHospitalClientTimestamp = 0;
-const getMonotonicHospitalTimestamp = (baseTimestamp = 0) => {
-  const now = Date.now();
-  lastHospitalClientTimestamp = Math.max(now, lastHospitalClientTimestamp + 1, Number(baseTimestamp || 0) + 1);
-  return lastHospitalClientTimestamp;
-};
-
 const HospitalHomeStatusControl = React.memo(({
   hospital,
   onToggle,
   showToast
 }) => {
   const hospId = String(hospital?._id || hospital?.id || '');
-  const serverRunning = hospital?.showOnHome !== false;
-
-  // Local optimistic state for instant UI response without flashing
-  const [isRunning, setIsRunning] = useState(serverRunning);
-
-  // Ref tracking latest user intended state across rapid clicks (prevents stale closures)
-  const latestRunningRef = useRef(serverRunning);
-  const lastUserActionTimestampRef = useRef(0);
-  const activeSequenceRef = useRef(0);
-  const inFlightCountRef = useRef(0);
-  const isMountedRef = useRef(true);
-  const onToggleRef = useRef(onToggle);
-  onToggleRef.current = onToggle;
-  const showToastRef = useRef(showToast);
-  showToastRef.current = showToast;
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    return () => {
-      isMountedRef.current = false;
-    };
-  }, []);
-
-  // Synchronize with external prop updates only when there are no pending in-flight user mutations
-  // and protect against stale parent props / out-of-order broadcasts within a 3.5s grace window
-  useEffect(() => {
-    if (inFlightCountRef.current === 0) {
-      const timeSinceUserAction = Date.now() - (lastUserActionTimestampRef.current || 0);
-      if (timeSinceUserAction < 3500 && serverRunning !== latestRunningRef.current) {
-        return;
-      }
-      latestRunningRef.current = serverRunning;
-      setIsRunning(serverRunning);
-    }
-  }, [serverRunning]);
+  const isRunning = hospital?.showOnHome !== false;
+  const [isPending, setIsPending] = useState(false);
 
   const handleClick = useCallback(async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!hospId) return;
+    if (isPending || !hospId) return;
 
-    // Increment request sequence counter, record action timestamp, and increment in-flight count
-    const currentSeq = ++activeSequenceRef.current;
-    lastUserActionTimestampRef.current = Date.now();
-    inFlightCountRef.current += 1;
+    // Explicit boolean target based on single source of truth
+    const targetVal = !isRunning;
+    const clientTimestamp = Date.now();
 
-    // Deterministically toggle based on latest intent ref (never stale)
-    const nextVal = !latestRunningRef.current;
-    latestRunningRef.current = nextVal;
-
-    // Instant optimistic update — UI reflects new state immediately
-    setIsRunning(nextVal);
-
-    const clientTimestamp = getMonotonicHospitalTimestamp(hospital?.homeUpdatedAt);
+    setIsPending(true);
 
     try {
-      if (onToggleRef.current) {
-        await onToggleRef.current(hospId, nextVal, { homeMutationTimestamp: clientTimestamp });
+      if (onToggle) {
+        await onToggle(hospId, targetVal, { homeMutationTimestamp: clientTimestamp });
       }
 
-      // If a newer click occurred while this network request was in-flight, discard this completion
-      if (currentSeq !== activeSequenceRef.current || !isMountedRef.current) {
-        return;
-      }
-
-      if (showToastRef.current) {
-        showToastRef.current(
-          nextVal
+      if (showToast) {
+        showToast(
+          targetVal
             ? `⚡ ${hospital?.name || 'Hospital'} is now Running on the homepage marquee.`
             : `⏸️ ${hospital?.name || 'Hospital'} is now Hidden from the homepage marquee.`,
           'success',
@@ -99,23 +43,13 @@ const HospitalHomeStatusControl = React.memo(({
         );
       }
     } catch (err) {
-      // If a newer click occurred, do not rollback older state
-      if (currentSeq !== activeSequenceRef.current || !isMountedRef.current) {
-        return;
-      }
-
-      // Rollback to server state on genuine API failure of the latest request
-      lastUserActionTimestampRef.current = 0;
-      latestRunningRef.current = serverRunning;
-      setIsRunning(serverRunning);
-
-      if (showToastRef.current) {
-        showToastRef.current(err.message || 'Failed to update homepage visibility', 'error', 3000);
+      if (showToast) {
+        showToast(err?.message || 'Failed to update homepage visibility', 'error', 3000);
       }
     } finally {
-      inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
+      setIsPending(false);
     }
-  }, [hospId, hospital?.homeUpdatedAt, hospital?.name, serverRunning]);
+  }, [hospId, isRunning, hospital?.name, isPending, onToggle, showToast]);
 
   return (
     <div style={{
@@ -150,6 +84,7 @@ const HospitalHomeStatusControl = React.memo(({
 
       <button
         type="button"
+        disabled={isPending}
         onClick={handleClick}
         style={{
           width: '88px',
@@ -164,12 +99,13 @@ const HospitalHomeStatusControl = React.memo(({
           padding: '0 10px',
           fontSize: '0.74rem',
           fontWeight: 700,
-          cursor: 'pointer',
+          cursor: isPending ? 'not-allowed' : 'pointer',
+          opacity: isPending ? 0.75 : 1,
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
           boxShadow: isRunning ? '0 1px 3px rgba(22, 163, 74, 0.3)' : 'none',
-          transition: 'background-color 0.2s ease, box-shadow 0.2s ease',
+          transition: 'background-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
           userSelect: 'none',
           whiteSpace: 'nowrap'
         }}
@@ -183,12 +119,13 @@ const HospitalHomeStatusControl = React.memo(({
   const prevH = prevProps.hospital;
   const nextH = nextProps.hospital;
 
-  // Custom memo comparator prevents unnecessary re-renders while accurately detecting relevant prop changes
   return (
     String(prevH?._id || prevH?.id) === String(nextH?._id || nextH?.id) &&
     (prevH?.showOnHome !== false) === (nextH?.showOnHome !== false) &&
     Number(prevH?.homeUpdatedAt || 0) === Number(nextH?.homeUpdatedAt || 0) &&
-    prevH?.name === nextH?.name
+    prevH?.name === nextH?.name &&
+    prevProps.onToggle === nextProps.onToggle &&
+    prevProps.showToast === nextProps.showToast
   );
 });
 

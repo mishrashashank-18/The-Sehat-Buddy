@@ -860,3 +860,207 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Blog PDF Attachment Styles */
+.pdfAttachmentCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 6px;
+}
+
+.pdfInfo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pdfIconBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: #FEE2E2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pdfMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pdfFileName {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #991B1B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pdfFileSize {
+  font-size: 0.72rem;
+  color: #B91C1C;
+}
+
+.pdfActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pdfViewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #DC2626;
+  background: #ffffff;
+  border: 1px solid #FCA5A5;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.pdfViewBtn:hover {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.pdfReplaceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #CBD5E1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdfReplaceBtn:hover {
+  background: #F1F5F9;
+  color: #1E293B;
+}
+
+.pdfRemoveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #FECACA;
+  background: #ffffff;
+  color: #DC2626;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pdfRemoveBtn:hover {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.pdfUploadZone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.pdfUploadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 7px;
+  border: 1px dashed #DC2626;
+  background: #FFF5F5;
+  color: #DC2626;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.pdfUploadBtn:hover {
+  background: #FEE2E2;
+  border-color: #B91C1C;
+}
+
+.pdfUploadHelp {
+  font-size: 0.73rem;
+  color: #64748B;
+  line-height: 1.3;
+}
+
+/* Corporate Tie-ups Logo Upload Styles */
+.corpLogoUploadWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.corpUploadIconBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #2563EB;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.corpUploadIconBtn:hover {
+  background: #DBEAFE;
+  color: #1D4ED8;
+}
+
+.corpRemoveIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid #E2E8F0;
+  background: #ffffff;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.corpRemoveIconBtn:hover {
+  background: #FEE2E2;
+  color: #DC2626;
+  border-color: #FECACA;
+}

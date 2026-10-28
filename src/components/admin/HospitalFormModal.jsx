@@ -149,16 +149,16 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         name: hospitalToEdit.name || '',
         city: hospitalToEdit.city || 'Bengaluru',
         address: hospitalToEdit.address || '',
-        rating: hospitalToEdit.rating || 4.8,
-        reviews: hospitalToEdit.reviews || '500+',
+        rating: hospitalToEdit.rating !== undefined && hospitalToEdit.rating !== null ? hospitalToEdit.rating : 0,
+        reviews: hospitalToEdit.reviews || '0 Reviews',
         totalBeds: hospitalToEdit.totalBeds || 300,
         availableBeds: hospitalToEdit.availableBeds !== undefined ? hospitalToEdit.availableBeds : (hospitalToEdit.emptyBeds || 20),
         emergency24x7: Boolean(hospitalToEdit.emergency24x7),
         phone: hospitalToEdit.phone || '',
         email: hospitalToEdit.email || '',
-        establishedYear: hospitalToEdit.establishedYear || 2000,
+        establishedYear: hospitalToEdit.establishedYear ? hospitalToEdit.establishedYear : '',
         description: hospitalToEdit.description || '',
-        image: hospitalToEdit.image || PRESET_HOSPITAL_IMAGES[0].url,
+        image: hospitalToEdit.image || '',
         specialties: hospitalToEdit.specialties || ['Cardiology'],
         reels: initReels.slice(0, 5),
         youtube_videos: initVideos.slice(0, 5),
@@ -511,7 +511,9 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           longitude: undefined,
           isVerified: false,
           publicationStatus: 'draft',
-          showOnHome: true
+          showOnHome: true,
+          erCases: [],
+          ambulances: []
         };
       }
 
@@ -934,14 +936,16 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
             </div>
 
             <div className={styles.formGroup}>
-              <label>Rating (1 - 5)</label>
+              <label>Rating (Auto-calculated from public reviews)</label>
               <input
                 type="number"
                 step="0.1"
-                min="1"
+                min="0"
                 max="5"
-                value={formData.rating}
-                onChange={(e) => setFormData({ ...formData, rating: e.target.value })}
+                readOnly
+                value={formData.rating || 0}
+                style={{ background: '#f8fafc', cursor: 'not-allowed', color: '#475569' }}
+                title="Ratings are directly calculated from verified public patient reviews (0 if no reviews)"
               />
             </div>
           </div>

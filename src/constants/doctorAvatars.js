@@ -1,13 +1,10 @@
-import maleAvatarLocal from '../assets/images/avatar-male.png';
-import femaleAvatarLocal from '../assets/images/avatar-female.jpg';
-
 export const DEFAULT_DOCTOR_AVATARS = [
   {
     key: 'male_doctor',
     label: 'Male Doctor Avatar',
     gender: 'male',
     url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png',
-    localSrc: maleAvatarLocal,
+    localSrc: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png',
     publicPath: '/avatars/avatar-male.png',
     description: 'Male doctor avatar with stethoscope & blue circular backdrop'
   },
@@ -16,7 +13,7 @@ export const DEFAULT_DOCTOR_AVATARS = [
     label: 'Female Doctor Avatar',
     gender: 'female',
     url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893958/sehatbuddy/avatars/default_doctor_female.jpg',
-    localSrc: femaleAvatarLocal,
+    localSrc: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893958/sehatbuddy/avatars/default_doctor_female.jpg',
     publicPath: '/avatars/avatar-female.jpg',
     description: 'Female doctor avatar in white coat with stethoscope'
   }

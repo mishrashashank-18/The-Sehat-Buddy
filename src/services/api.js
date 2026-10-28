@@ -25,19 +25,41 @@ export const getActiveAuthToken = () => {
       storedUser = JSON.parse(localStorage.getItem('user') || '{}');
     } catch {}
 
+    const isTokenExpired = (tok) => {
+      if (!tok || typeof tok !== 'string') return true;
+      try {
+        const parts = tok.split('.');
+        if (parts.length !== 3) return false;
+        const payload = JSON.parse(atob(parts[1]));
+        return Boolean(payload?.exp && payload.exp * 1000 < Date.now());
+      } catch {
+        return false;
+      }
+    };
+
     const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
     const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
 
     if (storedUser?.role === 'admin' || path.startsWith('/admin') || hash.includes('admin') || localStorage.getItem('admin_logged_in') === 'true') {
       const adminToken = localStorage.getItem('admin_token');
-      if (adminToken) return adminToken;
+      if (adminToken) {
+        if (isTokenExpired(adminToken)) {
+          localStorage.removeItem('admin_token');
+        } else {
+          return adminToken;
+        }
+      }
       const genericToken = localStorage.getItem('token');
       if (genericToken) {
-        try {
-          const payload = JSON.parse(atob(genericToken.split('.')[1]));
-          if (payload?.role === 'admin' || !payload?.role) return genericToken;
-        } catch {
-          return genericToken;
+        if (isTokenExpired(genericToken)) {
+          localStorage.removeItem('token');
+        } else {
+          try {
+            const payload = JSON.parse(atob(genericToken.split('.')[1]));
+            if (payload?.role === 'admin' || !payload?.role) return genericToken;
+          } catch {
+            return genericToken;
+          }
         }
       }
       return null;
@@ -682,6 +704,32 @@ export const api = {
     });
     const data = await handleResponse(res);
     return data.url;
+  },
+
+  // PDF Document Upload (Cloudinary / Backend storage) - Max 1MB
+  async uploadPdf(fileOrBase64, folder = 'sehatbuddy/articles') {
+    let body;
+    let headers = {};
+    const token = getActiveAuthToken();
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
+      const formData = new FormData();
+      formData.append('pdf', fileOrBase64);
+      formData.append('folder', folder);
+      body = formData;
+    } else {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify({ pdf: fileOrBase64, folder });
+    }
+
+    const res = await fetch(`${API_BASE}/upload/pdf`, {
+      method: 'POST',
+      headers,
+      body
+    });
+    const data = await handleResponse(res);
+    return data;
   },
 
   // Delete Media / Image completely from Cloudinary

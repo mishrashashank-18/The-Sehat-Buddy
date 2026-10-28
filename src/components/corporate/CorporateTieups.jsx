@@ -55,7 +55,24 @@ const CorporateTieups = () => {
                       className={styles.logoBadge}
                       style={{ backgroundColor: corp.bgColor, color: corp.color }}
                     >
-                      <span className={styles.logoText}>{corp.logoText}</span>
+                      {corp.logo ? (
+                        <img
+                          src={corp.logo}
+                          alt={corp.name || 'Company logo'}
+                          className={styles.logoImg}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            const fallback = e.target.parentElement?.querySelector(`.${styles.logoText}`);
+                            if (fallback) fallback.style.display = 'inline';
+                          }}
+                        />
+                      ) : null}
+                      <span
+                        className={styles.logoText}
+                        style={{ display: corp.logo ? 'none' : 'inline' }}
+                      >
+                        {corp.logoText}
+                      </span>
                     </div>
                     <span className={styles.categoryTag}>{corp.category}</span>
                   </div>

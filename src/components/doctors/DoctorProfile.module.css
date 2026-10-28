@@ -2289,6 +2289,12 @@
   .heroCard {
     padding: 18px 16px;
   }
+  .mediaSection {
+    padding: 18px 16px;
+  }
+  .reviewsCard {
+    padding: 18px 16px;
+  }
   .heroAvatarWrap {
     width: 120px;
     height: 120px;
@@ -2319,6 +2325,12 @@
   .heroCard {
     padding: 16px 12px;
   }
+  .mediaSection {
+    padding: 16px 14px;
+  }
+  .reviewsCard {
+    padding: 16px 14px;
+  }
   .doctorName {
     font-size: 1.4rem;
   }
@@ -2333,5 +2345,18 @@
     grid-template-columns: 1fr;
     max-width: 260px;
     margin: 0 auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .timeSlotsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .unifiedMainCol {
+    padding: 14px 10px;
+  }
+  .unifiedBookingCol {
+    padding: 16px 10px;
   }
 }

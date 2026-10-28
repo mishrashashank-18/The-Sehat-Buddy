@@ -327,3 +327,17 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 8px;
+  }
+  .modalContent {
+    padding: 16px 14px;
+    border-radius: 14px;
+    max-height: 94vh;
+  }
+  .title {
+    font-size: 1.3rem;
+  }
+}

@@ -21,8 +21,9 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
-import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './FrontPageEditor.module.css';
+
+const heroFamily = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg';
 
 const DEFAULT_HERO_PRESETS = [];
 
@@ -226,7 +227,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     categoryColor: '#E0457B',
     categoryBg: '#FDE8EF',
     image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80',
-    link: ''
+    link: '',
+    pdfUrl: '',
+    pdfName: '',
+    pdfSize: ''
   });
 
   const [isPreviewVideoOpen, setIsPreviewVideoOpen] = useState(false);
@@ -338,6 +342,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     color: '#0054A6',
     bgColor: '#EFF6FF',
     logoText: '',
+    logo: '',
     employeesCovered: '100,000+'
   });
 
@@ -544,7 +549,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     addService({
       title: newService.title.trim(),
       subtitle: newService.subtitle.trim() || 'Expert care service',
-      iconPath: '/src/assets/images/icons/stethoscope.png',
+      iconPath: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190495/sehatbuddy/services/stethoscope.jpg',
       bgTint: newService.bgTint,
       iconTint: newService.iconTint
     });
@@ -567,6 +572,191 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     showToast('New "Why Choose Us" feature card added!');
   };
 
+  const formatFileSize = (bytes) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleArticlePdfUpload = (articleId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      showToast('PDF file exceeds the 1MB limit. Please choose a file under 1MB.');
+      e.target.value = '';
+      return;
+    }
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Invalid file type: Please select a valid PDF document (.pdf).');
+      e.target.value = '';
+      return;
+    }
+
+    const formattedSize = formatFileSize(file.size);
+    const fileName = file.name;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = reader.result;
+      updateArticle(articleId, {
+        pdfUrl: dataUri,
+        pdfName: fileName,
+        pdfSize: formattedSize
+      });
+      showToast(`PDF "${fileName}" (${formattedSize}) attached to article!`);
+
+      try {
+        const res = await api.uploadPdf(file, 'sehatbuddy/articles');
+        if (res && (res.url || typeof res === 'string')) {
+          const finalUrl = res.url || res;
+          updateArticle(articleId, {
+            pdfUrl: finalUrl,
+            pdfName: fileName,
+            pdfSize: formattedSize
+          });
+        }
+      } catch (err) {
+        console.warn('Backend PDF upload fallback used Data URI:', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveArticlePdf = (articleId, title) => {
+    updateArticle(articleId, {
+      pdfUrl: '',
+      pdfName: '',
+      pdfSize: ''
+    });
+    showToast(`PDF removed from article "${title || 'item'}".`);
+  };
+
+  const handleNewArticlePdfUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024) {
+      showToast('PDF file exceeds the 1MB limit. Please choose a file under 1MB.');
+      e.target.value = '';
+      return;
+    }
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Invalid file type: Please select a valid PDF document (.pdf).');
+      e.target.value = '';
+      return;
+    }
+
+    const formattedSize = formatFileSize(file.size);
+    const fileName = file.name;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = reader.result;
+      setNewArticle(prev => ({
+        ...prev,
+        pdfUrl: dataUri,
+        pdfName: fileName,
+        pdfSize: formattedSize
+      }));
+      showToast(`PDF "${fileName}" (${formattedSize}) ready to attach!`);
+
+      try {
+        const res = await api.uploadPdf(file, 'sehatbuddy/articles');
+        if (res && (res.url || typeof res === 'string')) {
+          const finalUrl = res.url || res;
+          setNewArticle(prev => ({
+            ...prev,
+            pdfUrl: finalUrl,
+            pdfName: fileName,
+            pdfSize: formattedSize
+          }));
+        }
+      } catch (err) {
+        console.warn('Backend PDF upload fallback:', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleCorporateLogoUpload = (corpId, e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(png|jpe?g|svg|webp|ico)$/i)) {
+      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP, ICO).');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size exceeds 5MB limit.');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = reader.result;
+      updateCorporateTieup(corpId, { logo: dataUri });
+      showToast('Corporate icon / logo uploaded!');
+
+      try {
+        const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
+        if (uploadedUrl) {
+          updateCorporateTieup(corpId, { logo: uploadedUrl });
+        }
+      } catch (err) {
+        console.warn('Backend corporate logo upload fallback used Data URI:', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveCorporateLogo = (corpId, name) => {
+    updateCorporateTieup(corpId, { logo: '' });
+    showToast(`Custom icon removed for "${name || 'partner'}".`);
+  };
+
+  const handleNewCorporateLogoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(png|jpe?g|svg|webp|ico)$/i)) {
+      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP, ICO).');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size exceeds 5MB limit.');
+      e.target.value = '';
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUri = reader.result;
+      setNewCorporate(prev => ({ ...prev, logo: dataUri }));
+      showToast('Corporate logo ready!');
+
+      try {
+        const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
+        if (uploadedUrl) {
+          setNewCorporate(prev => ({ ...prev, logo: uploadedUrl }));
+        }
+      } catch (err) {
+        console.warn('Backend corporate logo upload fallback:', err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   // Add Article
   const handleCreateArticle = (e) => {
     e.preventDefault();
@@ -578,7 +768,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       categoryColor: newArticle.categoryColor,
       categoryBg: newArticle.categoryBg,
       image: newArticle.image,
-      link: newArticle.link?.trim() || ''
+      link: newArticle.link?.trim() || '',
+      pdfUrl: newArticle.pdfUrl || '',
+      pdfName: newArticle.pdfName || '',
+      pdfSize: newArticle.pdfSize || ''
     });
     setIsAddArticleOpen(false);
     setNewArticle({
@@ -588,7 +781,10 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       categoryColor: '#E0457B',
       categoryBg: '#FDE8EF',
       image: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?auto=format&fit=crop&w=600&q=80',
-      link: ''
+      link: '',
+      pdfUrl: '',
+      pdfName: '',
+      pdfSize: ''
     });
     showToast('New health article added to front page!');
   };
@@ -620,7 +816,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       benefit: newCorporate.benefit.trim() || 'Comprehensive healthcare coverage and priority care',
       employeesCovered: newCorporate.employeesCovered.trim() || '50,000+',
       color: newCorporate.color || '#2563EB',
-      bgColor: newCorporate.bgColor || '#EFF6FF'
+      bgColor: newCorporate.bgColor || '#EFF6FF',
+      logo: newCorporate.logo || ''
     });
     setIsAddCorporateOpen(false);
     setNewCorporate({
@@ -631,6 +828,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       color: '#0054A6',
       bgColor: '#EFF6FF',
       logoText: '',
+      logo: '',
       employeesCovered: '100,000+'
     });
     showToast(`Partner "${newCorporate.name.trim()}" added to Corporate Tie-ups!`);
@@ -1523,6 +1721,78 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     />
                   </div>
 
+                  {/* Blog PDF Document Attachment (Max 1MB) */}
+                  <div className={styles.formGroup} style={{ marginTop: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '5px', margin: 0, fontWeight: 600 }}>
+                        <FileText size={13} color="#DC2626" />
+                        <span>Blog PDF Document</span>
+                      </label>
+                      <span style={{ fontSize: '0.72rem', color: '#64748B' }}>
+                        Limit: 1MB
+                      </span>
+                    </div>
+
+                    {art.pdfUrl ? (
+                      <div className={styles.pdfAttachmentCard}>
+                        <div className={styles.pdfInfo}>
+                          <div className={styles.pdfIconBadge}>
+                            <FileText size={16} color="#DC2626" />
+                          </div>
+                          <div className={styles.pdfMeta}>
+                            <span className={styles.pdfFileName} title={art.pdfName || 'Article Document.pdf'}>
+                              {art.pdfName || 'Article Document.pdf'}
+                            </span>
+                            <span className={styles.pdfFileSize}>
+                              {art.pdfSize || 'PDF Document'} • Uploaded
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.pdfActions}>
+                          <a
+                            href={art.pdfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={styles.pdfViewBtn}
+                            title="Open & view PDF in new tab"
+                          >
+                            <ExternalLink size={12} /> View
+                          </a>
+                          <label className={styles.pdfReplaceBtn} title="Upload a different PDF (Max 1MB)">
+                            <Upload size={12} /> Replace
+                            <input
+                              type="file"
+                              accept=".pdf,application/pdf"
+                              style={{ display: 'none' }}
+                              onChange={(e) => handleArticlePdfUpload(art.id, e)}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className={styles.pdfRemoveBtn}
+                            onClick={() => handleRemoveArticlePdf(art.id, art.title)}
+                            title="Remove PDF document from this article"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={styles.pdfUploadZone}>
+                        <label className={styles.pdfUploadBtn}>
+                          <Upload size={13} />
+                          <span>Upload PDF in Blog (Max 1MB)</span>
+                          <input
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            style={{ display: 'none' }}
+                            onChange={(e) => handleArticlePdfUpload(art.id, e)}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
                   <div className={styles.artCardFooter}>
                     <span className={styles.categoryPillPreview} style={{ backgroundColor: art.categoryBg, color: art.categoryColor }}>
                       {art.category}
@@ -1706,27 +1976,62 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
           <div className={styles.itemsList}>
             {corporateTieups?.map((corp) => (
               <div key={corp.id} className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
-                {/* Visual Preview Badge */}
-                <div
-                  style={{
-                    width: '64px',
-                    height: '42px',
-                    borderRadius: '8px',
-                    backgroundColor: corp.bgColor || '#EFF6FF',
-                    color: corp.color || '#2563EB',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: '0.82rem',
-                    flexShrink: 0,
-                    border: '1px solid #E2E8F0',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    marginTop: '4px'
-                  }}
-                  title="Badge Live Preview"
-                >
-                  {corp.logoText || corp.shortName || 'CORP'}
+                {/* Visual Preview Badge with Icon Upload */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                  <div
+                    style={{
+                      width: '64px',
+                      height: '46px',
+                      borderRadius: '8px',
+                      backgroundColor: corp.bgColor || '#EFF6FF',
+                      color: corp.color || '#2563EB',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '0.82rem',
+                      flexShrink: 0,
+                      border: '1px solid #E2E8F0',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      marginTop: '4px',
+                      padding: '4px',
+                      overflow: 'hidden'
+                    }}
+                    title={corp.logo ? `Custom icon for ${corp.name}` : "Badge Live Preview"}
+                  >
+                    {corp.logo ? (
+                      <img
+                        src={corp.logo}
+                        alt={corp.name || 'Company icon'}
+                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <span>{corp.logoText || corp.shortName || 'CORP'}</span>
+                    )}
+                  </div>
+
+                  <div className={styles.corpLogoUploadWrap}>
+                    <label className={styles.corpUploadIconBtn} title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)">
+                      <Upload size={11} />
+                      <span>{corp.logo ? 'Change' : 'Upload Icon'}</span>
+                      <input
+                        type="file"
+                        accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
+                        style={{ display: 'none' }}
+                        onChange={(e) => handleCorporateLogoUpload(corp.id, e)}
+                      />
+                    </label>
+                    {corp.logo && (
+                      <button
+                        type="button"
+                        className={styles.corpRemoveIconBtn}
+                        onClick={() => handleRemoveCorporateLogo(corp.id, corp.name)}
+                        title="Remove custom icon and revert to text code"
+                      >
+                        <X size={11} />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
@@ -2023,6 +2328,51 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   When visitors on the homepage click this article, they will be redirected to this link.
                 </span>
               </div>
+
+              {/* PDF Document Upload in Blog */}
+              <div className={styles.formGroup}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: 0, fontWeight: 600 }}>
+                    <FileText size={14} color="#DC2626" />
+                    <span>Upload PDF in Blog (Max 1MB)</span>
+                  </label>
+                  <span style={{ fontSize: '0.72rem', color: '#64748B' }}>Limit: 1MB</span>
+                </div>
+                {newArticle.pdfUrl ? (
+                  <div className={styles.pdfAttachmentCard}>
+                    <div className={styles.pdfInfo}>
+                      <div className={styles.pdfIconBadge}>
+                        <FileText size={16} color="#DC2626" />
+                      </div>
+                      <div className={styles.pdfMeta}>
+                        <span className={styles.pdfFileName}>{newArticle.pdfName || 'Document.pdf'}</span>
+                        <span className={styles.pdfFileSize}>{newArticle.pdfSize || 'Ready to attach'}</span>
+                      </div>
+                    </div>
+                    <div className={styles.pdfActions}>
+                      <button
+                        type="button"
+                        className={styles.pdfRemoveBtn}
+                        onClick={() => setNewArticle(prev => ({ ...prev, pdfUrl: '', pdfName: '', pdfSize: '' }))}
+                        title="Remove PDF"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <label className={styles.pdfUploadBtn} style={{ cursor: 'pointer' }}>
+                    <Upload size={14} />
+                    <span>Select PDF Document (Max 1MB)</span>
+                    <input
+                      type="file"
+                      accept=".pdf,application/pdf"
+                      style={{ display: 'none' }}
+                      onChange={handleNewArticlePdfUpload}
+                    />
+                  </label>
+                )}
+              </div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.cancelBtn} onClick={() => setIsAddArticleOpen(false)}>Cancel</button>
                 <button type="submit" className={styles.submitBtn}>Add Article</button>
@@ -2131,12 +2481,40 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 </div>
               </div>
 
+              {/* Upload Company Icon / Logo */}
+              <div className={styles.formGroup}>
+                <label>Upload Company Icon / Logo (Optional)</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label className={styles.corpUploadIconBtn} style={{ padding: '8px 14px', fontSize: '0.82rem', cursor: 'pointer' }}>
+                    <Upload size={14} />
+                    <span>{newCorporate.logo ? 'Change Icon' : 'Upload Icon (PNG, SVG, JPG)'}</span>
+                    <input
+                      type="file"
+                      accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
+                      style={{ display: 'none' }}
+                      onChange={handleNewCorporateLogoUpload}
+                    />
+                  </label>
+                  {newCorporate.logo && (
+                    <button
+                      type="button"
+                      className={styles.corpRemoveIconBtn}
+                      style={{ width: '32px', height: '32px' }}
+                      onClick={() => setNewCorporate(prev => ({ ...prev, logo: '' }))}
+                      title="Remove Icon"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Live Preview Box */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div
                   style={{
                     width: '60px',
-                    height: '36px',
+                    height: '40px',
                     borderRadius: '8px',
                     backgroundColor: newCorporate.bgColor,
                     color: newCorporate.color,
@@ -2146,10 +2524,21 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     fontWeight: 800,
                     fontSize: '0.85rem',
                     flexShrink: 0,
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.06)'
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.06)',
+                    padding: '4px',
+                    overflow: 'hidden'
                   }}
+                  title="Live Preview"
                 >
-                  {newCorporate.logoText || 'CORP'}
+                  {newCorporate.logo ? (
+                    <img
+                      src={newCorporate.logo}
+                      alt="Logo preview"
+                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    newCorporate.logoText || 'CORP'
+                  )}
                 </div>
                 <div>
                   <strong style={{ fontSize: '0.88rem', color: '#0F172A', display: 'block' }}>

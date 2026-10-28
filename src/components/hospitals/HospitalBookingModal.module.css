@@ -680,3 +680,28 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 8px;
+  }
+  .modalContent {
+    max-height: 96vh;
+    border-radius: 14px;
+  }
+  .modalHeader {
+    padding: 14px 14px;
+  }
+  .modalBody {
+    padding: 14px 14px 18px;
+  }
+  .modalTitle {
+    font-size: 1.05rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .dateSlotsRow {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

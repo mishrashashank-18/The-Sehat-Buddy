@@ -1,9 +1,14 @@
 import React from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, FileText } from 'lucide-react';
 import styles from './ArticleCard.module.css';
 
 const ArticleCard = ({ article, onNavigate }) => {
   const handleClick = (e) => {
+    if (article?.pdfUrl) {
+      window.open(article.pdfUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
     if (article?.link && article.link.trim()) {
       let targetUrl = article.link.trim();
       if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://') && !targetUrl.startsWith('/')) {
@@ -27,7 +32,7 @@ const ArticleCard = ({ article, onNavigate }) => {
       className={styles.card}
       onClick={handleClick}
       style={{ cursor: 'pointer' }}
-      title={article?.link ? `Read article: ${article.title} (${article.link})` : `Read article: ${article.title}`}
+      title={article?.pdfUrl ? `View PDF: ${article.title} (${article.pdfSize || '1MB'})` : article?.link ? `Read article: ${article.title} (${article.link})` : `Read article: ${article.title}`}
       role="button"
       tabIndex={0}
       onKeyDown={(e) => {
@@ -58,11 +63,19 @@ const ArticleCard = ({ article, onNavigate }) => {
           >
             {article.category}
           </div>
-          {article?.link && (
-            <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }} title={`External link: ${article.link}`}>
-              <ExternalLink size={12} />
-            </span>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {article?.pdfUrl && (
+              <span className={styles.pdfBadge} title="PDF Document Attached">
+                <FileText size={11} />
+                <span>PDF {article.pdfSize ? `(${article.pdfSize})` : ''}</span>
+              </span>
+            )}
+            {article?.link && !article?.pdfUrl && (
+              <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '3px' }} title={`External link: ${article.link}`}>
+                <ExternalLink size={12} />
+              </span>
+            )}
+          </div>
         </div>
         <h3 className={styles.title}>{article.title}</h3>
         <p className={styles.readTime}>{article.readTime}</p>

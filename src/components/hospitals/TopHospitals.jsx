@@ -1,8 +1,9 @@
 import React from 'react';
-import { MapPin, Star, Bed, ShieldCheck } from 'lucide-react';
+import { MapPin, Star, Bed, ShieldCheck, Building2 } from 'lucide-react';
 import Container from '../layout/Container';
 import SectionHeader from '../common/SectionHeader';
 import { useData } from '../../context/useData';
+import { getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
 import styles from './TopHospitals.module.css';
 
 const TopHospitals = ({ onNavigate }) => {
@@ -52,14 +53,31 @@ const TopHospitals = ({ onNavigate }) => {
                   style={{ cursor: 'pointer' }}
                 >
                   <div className={styles.imageWrapper}>
-                    <img
-                      src={hospital.image}
-                      alt={hospital.name}
-                      className={styles.image}
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=600&q=80';
+                    {hospital.image ? (
+                      <img
+                        src={hospital.image}
+                        alt={hospital.name}
+                        className={styles.image}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      style={{
+                        display: hospital.image ? 'none' : 'flex',
+                        width: '100%',
+                        height: '100%',
+                        minHeight: '180px',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                        color: '#94a3b8'
                       }}
-                    />
+                    >
+                      <Building2 size={44} color="#94a3b8" />
+                    </div>
                     <div className={styles.cityBadge}>
                       <MapPin size={12} /> {hospital.city}
                     </div>
@@ -70,15 +88,7 @@ const TopHospitals = ({ onNavigate }) => {
                       <h3 className={styles.name}>{hospital.name}</h3>
                       <div className={styles.rating}>
                         <Star size={13} fill="#FACC15" color="#FACC15" />
-                        <span>{(() => {
-                          const hospReviews = (reviews || []).filter(r => r && r.status !== 'rejected' && (
-                            (r.targetId && (r.targetId === hospital.id || r.targetId === hospital._id)) ||
-                            (r.targetName && hospital.name && (r.targetName.toLowerCase() === hospital.name.toLowerCase() || hospital.name.toLowerCase().includes(r.targetName.toLowerCase())))
-                          ));
-                          return hospReviews.length > 0
-                            ? (hospReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0) / hospReviews.length).toFixed(1)
-                            : (hospital.rating || '4.8');
-                        })()}</span>
+                        <span>{getHospitalRatingStats(hospital, reviews).ratingDisplay}</span>
                       </div>
                     </div>
 

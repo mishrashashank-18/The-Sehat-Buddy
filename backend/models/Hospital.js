@@ -79,6 +79,8 @@ const hospitalSchema = new mongoose.Schema({
   insuranceHelpline: { type: String, default: '' },
   latitude: { type: Number },
   longitude: { type: Number },
+  erCases: { type: [mongoose.Schema.Types.Mixed], default: [] },
+  ambulances: { type: [mongoose.Schema.Types.Mixed], default: [] },
 }, { timestamps: true, minimize: false, versionKey: false });
 
 hospitalSchema.pre('save', async function() {

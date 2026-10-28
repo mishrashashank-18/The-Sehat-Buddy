@@ -5,6 +5,8 @@
   flex-direction: column;
   font-family: var(--font-family, 'Poppins', sans-serif);
   color: var(--color-heading);
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Toast */
@@ -122,6 +124,7 @@
 .topbarActions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -1426,9 +1429,15 @@
 @media (max-width: 768px) {
   .workspace {
     flex-direction: column;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
   .sidebar {
     width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
     padding: 12px 14px;
@@ -1441,6 +1450,8 @@
     gap: 8px;
     padding-bottom: 4px;
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
   }
   .navItem {
     width: auto;
@@ -1451,6 +1462,9 @@
   }
   .mainContent {
     padding: 16px 14px;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
   }
   .statsGrid {
     grid-template-columns: 1fr;
@@ -1460,6 +1474,11 @@
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
+  }
+  .topbarActions {
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
   }
   .headerActions {
     flex-wrap: wrap;
@@ -1478,9 +1497,10 @@
   .brandText h2 {
     font-size: 1.1rem;
   }
-  .resetBtn, .viewSiteBtn, .logoutBtn {
-    padding: 6px 12px;
-    font-size: 0.82rem;
+  .portalNavBtn, .viewSiteBtn, .logoutBtn, .resetBtn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
   .filterRow {
     flex-direction: column;

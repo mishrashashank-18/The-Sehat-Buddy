@@ -134,7 +134,7 @@ const makeCircularFavicon = (imageUrl) => {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       try {
-        const size = 64;
+        const size = 192;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
@@ -153,7 +153,7 @@ const makeCircularFavicon = (imageUrl) => {
 
         // Draw image centered inside circle preserving aspect ratio
         const aspect = (img.width || 1) / (img.height || 1);
-        const maxInner = size * 0.62;
+        const maxInner = size * 0.75;
         let drawW = maxInner;
         let drawH = maxInner;
         if (aspect >= 1) {
@@ -162,7 +162,7 @@ const makeCircularFavicon = (imageUrl) => {
           drawW = maxInner * aspect;
         }
         const drawX = (size - drawW) / 2;
-        const drawY = (size - drawH) / 2 + 1.5;
+        const drawY = (size - drawH) / 2;
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
         resolve(canvas.toDataURL('image/png'));
@@ -300,14 +300,17 @@ function AppContent() {
     }
 
     let isMounted = true;
-    let rawFavicon =
+    const hasCustomFavicon =
       branding?.favicon &&
       branding.favicon !== '/favicon.png' &&
       branding.favicon !== '/favicon.ico' &&
       branding.favicon !== '/logo.png' &&
-      !branding.favicon.includes('M24.5 17.5')
-        ? branding.favicon
-        : NEW_SEHAT_BUDDY_FAVICON;
+      !branding.favicon.includes('logo.png') &&
+      !branding.favicon.includes('M24.5 17.5');
+
+    if (!hasCustomFavicon) {
+      return;
+    }
 
     const applyFavicon = (url) => {
       if (!isMounted) return;
@@ -330,7 +333,7 @@ function AppContent() {
       document.head.appendChild(appleTouch);
     };
 
-    makeCircularFavicon(rawFavicon).then(applyFavicon);
+    makeCircularFavicon(branding.favicon).then(applyFavicon);
 
     return () => {
       isMounted = false;

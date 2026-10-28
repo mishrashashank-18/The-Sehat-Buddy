@@ -2429,7 +2429,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               return (
                 <div className={styles.mediaSection}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: '1 1 auto' }}>
                       <div style={{
                         width: '36px',
                         height: '36px',
@@ -2439,15 +2439,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: '#db2777',
-                        border: '1px solid #fbcfe8'
+                        border: '1px solid #fbcfe8',
+                        flexShrink: 0
                       }}>
                         <SocialInstagramIcon size={20} />
                       </div>
-                      <div>
-                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', wordBreak: 'break-word' }}>
                           Instagram Reels
                         </h3>
-                        <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                        <p style={{ margin: '2px 0 0', fontSize: '0.84rem', color: '#64748b', wordBreak: 'break-word' }}>
                           Clinical guidance, health reels, and treatment walkthroughs
                         </p>
                       </div>
@@ -2459,7 +2460,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                       background: '#fdf2f8',
                       padding: '4px 12px',
                       borderRadius: '100px',
-                      border: '1px solid #fbcfe8'
+                      border: '1px solid #fbcfe8',
+                      flexShrink: 0
                     }}>
                       {parsedReels.length} Reel{parsedReels.length > 1 ? 's' : ''}
                     </span>

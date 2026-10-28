@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   ArrowLeft,
+  Building2,
   Star,
   MapPin,
   Bed,
@@ -35,6 +36,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { isDoctorInStarList, isDoctorAffiliatedWithHospital, matchesId } from '../../context/DataContext';
+import { getHospitalVerifiedReviews, getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
 import Container from '../layout/Container';
 import HospitalDirections from './HospitalDirections';
 import HospitalInsuranceModal from '../insurance/HospitalInsuranceModal';
@@ -661,17 +663,18 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
   const allHospitalPhotos = useMemo(() => {
     const list = [];
-    const mainImg = hospital?.image || 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=1200&q=80';
-    list.push({
-      url: mainImg,
-      title: `${hospital?.name || 'Hospital'} - Main Campus & Exterior`,
-      category: 'Exterior'
-    });
+    if (hospital?.image) {
+      list.push({
+        url: hospital.image,
+        title: `${hospital?.name || 'Hospital'} - Main Campus & Exterior`,
+        category: 'Exterior'
+      });
+    }
 
     if (Array.isArray(hospital?.photos) && hospital.photos.length > 0) {
       hospital.photos.forEach((item, idx) => {
         const url = typeof item === 'string' ? item : item.url;
-        if (!url || url === mainImg) return;
+        if (!url || (hospital?.image && url === hospital.image)) return;
         list.push({
           url,
           title: (typeof item === 'object' && item.title) ? item.title : `Facility View #${idx + 1}`,
@@ -680,20 +683,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       });
     }
 
-    if (list.length < 5) {
-      defaultFacilityPhotos.forEach(dp => {
-        if (!list.some(existing => existing.url === dp.url)) {
-          list.push({
-            url: dp.url,
-            title: `${hospital?.name || 'Hospital'} - ${dp.title}`,
-            category: dp.category
-          });
-        }
-      });
-    }
-
     return list;
-  }, [hospital, defaultFacilityPhotos]);
+  }, [hospital]);
 
   const [activePhotoIndex, setActivePhotoIndex] = useState(null);
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
@@ -859,39 +850,12 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
   // Filtered reviews belonging strictly to this hospital
   const hospitalReviews = useMemo(() => {
-    if (!reviews || !hospital) return [];
-    const hospId = String(hospital?.id || hospital?._id || '').toLowerCase().trim();
-    const hospName = String(hospital?.name || '').toLowerCase().trim();
-
-    return reviews
-      .filter(r => r.status !== 'rejected')
-      .filter(r => {
-        if (r.targetType && r.targetType !== 'hospital') return false;
-        const tId = String(r.targetId || '').toLowerCase().trim();
-        const tName = String(r.targetName || '').toLowerCase().trim();
-
-        if (tId) {
-          return tId === hospId;
-        }
-        if (tName && hospName) {
-          return tName === hospName || (tName.length > 5 && hospName.includes(tName)) || (hospName.length > 5 && tName.includes(hospName));
-        }
-        return false;
-      });
+    return getHospitalVerifiedReviews(hospital, reviews);
   }, [reviews, hospital]);
 
-  const avgRating = useMemo(() => {
-    if (hospitalReviews.length === 0) return (hospital?.rating ? String(hospital.rating) : '4.8');
-    const total = hospitalReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0);
-    return (total / hospitalReviews.length).toFixed(1);
-  }, [hospitalReviews, hospital?.rating]);
-
-  const reviewsCountText = useMemo(() => {
-    if (hospitalReviews.length === 0) {
-      return hospital?.reviews || '50+ Reviews';
-    }
-    return `${hospitalReviews.length} Review${hospitalReviews.length === 1 ? '' : 's'}`;
-  }, [hospitalReviews, hospital?.reviews]);
+  const { avg: avgRating, reviewsText: reviewsCountText } = useMemo(() => {
+    return getHospitalRatingStats(hospital, reviews);
+  }, [reviews, hospital]);
 
   if (!hospital) {
     return (
@@ -1055,41 +1019,64 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
           <div className={styles.imageCol}>
             <div
               className={styles.imageWrapper}
-              onClick={() => setActivePhotoIndex(0)}
-              title="Click to view all facility photos"
-              role="button"
-              tabIndex={0}
+              onClick={() => {
+                if (allHospitalPhotos.length > 0) setActivePhotoIndex(0);
+              }}
+              title={allHospitalPhotos.length > 0 ? "Click to view all facility photos" : "No photos uploaded yet"}
+              role={allHospitalPhotos.length > 0 ? "button" : undefined}
+              tabIndex={allHospitalPhotos.length > 0 ? 0 : undefined}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
+                if ((e.key === 'Enter' || e.key === ' ') && allHospitalPhotos.length > 0) {
                   e.preventDefault();
                   setActivePhotoIndex(0);
                 }
               }}
             >
-              <img
-                src={hospital.image}
-                alt={hospital.name}
-                onError={(e) => {
-                  e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
+              {hospital.image ? (
+                <img
+                  src={hospital.image}
+                  alt={hospital.name}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div
+                style={{
+                  display: hospital.image ? 'none' : 'flex',
+                  width: '100%',
+                  height: '100%',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                  color: '#94a3b8',
+                  gap: '8px'
                 }}
-              />
+              >
+                <Building2 size={48} color="#94a3b8" />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>No facility photo uploaded</span>
+              </div>
 
               {/* Plus Option to open photo popup and slide photos */}
-              <button
-                type="button"
-                className={styles.photoPlusBtn}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActivePhotoIndex(0);
-                }}
-                aria-label="View all photos"
-                title="View all photos"
-              >
-                <div className={styles.photoPlusIconCircle}>
-                  <Plus size={14} strokeWidth={2.8} />
-                </div>
-                <span className={styles.photoPlusText}>{allHospitalPhotos.length} Photos</span>
-              </button>
+              {allHospitalPhotos.length > 0 && (
+                <button
+                  type="button"
+                  className={styles.photoPlusBtn}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActivePhotoIndex(0);
+                  }}
+                  aria-label="View all photos"
+                  title="View all photos"
+                >
+                  <div className={styles.photoPlusIconCircle}>
+                    <Plus size={14} strokeWidth={2.8} />
+                  </div>
+                  <span className={styles.photoPlusText}>{allHospitalPhotos.length} Photos</span>
+                </button>
+              )}
 
               <div className={styles.cityBadge}>
                 <MapPin size={13} /> {hospital.city ? hospital.city.replace(/,\s*Karnataka,\s*Karnataka/gi, ', Karnataka').replace(/,\s*Karnataka/gi, '') + ', Karnataka' : 'Bengaluru, Karnataka'}
@@ -1785,15 +1772,15 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                   <Star
                     key={s}
                     size={18}
-                    fill={s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#e2e8f0'}
-                    color={s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#cbd5e1'}
+                    fill={hospitalReviews.length > 0 && s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#e2e8f0'}
+                    color={hospitalReviews.length > 0 && s <= Math.round(Number(avgRating)) ? '#f59e0b' : '#cbd5e1'}
                   />
                 ))}
               </div>
               <div style={{ fontSize: '0.84rem', color: '#64748b', fontWeight: 600 }}>
                 {hospitalReviews.length > 0 
                   ? `Based on ${hospitalReviews.length} verified patient review${hospitalReviews.length === 1 ? '' : 's'}`
-                  : `Overall facility rating (${hospital.reviews || '50+ Reviews'})`}
+                  : 'No patient reviews yet (0 Reviews)'}
               </div>
             </div>
           </div>

@@ -498,8 +498,50 @@
 }
 
 @media (max-width: 640px) {
+  .header {
+    padding: 16px 20px;
+  }
+  .body {
+    padding: 18px 20px;
+  }
+  .footer {
+    padding: 14px 20px;
+  }
   .grid2, .grid3, .presetGrid {
     grid-template-columns: 1fr;
+  }
+  .coverPreviewGroup {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal {
+    width: 100%;
+    max-height: 96vh;
+    border-radius: 14px;
+  }
+  .header {
+    padding: 14px 16px;
+  }
+  .body {
+    padding: 16px 14px;
+    gap: 12px;
+  }
+  .footer {
+    padding: 12px 14px;
+  }
+  .addTagRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .addTagBtn {
+    justify-content: center;
+  }
+  .starDoctorsGrid {
+    grid-template-columns: 1fr;
+    padding: 8px;
   }
 }
 

@@ -702,3 +702,35 @@
     height: 120px;
   }
 }
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 8px;
+  }
+  .modalContent {
+    padding: 18px 14px;
+    border-radius: 16px;
+    max-height: 94vh;
+  }
+  .title {
+    font-size: 1.25rem;
+  }
+  .topTabsNav {
+    width: 100%;
+    display: flex;
+  }
+  .topTabBtn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+  .cardActionsRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .checkPreAuthBtn, .viewCenterBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}

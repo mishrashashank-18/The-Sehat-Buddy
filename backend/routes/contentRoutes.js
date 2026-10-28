@@ -52,7 +52,7 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
         bodyData.heroImage = uploadRes.secure_url || uploadRes.url;
       } else if (bodyData.heroImage.length > 50000) {
         // Fallback: Prevent oversized base64 strings from bloating DB
-        bodyData.heroImage = '/src/assets/images/hero-family.jpg';
+        bodyData.heroImage = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg';
       }
     }
 

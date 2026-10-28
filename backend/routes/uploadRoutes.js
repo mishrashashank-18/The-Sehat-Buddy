@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, optionalProtect } from '../middleware/authMiddleware.js';
 import { notifyStorageChanged } from '../services/storageMonitor.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +39,22 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Invalid file type: Only verified image files (.jpg, .png, .webp, .svg, .gif, .ico) are allowed.'), false);
+    }
+  }
+});
+
+// Memory storage for PDF documents with strict 1MB limit check
+const uploadPdf = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1MB limit strictly enforced
+  fileFilter: (req, file, cb) => {
+    if (
+      file.mimetype === 'application/pdf' ||
+      (file.originalname && file.originalname.toLowerCase().endsWith('.pdf'))
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type: Only PDF documents (.pdf) up to 1MB are allowed.'), false);
     }
   }
 });
@@ -185,6 +201,117 @@ router.post('/image', protect, (req, res, next) => {
   } catch (error) {
     console.error('Image upload error:', error);
     return res.status(500).json({ success: false, message: error.message || 'Upload failed' });
+  }
+});
+
+/**
+ * Upload single PDF (file or base64) to Cloudinary or local storage
+ * Maximum size limit: 1MB
+ * Returns { success: true, url, public_id, name, size }
+ */
+router.post('/pdf', optionalProtect, (req, res, next) => {
+  uploadPdf.single('pdf')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, message: 'PDF file size exceeds maximum limit of 1MB.' });
+      }
+      return res.status(400).json({ success: false, message: err.message });
+    } else if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    const isCloudinaryConfigured =
+      cloudName &&
+      apiKey &&
+      apiSecret &&
+      cloudName !== 'your_cloudinary_cloud_name' &&
+      !cloudName.includes('your_');
+
+    const folder = req.body?.folder || 'sehatbuddy/articles';
+
+    // 1. File uploaded via multipart/form-data
+    if (req.file) {
+      if (req.file.size > 1024 * 1024) {
+        return res.status(400).json({ success: false, message: 'PDF file size exceeds maximum limit of 1MB.' });
+      }
+
+      if (isCloudinaryConfigured) {
+        const cld = getCloudinary();
+        const uploadStream = () =>
+          new Promise((resolve, reject) => {
+            const stream = cld.uploader.upload_stream(
+              {
+                folder,
+                resource_type: 'auto',
+                use_filename: true
+              },
+              (error, result) => {
+                if (error) reject(error);
+                else resolve(result);
+              }
+            );
+            stream.end(req.file.buffer);
+          });
+
+        const result = await uploadStream();
+        notifyStorageChanged('cloudinary:raw');
+        return res.json({
+          success: true,
+          url: result.secure_url || result.url,
+          public_id: result.public_id,
+          name: req.file.originalname,
+          size: req.file.size,
+          provider: 'cloudinary'
+        });
+      } else {
+        // Fallback: Return Base64 Data URI
+        const b64 = Buffer.from(req.file.buffer).toString('base64');
+        const dataUri = `data:application/pdf;base64,${b64}`;
+        return res.json({
+          success: true,
+          url: dataUri,
+          name: req.file.originalname,
+          size: req.file.size,
+          provider: 'local-data-uri'
+        });
+      }
+    }
+
+    // 2. Base64 sent in JSON body
+    if (req.body?.pdf && typeof req.body.pdf === 'string') {
+      const pdfString = req.body.pdf;
+      if (isCloudinaryConfigured) {
+        const cld = getCloudinary();
+        const result = await cld.uploader.upload(pdfString, {
+          folder,
+          resource_type: 'auto'
+        });
+        return res.json({
+          success: true,
+          url: result.secure_url || result.url,
+          public_id: result.public_id,
+          provider: 'cloudinary'
+        });
+      } else {
+        return res.json({
+          success: true,
+          url: pdfString,
+          provider: 'local-data-uri'
+        });
+      }
+    }
+
+    return res.status(400).json({ success: false, message: 'No PDF file provided.' });
+  } catch (error) {
+    console.error('PDF upload error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'PDF upload failed' });
   }
 });
 

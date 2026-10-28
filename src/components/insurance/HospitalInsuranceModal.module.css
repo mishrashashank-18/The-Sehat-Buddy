@@ -348,3 +348,32 @@
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 8px;
+  }
+  .modalContent {
+    max-height: 94vh;
+    border-radius: 14px;
+  }
+  .header {
+    padding: 14px 16px 12px;
+  }
+  .metaBar {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+  .searchWrapper {
+    padding: 10px 16px 8px;
+  }
+  .body {
+    padding: 0 16px 14px;
+  }
+  .footer {
+    padding: 12px 16px;
+  }
+  .title {
+    font-size: 1.15rem;
+  }
+}

@@ -2,8 +2,9 @@ import React from 'react';
 import Container from '../layout/Container';
 import HeroStats from './HeroStats';
 import { useData } from '../../context/useData';
-import heroFamily from '../../assets/images/hero-family.jpg';
 import styles from './Hero.module.css';
+
+const DEFAULT_HERO_IMAGE = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg';
 
 const Hero = () => {
   const { heroContent } = useData();
@@ -34,11 +35,11 @@ const Hero = () => {
             <div className={styles.dotsPattern}></div>
             <div className={styles.imageShape}>
               <img
-                src={heroContent?.heroImage || heroFamily}
+                src={heroContent?.heroImage || DEFAULT_HERO_IMAGE}
                 alt="Happy Indian family at hospital reception"
                 className={styles.heroImg}
                 onError={(e) => {
-                  e.target.src = heroFamily;
+                  e.target.src = DEFAULT_HERO_IMAGE;
                 }}
               />
             </div>

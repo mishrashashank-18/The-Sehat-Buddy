@@ -5,7 +5,7 @@
     "titleLine2": "Appointments & Take",
     "titleHighlight": "Care of Your Health",
     "description": "The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.",
-    "heroImage": "/src/assets/images/hero-family.jpg",
+    "heroImage": "https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg",
     "stats": [
       {
         "id": 1,
@@ -36,7 +36,7 @@
       "id": 1,
       "title": "Find Doctors",
       "subtitle": "Consult expert\ndoctors",
-      "iconPath": "/src/assets/images/icons/stethoscope.png",
+      "iconPath": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190495/sehatbuddy/services/stethoscope.jpg",
       "bgTint": "#EAF6F3",
       "iconTint": "#D9F0EA"
     },
@@ -44,7 +44,7 @@
       "id": 2,
       "title": "Hospitals",
       "subtitle": "Find best hospitals\nnear you",
-      "iconPath": "/src/assets/images/icons/hospital.png",
+      "iconPath": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190494/sehatbuddy/services/hospital.jpg",
       "bgTint": "#EEF3FD",
       "iconTint": "#DCE7FB"
     },
@@ -52,7 +52,7 @@
       "id": 3,
       "title": "Lab Tests",
       "subtitle": "Book lab tests &\nhealth packages",
-      "iconPath": "/src/assets/images/icons/flask.svg",
+      "iconPath": "/assets/images/icons/flask.svg",
       "bgTint": "#F4EFFC",
       "iconTint": "#E6DDF8"
     },
@@ -60,7 +60,7 @@
       "id": 4,
       "title": "Surgeries",
       "subtitle": "Advanced surgical\ncare",
-      "iconPath": "/src/assets/images/icons/surgery.svg",
+      "iconPath": "/assets/images/icons/surgery.svg",
       "bgTint": "#FDF0EE",
       "iconTint": "#FBDDD8"
     },
@@ -68,7 +68,7 @@
       "id": 5,
       "title": "Senior Care",
       "subtitle": "Compassionate care\nfor elders",
-      "iconPath": "/src/assets/images/icons/elderly.svg",
+      "iconPath": "/assets/images/icons/elderly.svg",
       "bgTint": "#FEF3E8",
       "iconTint": "#FDE3C8"
     },
@@ -76,7 +76,7 @@
       "id": 6,
       "title": "Women Care",
       "subtitle": "Complete care for\nwomen",
-      "iconPath": "/src/assets/images/icons/women.svg",
+      "iconPath": "/assets/images/icons/women.svg",
       "bgTint": "#FDEEF4",
       "iconTint": "#FBD9E7"
     },
@@ -84,7 +84,7 @@
       "id": 7,
       "title": "Kid Care",
       "subtitle": "Special care\nfor children",
-      "iconPath": "/src/assets/images/icons/kid.svg",
+      "iconPath": "/assets/images/icons/kid.svg",
       "bgTint": "#EAF6F2",
       "iconTint": "#D6EFE5"
     }
@@ -123,7 +123,7 @@
       "categoryBg": "#FDE8EF",
       "title": "5 Simple Steps for a Healthy Heart",
       "readTime": "5 min read",
-      "image": "/src/assets/images/article-1.png"
+      "image": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190459/sehatbuddy/articles/article-1.jpg"
     },
     {
       "id": 2,
@@ -132,7 +132,7 @@
       "categoryBg": "#E8ECFD",
       "title": "How to Manage Stress in Daily Life",
       "readTime": "4 min read",
-      "image": "/src/assets/images/article-2.png"
+      "image": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190461/sehatbuddy/articles/article-2.jpg"
     },
     {
       "id": 3,
@@ -141,7 +141,7 @@
       "categoryBg": "#E1F5EC",
       "title": "Immunity Boosting Foods you should eat",
       "readTime": "6 min read",
-      "image": "/src/assets/images/article-3.png"
+      "image": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190462/sehatbuddy/articles/article-3.jpg"
     },
     {
       "id": 4,
@@ -150,7 +150,7 @@
       "categoryBg": "#F3E6FA",
       "title": "Prenatal Care: Important Tips for Expecting Moms",
       "readTime": "5 min read",
-      "image": "/src/assets/images/article-4.png"
+      "image": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190464/sehatbuddy/articles/article-4.jpg"
     }
   ],
   "corporate": [

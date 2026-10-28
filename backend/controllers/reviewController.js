@@ -38,9 +38,9 @@ export const syncHospitalRating = async (targetId, targetName) => {
     } else {
       await Hospital.updateOne(
         { _id: hospital._id },
-        { $set: { rating: 4.8, reviews: '0 Reviews' } }
+        { $set: { rating: 0, reviews: '0 Reviews' } }
       );
-      hospital.rating = 4.8;
+      hospital.rating = 0;
       hospital.reviews = '0 Reviews';
       broadcastDbChange('hospitals', 'update', hospital._id, hospital);
     }

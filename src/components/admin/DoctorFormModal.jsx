@@ -6,8 +6,6 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
-import doc1 from '../../assets/images/doctor-1.png';
-import doc2 from '../../assets/images/doctor-2.png';
 import { api } from '../../services/api';
 import FaqSymbolSelector from './FaqSymbolSelector';
 import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
@@ -94,11 +92,14 @@ const getSpecialtySuggestions = (specialty = '') => {
   return ['Consultant Specialist', 'Clinical Diagnostics', 'Preventive Healthcare', 'Chronic Disease Management', 'Patient Care Specialist'];
 };
 
+const DOC1_URL = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190466/sehatbuddy/doctors/doctor-1.jpg';
+const DOC2_URL = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190467/sehatbuddy/doctors/doctor-2.jpg';
+
 const PRESET_AVATARS = [
-  { label: 'Male Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[0].url, preview: DEFAULT_DOCTOR_AVATARS[0].localSrc, key: 'male_doctor' },
-  { label: 'Female Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].localSrc, key: 'female_doctor' },
-  { label: 'Male Doctor 1', src: doc1, preview: doc1, key: 'doc1' },
-  { label: 'Female Doctor 1', src: doc2, preview: doc2, key: 'doc2' },
+  { label: 'Male Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[0].url, preview: DEFAULT_DOCTOR_AVATARS[0].url, key: 'male_doctor' },
+  { label: 'Female Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].url, key: 'female_doctor' },
+  { label: 'Male Doctor 1', src: DOC1_URL, preview: DOC1_URL, key: 'doc1' },
+  { label: 'Female Doctor 1', src: DOC2_URL, preview: DOC2_URL, key: 'doc2' },
 ];
 
 const SPECIALTY_OPTIONS = [

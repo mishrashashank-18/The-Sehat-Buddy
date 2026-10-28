@@ -48,6 +48,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
+import { getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
 import { matchesId } from '../../context/DataContext';
 import DoctorFormModal from './DoctorFormModal';
 import HospitalFormModal from './HospitalFormModal';
@@ -1601,7 +1602,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         <div className={styles.boxItemRight}>
                           <div className={styles.ratingBadgeSmall}>
                             <Star size={12} fill="#FACC15" color="#FACC15" />
-                            <span>{hosp.rating}</span>
+                            <span>{getHospitalRatingStats(hosp, reviews).ratingDisplay}</span>
                           </div>
                           <button
                             className={styles.smallActionBtn}
@@ -1956,14 +1957,31 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   {filteredHospitals.map(hosp => (
                     <div key={String(hosp._id || hosp.id)} className={styles.hospitalAdminCard}>
                       <div className={styles.cardImageContainer}>
-                        <img
-                          src={hosp.image}
-                          alt={hosp.name}
-                          className={styles.cardHospitalImage}
-                          onError={(e) => {
-                            e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=800&q=80';
+                        {hosp.image ? (
+                          <img
+                            src={hosp.image}
+                            alt={hosp.name}
+                            className={styles.cardHospitalImage}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          style={{
+                            display: hosp.image ? 'none' : 'flex',
+                            width: '100%',
+                            height: '100%',
+                            minHeight: '160px',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                            color: '#94a3b8'
                           }}
-                        />
+                        >
+                          <Building2 size={42} color="#94a3b8" />
+                        </div>
                         <div style={{
                           position: 'absolute',
                           top: '10px',
@@ -2030,7 +2048,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                           <h3 className={styles.cardHospitalName}>{hosp.name}</h3>
                           <div className={styles.cardRating}>
                             <Star size={14} fill="#FACC15" color="#FACC15" />
-                            <span>{hosp.rating}</span>
+                            <span>{getHospitalRatingStats(hosp, reviews).ratingDisplay}</span>
                           </div>
                         </div>
 

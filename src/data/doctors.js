@@ -1,6 +1,3 @@
-import doc1 from '../assets/images/doctor-1.png';
-import doc2 from '../assets/images/doctor-2.png';
-
 export const initialDoctors = [
   {
     id: 1,
@@ -10,7 +7,7 @@ export const initialDoctors = [
     rating: 0,
     reviews: '0',
     price: 800,
-    image: doc1,
+    image: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190466/sehatbuddy/doctors/doctor-1.jpg',
     hospital: 'Apollo Hospital & Heart Center',
     degree: 'MBBS, MD (Medicine), DM (Cardiology)',
     phone: '+91 98101 23456',
@@ -64,7 +61,7 @@ export const initialDoctors = [
     rating: 0,
     reviews: '0',
     price: 700,
-    image: doc2,
+    image: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190467/sehatbuddy/doctors/doctor-2.jpg',
     hospital: 'Max Super Speciality Hospital',
     degree: 'MBBS, MS (Obstetrics & Gynecology)',
     phone: '+91 98202 34567',
@@ -172,7 +169,7 @@ export const initialDoctors = [
     rating: 0,
     reviews: '0',
     price: 700,
-    image: doc1,
+    image: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190466/sehatbuddy/doctors/doctor-1.jpg',
     hospital: 'Manipal Hospital, Old Airport Road',
     degree: 'MBBS, MD (Dermatology, Venereology & Leprosy)',
     phone: '+91 7839502745',

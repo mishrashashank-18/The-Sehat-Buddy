@@ -5,6 +5,8 @@
   font-family: inherit;
   display: flex;
   flex-direction: column;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .topBar {
@@ -63,7 +65,7 @@
   align-items: center;
   gap: 20px;
   flex: 1;
-  min-width: 320px;
+  min-width: 0;
 }
 
 .overviewImgWrapper {
@@ -222,7 +224,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 10px;
-  min-width: 250px;
+  min-width: 0;
 }
 
 .occupancyWidget {
@@ -937,7 +939,7 @@ input:checked + .slider:before {
 /* Doctor Selector Cards */
 .doctorSelectGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   gap: 16px;
   margin-top: 14px;
 }
@@ -1422,7 +1424,7 @@ input:checked + .slider:before {
 
 .insuranceGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
   gap: 14px;
 }
 
@@ -1965,7 +1967,7 @@ input:checked + .slider:before {
 
 .reviewsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 18px;
   margin-top: 16px;
 }
@@ -2315,4 +2317,71 @@ input:checked + .slider:before {
 
 .faqPreviewBtn:hover {
   background: #dbeafe;
+}
+
+@media (max-width: 768px) {
+  .topBar {
+    padding: 12px 16px;
+  }
+  .overviewContainer {
+    padding: 0 16px;
+  }
+  .tabsContainer {
+    padding: 0 16px;
+    gap: 6px;
+  }
+  .mainContent {
+    padding: 16px;
+  }
+  .cardSection {
+    padding: 18px 16px;
+  }
+  .sectionHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .topActionsGroup {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .topBar {
+    padding: 10px 12px;
+  }
+  .overviewContainer, .tabsContainer {
+    padding: 0 12px;
+  }
+  .mainContent {
+    padding: 14px 12px;
+  }
+  .overviewHeroCard {
+    padding: 16px 14px;
+    gap: 16px;
+  }
+  .overviewImgWrapper {
+    width: 68px;
+    height: 68px;
+  }
+  .overviewTitle {
+    font-size: 1.15rem;
+  }
+  .pageHeading {
+    font-size: 1.15rem;
+  }
+  .cardSection {
+    padding: 16px 12px;
+    border-radius: 10px;
+  }
+  .sectionTitle {
+    font-size: 1.05rem;
+  }
+  .saveBtn, .liveViewBtn, .backBtn {
+    padding: 8px 14px;
+    font-size: 0.82rem;
+  }
 }

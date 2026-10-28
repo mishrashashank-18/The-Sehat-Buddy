@@ -670,3 +670,47 @@
   margin: 0;
   max-width: 420px;
 }
+
+@media (max-width: 640px) {
+  .modalOverlay {
+    padding: 10px;
+  }
+  .modalHeader {
+    padding: 14px 16px;
+  }
+  .modalBody {
+    padding: 14px 16px;
+    gap: 14px;
+  }
+  .searchBox {
+    min-width: 100%;
+  }
+  .toolbarRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .searchFilterGroup {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modalOverlay {
+    padding: 6px;
+  }
+  .modalContainer {
+    max-height: 96vh;
+    border-radius: 14px;
+  }
+  .docAvatar {
+    width: 44px;
+    height: 44px;
+  }
+  .docName {
+    font-size: 1.05rem;
+  }
+  .headerActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

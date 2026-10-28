@@ -53,6 +53,7 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 import HospitalFaqCard from './HospitalFaqCard';
 import PopularDoctorActionButtons from './PopularDoctorActionButtons';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
+import { getHospitalVerifiedReviews, getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
 import styles from './AdminHospitalEditPage.module.css';
 
 const DEFAULT_SPECIALTIES = [
@@ -158,18 +159,9 @@ export const FAQ_ICONS_LIST = [
   { id: 'help-circle', label: 'General Info', icon: HelpCircle, color: '#475569', bg: '#f1f5f9' }
 ];
 
-const INITIAL_ER_CASES = [
-  { id: 'ER-101', patient: 'Rohan Sharma', age: 45, triage: 'Red (Critical)', condition: 'Acute Chest Pain / STEMI', eta: '5 mins', bedAssigned: 'ICU-B02', status: 'Arriving' },
-  { id: 'ER-102', patient: 'Priya Patel', age: 29, triage: 'Yellow (Urgent)', condition: 'Compound Fracture', eta: 'In Facility', bedAssigned: 'Triage-04', status: 'Under Treatment' },
-  { id: 'ER-103', patient: 'Deepak Verma', age: 62, triage: 'Green (Standard)', condition: 'High Fever & Dehydration', eta: 'In Facility', bedAssigned: 'Ward-A12', status: 'Observed' }
-];
+const INITIAL_ER_CASES = [];
 
-const INITIAL_AMBULANCES = [
-  { id: 'AMB-01', type: 'Advanced Cardiac (ICU on Wheels)', driver: 'Suresh Kumar', phone: '+91 98765 43210', status: 'Available', location: 'Hospital Base' },
-  { id: 'AMB-02', type: 'Basic Life Support (BLS)', driver: 'Ramesh Singh', phone: '+91 98765 43211', status: 'Dispatched', location: 'MG Road, Transit' },
-  { id: 'AMB-03', type: 'Neonatal Care Intensive', driver: 'Manoj Tiwari', phone: '+91 98765 43212', status: 'Available', location: 'Hospital Base' },
-  { id: 'AMB-04', type: 'Advanced Life Support (ALS)', driver: 'Vikram Joshi', phone: '+91 98765 43213', status: 'Maintenance', location: 'Workshop Bay 2' }
-];
+const INITIAL_AMBULANCES = [];
 
 const getYouTubeEmbedUrl = (url) => {
   if (!url) return '';
@@ -408,9 +400,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [faqSearchQuery, setFaqSearchQuery] = useState('');
   const [faqCategoryFilter, setFaqCategoryFilter] = useState('All');
 
-  // ER & Fleet State
-  const [erCases] = useState(INITIAL_ER_CASES);
-  const [ambulances, setAmbulances] = useState(INITIAL_AMBULANCES);
+  // ER & Fleet State - initially 0 for newly added hospitals
+  const [erCases, setErCases] = useState(() => (Array.isArray(hospital?.erCases) ? hospital.erCases : INITIAL_ER_CASES));
+  const [ambulances, setAmbulances] = useState(() => (Array.isArray(hospital?.ambulances) ? hospital.ambulances : INITIAL_AMBULANCES));
 
   const handleDispatchAmbulance = (ambId) => {
     setAmbulances(prev =>
@@ -426,6 +418,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('hospital'); // 'hospital' | 'star' | 'all'
+
+  const currentHospId = useMemo(() => {
+    return String(hospital?.id || hospital?._id || hospitalId || '');
+  }, [hospital, hospitalId]);
 
   // Affiliated doctors resolution for THIS specific hospital
   const currentHospitalTarget = useMemo(() => {
@@ -701,54 +697,13 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Reviews strictly linked to this hospital (deduplicated by ID / content)
   const hospitalReviews = useMemo(() => {
-    if (!hospital || !reviews) return [];
-    const hospId = String(hospital.id || hospital._id || '').toLowerCase().trim();
-    const hospName = String(hospital.name || '').toLowerCase().trim();
-
-    const seenIds = new Set();
-    const filtered = [];
-
-    for (const r of reviews) {
-      if (r.targetType && r.targetType !== 'hospital') continue;
-      const tId = String(r.targetId || '').toLowerCase().trim();
-      const tName = String(r.targetName || '').toLowerCase().trim();
-
-      // Strict matching logic:
-      // 1. If review has a targetId, it MUST match this hospital's ID strictly.
-      let isMatch = false;
-      if (tId) {
-        isMatch = (tId === hospId);
-      } else if (tName && hospName) {
-        // 2. Only if targetId is completely absent, fall back to exact hospital name
-        isMatch = (tName === hospName || (tName.length > 5 && hospName.includes(tName)) || (hospName.length > 5 && tName.includes(hospName)));
-      }
-
-      if (isMatch) {
-        const uniqueKey = String(r.id || r._id || `${r.patientName}_${r.comment}`);
-        if (!seenIds.has(uniqueKey)) {
-          seenIds.add(uniqueKey);
-          filtered.push(r);
-        }
-      }
-    }
-    return filtered;
+    return getHospitalVerifiedReviews(hospital, reviews);
   }, [hospital, reviews]);
 
-  // Review Summary Metrics
+  // Review Summary Metrics - directly fetched from public reviews; if 0 reviews, rating is strictly 0
   const reviewStats = useMemo(() => {
-    const total = hospitalReviews.length;
-    const avg = total > 0
-      ? (hospitalReviews.reduce((sum, r) => sum + (Number(r?.rating) || 5), 0) / total).toFixed(1)
-      : (formData?.rating !== undefined && formData?.rating !== '' && !isNaN(Number(formData?.rating)) && Number(formData?.rating) > 0
-          ? Number(formData?.rating).toFixed(1)
-          : (hospital?.rating !== undefined && hospital?.rating !== null && Number(hospital?.rating) > 0 ? Number(hospital.rating).toFixed(1) : 'New'));
-    const fiveStars = hospitalReviews.filter(r => Number(r?.rating) === 5).length;
-    const verifiedCount = hospitalReviews.filter(r => r?.isVerified).length;
-    const reviewsText = total > 0
-      ? `${total} Review${total === 1 ? '' : 's'}`
-      : (formData?.reviews && formData?.reviews !== '500+ Reviews' ? formData?.reviews : (hospital?.reviews || '0 Reviews'));
-    return { total, avg, fiveStars, verifiedCount, reviewsText };
-  }, [hospitalReviews, formData?.rating, formData?.reviews, hospital?.rating, hospital?.reviews]);
+    return getHospitalRatingStats(hospital, reviews);
+  }, [hospital, reviews]);
 
   // Filtered Hospital Reviews
   const filteredHospitalReviews = useMemo(() => {
@@ -971,6 +926,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
     initializedHospitalId.current = currentHospId;
     setFormData(createInitialHospitalFormData(hospital));
+    setErCases(Array.isArray(hospital?.erCases) ? hospital.erCases : INITIAL_ER_CASES);
+    setAmbulances(Array.isArray(hospital?.ambulances) ? hospital.ambulances : INITIAL_AMBULANCES);
   }, [hospital]);
 
   if (!hospital) {
@@ -1658,8 +1615,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         isVerified: Boolean(formData.isVerified),
         publicationStatus: formData.publicationStatus || 'draft',
         status: formData.status || 'active',
-        rating: formData.rating !== undefined && formData.rating !== '' && !isNaN(Number(formData.rating)) ? Number(formData.rating) : 0,
-        reviews: formData.reviews || '0 Reviews',
+        rating: Number(reviewStats.avg) || 0,
+        reviews: reviewStats.reviewsText || '0 Reviews',
         phone: phoneValidation.normalized || formData.phone,
         email: (formData.email || '').trim(),
         description: (formData.description || '').trim(),
@@ -1682,6 +1639,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         facebook: (formData.facebook || '').trim(),
         reels: Array.isArray(formData.reels) ? formData.reels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim()))) : [],
         youtube_videos: Array.isArray(formData.youtube_videos) ? formData.youtube_videos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim()))) : [],
+        erCases: Array.isArray(erCases) ? erCases : [],
+        ambulances: Array.isArray(ambulances) ? ambulances : [],
         ...(cleanOverride || {})
       };
 
@@ -1852,17 +1811,38 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           <div className={styles.overviewHeroCard}>
             <div className={styles.overviewHeroMain}>
               <div className={styles.overviewImgWrapper}>
-                <img
-                  src={formData.image || PRESET_HOSPITAL_IMAGES[0].url}
-                  alt={formData.name}
-                  className={styles.overviewImg}
-                  onError={(e) => {
-                    e.target.src = PRESET_HOSPITAL_IMAGES[0].url;
+                {formData.image ? (
+                  <img
+                    src={formData.image}
+                    alt={formData.name}
+                    className={styles.overviewImg}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div
+                  style={{
+                    display: formData.image ? 'none' : 'flex',
+                    width: '100%',
+                    height: '100%',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#f8fafc',
+                    color: '#94a3b8'
                   }}
-                />
-                <span className={styles.overviewImgTag}>
-                  Est. {formData.establishedYear || '1991'}
-                </span>
+                  title="No photo uploaded yet"
+                >
+                  <Building2 size={32} color="#94a3b8" />
+                  <span style={{ fontSize: '0.62rem', fontWeight: 600, color: '#94a3b8', marginTop: '2px' }}>No Photo</span>
+                </div>
+                {formData.establishedYear ? (
+                  <span className={styles.overviewImgTag}>
+                    Est. {formData.establishedYear}
+                  </span>
+                ) : null}
               </div>
 
               <div className={styles.overviewDetails}>
@@ -2227,7 +2207,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           >
             <Camera size={15} />
             <span>Photos & Showcase</span>
-            <span className={styles.tabBadge}>{formData.photos.length + 1}</span>
+            <span className={styles.tabBadge}>
+              {(formData.image ? 1 : 0) + (Array.isArray(formData.photos) ? formData.photos.length : 0)}
+            </span>
           </button>
 
           <button
@@ -2330,7 +2312,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           >
             <Siren size={15} />
             <span>ER & Fleet</span>
-            <span className={styles.tabBadge}>3 Active</span>
+            <span className={styles.tabBadge}>{erCases.length} Active</span>
           </button>
         </div>
       </div>
@@ -2797,16 +2779,26 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
                 <div>
                   <label className={styles.formLabel}>Hero Image Preview</label>
-                  <div style={{ width: '100%', height: '240px', borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #cbd5e1', position: 'relative' }}>
-                    <img
-                      src={formData.image}
-                      alt="Hero Preview"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      onError={(e) => { e.target.src = PRESET_HOSPITAL_IMAGES[0].url; }}
-                    />
-                    <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(15, 23, 42, 0.8)', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
-                      Primary Campus Hero
-                    </div>
+                  <div style={{ width: '100%', height: '240px', borderRadius: '10px', overflow: 'hidden', border: formData.image ? '1.5px solid #cbd5e1' : '1.5px dashed #cbd5e1', position: 'relative', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {formData.image ? (
+                      <>
+                        <img
+                          src={formData.image}
+                          alt="Hero Preview"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => { e.target.style.display = 'none'; }}
+                        />
+                        <div style={{ position: 'absolute', bottom: '10px', left: '10px', background: 'rgba(15, 23, 42, 0.8)', color: 'white', padding: '4px 10px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          Primary Campus Hero
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>
+                        <Camera size={40} color="#cbd5e1" style={{ marginBottom: '8px' }} />
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: '0.9rem', color: '#64748b' }}>No Hero Photo Uploaded</p>
+                        <p style={{ margin: '4px 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>Upload a primary photo above to showcase your facility</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5612,34 +5604,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {erCases.map((c) => (
-                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                          {c.patient} <span style={{ fontSize: '0.78rem', color: '#64748b' }}>({c.age} yrs)</span>
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                          {c.condition} • Bed: {c.bedAssigned}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          background: c.triage.includes('Red') ? '#fee2e2' : c.triage.includes('Yellow') ? '#fef3c7' : '#dcfce7',
-                          color: c.triage.includes('Red') ? '#dc2626' : c.triage.includes('Yellow') ? '#d97706' : '#15803d'
-                        }}>
-                          {c.triage}
-                        </span>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>
-                          ETA: {c.eta}
-                        </div>
-                      </div>
+                  {erCases.length === 0 ? (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                      <AlertTriangle size={28} color="#cbd5e1" style={{ marginBottom: '6px' }} />
+                      <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 600, color: '#64748b' }}>No Active ER Triage Cases</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>Incoming emergency triage admissions will appear here in real-time</p>
                     </div>
-                  ))}
+                  ) : (
+                    erCases.map((c) => (
+                      <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
+                            {c.patient} <span style={{ fontSize: '0.78rem', color: '#64748b' }}>({c.age} yrs)</span>
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                            {c.condition} • Bed: {c.bedAssigned}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{
+                            display: 'inline-block',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            background: c.triage.includes('Red') ? '#fee2e2' : c.triage.includes('Yellow') ? '#fef3c7' : '#dcfce7',
+                            color: c.triage.includes('Red') ? '#dc2626' : c.triage.includes('Yellow') ? '#d97706' : '#15803d'
+                          }}>
+                            {c.triage}
+                          </span>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>
+                            ETA: {c.eta}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -5651,38 +5651,46 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     Ambulance Rescue Fleet
                   </h3>
                   <span style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '999px', fontSize: '0.74rem', fontWeight: 700 }}>
-                    2 Available
+                    {ambulances.filter(a => a.status === 'Available').length} Available
                   </span>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {ambulances.map((amb) => (
-                    <div key={amb.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                          {amb.id} — {amb.type}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                          Driver: {amb.driver} ({amb.phone}) • {amb.location}
-                        </div>
-                      </div>
-                      <div>
-                        {amb.status === 'Available' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleDispatchAmbulance(amb.id)}
-                            style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
-                          >
-                            Dispatch
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '0.74rem', fontWeight: 600, color: amb.status === 'Dispatched' ? '#d97706' : '#94a3b8' }}>
-                            {amb.status}
-                          </span>
-                        )}
-                      </div>
+                  {ambulances.length === 0 ? (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+                      <Siren size={28} color="#cbd5e1" style={{ marginBottom: '6px' }} />
+                      <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 600, color: '#64748b' }}>No Ambulances Registered</p>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>Registered ambulance units and rescue fleet will appear here</p>
                     </div>
-                  ))}
+                  ) : (
+                    ambulances.map((amb) => (
+                      <div key={amb.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
+                            {amb.id} — {amb.type}
+                          </div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
+                            Driver: {amb.driver} ({amb.phone}) • {amb.location}
+                          </div>
+                        </div>
+                        <div>
+                          {amb.status === 'Available' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDispatchAmbulance(amb.id)}
+                              style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Dispatch
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: '0.74rem', fontWeight: 600, color: amb.status === 'Dispatched' ? '#d97706' : '#94a3b8' }}>
+                              {amb.status}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>

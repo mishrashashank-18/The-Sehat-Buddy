@@ -4,6 +4,11 @@ import { api, API_BASE } from '../services/api';
 import { initialBranding } from '../data/branding';
 import { defaultAcceptedInsurances } from '../data/insurancePartners';
 import { formatDoctorAvailability } from '../utils/doctorScheduleUtils';
+import { initialArticles } from '../data/articles';
+import { initialServices } from '../data/services';
+import { initialDoctors } from '../data/doctors';
+import { initialCorporateTieups } from '../data/corporateTieups';
+import { initialHeroContent } from '../data/heroContent';
 
 const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
 const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v4';
@@ -107,6 +112,60 @@ export const getDoctorCanonicalId = (doc) => {
     return doc._id ? String(doc._id) : (doc.id ? String(doc.id) : (doc.email ? String(doc.email).toLowerCase() : null));
   }
   return String(doc);
+};
+
+// Automatic media resolution helper that seamlessly upgrades legacy local paths to Cloudinary CDN
+export const resolveMediaUrl = (url) => {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+
+  // 1. Articles migration to Cloudinary CDN
+  if (trimmed.includes('article-1') || trimmed === '/src/assets/images/article-1.png' || trimmed.endsWith('/article-1.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190459/sehatbuddy/articles/article-1.jpg';
+  }
+  if (trimmed.includes('article-2') || trimmed === '/src/assets/images/article-2.png' || trimmed.endsWith('/article-2.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190461/sehatbuddy/articles/article-2.jpg';
+  }
+  if (trimmed.includes('article-3') || trimmed === '/src/assets/images/article-3.png' || trimmed.endsWith('/article-3.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190462/sehatbuddy/articles/article-3.jpg';
+  }
+  if (trimmed.includes('article-4') || trimmed === '/src/assets/images/article-4.png' || trimmed.endsWith('/article-4.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190464/sehatbuddy/articles/article-4.jpg';
+  }
+
+  // 2. Doctor photos migration to Cloudinary CDN
+  if (trimmed.includes('doctor-1') || trimmed === '/src/assets/images/doctor-1.png' || trimmed.endsWith('/doctor-1.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190466/sehatbuddy/doctors/doctor-1.jpg';
+  }
+  if (trimmed.includes('doctor-2') || trimmed === '/src/assets/images/doctor-2.png' || trimmed.endsWith('/doctor-2.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190467/sehatbuddy/doctors/doctor-2.jpg';
+  }
+
+  // 3. Hero image migration to Cloudinary CDN
+  if (trimmed.includes('hero-family') || trimmed === '/src/assets/images/hero-family.jpg' || trimmed.endsWith('/hero-family.jpg')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg';
+  }
+
+  // 4. Services icons migration to Cloudinary CDN & public static
+  if (trimmed.includes('stethoscope')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190495/sehatbuddy/services/stethoscope.jpg';
+  }
+  if (trimmed.includes('hospital.png')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190494/sehatbuddy/services/hospital.jpg';
+  }
+  if (trimmed.startsWith('/src/assets/images/icons/')) {
+    return trimmed.replace('/src/assets/images/icons/', '/assets/images/icons/');
+  }
+
+  // 5. Avatars migration to Cloudinary CDN
+  if (trimmed.includes('avatar-male') || trimmed.includes('default_doctor_male')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png';
+  }
+  if (trimmed.includes('avatar-female') || trimmed.includes('default_doctor_female')) {
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893958/sehatbuddy/avatars/default_doctor_female.jpg';
+  }
+
+  return trimmed;
 };
 
 // Robust helper to check if a doctor is included in a star_doctors list
@@ -234,23 +293,17 @@ export const DataProvider = ({ children }) => {
       if (savedV4) {
         const parsed = JSON.parse(savedV4);
         if (parsed && typeof parsed === 'object') {
+          parsed.heroImage = resolveMediaUrl(parsed.heroImage || initialHeroContent.heroImage);
           if (parsed.whyChooseVideoUrl === 'https://www.youtube.com/watch?v=zCCD52Pty4A') {
             parsed.whyChooseVideoUrl = '';
           }
-          return parsed;
+          return { ...initialHeroContent, ...parsed };
         }
       }
     } catch (e) {
       console.error('Failed to parse heroContent from localStorage', e);
     }
-    return {
-      badge: 'Your Health Partner, Every Step of the Way',
-      titleLine1: 'Find Doctors, Book',
-      titleLine2: 'Appointments & Take',
-      titleHighlight: 'Care of Your Health',
-      description: 'The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.',
-      heroImage: '/src/assets/images/hero-family.jpg'
-    };
+    return initialHeroContent;
   });
 
   // 4. Services State
@@ -259,10 +312,12 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_SERVICES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(s => ({ ...s, iconPath: resolveMediaUrl(s.iconPath) }));
+        }
       }
     } catch (e) {}
-    return [];
+    return initialServices;
   });
 
   // 5. Features ("Why Choose Us") State
@@ -271,7 +326,7 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_FEATURES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
+        if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map((item, idx) => ({
             id: item.id || idx + 1,
             title: item.title || 'Healthcare Feature',
@@ -290,10 +345,12 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_ARTICLES);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(a => ({ ...a, image: resolveMediaUrl(a.image) }));
+        }
       }
     } catch (e) {}
-    return [];
+    return initialArticles;
   });
 
   // 7. Corporate Tie-ups & Enterprise Network State
@@ -302,10 +359,10 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_CORPORATE);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch (e) {}
-    return [];
+    return initialCorporateTieups;
   });
 
   // 8. FAQs State
@@ -420,6 +477,7 @@ export const DataProvider = ({ children }) => {
         ...d,
         id: d._id || d.id || existing?._id || existing?.id,
         _id: d._id || existing?._id || d.id,
+        image: resolveMediaUrl(d.image || existing?.image || initialDoctors[0].image),
         phone: resolvedPhone,
         contact_number: resolvedPhone,
         degree: resolvedDegree,
@@ -503,10 +561,10 @@ export const DataProvider = ({ children }) => {
           preAuthTime: '30 Mins Cashless Pre-Approval'
         },
         insuranceHelpline: h.insuranceHelpline || existing?.insuranceHelpline || '1800-SEHAT-CARE',
-        showOnHome: (Number(existing?.homeUpdatedAt || 0) >= Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
+        showOnHome: (Number(existing?.homeUpdatedAt || 0) > Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
           ? Boolean(existing.showOnHome)
           : (h.showOnHome !== undefined ? Boolean(h.showOnHome) : (existing?.showOnHome ?? true)),
-        homeUpdatedAt: (Number(existing?.homeUpdatedAt || 0) >= Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
+        homeUpdatedAt: (Number(existing?.homeUpdatedAt || 0) > Number(h.homeUpdatedAt || 0) && existing?.showOnHome !== undefined)
           ? Number(existing.homeUpdatedAt)
           : (h.homeUpdatedAt !== undefined ? Number(h.homeUpdatedAt) : Number(existing?.homeUpdatedAt || 0))
       };
@@ -559,9 +617,7 @@ export const DataProvider = ({ children }) => {
         if (hero && typeof hero === 'object') {
           setHeroContent(prev => {
             const cleanHero = { ...hero };
-            if (typeof cleanHero.heroImage === 'string' && cleanHero.heroImage.startsWith('data:image/') && cleanHero.heroImage.length > 50000) {
-              cleanHero.heroImage = prev?.heroImage || '/src/assets/images/hero-family.jpg';
-            }
+            cleanHero.heroImage = resolveMediaUrl(cleanHero.heroImage || prev?.heroImage);
             if (cleanHero.whyChooseVideoUrl === 'https://www.youtube.com/watch?v=zCCD52Pty4A') {
               cleanHero.whyChooseVideoUrl = '';
             }
@@ -571,9 +627,9 @@ export const DataProvider = ({ children }) => {
         if (bData && typeof bData === 'object') {
           setBranding(prev => ({ ...prev, ...bData }));
         }
-        if (Array.isArray(sList)) setServices(sList);
+        if (Array.isArray(sList)) setServices(sList.map(s => ({ ...s, iconPath: resolveMediaUrl(s.iconPath) })));
         if (Array.isArray(fList)) setFeatures(fList);
-        if (Array.isArray(aList)) setArticles(aList);
+        if (Array.isArray(aList)) setArticles(aList.map(a => ({ ...a, image: resolveMediaUrl(a.image) })));
         if (Array.isArray(cList)) setCorporateTieups(cList);
       }
     } catch {}
@@ -857,7 +913,7 @@ export const DataProvider = ({ children }) => {
                     if (matchesId(h, payload.docId)) {
                       const currentHomeTs = Number(h.homeUpdatedAt || 0);
                       const incomingHomeTs = Number(hospData.homeUpdatedAt || 0);
-                      const keepCurrentHome = currentHomeTs >= incomingHomeTs && h.showOnHome !== undefined;
+                      const keepCurrentHome = currentHomeTs > incomingHomeTs && h.showOnHome !== undefined;
                       const nextHome = keepCurrentHome
                         ? Boolean(h.showOnHome)
                         : (hospData.showOnHome !== undefined ? Boolean(hospData.showOnHome) : (h.showOnHome ?? true));
@@ -1566,8 +1622,8 @@ export const DataProvider = ({ children }) => {
   const addHospital = async (hospitalData) => {
     const newHospital = {
       ...hospitalData,
-      rating: parseFloat(hospitalData.rating) || 4.5,
-      reviews: hospitalData.reviews ? `${hospitalData.reviews}` : '50+',
+      rating: parseFloat(hospitalData.rating) || 0,
+      reviews: hospitalData.reviews ? `${hospitalData.reviews}` : '0 Reviews',
       totalBeds: parseInt(hospitalData.totalBeds, 10) || 100,
       emergency24x7: Boolean(hospitalData.emergency24x7),
       specialties: Array.isArray(hospitalData.specialties)
@@ -1684,7 +1740,9 @@ export const DataProvider = ({ children }) => {
         return hosp;
       });
       try {
-        localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(nextList));
+        const serialized = JSON.stringify(nextList);
+        lastSyncRef.current[STORAGE_KEY_HOSPITALS] = serialized;
+        localStorage.setItem(STORAGE_KEY_HOSPITALS, serialized);
         broadcastSync(STORAGE_KEY_HOSPITALS, nextList);
       } catch {}
       return nextList;
@@ -1728,7 +1786,9 @@ export const DataProvider = ({ children }) => {
           });
           if (!hasDiff) return prev;
           try {
-            localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(synced));
+            const serialized = JSON.stringify(synced);
+            lastSyncRef.current[STORAGE_KEY_HOSPITALS] = serialized;
+            localStorage.setItem(STORAGE_KEY_HOSPITALS, serialized);
             broadcastSync(STORAGE_KEY_HOSPITALS, synced);
           } catch {}
           return synced;
@@ -1748,7 +1808,9 @@ export const DataProvider = ({ children }) => {
         setHospitals(prev => {
           const reverted = prev.map(h => matchesId(h, id) ? prevHospital : h);
           try {
-            localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(reverted));
+            const serialized = JSON.stringify(reverted);
+            lastSyncRef.current[STORAGE_KEY_HOSPITALS] = serialized;
+            localStorage.setItem(STORAGE_KEY_HOSPITALS, serialized);
             broadcastSync(STORAGE_KEY_HOSPITALS, reverted);
           } catch {}
           return reverted;
