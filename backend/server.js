@@ -13,7 +13,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
 import hospitalRoutes from './routes/hospitalRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-import contentRoutes from './routes/contentRoutes.js';
+import contentRoutes, { seedContentIfEmpty } from './routes/contentRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import faqRoutes from './routes/faqRoutes.js';
@@ -21,6 +21,7 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import specialityRoutes from './routes/specialityRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import avatarRoutes from './routes/avatarRoutes.js';
+import corporateRoutes from './routes/corporateRoutes.js';
 
 import mongoSanitize from './middleware/mongoSanitize.js';
 import { initMongoDBChangeStream, streamRealtimeDatabase } from './services/storageMonitor.js';
@@ -56,6 +57,7 @@ if (NODE_ENV === 'production') {
 connectDB().then(() => {
   initMongoDBChangeStream();
   initHospitalPublicationAndCompletion();
+  seedContentIfEmpty().catch(() => {});
 }).catch(() => {});
 
 const app = express();
@@ -376,6 +378,7 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/specialities-procedures', specialityRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/avatars', avatarRoutes);
+app.use('/api/corporate', corporateRoutes);
 
 // 404 Route Catch-all
 app.use((req, res, next) => {

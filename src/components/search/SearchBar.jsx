@@ -6,7 +6,8 @@ import { useData } from '../../context/useData';
 import styles from './SearchBar.module.css';
 
 const SearchBar = ({ onNavigate }) => {
-  const { doctors, hospitals } = useData();
+  const { doctors, hospitals, branding, heroContent } = useData();
+  const currentCity = heroContent?.city || branding?.city || 'Bengaluru';
 
   const [searchQuery, setSearchQuery] = useState('');
   const [speciality, setSpeciality] = useState('');
@@ -30,7 +31,7 @@ const SearchBar = ({ onNavigate }) => {
     if (e) e.preventDefault();
 
     const query = searchQuery.trim();
-    const loc = 'Bengaluru';
+    const loc = currentCity;
     const spec = speciality.trim();
 
     // Check if query specifically targets a hospital
@@ -105,10 +106,10 @@ const SearchBar = ({ onNavigate }) => {
             <input
               type="text"
               className={`${styles.input} ${styles.selectWithIcon}`}
-              value="Bengaluru"
+              value={currentCity}
               readOnly
               style={{ cursor: 'default', color: '#1e293b', fontWeight: 500, backgroundColor: '#ffffff' }}
-              title="Currently serving Bengaluru"
+              title={`Currently serving ${currentCity}`}
             />
           </div>
         </div>

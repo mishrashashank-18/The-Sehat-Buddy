@@ -625,6 +625,42 @@ export const api = {
     return data.data;
   },
 
+  async getCorporates() {
+    const res = await fetch(`${API_BASE}/corporate`, {
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async addCorporate(corporateData) {
+    const res = await fetch(`${API_BASE}/corporate`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(corporateData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteCorporate(id) {
+    const res = await fetch(`${API_BASE}/corporate/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data;
+  },
+
+  async deleteAllCorporates() {
+    const res = await fetch(`${API_BASE}/corporate`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data;
+  },
+
   async updateBranding(brandingData) {
     const res = await fetch(`${API_BASE}/content/branding`, {
       method: 'PUT',

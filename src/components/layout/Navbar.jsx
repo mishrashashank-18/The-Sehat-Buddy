@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
@@ -7,7 +7,7 @@ import { API_BASE } from '../../services/api';
 import Container from './Container';
 import styles from './Navbar.module.css';
 
-const CARE_SERVICES = [
+const DEFAULT_CARE_SERVICES = [
   { name: 'Senior Care', desc: 'Elderly assistance & nursing', icon: '👴' },
   { name: "Women's Health", desc: 'Gynecology & maternal wellness', icon: '🌸' },
   { name: 'Kid Care', desc: 'Pediatric care & vaccinations', icon: '👶' },
@@ -16,8 +16,8 @@ const CARE_SERVICES = [
 ];
 
 const Navbar = ({ onNavigate, currentView = 'site' }) => {
-  const { branding } = useData();
-  const [selectedCity] = useState('Bengaluru');
+  const { branding, heroContent, services } = useData();
+  const selectedCity = heroContent?.city || branding?.city || 'Bengaluru';
   const [isCareOpen, setIsCareOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState(() => {
@@ -26,6 +26,36 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   });
 
   const careDropdownRef = useRef(null);
+
+  // Dynamically compute Care Services from database services in real-time
+  const careServicesList = useMemo(() => {
+    if (Array.isArray(services) && services.length > 0) {
+      const specialized = services.filter(s => {
+        const titleLower = (s.title || '').toLowerCase().trim();
+        return titleLower !== 'find doctors' && titleLower !== 'hospitals';
+      });
+      if (specialized.length > 0) {
+        const iconMap = {
+          'Senior Care': '👴',
+          'Women Care': '🌸',
+          "Women's Health": '🌸',
+          'Kid Care': '👶',
+          'Surgeries': '🏥',
+          'Surgeries & Procedures': '🏥',
+          'Lab Tests': '🧪',
+          'Lab Tests & Diagnostics': '🧪'
+        };
+        return specialized.map((s, idx) => ({
+          id: s.id || idx,
+          name: s.title,
+          desc: s.subtitle ? s.subtitle.replace(/\n/g, ' ') : '',
+          icon: iconMap[s.title] || '🩺',
+          iconPath: s.iconPath
+        }));
+      }
+    }
+    return DEFAULT_CARE_SERVICES;
+  }, [services]);
 
   // Compute active tab from currentView
   const getActiveTab = () => {
@@ -233,9 +263,9 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
                 onMouseLeave={() => setIsCareOpen(false)}
               >
                 <div className={styles.dropdownHeader}>Specialized Healthcare</div>
-                {CARE_SERVICES.map((item, idx) => (
+                {careServicesList.map((item, idx) => (
                   <button
-                    key={idx}
+                    key={item.id || idx}
                     type="button"
                     className={styles.dropdownItem}
                     onClick={() => handleScrollToSection('services-section', 'care-services')}
@@ -254,15 +284,15 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
         {/* Right Actions */}
         <div className={styles.actions}>
-          {/* Location Badge (Fixed to Bengaluru) */}
+          {/* Location Badge (Synced from Database) */}
           <div className={styles.locationWrapper}>
             <div
               className={styles.locationPill}
               style={{ cursor: 'default' }}
-              title="Serving Bengaluru"
+              title={`Serving ${selectedCity}`}
             >
               <MapPin size={16} className={styles.locationIcon} />
-              <span className={styles.cityName}>Bengaluru</span>
+              <span className={styles.cityName}>{selectedCity}</span>
             </div>
           </div>
 
@@ -338,9 +368,9 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
             <div className={styles.mobileCareSection}>
               <div className={styles.mobileCareHeading}>Care Services</div>
-              {CARE_SERVICES.map((item, idx) => (
+              {careServicesList.map((item, idx) => (
                 <button
-                  key={idx}
+                  key={item.id || idx}
                   type="button"
                   className={styles.mobileCareItem}
                   onClick={() => handleScrollToSection('services-section', 'care-services')}
@@ -353,7 +383,7 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
 
             <div className={styles.mobileLocationRow}>
               <MapPin size={16} color="#64748B" />
-              <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#334155' }}>Bengaluru</span>
+              <span style={{ fontSize: '0.92rem', fontWeight: 600, color: '#334155' }}>{selectedCity}</span>
             </div>
 
             {user ? (

@@ -595,6 +595,234 @@
   background: #1d4ed8;
 }
 
+/* Social Media Links Section */
+.socialLinksList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.socialCard {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s ease;
+}
+
+.socialCard:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.socialCardDisabled {
+  opacity: 0.6;
+  background: #f8fafc;
+}
+
+.socialIconPreviewWrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  color: #2563eb;
+  border: 1.5px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+
+.socialInputsGrid {
+  display: grid;
+  grid-template-columns: 140px 160px 1fr;
+  gap: 12px;
+  flex: 1;
+}
+
+.socialActionsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.socialToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.socialToggleActive {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.socialToggleActive:hover {
+  background: #bbf7d0;
+}
+
+.socialToggleInactive {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.socialToggleInactive:hover {
+  background: #e2e8f0;
+}
+
+.socialDeleteBtn {
+  background: transparent;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.socialDeleteBtn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.socialTestBtn {
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.socialTestBtn:hover {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #2563eb;
+}
+
+.socialSectionActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.addSocialBtn {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1.5px dashed #93c5fd;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.addSocialBtn:hover {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+}
+
+.resetSocialBtn {
+  background: transparent;
+  color: #64748b;
+  border: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.resetSocialBtn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+/* Footer preview in manager */
+.footerPreviewBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.footerPreviewLabel {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.footerPreviewCircles {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footerPreviewCircle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.footerPreviewCircle:hover {
+  background: #2563eb;
+  color: #ffffff;
+  transform: translateY(-2px);
+}
+
 @media (max-width: 768px) {
   .inputGrid {
     grid-template-columns: 1fr;
@@ -608,5 +836,16 @@
   .faviconRow {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .socialCard {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .socialInputsGrid {
+    grid-template-columns: 1fr;
+  }
+  .socialActionsRow {
+    justify-content: space-between;
+    width: 100%;
   }
 }

@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   CheckCircle,
-  RotateCcw,
   Plus,
   Trash2,
   FileText,
@@ -24,6 +23,8 @@ import { api } from '../../services/api';
 import styles from './FrontPageEditor.module.css';
 
 const heroFamily = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg';
+
+const isValidHex = (hex) => typeof hex === 'string' && /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(hex.trim());
 
 const DEFAULT_HERO_PRESETS = [];
 
@@ -84,6 +85,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     addCorporateTieup,
     updateCorporateTieup,
     deleteCorporateTieup,
+    deleteAllCorporateTieups,
+    saveCorporateTieupsNow,
     resetFrontPageDefaults
   } = useData();
 
@@ -109,6 +112,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   // Hero form local state
   const [heroForm, setHeroForm] = useState(() => ({
     badge: heroContent?.badge ?? '',
+    city: heroContent?.city ?? 'Bengaluru',
     titleLine1: heroContent?.titleLine1 ?? '',
     titleLine2: heroContent?.titleLine2 ?? '',
     titleHighlight: heroContent?.titleHighlight ?? '',
@@ -125,12 +129,33 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
     whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
     newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
-    newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter',
+    newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter'
+  }));
+
+  // Corporate Tie-ups Header & Metrics local form state (only displays on frontend when clicking Save Header)
+  const [corporateHeaderForm, setCorporateHeaderForm] = useState(() => ({
     corporateBadge: heroContent?.corporateBadge ?? 'ENTERPRISE HEALTHCARE NETWORK',
     corporateTitle: heroContent?.corporateTitle ?? 'Corporate Tie-ups & Partners',
     corporateSubtitle: heroContent?.corporateSubtitle ?? 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
     corporateStat: heroContent?.corporateStat ?? '2.5M+ Corporate Lives Covered'
   }));
+  const isCorporateHeaderDirtyRef = useRef(false);
+
+  useEffect(() => {
+    if (!isCorporateHeaderDirtyRef.current && heroContent) {
+      setCorporateHeaderForm({
+        corporateBadge: heroContent?.corporateBadge ?? 'ENTERPRISE HEALTHCARE NETWORK',
+        corporateTitle: heroContent?.corporateTitle ?? 'Corporate Tie-ups & Partners',
+        corporateSubtitle: heroContent?.corporateSubtitle ?? 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
+        corporateStat: heroContent?.corporateStat ?? '2.5M+ Corporate Lives Covered'
+      });
+    }
+  }, [heroContent?.corporateBadge, heroContent?.corporateTitle, heroContent?.corporateSubtitle, heroContent?.corporateStat]);
+
+  const handleCorporateHeaderChange = (field, value) => {
+    isCorporateHeaderDirtyRef.current = true;
+    setCorporateHeaderForm(prev => ({ ...prev, [field]: value }));
+  };
 
   // Keep heroFormRef in sync with heroForm
   useEffect(() => {
@@ -151,6 +176,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     if (!isHeroDirtyRef.current && heroContent) {
       setHeroForm({
         badge: heroContent?.badge ?? '',
+        city: heroContent?.city ?? 'Bengaluru',
         titleLine1: heroContent?.titleLine1 ?? '',
         titleLine2: heroContent?.titleLine2 ?? '',
         titleHighlight: heroContent?.titleHighlight ?? '',
@@ -167,11 +193,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
         whyChooseVideoText: heroContent?.whyChooseVideoText ?? 'Watch how\nSehat Buddy\nworks for you',
         whyChooseVideoAutoplay: heroContent?.whyChooseVideoAutoplay !== false,
         newsletterTitle: heroContent?.newsletterTitle ?? 'Stay updated with\nhealth tips & offers',
-        newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter',
-        corporateBadge: heroContent?.corporateBadge ?? 'ENTERPRISE HEALTHCARE NETWORK',
-        corporateTitle: heroContent?.corporateTitle ?? 'Corporate Tie-ups & Partners',
-        corporateSubtitle: heroContent?.corporateSubtitle ?? 'Trusted by leading enterprises for priority admissions, comprehensive annual checkups, and cashless corporate benefits.',
-        corporateStat: heroContent?.corporateStat ?? '2.5M+ Corporate Lives Covered'
+        newsletterSubtitle: heroContent?.newsletterSubtitle ?? 'Subscribe to our newsletter'
       });
     }
   }, [heroContent]);
@@ -334,23 +356,41 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
   // Corporate partner modal & form state
   const [isAddCorporateOpen, setIsAddCorporateOpen] = useState(false);
+  const [uploadingLogoCorpId, setUploadingLogoCorpId] = useState(null);
+  const [isNewCorporateUploading, setIsNewCorporateUploading] = useState(false);
   const [newCorporate, setNewCorporate] = useState({
     name: '',
     shortName: '',
-    category: 'IT & Consulting',
+    category: '',
     benefit: '',
     color: '#0054A6',
     bgColor: '#EFF6FF',
     logoText: '',
     logo: '',
-    employeesCovered: '100,000+'
+    employeesCovered: ''
   });
+
+  const handleOpenAddCorporate = () => {
+    setNewCorporate({
+      name: '',
+      shortName: '',
+      category: '',
+      benefit: '',
+      color: '#0054A6',
+      bgColor: '#EFF6FF',
+      logoText: '',
+      logo: '',
+      employeesCovered: ''
+    });
+    setIsAddCorporateOpen(true);
+  };
 
   // Save Hero Form
   const handleSaveHero = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     updateHeroContent({
       badge: heroForm.badge,
+      city: heroForm.city,
       titleLine1: heroForm.titleLine1,
       titleLine2: heroForm.titleLine2,
       titleHighlight: heroForm.titleHighlight,
@@ -682,7 +722,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     e.target.value = '';
   };
 
-  const handleCorporateLogoUpload = (corpId, e) => {
+  const handleCorporateLogoUpload = async (corpId, e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -698,23 +738,28 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUri = reader.result;
-      updateCorporateTieup(corpId, { logo: dataUri });
-      showToast('Corporate icon / logo uploaded!');
-
-      try {
-        const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
-        if (uploadedUrl) {
-          updateCorporateTieup(corpId, { logo: uploadedUrl });
-        }
-      } catch (err) {
-        console.warn('Backend corporate logo upload fallback used Data URI:', err.message);
-      }
-    };
-    reader.readAsDataURL(file);
     e.target.value = '';
+    setUploadingLogoCorpId(corpId);
+
+    try {
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
+      if (uploadedUrl) {
+        updateCorporateTieup(corpId, { logo: uploadedUrl });
+        showToast('Corporate icon updated!');
+      } else {
+        throw new Error('Upload returned no URL');
+      }
+    } catch (err) {
+      console.warn('Backend corporate logo upload fallback used Data URI:', err.message);
+      const reader = new FileReader();
+      reader.onload = () => {
+        updateCorporateTieup(corpId, { logo: reader.result });
+        showToast('Corporate icon updated locally.');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setUploadingLogoCorpId(null);
+    }
   };
 
   const handleRemoveCorporateLogo = (corpId, name) => {
@@ -722,7 +767,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     showToast(`Custom icon removed for "${name || 'partner'}".`);
   };
 
-  const handleNewCorporateLogoUpload = (e) => {
+  const handleNewCorporateLogoUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -738,23 +783,28 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUri = reader.result;
-      setNewCorporate(prev => ({ ...prev, logo: dataUri }));
-      showToast('Corporate logo ready!');
-
-      try {
-        const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
-        if (uploadedUrl) {
-          setNewCorporate(prev => ({ ...prev, logo: uploadedUrl }));
-        }
-      } catch (err) {
-        console.warn('Backend corporate logo upload fallback:', err.message);
-      }
-    };
-    reader.readAsDataURL(file);
     e.target.value = '';
+    setIsNewCorporateUploading(true);
+
+    try {
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
+      if (uploadedUrl) {
+        setNewCorporate(prev => ({ ...prev, logo: uploadedUrl }));
+        showToast('Corporate logo ready!');
+      } else {
+        throw new Error('Upload returned no URL');
+      }
+    } catch (err) {
+      console.warn('Modal corporate logo upload fallback used Data URI:', err.message);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setNewCorporate(prev => ({ ...prev, logo: reader.result }));
+        showToast('Corporate logo ready!');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsNewCorporateUploading(false);
+    }
   };
 
   // Add Article
@@ -790,48 +840,69 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   };
 
   // Save Corporate Header
-  const handleSaveCorporateHeader = (e) => {
-    if (e) e.preventDefault();
-    const current = heroFormRef.current || heroForm;
-    isHeroDirtyRef.current = false;
-    updateHeroContent({
-      corporateBadge: current.corporateBadge ?? '',
-      corporateTitle: current.corporateTitle ?? '',
-      corporateSubtitle: current.corporateSubtitle ?? '',
-      corporateStat: current.corporateStat ?? ''
-    });
-    showToast('Corporate Tie-ups header & metrics updated successfully!');
+  const handleSaveCorporateHeader = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    isCorporateHeaderDirtyRef.current = false;
+    try {
+      await updateHeroContent({
+        corporateBadge: corporateHeaderForm.corporateBadge ?? '',
+        corporateTitle: corporateHeaderForm.corporateTitle ?? '',
+        corporateSubtitle: corporateHeaderForm.corporateSubtitle ?? '',
+        corporateStat: corporateHeaderForm.corporateStat ?? ''
+      });
+      showToast('Corporate Tie-ups header & metrics updated and live on frontend!');
+    } catch (err) {
+      showToast('Failed to save header: ' + (err.message || 'Server error'), 'error');
+    }
   };
 
   // Add Corporate Partner
-  const handleCreateCorporate = (e) => {
+  const handleCreateCorporate = async (e) => {
     e.preventDefault();
-    if (!newCorporate.name.trim()) return;
-    const short = newCorporate.shortName.trim() || newCorporate.name.split(' ')[0];
-    addCorporateTieup({
-      name: newCorporate.name.trim(),
-      shortName: short,
-      logoText: (newCorporate.logoText.trim() || short).slice(0, 10),
-      category: newCorporate.category.trim() || 'Enterprise Partner',
-      benefit: newCorporate.benefit.trim() || 'Comprehensive healthcare coverage and priority care',
-      employeesCovered: newCorporate.employeesCovered.trim() || '50,000+',
-      color: newCorporate.color || '#2563EB',
-      bgColor: newCorporate.bgColor || '#EFF6FF',
-      logo: newCorporate.logo || ''
-    });
-    setIsAddCorporateOpen(false);
-    setNewCorporate({
-      name: '',
-      shortName: '',
-      category: 'IT & Consulting',
-      benefit: '',
-      color: '#0054A6',
-      bgColor: '#EFF6FF',
-      logoText: '',
-      logo: '',
-      employeesCovered: '100,000+'
-    });
-    showToast(`Partner "${newCorporate.name.trim()}" added to Corporate Tie-ups!`);
+    const companyName = newCorporate.name.trim();
+    if (!companyName) return;
+    const short = newCorporate.shortName.trim() || companyName.split(' ')[0];
+    try {
+      await addCorporateTieup({
+        name: companyName,
+        shortName: short,
+        logoText: (newCorporate.logoText.trim() || short).slice(0, 10),
+        category: newCorporate.category.trim() || 'Enterprise Partner',
+        benefit: newCorporate.benefit.trim() || 'Comprehensive healthcare coverage and priority care',
+        employeesCovered: newCorporate.employeesCovered.trim() || '50,000+',
+        color: newCorporate.color || '#2563EB',
+        bgColor: newCorporate.bgColor || '#EFF6FF',
+        logo: newCorporate.logo || ''
+      });
+      setIsAddCorporateOpen(false);
+      setNewCorporate({
+        name: '',
+        shortName: '',
+        category: '',
+        benefit: '',
+        color: '#0054A6',
+        bgColor: '#EFF6FF',
+        logoText: '',
+        logo: '',
+        employeesCovered: ''
+      });
+      showToast(`Partner "${companyName}" saved to database!`);
+    } catch (err) {
+      showToast(`Failed to add partner: ${err.message || 'Server error'}`);
+    }
+  };
+
+  // Delete All Corporate Partners
+  const handleDeleteAllCorporate = async () => {
+    const count = corporateTieups?.length || 0;
+    if (window.confirm(`Are you sure you want to delete all ${count} corporate partners from the database?`)) {
+      try {
+        await deleteAllCorporateTieups();
+        showToast('All corporate partners deleted from database.');
+      } catch (err) {
+        showToast(`Failed to delete partners: ${err.message || 'Server error'}`);
+      }
+    }
   };
 
   return (
@@ -843,16 +914,6 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
             Customize hero banners, trust metrics, service cards, features, and health articles shown to website visitors.
           </p>
         </div>
-        <button
-          className={styles.resetBtn}
-          onClick={() => {
-            resetFrontPageDefaults();
-            showToast('Front page mock data reset to initial defaults.');
-          }}
-          title="Restore original sample headlines and cards"
-        >
-          <RotateCcw size={15} /> Reset Front Page Defaults
-        </button>
       </div>
 
       {/* Sub Tabs */}
@@ -909,13 +970,23 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
             </div>
 
             <div className={styles.formGrid}>
-              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+              <div className={styles.formGroup}>
                 <label>Top Badge Text</label>
                 <input
                   type="text"
                   value={heroForm.badge}
                   onChange={(e) => handleHeroFieldChange('badge', e.target.value)}
-                  placeholder="e.g. Your Health Partner, Every Step of the Way"
+                  placeholder="e.g. One Buddy for all Need"
+                />
+              </div>
+
+              <div className={styles.formGroup}>
+                <label>Primary Serving City / Location</label>
+                <input
+                  type="text"
+                  value={heroForm.city}
+                  onChange={(e) => handleHeroFieldChange('city', e.target.value)}
+                  placeholder="e.g. Bengaluru"
                 />
               </div>
 
@@ -1915,9 +1986,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Top Badge Text</label>
                 <input
                   type="text"
-                  value={heroForm.corporateBadge ?? ''}
-                  onChange={(e) => handleHeroFieldChange('corporateBadge', e.target.value)}
-                  onBlur={(e) => handleHeroFieldBlur('corporateBadge', e.target.value)}
+                  value={corporateHeaderForm.corporateBadge ?? ''}
+                  onChange={(e) => handleCorporateHeaderChange('corporateBadge', e.target.value)}
                   placeholder="e.g. ENTERPRISE HEALTHCARE NETWORK"
                 />
               </div>
@@ -1926,9 +1996,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Covered Lives Stat Pill</label>
                 <input
                   type="text"
-                  value={heroForm.corporateStat ?? ''}
-                  onChange={(e) => handleHeroFieldChange('corporateStat', e.target.value)}
-                  onBlur={(e) => handleHeroFieldBlur('corporateStat', e.target.value)}
+                  value={corporateHeaderForm.corporateStat ?? ''}
+                  onChange={(e) => handleCorporateHeaderChange('corporateStat', e.target.value)}
                   placeholder="e.g. 2.5M+ Corporate Lives Covered"
                 />
               </div>
@@ -1937,9 +2006,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Heading Title</label>
                 <input
                   type="text"
-                  value={heroForm.corporateTitle ?? ''}
-                  onChange={(e) => handleHeroFieldChange('corporateTitle', e.target.value)}
-                  onBlur={(e) => handleHeroFieldBlur('corporateTitle', e.target.value)}
+                  value={corporateHeaderForm.corporateTitle ?? ''}
+                  onChange={(e) => handleCorporateHeaderChange('corporateTitle', e.target.value)}
                   placeholder="e.g. Corporate Tie-ups & Partners"
                 />
               </div>
@@ -1948,9 +2016,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <label>Section Subtitle</label>
                 <textarea
                   rows={2}
-                  value={heroForm.corporateSubtitle ?? ''}
-                  onChange={(e) => handleHeroFieldChange('corporateSubtitle', e.target.value)}
-                  onBlur={(e) => handleHeroFieldBlur('corporateSubtitle', e.target.value)}
+                  value={corporateHeaderForm.corporateSubtitle ?? ''}
+                  onChange={(e) => handleCorporateHeaderChange('corporateSubtitle', e.target.value)}
                   placeholder="Describe your corporate healthcare partnership network..."
                 />
               </div>
@@ -1963,19 +2030,74 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               <h3>Corporate Partners & Enterprises ({corporateTieups?.length || 0})</h3>
               <p>Manage enterprise companies, custom brand colors, logo initials, and employee benefit packages.</p>
             </div>
-            <button
-              type="button"
-              className={styles.addBtn}
-              onClick={() => setIsAddCorporateOpen(true)}
-            >
-              <Plus size={16} /> Add Corporate Partner
-            </button>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {corporateTieups && corporateTieups.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await saveCorporateTieupsNow();
+                      showToast('All corporate partners saved to database!');
+                    }}
+                    className={styles.primarySaveBtn}
+                    style={{ padding: '8px 14px', fontSize: '0.84rem' }}
+                    title="Save all corporate partner details to database"
+                  >
+                    <CheckCircle size={15} /> Save All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteAllCorporate}
+                    style={{
+                      background: '#fef2f2',
+                      color: '#dc2626',
+                      border: '1px solid #fecaca',
+                      borderRadius: '8px',
+                      padding: '8px 14px',
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="Remove all corporate partners from database"
+                  >
+                    <Trash2 size={15} /> Delete All
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className={styles.addBtn}
+                onClick={handleOpenAddCorporate}
+              >
+                <Plus size={16} /> Add Corporate Partner
+              </button>
+            </div>
           </div>
 
           {/* Partners List */}
           <div className={styles.itemsList}>
-            {corporateTieups?.map((corp) => (
-              <div key={corp.id} className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
+            {(!corporateTieups || corporateTieups.length === 0) && (
+              <div style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b', background: '#f8fafc', borderRadius: '12px', border: '1.5px dashed #cbd5e1' }}>
+                <p style={{ margin: '0 0 10px 0', fontWeight: 600, fontSize: '0.95rem' }}>No corporate partners currently in the database.</p>
+                <p style={{ margin: '0 0 14px 0', fontSize: '0.85rem' }}>Click "+ Add Corporate Partner" to add a new enterprise partner.</p>
+                <button
+                  type="button"
+                  onClick={handleOpenAddCorporate}
+                  className={styles.addBtn}
+                  style={{ display: 'inline-flex' }}
+                >
+                  <Plus size={16} /> Add Corporate Partner
+                </button>
+              </div>
+            )}
+            {corporateTieups?.map((corp) => {
+              const corpId = corp.id !== undefined && corp.id !== null ? corp.id : corp._id;
+              return (
+              <div key={corpId} className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
                 {/* Visual Preview Badge with Icon Upload */}
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                   <div
@@ -1999,7 +2121,9 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     }}
                     title={corp.logo ? `Custom icon for ${corp.name}` : "Badge Live Preview"}
                   >
-                    {corp.logo ? (
+                    {uploadingLogoCorpId === corpId ? (
+                      <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Saving...</span>
+                    ) : corp.logo ? (
                       <img
                         src={corp.logo}
                         alt={corp.name || 'Company icon'}
@@ -2011,22 +2135,31 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   </div>
 
                   <div className={styles.corpLogoUploadWrap}>
-                    <label className={styles.corpUploadIconBtn} title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)">
+                    <label
+                      className={styles.corpUploadIconBtn}
+                      title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)"
+                      style={{
+                        opacity: uploadingLogoCorpId === corpId ? 0.6 : 1,
+                        pointerEvents: uploadingLogoCorpId === corpId ? 'none' : 'auto'
+                      }}
+                    >
                       <Upload size={11} />
-                      <span>{corp.logo ? 'Change' : 'Upload Icon'}</span>
+                      <span>{uploadingLogoCorpId === corpId ? 'Uploading...' : (corp.logo ? 'Change' : 'Upload Icon')}</span>
                       <input
                         type="file"
                         accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
                         style={{ display: 'none' }}
-                        onChange={(e) => handleCorporateLogoUpload(corp.id, e)}
+                        disabled={uploadingLogoCorpId === corpId}
+                        onChange={(e) => handleCorporateLogoUpload(corpId, e)}
                       />
                     </label>
                     {corp.logo && (
                       <button
                         type="button"
                         className={styles.corpRemoveIconBtn}
-                        onClick={() => handleRemoveCorporateLogo(corp.id, corp.name)}
+                        onClick={() => handleRemoveCorporateLogo(corpId, corp.name)}
                         title="Remove custom icon and revert to text code"
+                        disabled={uploadingLogoCorpId === corpId}
                       >
                         <X size={11} />
                       </button>
@@ -2040,11 +2173,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <input
                       type="text"
                       value={corp.name || ''}
-                      onChange={(e) => updateCorporateTieup(corp.id, { name: e.target.value })}
+                      onChange={(e) => updateCorporateTieup(corpId, { name: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          updateCorporateTieup(corp.id, { name: corp.name });
+                          updateCorporateTieup(corpId, { name: corp.name });
                           showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
                         }
                       }}
@@ -2057,11 +2190,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <input
                       type="text"
                       value={corp.logoText || ''}
-                      onChange={(e) => updateCorporateTieup(corp.id, { logoText: e.target.value })}
+                      onChange={(e) => updateCorporateTieup(corpId, { logoText: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          updateCorporateTieup(corp.id, { logoText: corp.logoText });
+                          updateCorporateTieup(corpId, { logoText: corp.logoText });
                           showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
                         }
                       }}
@@ -2074,11 +2207,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <input
                       type="text"
                       value={corp.category || ''}
-                      onChange={(e) => updateCorporateTieup(corp.id, { category: e.target.value })}
+                      onChange={(e) => updateCorporateTieup(corpId, { category: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          updateCorporateTieup(corp.id, { category: corp.category });
+                          updateCorporateTieup(corpId, { category: corp.category });
                           showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
                         }
                       }}
@@ -2091,11 +2224,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <input
                       type="text"
                       value={corp.benefit || ''}
-                      onChange={(e) => updateCorporateTieup(corp.id, { benefit: e.target.value })}
+                      onChange={(e) => updateCorporateTieup(corpId, { benefit: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          updateCorporateTieup(corp.id, { benefit: corp.benefit });
+                          updateCorporateTieup(corpId, { benefit: corp.benefit });
                           showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
                         }
                       }}
@@ -2108,11 +2241,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                     <input
                       type="text"
                       value={corp.employeesCovered || ''}
-                      onChange={(e) => updateCorporateTieup(corp.id, { employeesCovered: e.target.value })}
+                      onChange={(e) => updateCorporateTieup(corpId, { employeesCovered: e.target.value })}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
-                          updateCorporateTieup(corp.id, { employeesCovered: corp.employeesCovered });
+                          updateCorporateTieup(corpId, { employeesCovered: corp.employeesCovered });
                           showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
                         }
                       }}
@@ -2125,21 +2258,43 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <div className={styles.colorPillsGroup} style={{ flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
                   <div className={styles.colorInputWrap}>
                     <label>Text Color</label>
-                    <input
-                      type="color"
-                      value={corp.color || '#2563EB'}
-                      onChange={(e) => updateCorporateTieup(corp.id, { color: e.target.value })}
-                      title="Logo text color"
-                    />
+                    <div className={styles.colorInputInline}>
+                      <input
+                        type="color"
+                        value={isValidHex(corp.color) ? corp.color : '#2563EB'}
+                        onChange={(e) => updateCorporateTieup(corpId, { color: e.target.value })}
+                        title="Choose text color swatch"
+                      />
+                      <input
+                        type="text"
+                        className={styles.colorHexText}
+                        value={corp.color || ''}
+                        onChange={(e) => updateCorporateTieup(corpId, { color: e.target.value })}
+                        placeholder="#2563EB"
+                        maxLength={9}
+                        title="Enter hex color code (e.g. #2563EB)"
+                      />
+                    </div>
                   </div>
                   <div className={styles.colorInputWrap}>
                     <label>Badge BG</label>
-                    <input
-                      type="color"
-                      value={corp.bgColor || '#EFF6FF'}
-                      onChange={(e) => updateCorporateTieup(corp.id, { bgColor: e.target.value })}
-                      title="Badge background color"
-                    />
+                    <div className={styles.colorInputInline}>
+                      <input
+                        type="color"
+                        value={isValidHex(corp.bgColor) ? corp.bgColor : '#EFF6FF'}
+                        onChange={(e) => updateCorporateTieup(corpId, { bgColor: e.target.value })}
+                        title="Choose badge background swatch"
+                      />
+                      <input
+                        type="text"
+                        className={styles.colorHexText}
+                        value={corp.bgColor || ''}
+                        onChange={(e) => updateCorporateTieup(corpId, { bgColor: e.target.value })}
+                        placeholder="#EFF6FF"
+                        maxLength={9}
+                        title="Enter hex color code (e.g. #EFF6FF)"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -2147,9 +2302,13 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                 <button
                   type="button"
                   className={styles.deleteRowBtn}
-                  onClick={() => {
-                    deleteCorporateTieup(corp.id);
-                    showToast(`Partner "${corp.name}" removed.`);
+                  onClick={async () => {
+                    try {
+                      await deleteCorporateTieup(corpId);
+                      showToast(`Partner "${corp.name}" removed from database.`);
+                    } catch (err) {
+                      showToast(`Failed to delete partner: ${err.message || 'Server error'}`);
+                    }
                   }}
                   title="Delete corporate partner"
                   style={{ marginTop: '4px' }}
@@ -2157,7 +2316,8 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                   <Trash2 size={16} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -2385,7 +2545,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
       {/* Modal: Add Corporate Partner */}
       {isAddCorporateOpen && (
         <div className={styles.modalOverlay} onClick={() => setIsAddCorporateOpen(false)}>
-          <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+          <div className={`${styles.modal} ${styles.corporateModal}`} onClick={(e) => e.stopPropagation()}>
             <div className={styles.modalHeader}>
               <h3>Add Corporate Partner</h3>
               <button onClick={() => setIsAddCorporateOpen(false)} className={styles.closeBtn}><X size={18} /></button>
@@ -2404,11 +2564,11 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
 
               <div className={styles.formGrid2}>
                 <div className={styles.formGroup}>
-                  <label>Logo Badge Text (Short Acronym) *</label>
+                  <label>Badge Logo Text *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. TCS"
+                    placeholder="e.g. TCS or MSFT"
                     value={newCorporate.logoText}
                     onChange={(e) => setNewCorporate({ ...newCorporate, logoText: e.target.value })}
                   />
@@ -2447,35 +2607,37 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               <div className={styles.formGrid2}>
                 <div className={styles.formGroup}>
                   <label>Logo Text Color</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className={styles.colorInputRow}>
                     <input
                       type="color"
+                      className={styles.colorSwatchInput}
                       value={newCorporate.color}
                       onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
-                      style={{ width: '40px', height: '36px', padding: 0 }}
                     />
                     <input
                       type="text"
+                      className={styles.colorHexInput}
                       value={newCorporate.color}
                       onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
-                      style={{ flex: 1 }}
+                      placeholder="#2563EB"
                     />
                   </div>
                 </div>
                 <div className={styles.formGroup}>
                   <label>Badge Background Color</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className={styles.colorInputRow}>
                     <input
                       type="color"
+                      className={styles.colorSwatchInput}
                       value={newCorporate.bgColor}
                       onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
-                      style={{ width: '40px', height: '36px', padding: 0 }}
                     />
                     <input
                       type="text"
+                      className={styles.colorHexInput}
                       value={newCorporate.bgColor}
                       onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
-                      style={{ flex: 1 }}
+                      placeholder="#EFF6FF"
                     />
                   </div>
                 </div>
@@ -2485,13 +2647,22 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               <div className={styles.formGroup}>
                 <label>Upload Company Icon / Logo (Optional)</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <label className={styles.corpUploadIconBtn} style={{ padding: '8px 14px', fontSize: '0.82rem', cursor: 'pointer' }}>
+                  <label
+                    className={styles.corpUploadIconBtn}
+                    style={{
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
+                      cursor: isNewCorporateUploading ? 'not-allowed' : 'pointer',
+                      opacity: isNewCorporateUploading ? 0.6 : 1
+                    }}
+                  >
                     <Upload size={14} />
-                    <span>{newCorporate.logo ? 'Change Icon' : 'Upload Icon (PNG, SVG, JPG)'}</span>
+                    <span>{isNewCorporateUploading ? 'Uploading...' : (newCorporate.logo ? 'Change Icon' : 'Upload Icon (PNG, SVG, JPG)')}</span>
                     <input
                       type="file"
                       accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
                       style={{ display: 'none' }}
+                      disabled={isNewCorporateUploading}
                       onChange={handleNewCorporateLogoUpload}
                     />
                   </label>
@@ -2502,6 +2673,7 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
                       style={{ width: '32px', height: '32px' }}
                       onClick={() => setNewCorporate(prev => ({ ...prev, logo: '' }))}
                       title="Remove Icon"
+                      disabled={isNewCorporateUploading}
                     >
                       <Trash2 size={14} />
                     </button>

@@ -1,9 +1,10 @@
 export const initialHeroContent = {
-  badge: 'Your Health Partner, Every Step of the Way',
+  badge: 'One Buddy for all Need',
   titleLine1: 'Find Doctors, Book',
   titleLine2: 'Appointments & Take',
   titleHighlight: 'Care of Your Health',
   description: 'The Sehat Buddy is your one-stop platform to consult doctors, book tests, surgeries and explore trusted healthcare services – anytime, anywhere.',
+  city: 'Bengaluru',
   heroImage: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792239399/sehatbuddy/hero/i3g2e9ptcdydfnfeqf9c.jpg',
   stats: [
     { id: 1, label: 'Trusted by', value: '10M+ Users' },

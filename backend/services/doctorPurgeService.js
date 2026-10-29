@@ -45,17 +45,7 @@ export const purgeDoctorPermanently = async (identifier) => {
     }
   }
 
-  // 2. System Protection Check
-  if (
-    (doctor && (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma')))) ||
-    rawEmail === 'dr.rahul@sehatbuddy.com' ||
-    (typeof raw === 'string' && raw.toLowerCase().includes('rahul'))
-  ) {
-    const error = new Error('System protection: Dr. Rahul Verma cannot be deleted.');
-    error.statusCode = 400;
-    throw error;
-  }
-
+  // 2. Resolve target Doctor IDs and Email
   const docId = doctor ? doctor._id : (mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null);
   const docCustomId = doctor?.id || (!mongoose.Types.ObjectId.isValid(raw) && !raw.includes('@') && raw ? raw : null);
   const docEmail = (doctor?.email || rawEmail || (raw.includes('@') ? decodeURIComponent(raw) : '')).toLowerCase().trim();

@@ -47,6 +47,8 @@ export const broadcastSync = (key, data) => {
   } catch {}
 };
 
+export const isSame = (prev, next) => JSON.stringify(prev) === JSON.stringify(next);
+
 // Robust ID matching helper that safely handles MongoDB _id, numeric id, and email
 export const matchesId = (item, id) => {
   if (!item || id === undefined || id === null) return false;
@@ -359,7 +361,7 @@ export const DataProvider = ({ children }) => {
       const saved = localStorage.getItem(STORAGE_KEY_CORPORATE);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {}
     return initialCorporateTieups;
@@ -621,16 +623,29 @@ export const DataProvider = ({ children }) => {
             if (cleanHero.whyChooseVideoUrl === 'https://www.youtube.com/watch?v=zCCD52Pty4A') {
               cleanHero.whyChooseVideoUrl = '';
             }
-            return cleanHero;
+            return isSame(prev, cleanHero) ? prev : cleanHero;
           });
         }
         if (bData && typeof bData === 'object') {
-          setBranding(prev => ({ ...prev, ...bData }));
+          setBranding(prev => (isSame(prev, { ...prev, ...bData }) ? prev : { ...prev, ...bData }));
         }
-        if (Array.isArray(sList)) setServices(sList.map(s => ({ ...s, iconPath: resolveMediaUrl(s.iconPath) })));
-        if (Array.isArray(fList)) setFeatures(fList);
-        if (Array.isArray(aList)) setArticles(aList.map(a => ({ ...a, image: resolveMediaUrl(a.image) })));
-        if (Array.isArray(cList)) setCorporateTieups(cList);
+        if (Array.isArray(sList)) {
+          const mappedServices = sList.map(s => ({ ...s, iconPath: resolveMediaUrl(s.iconPath) }));
+          setServices(prev => (isSame(prev, mappedServices) ? prev : mappedServices));
+        }
+        if (Array.isArray(fList)) {
+          setFeatures(prev => (isSame(prev, fList) ? prev : fList));
+        }
+        if (Array.isArray(aList)) {
+          const mappedArticles = aList.map(a => ({ ...a, image: resolveMediaUrl(a.image) }));
+          setArticles(prev => (isSame(prev, mappedArticles) ? prev : mappedArticles));
+        }
+        if (Array.isArray(cList)) {
+          setCorporateTieups(prev => (isSame(prev, cList) ? prev : cList));
+          try {
+            localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(cList));
+          } catch {}
+        }
       }
     } catch {}
   }, []);
@@ -948,7 +963,73 @@ export const DataProvider = ({ children }) => {
                 refreshHospitals();
               }
             } else if (collection === 'contents') {
-              refreshContent();
+              if (payload.fullDocument?.type && payload.fullDocument?.data) {
+                const { type, data } = payload.fullDocument;
+                if (type === 'hero' && data && typeof data === 'object') {
+                  setHeroContent(prev => {
+                    const clean = { ...prev, ...data };
+                    clean.heroImage = resolveMediaUrl(clean.heroImage || prev?.heroImage);
+                    if (clean.whyChooseVideoUrl === 'https://www.youtube.com/watch?v=zCCD52Pty4A') {
+                      clean.whyChooseVideoUrl = '';
+                    }
+                    try {
+                      localStorage.setItem(STORAGE_KEY_HERO, JSON.stringify(clean));
+                      broadcastSync(STORAGE_KEY_HERO, clean);
+                    } catch {}
+                    return clean;
+                  });
+                } else if (type === 'services' && Array.isArray(data)) {
+                  const mapped = data.map(s => ({ ...s, iconPath: resolveMediaUrl(s.iconPath) }));
+                  setServices(mapped);
+                  try {
+                    localStorage.setItem(STORAGE_KEY_SERVICES, JSON.stringify(mapped));
+                    broadcastSync(STORAGE_KEY_SERVICES, mapped);
+                  } catch {}
+                } else if (type === 'features' && Array.isArray(data)) {
+                  setFeatures(data);
+                  try {
+                    localStorage.setItem(STORAGE_KEY_FEATURES, JSON.stringify(data));
+                    broadcastSync(STORAGE_KEY_FEATURES, data);
+                  } catch {}
+                } else if (type === 'articles' && Array.isArray(data)) {
+                  const mapped = data.map(a => ({ ...a, image: resolveMediaUrl(a.image) }));
+                  setArticles(mapped);
+                  try {
+                    localStorage.setItem(STORAGE_KEY_ARTICLES, JSON.stringify(mapped));
+                    broadcastSync(STORAGE_KEY_ARTICLES, mapped);
+                  } catch {}
+                } else if (type === 'branding' && data && typeof data === 'object') {
+                  setBranding(prev => {
+                    const merged = { ...prev, ...data };
+                    try {
+                      localStorage.setItem(STORAGE_KEY_BRANDING, JSON.stringify(merged));
+                      broadcastSync(STORAGE_KEY_BRANDING, merged);
+                    } catch {}
+                    return merged;
+                  });
+                } else if (type === 'corporate') {
+                  const safeData = Array.isArray(data) ? data : (data && typeof data === 'object' ? [data] : []);
+                  setCorporateTieups(prev => (isSame(prev, safeData) ? prev : safeData));
+                  try {
+                    localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(safeData));
+                    broadcastSync(STORAGE_KEY_CORPORATE, safeData);
+                  } catch {}
+                }
+              }
+            } else if (collection === 'corporates') {
+              if (payload.action === 'delete' && payload.docId === 'all') {
+                setCorporateTieups(prev => (prev.length === 0 ? prev : []));
+                try {
+                  localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify([]));
+                  broadcastSync(STORAGE_KEY_CORPORATE, []);
+                } catch {}
+              } else if (Array.isArray(payload.data)) {
+                setCorporateTieups(prev => (isSame(prev, payload.data) ? prev : payload.data));
+                try {
+                  localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(payload.data));
+                  broadcastSync(STORAGE_KEY_CORPORATE, payload.data);
+                } catch {}
+              }
             } else if (collection === 'faqs') {
               if (payload.operation === 'delete' || payload.action === 'delete') {
                 const targetDocId = payload.docId || payload.id;
@@ -1154,6 +1235,7 @@ export const DataProvider = ({ children }) => {
 
   // Sync to localStorage and broadcast real-time updates with loop prevention
   const lastSyncRef = useRef({});
+  const corporateSyncTimeoutRef = useRef(null);
 
   const syncState = (key, value) => {
     try {
@@ -1973,10 +2055,10 @@ export const DataProvider = ({ children }) => {
   };
 
   // Corporate Tie-ups CRUD
-  const addCorporateTieup = (tieupData) => {
+  const addCorporateTieup = async (tieupData) => {
     const newTieup = {
       ...tieupData,
-      id: Date.now(),
+      id: tieupData.id || Date.now(),
       name: tieupData.name || 'New Corporate Partner',
       shortName: tieupData.shortName || (tieupData.name ? tieupData.name.split(' ')[0] : 'Partner'),
       logoText: tieupData.logoText || (tieupData.name ? tieupData.name.slice(0, 4).toUpperCase() : 'CORP'),
@@ -1986,28 +2068,88 @@ export const DataProvider = ({ children }) => {
       bgColor: tieupData.bgColor || '#EFF6FF',
       employeesCovered: tieupData.employeesCovered || '50,000+'
     };
-    setCorporateTieups(prev => {
-      const next = [newTieup, ...prev];
-      api.updateCorporateTieups(next).catch(() => {});
-      return next;
-    });
+    const safePrev = Array.isArray(corporateTieups) ? corporateTieups : [];
+    const next = [newTieup, ...safePrev];
+    setCorporateTieups(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(next));
+      broadcastSync(STORAGE_KEY_CORPORATE, next);
+    } catch {}
+    try {
+      await api.updateCorporateTieups(next);
+    } catch (err) {
+      console.error('Failed to save corporate tieups to server:', err);
+      throw err;
+    }
     return newTieup;
   };
 
   const updateCorporateTieup = (id, updatedData) => {
     setCorporateTieups(prev => {
-      const next = prev.map(c => (String(c.id) === String(id) ? { ...c, ...updatedData } : c));
-      api.updateCorporateTieups(next).catch(() => {});
+      const safePrev = Array.isArray(prev) ? prev : [];
+      const next = safePrev.map(c => (matchesId(c, id) ? { ...c, ...updatedData } : c));
+      if (isSame(safePrev, next)) return prev;
+      try {
+        localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(next));
+        broadcastSync(STORAGE_KEY_CORPORATE, next);
+      } catch {}
+
+      if (corporateSyncTimeoutRef.current) {
+        clearTimeout(corporateSyncTimeoutRef.current);
+      }
+      corporateSyncTimeoutRef.current = setTimeout(() => {
+        api.updateCorporateTieups(next).catch((err) => {
+          console.error('Failed to update corporate tieup on server:', err);
+        });
+      }, 350);
+
       return next;
     });
   };
 
-  const deleteCorporateTieup = (id) => {
-    setCorporateTieups(prev => {
-      const next = prev.filter(c => String(c.id) !== String(id));
-      api.updateCorporateTieups(next).catch(() => {});
-      return next;
-    });
+  const saveCorporateTieupsNow = async () => {
+    if (corporateSyncTimeoutRef.current) {
+      clearTimeout(corporateSyncTimeoutRef.current);
+    }
+    return api.updateCorporateTieups(corporateTieups);
+  };
+
+  const deleteCorporateTieup = async (id) => {
+    if (corporateSyncTimeoutRef.current) {
+      clearTimeout(corporateSyncTimeoutRef.current);
+    }
+    const safePrev = Array.isArray(corporateTieups) ? corporateTieups : [];
+    const next = safePrev.filter(c => !matchesId(c, id));
+    setCorporateTieups(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(next));
+      broadcastSync(STORAGE_KEY_CORPORATE, next);
+    } catch {}
+    try {
+      await api.updateCorporateTieups(next);
+    } catch (err) {
+      console.error('Failed to delete corporate tieup on server:', err);
+      throw err;
+    }
+    return next;
+  };
+
+  const deleteAllCorporateTieups = async () => {
+    if (corporateSyncTimeoutRef.current) {
+      clearTimeout(corporateSyncTimeoutRef.current);
+    }
+    const next = [];
+    setCorporateTieups(next);
+    try {
+      localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(next));
+      broadcastSync(STORAGE_KEY_CORPORATE, next);
+    } catch {}
+    try {
+      await api.deleteAllCorporates();
+    } catch {
+      await api.updateCorporateTieups([]);
+    }
+    return next;
   };
 
   // FAQs CRUD
@@ -2345,6 +2487,8 @@ export const DataProvider = ({ children }) => {
         addCorporateTieup,
         updateCorporateTieup,
         deleteCorporateTieup,
+        deleteAllCorporateTieups,
+        saveCorporateTieupsNow,
         // FAQs
         faqs,
         addFaq,

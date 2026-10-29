@@ -1149,13 +1149,6 @@ export const deleteDoctorProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Doctor not found in database' });
     }
 
-    if (doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))) {
-      return res.status(400).json({
-        success: false,
-        message: 'System protection: Dr. Rahul Verma cannot be deleted.'
-      });
-    }
-
     const isSelf = req.user && (
       req.user.id === doctor._id.toString() ||
       (req.user.email && doctor.email && req.user.email.toLowerCase() === doctor.email.toLowerCase())

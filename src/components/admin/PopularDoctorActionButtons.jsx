@@ -86,6 +86,17 @@ const PopularDoctorActionButtons = React.memo(({
     setCurrentPopular(targetValue);
     setIsPending(true);
 
+    // Instant optimistic toast notification with zero network latency delay
+    if (showToast) {
+      showToast(
+        targetValue
+          ? `⭐ ${doctor?.name || 'Doctor'} marked as Popular Doctor!`
+          : `Removed ${doctor?.name || 'Doctor'} from Popular Doctors.`,
+        'success',
+        2500
+      );
+    }
+
     const clientTimestamp = getMonotonicTimestamp(doctor?.starUpdatedAt);
     const extraPayload = { starMutationTimestamp: clientTimestamp };
 
@@ -99,16 +110,6 @@ const PopularDoctorActionButtons = React.memo(({
       // If a newer click occurred while this network request was in-flight, discard this completion
       if (currentSeq !== activeSequenceRef.current || !isMountedRef.current) {
         return;
-      }
-
-      if (showToast) {
-        showToast(
-          targetValue
-            ? `⭐ ${doctor?.name || 'Doctor'} marked as Popular Doctor!`
-            : `Removed ${doctor?.name || 'Doctor'} from Popular Doctors.`,
-          'success',
-          2500
-        );
       }
     } catch (err) {
       // If a newer click occurred, do not rollback older state

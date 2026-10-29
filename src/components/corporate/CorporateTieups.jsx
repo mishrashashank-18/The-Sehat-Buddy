@@ -74,7 +74,7 @@ const CorporateTieups = () => {
                         {corp.logoText}
                       </span>
                     </div>
-                    <span className={styles.categoryTag}>{corp.category}</span>
+                    {corp.category && <span className={styles.categoryTag}>{corp.category}</span>}
                   </div>
 
                   <h3 className={styles.companyName}>{corp.name}</h3>
@@ -85,9 +85,11 @@ const CorporateTieups = () => {
                       <ShieldCheck size={14} color="#16a34a" />
                       <span>Corporate Tie-up</span>
                     </div>
-                    <span className={styles.empCovered}>
-                      {corp.employeesCovered} Employees
-                    </span>
+                    {corp.employeesCovered && (
+                      <span className={styles.empCovered}>
+                        {corp.employeesCovered} Employees
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

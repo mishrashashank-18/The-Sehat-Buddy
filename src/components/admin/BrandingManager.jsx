@@ -9,11 +9,17 @@ import {
   Sparkles,
   Eye,
   Type,
-  Globe
+  Globe,
+  Plus,
+  ExternalLink,
+  Share2,
+  Check,
+  X
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
-import { DEFAULT_FAVICON, DEFAULT_FAVICON_CIRCULAR } from '../../data/branding';
+import { DEFAULT_FAVICON, DEFAULT_FAVICON_CIRCULAR, DEFAULT_SOCIAL_LINKS } from '../../data/branding';
+import { SocialIcon, SUPPORTED_PLATFORMS } from '../common/SocialIcon';
 import { NEW_SEHAT_BUDDY_FAVICON } from '../../data/faviconDataUri';
 import logoImg from '../../assets/images/logo.png';
 import styles from './BrandingManager.module.css';
@@ -94,7 +100,10 @@ const BrandingManager = ({ showToast }) => {
     showTagline: branding?.showTagline !== false,
     faviconType: branding?.faviconType ?? 'default', // 'default' | 'custom' | 'logo'
     favicon: branding?.favicon ?? DEFAULT_FAVICON,
-    faviconCircular: branding?.faviconCircular !== false
+    faviconCircular: branding?.faviconCircular !== false,
+    socialLinks: Array.isArray(branding?.socialLinks) && branding.socialLinks.length > 0
+      ? branding.socialLinks
+      : DEFAULT_SOCIAL_LINKS
   });
 
   const formDataRef = useRef(formData);
@@ -158,7 +167,10 @@ const BrandingManager = ({ showToast }) => {
           showTagline: branding.showTagline !== false,
           faviconType: branding.faviconType ?? 'default',
           favicon: branding.favicon ?? DEFAULT_FAVICON,
-          faviconCircular: branding.faviconCircular !== false
+          faviconCircular: branding.faviconCircular !== false,
+          socialLinks: Array.isArray(branding.socialLinks) && branding.socialLinks.length > 0
+            ? branding.socialLinks
+            : (prev.socialLinks || DEFAULT_SOCIAL_LINKS)
         };
         formDataRef.current = next;
         if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
@@ -328,6 +340,67 @@ const BrandingManager = ({ showToast }) => {
       faviconCircular: checked,
       favicon: newFavicon
     });
+  };
+
+  // Social Media Links CRUD Handlers
+  const handleSocialFieldChange = (index, field, value) => {
+    const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
+    const currentItem = list[index] || {};
+    const updatedItem = { ...currentItem, [field]: value };
+
+    // Auto-populate friendly label if platform changed and label was empty or matching old platform
+    if (field === 'platform') {
+      const matched = SUPPORTED_PLATFORMS.find((p) => p.value === value);
+      if (matched && (!currentItem.label || currentItem.label.toLowerCase() === (currentItem.platform || '').toLowerCase())) {
+        updatedItem.label = matched.label;
+      }
+    }
+
+    list[index] = updatedItem;
+    updateFormField('socialLinks', list);
+  };
+
+  const handleToggleSocialLink = (index) => {
+    const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
+    const currentItem = list[index] || {};
+    const isEnabled = currentItem.enabled !== false;
+    list[index] = { ...currentItem, enabled: !isEnabled };
+    updateFormField('socialLinks', list);
+  };
+
+  const handleDeleteSocialLink = (index) => {
+    const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
+    const itemToDelete = list[index];
+    const updated = list.filter((_, i) => i !== index);
+    updateFormField('socialLinks', updated);
+    if (showToast) {
+      showToast(`Removed ${itemToDelete?.label || itemToDelete?.platform || 'social'} link.`);
+    }
+  };
+
+  const handleAddSocialLink = () => {
+    const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
+    const newLink = {
+      id: `social_${Date.now()}`,
+      platform: 'youtube',
+      label: 'YouTube',
+      url: '',
+      enabled: true
+    };
+    const updated = [...list, newLink];
+    updateFormField('socialLinks', updated);
+    if (showToast) {
+      showToast('New YouTube social link added. Enter URL and save.');
+    }
+  };
+
+  const handleResetSocialLinks = () => {
+    if (window.confirm('Reset all social links back to defaults (Facebook, Twitter, Instagram, LinkedIn, YouTube)?')) {
+      updateFormField('socialLinks', DEFAULT_SOCIAL_LINKS);
+      if (showToast) {
+        showToast('Social links reset to default channels.');
+      }
+    }
   };
 
   // Save changes
@@ -787,6 +860,180 @@ const BrandingManager = ({ showToast }) => {
                 Processing favicon upload...
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Section 4: Social Media Links (Footer) */}
+        <div className={styles.sectionCard}>
+          <div className={styles.sectionHeader}>
+            <div className={styles.sectionIcon}>
+              <Share2 size={20} />
+            </div>
+            <div>
+              <h2 className={styles.sectionTitle}>Social Media Links (Footer)</h2>
+              <p className={styles.sectionDescription}>
+                Manage the circular social links displayed in the website footer. Add YouTube, Facebook, Twitter, Instagram, LinkedIn, or custom links.
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.sectionBody}>
+            {/* Live Footer Preview Box */}
+            <div className={styles.footerPreviewBox}>
+              <span className={styles.footerPreviewLabel}>Live Footer Preview:</span>
+              <div className={styles.footerPreviewCircles}>
+                {(formData.socialLinks || [])
+                  .filter((l) => l.enabled !== false)
+                  .map((l, idx) => (
+                    <a
+                      key={l.id || idx}
+                      href={l.url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.footerPreviewCircle}
+                      title={`${l.label || l.platform}: ${l.url || 'No URL configured'}`}
+                      onClick={(e) => {
+                        if (!l.url) e.preventDefault();
+                      }}
+                    >
+                      <SocialIcon platform={l.platform} size={18} />
+                    </a>
+                  ))}
+              </div>
+            </div>
+
+            {/* List of social links */}
+            <div className={styles.socialLinksList}>
+              {(formData.socialLinks || []).map((link, idx) => {
+                const isEnabled = link.enabled !== false;
+                const hasUrl = Boolean(link.url && link.url.trim() && link.url !== '#');
+
+                return (
+                  <div
+                    key={link.id || idx}
+                    className={`${styles.socialCard} ${!isEnabled ? styles.socialCardDisabled : ''}`}
+                  >
+                    {/* Icon Preview */}
+                    <div className={styles.socialIconPreviewWrapper} title={link.label || link.platform}>
+                      <SocialIcon platform={link.platform} size={22} />
+                    </div>
+
+                    {/* Form Controls */}
+                    <div className={styles.socialInputsGrid}>
+                      <div>
+                        <label className={styles.label} style={{ fontSize: '0.78rem' }}>Platform</label>
+                        <select
+                          value={link.platform || 'youtube'}
+                          onChange={(e) => handleSocialFieldChange(idx, 'platform', e.target.value)}
+                          className={styles.textInput}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        >
+                          {SUPPORTED_PLATFORMS.map((plat) => (
+                            <option key={plat.value} value={plat.value}>
+                              {plat.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className={styles.label} style={{ fontSize: '0.78rem' }}>Display Label</label>
+                        <input
+                          type="text"
+                          value={link.label || ''}
+                          onChange={(e) => handleSocialFieldChange(idx, 'label', e.target.value)}
+                          onBlur={handleBlurSync}
+                          onKeyDown={handleKeyDownEnter}
+                          placeholder="e.g. YouTube Channel"
+                          className={styles.textInput}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className={styles.label} style={{ fontSize: '0.78rem' }}>Profile or Channel URL</label>
+                        <input
+                          type="url"
+                          value={link.url || ''}
+                          onChange={(e) => handleSocialFieldChange(idx, 'url', e.target.value)}
+                          onBlur={handleBlurSync}
+                          onKeyDown={handleKeyDownEnter}
+                          placeholder={
+                            link.platform === 'youtube'
+                              ? 'https://www.youtube.com/@TheSehatBuddy'
+                              : link.platform === 'facebook'
+                              ? 'https://www.facebook.com/your-page'
+                              : link.platform === 'twitter'
+                              ? 'https://x.com/your-handle'
+                              : link.platform === 'instagram'
+                              ? 'https://www.instagram.com/your-handle/'
+                              : link.platform === 'linkedin'
+                              ? 'https://www.linkedin.com/company/your-company/'
+                              : 'https://example.com'
+                          }
+                          className={styles.textInput}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className={styles.socialActionsRow}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSocialLink(idx)}
+                        className={`${styles.socialToggleBtn} ${isEnabled ? styles.socialToggleActive : styles.socialToggleInactive}`}
+                        title={isEnabled ? 'Visible in footer (Click to hide)' : 'Hidden from footer (Click to show)'}
+                      >
+                        {isEnabled ? <Check size={14} /> : <X size={14} />}
+                        {isEnabled ? 'Active' : 'Hidden'}
+                      </button>
+
+                      {hasUrl && (
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={styles.socialTestBtn}
+                          title="Open URL in new tab"
+                        >
+                          <ExternalLink size={16} />
+                        </a>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSocialLink(idx)}
+                        className={styles.socialDeleteBtn}
+                        title="Delete this link"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Actions for Social Section */}
+            <div className={styles.socialSectionActions}>
+              <button
+                type="button"
+                onClick={handleAddSocialLink}
+                className={styles.addSocialBtn}
+              >
+                <Plus size={16} /> Add Social Link
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetSocialLinks}
+                className={styles.resetSocialBtn}
+                title="Restore default social links"
+              >
+                <RotateCcw size={14} /> Reset Links
+              </button>
+            </div>
           </div>
         </div>
 
