@@ -153,9 +153,9 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
       } catch (cErr) {
         console.warn('Corporate sync warning in contentRoutes:', cErr.message);
       }
+    } else {
+      broadcastDbChange('contents', 'update', content._id, { type, data: finalData });
     }
-
-    broadcastDbChange('contents', 'update', content._id, { type, data: finalData });
     res.json({ success: true, data: content, message: `${type} updated` });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

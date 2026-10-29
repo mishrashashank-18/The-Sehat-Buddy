@@ -2084,11 +2084,12 @@ export const DataProvider = ({ children }) => {
     return newTieup;
   };
 
-  const updateCorporateTieup = (id, updatedData) => {
+  const updateCorporateTieup = async (id, updatedData, immediate = true) => {
+    let nextState = null;
     setCorporateTieups(prev => {
       const safePrev = Array.isArray(prev) ? prev : [];
       const next = safePrev.map(c => (matchesId(c, id) ? { ...c, ...updatedData } : c));
-      if (isSame(safePrev, next)) return prev;
+      nextState = next;
       try {
         localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(next));
         broadcastSync(STORAGE_KEY_CORPORATE, next);
@@ -2097,14 +2098,21 @@ export const DataProvider = ({ children }) => {
       if (corporateSyncTimeoutRef.current) {
         clearTimeout(corporateSyncTimeoutRef.current);
       }
-      corporateSyncTimeoutRef.current = setTimeout(() => {
-        api.updateCorporateTieups(next).catch((err) => {
-          console.error('Failed to update corporate tieup on server:', err);
-        });
-      }, 350);
+      if (!immediate) {
+        corporateSyncTimeoutRef.current = setTimeout(() => {
+          api.updateCorporateTieups(next).catch((err) => {
+            console.error('Failed to update corporate tieup on server:', err);
+          });
+        }, 350);
+      }
 
       return next;
     });
+
+    if (immediate && nextState) {
+      await api.updateCorporateTieups(nextState);
+    }
+    return nextState;
   };
 
   const saveCorporateTieupsNow = async () => {

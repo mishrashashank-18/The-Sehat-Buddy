@@ -16,7 +16,9 @@ import {
   Video,
   Building2,
   Users,
-  ExternalLink
+  ExternalLink,
+  Save,
+  Check
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -64,6 +66,343 @@ const getEmbedUrl = (url, autoplay = true) => {
   }
   return url;
 };
+
+// Isolated, memoized row component with local staged draft state and card-level Save
+const CorporatePartnerRow = React.memo(({
+  corp,
+  onSave,
+  onDelete,
+  showToast
+}) => {
+  const corpId = corp.id !== undefined && corp.id !== null ? corp.id : corp._id;
+
+  const [draft, setDraft] = useState({
+    name: corp.name || '',
+    shortName: corp.shortName || '',
+    logoText: corp.logoText || '',
+    category: corp.category || '',
+    benefit: corp.benefit || '',
+    employeesCovered: corp.employeesCovered || '',
+    color: corp.color || '#2563EB',
+    bgColor: corp.bgColor || '#EFF6FF',
+    logo: corp.logo || ''
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  // Synchronize draft if corp updates externally (e.g. initial fetch or database reload)
+  useEffect(() => {
+    setDraft({
+      name: corp.name || '',
+      shortName: corp.shortName || '',
+      logoText: corp.logoText || '',
+      category: corp.category || '',
+      benefit: corp.benefit || '',
+      employeesCovered: corp.employeesCovered || '',
+      color: corp.color || '#2563EB',
+      bgColor: corp.bgColor || '#EFF6FF',
+      logo: corp.logo || ''
+    });
+  }, [corp.name, corp.shortName, corp.logoText, corp.category, corp.benefit, corp.employeesCovered, corp.color, corp.bgColor, corp.logo]);
+
+  const hasChanges = (
+    (draft.name || '').trim() !== (corp.name || '').trim() ||
+    (draft.logoText || '').trim() !== (corp.logoText || '').trim() ||
+    (draft.category || '').trim() !== (corp.category || '').trim() ||
+    (draft.benefit || '').trim() !== (corp.benefit || '').trim() ||
+    (draft.employeesCovered || '').trim() !== (corp.employeesCovered || '').trim() ||
+    (draft.color || '#2563EB').toLowerCase() !== (corp.color || '#2563EB').toLowerCase() ||
+    (draft.bgColor || '#EFF6FF').toLowerCase() !== (corp.bgColor || '#EFF6FF').toLowerCase() ||
+    (draft.logo || '') !== (corp.logo || '')
+  );
+
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(png|jpe?g|svg|webp|ico)$/i)) {
+      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP, ICO).');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Logo file size exceeds 5MB limit.');
+      e.target.value = '';
+      return;
+    }
+
+    e.target.value = '';
+    setIsUploadingLogo(true);
+
+    try {
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
+      if (uploadedUrl) {
+        setDraft(prev => ({ ...prev, logo: uploadedUrl }));
+        showToast('Logo loaded into draft! Click "Save" on card to publish.');
+      } else {
+        throw new Error('Upload returned no URL');
+      }
+    } catch (err) {
+      console.warn('Fallback Data URI logo upload used:', err.message);
+      const reader = new FileReader();
+      reader.onload = () => {
+        setDraft(prev => ({ ...prev, logo: reader.result }));
+        showToast('Logo loaded into draft! Click "Save" on card to publish.');
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleLogoRemove = () => {
+    setDraft(prev => ({ ...prev, logo: '' }));
+    showToast('Logo removed from draft. Click "Save" on card to publish.');
+  };
+
+  const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(corpId, draft);
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 2200);
+    } catch (err) {
+      // handled by onSave
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
+      {/* Visual Preview Badge with Icon Upload */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+        <div
+          className={styles.corpBadgePreview}
+          style={{
+            backgroundColor: draft.bgColor || '#EFF6FF',
+            color: draft.color || '#2563EB'
+          }}
+          title={draft.logo ? `Custom icon for ${draft.name || 'Company'}` : "Badge Live Preview"}
+        >
+          {isUploadingLogo ? (
+            <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Loading...</span>
+          ) : draft.logo ? (
+            <img
+              key={draft.logo}
+              src={draft.logo}
+              alt={draft.name || 'Company icon'}
+              className={styles.corpBadgeImg}
+              loading="eager"
+              decoding="async"
+            />
+          ) : (
+            <span>{draft.logoText || draft.shortName || 'CORP'}</span>
+          )}
+        </div>
+
+        <div className={styles.corpLogoUploadWrap}>
+          <label
+            className={styles.corpUploadIconBtn}
+            title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)"
+            style={{
+              opacity: isUploadingLogo ? 0.6 : 1,
+              pointerEvents: isUploadingLogo ? 'none' : 'auto'
+            }}
+          >
+            <Upload size={11} />
+            <span>{isUploadingLogo ? 'Uploading...' : (draft.logo ? 'Change' : 'Upload Icon')}</span>
+            <input
+              type="file"
+              accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
+              style={{ display: 'none' }}
+              disabled={isUploadingLogo}
+              onChange={handleLogoUpload}
+            />
+          </label>
+          {draft.logo && (
+            <button
+              type="button"
+              className={styles.corpRemoveIconBtn}
+              onClick={handleLogoRemove}
+              title="Remove custom icon and revert to text code"
+              disabled={isUploadingLogo}
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
+        <div className={styles.formGroup}>
+          <label>Company Name</label>
+          <input
+            type="text"
+            value={draft.name}
+            onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            placeholder="e.g. Tata Consultancy Services"
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Logo Text (Short Code)</label>
+          <input
+            type="text"
+            value={draft.logoText}
+            onChange={(e) => setDraft(prev => ({ ...prev, logoText: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            placeholder="e.g. TCS"
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Industry / Category</label>
+          <input
+            type="text"
+            value={draft.category}
+            onChange={(e) => setDraft(prev => ({ ...prev, category: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            placeholder="e.g. IT & Consulting"
+          />
+        </div>
+
+        <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
+          <label>Benefit Offered</label>
+          <input
+            type="text"
+            value={draft.benefit}
+            onChange={(e) => setDraft(prev => ({ ...prev, benefit: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            placeholder="e.g. Comprehensive Employee Wellness & Health Checks"
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label>Employees Covered</label>
+          <input
+            type="text"
+            value={draft.employeesCovered}
+            onChange={(e) => setDraft(prev => ({ ...prev, employeesCovered: e.target.value }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSave();
+              }
+            }}
+            placeholder="e.g. 500,000+"
+          />
+        </div>
+      </div>
+
+      {/* Color Controls */}
+      <div className={styles.colorPillsGroup} style={{ flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+        <div className={styles.colorInputWrap}>
+          <label>Text Color</label>
+          <div className={styles.colorInputInline}>
+            <input
+              type="color"
+              value={isValidHex(draft.color) ? draft.color : '#2563EB'}
+              onChange={(e) => setDraft(prev => ({ ...prev, color: e.target.value }))}
+              title="Choose text color swatch"
+            />
+            <input
+              type="text"
+              className={styles.colorHexText}
+              value={draft.color}
+              onChange={(e) => setDraft(prev => ({ ...prev, color: e.target.value }))}
+              placeholder="#2563EB"
+              maxLength={9}
+              title="Enter hex color code (e.g. #2563EB)"
+            />
+          </div>
+        </div>
+        <div className={styles.colorInputWrap}>
+          <label>Badge BG</label>
+          <div className={styles.colorInputInline}>
+            <input
+              type="color"
+              value={isValidHex(draft.bgColor) ? draft.bgColor : '#EFF6FF'}
+              onChange={(e) => setDraft(prev => ({ ...prev, bgColor: e.target.value }))}
+              title="Choose badge background swatch"
+            />
+            <input
+              type="text"
+              className={styles.colorHexText}
+              value={draft.bgColor}
+              onChange={(e) => setDraft(prev => ({ ...prev, bgColor: e.target.value }))}
+              placeholder="#EFF6FF"
+              maxLength={9}
+              title="Enter hex color code (e.g. #EFF6FF)"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Card Actions: Save & Delete */}
+      <div className={styles.cardActionsCol}>
+        <button
+          type="button"
+          className={`${styles.saveCardBtn} ${hasChanges ? styles.saveCardBtnActive : ''} ${justSaved ? styles.saveCardBtnSuccess : ''}`}
+          onClick={handleSave}
+          disabled={isSaving}
+          title={hasChanges ? "Save changes to frontend and database" : "Click to save card"}
+        >
+          {isSaving ? (
+            <>
+              <Loader2 size={13} className={styles.saveCardSpinner} />
+              <span>Saving...</span>
+            </>
+          ) : justSaved ? (
+            <>
+              <Check size={13} />
+              <span>Saved!</span>
+            </>
+          ) : (
+            <>
+              <Save size={13} />
+              <span>Save</span>
+            </>
+          )}
+        </button>
+
+        <button
+          type="button"
+          className={styles.deleteRowBtn}
+          onClick={() => onDelete(corpId, draft.name || corp.name)}
+          title="Delete corporate partner"
+          disabled={isSaving}
+        >
+          <Trash2 size={15} />
+        </button>
+      </div>
+    </div>
+  );
+});
 
 const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
   const {
@@ -720,6 +1059,16 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const handleSaveCorporatePartner = async (corpId, updatedData) => {
+    try {
+      await updateCorporateTieup(corpId, updatedData, true);
+      showToast(`Corporate partner "${updatedData.name || 'entry'}" saved to database and live site!`);
+    } catch (err) {
+      showToast(`Failed to save partner: ${err.message || 'Server error'}`);
+      throw err;
+    }
   };
 
   const handleCorporateLogoUpload = async (corpId, e) => {
@@ -2097,225 +2446,20 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
             {corporateTieups?.map((corp) => {
               const corpId = corp.id !== undefined && corp.id !== null ? corp.id : corp._id;
               return (
-              <div key={corpId} className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
-                {/* Visual Preview Badge with Icon Upload */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                  <div
-                    style={{
-                      width: '64px',
-                      height: '46px',
-                      borderRadius: '8px',
-                      backgroundColor: corp.bgColor || '#EFF6FF',
-                      color: corp.color || '#2563EB',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 800,
-                      fontSize: '0.82rem',
-                      flexShrink: 0,
-                      border: '1px solid #E2E8F0',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                      marginTop: '4px',
-                      padding: '4px',
-                      overflow: 'hidden'
-                    }}
-                    title={corp.logo ? `Custom icon for ${corp.name}` : "Badge Live Preview"}
-                  >
-                    {uploadingLogoCorpId === corpId ? (
-                      <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Saving...</span>
-                    ) : corp.logo ? (
-                      <img
-                        src={corp.logo}
-                        alt={corp.name || 'Company icon'}
-                        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                      />
-                    ) : (
-                      <span>{corp.logoText || corp.shortName || 'CORP'}</span>
-                    )}
-                  </div>
-
-                  <div className={styles.corpLogoUploadWrap}>
-                    <label
-                      className={styles.corpUploadIconBtn}
-                      title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)"
-                      style={{
-                        opacity: uploadingLogoCorpId === corpId ? 0.6 : 1,
-                        pointerEvents: uploadingLogoCorpId === corpId ? 'none' : 'auto'
-                      }}
-                    >
-                      <Upload size={11} />
-                      <span>{uploadingLogoCorpId === corpId ? 'Uploading...' : (corp.logo ? 'Change' : 'Upload Icon')}</span>
-                      <input
-                        type="file"
-                        accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
-                        style={{ display: 'none' }}
-                        disabled={uploadingLogoCorpId === corpId}
-                        onChange={(e) => handleCorporateLogoUpload(corpId, e)}
-                      />
-                    </label>
-                    {corp.logo && (
-                      <button
-                        type="button"
-                        className={styles.corpRemoveIconBtn}
-                        onClick={() => handleRemoveCorporateLogo(corpId, corp.name)}
-                        title="Remove custom icon and revert to text code"
-                        disabled={uploadingLogoCorpId === corpId}
-                      >
-                        <X size={11} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
-                  <div className={styles.formGroup}>
-                    <label>Company Name</label>
-                    <input
-                      type="text"
-                      value={corp.name || ''}
-                      onChange={(e) => updateCorporateTieup(corpId, { name: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          updateCorporateTieup(corpId, { name: corp.name });
-                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
-                        }
-                      }}
-                      placeholder="e.g. Tata Consultancy Services"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label>Logo Text (Short Code)</label>
-                    <input
-                      type="text"
-                      value={corp.logoText || ''}
-                      onChange={(e) => updateCorporateTieup(corpId, { logoText: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          updateCorporateTieup(corpId, { logoText: corp.logoText });
-                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
-                        }
-                      }}
-                      placeholder="e.g. TCS"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label>Industry / Category</label>
-                    <input
-                      type="text"
-                      value={corp.category || ''}
-                      onChange={(e) => updateCorporateTieup(corpId, { category: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          updateCorporateTieup(corpId, { category: corp.category });
-                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
-                        }
-                      }}
-                      placeholder="e.g. IT & Consulting"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                    <label>Benefit Offered</label>
-                    <input
-                      type="text"
-                      value={corp.benefit || ''}
-                      onChange={(e) => updateCorporateTieup(corpId, { benefit: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          updateCorporateTieup(corpId, { benefit: corp.benefit });
-                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
-                        }
-                      }}
-                      placeholder="e.g. Comprehensive Employee Wellness & Health Checks"
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label>Employees Covered</label>
-                    <input
-                      type="text"
-                      value={corp.employeesCovered || ''}
-                      onChange={(e) => updateCorporateTieup(corpId, { employeesCovered: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          updateCorporateTieup(corpId, { employeesCovered: corp.employeesCovered });
-                          showToast(`Corporate partner "${corp.name || 'entry'}" saved!`);
-                        }
-                      }}
-                      placeholder="e.g. 500,000+"
-                    />
-                  </div>
-                </div>
-
-                {/* Color Controls */}
-                <div className={styles.colorPillsGroup} style={{ flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-                  <div className={styles.colorInputWrap}>
-                    <label>Text Color</label>
-                    <div className={styles.colorInputInline}>
-                      <input
-                        type="color"
-                        value={isValidHex(corp.color) ? corp.color : '#2563EB'}
-                        onChange={(e) => updateCorporateTieup(corpId, { color: e.target.value })}
-                        title="Choose text color swatch"
-                      />
-                      <input
-                        type="text"
-                        className={styles.colorHexText}
-                        value={corp.color || ''}
-                        onChange={(e) => updateCorporateTieup(corpId, { color: e.target.value })}
-                        placeholder="#2563EB"
-                        maxLength={9}
-                        title="Enter hex color code (e.g. #2563EB)"
-                      />
-                    </div>
-                  </div>
-                  <div className={styles.colorInputWrap}>
-                    <label>Badge BG</label>
-                    <div className={styles.colorInputInline}>
-                      <input
-                        type="color"
-                        value={isValidHex(corp.bgColor) ? corp.bgColor : '#EFF6FF'}
-                        onChange={(e) => updateCorporateTieup(corpId, { bgColor: e.target.value })}
-                        title="Choose badge background swatch"
-                      />
-                      <input
-                        type="text"
-                        className={styles.colorHexText}
-                        value={corp.bgColor || ''}
-                        onChange={(e) => updateCorporateTieup(corpId, { bgColor: e.target.value })}
-                        placeholder="#EFF6FF"
-                        maxLength={9}
-                        title="Enter hex color code (e.g. #EFF6FF)"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Delete Button */}
-                <button
-                  type="button"
-                  className={styles.deleteRowBtn}
-                  onClick={async () => {
+                <CorporatePartnerRow
+                  key={corpId}
+                  corp={corp}
+                  onSave={handleSaveCorporatePartner}
+                  onDelete={async (id, name) => {
                     try {
-                      await deleteCorporateTieup(corpId);
-                      showToast(`Partner "${corp.name}" removed from database.`);
+                      await deleteCorporateTieup(id);
+                      showToast(`Partner "${name}" removed from database.`);
                     } catch (err) {
                       showToast(`Failed to delete partner: ${err.message || 'Server error'}`);
                     }
                   }}
-                  title="Delete corporate partner"
-                  style={{ marginTop: '4px' }}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  showToast={showToast}
+                />
               );
             })}
           </div>
@@ -2684,32 +2828,27 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               {/* Live Preview Box */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
                 <div
+                  className={styles.corpBadgePreview}
                   style={{
+                    backgroundColor: newCorporate.bgColor || '#EFF6FF',
+                    color: newCorporate.color || '#2563EB',
                     width: '60px',
                     height: '40px',
-                    borderRadius: '8px',
-                    backgroundColor: newCorporate.bgColor,
-                    color: newCorporate.color,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: '0.85rem',
-                    flexShrink: 0,
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.06)',
-                    padding: '4px',
-                    overflow: 'hidden'
+                    margin: 0
                   }}
                   title="Live Preview"
                 >
                   {newCorporate.logo ? (
                     <img
+                      key={newCorporate.logo}
                       src={newCorporate.logo}
                       alt="Logo preview"
-                      style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                      className={styles.corpBadgeImg}
+                      loading="eager"
+                      decoding="async"
                     />
                   ) : (
-                    newCorporate.logoText || 'CORP'
+                    <span>{newCorporate.logoText || 'CORP'}</span>
                   )}
                 </div>
                 <div>

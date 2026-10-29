@@ -57,9 +57,12 @@ const CorporateTieups = () => {
                     >
                       {corp.logo ? (
                         <img
+                          key={corp.logo || `${corp.id}-${index}`}
                           src={corp.logo}
                           alt={corp.name || 'Company logo'}
                           className={styles.logoImg}
+                          loading="eager"
+                          decoding="async"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             const fallback = e.target.parentElement?.querySelector(`.${styles.logoText}`);

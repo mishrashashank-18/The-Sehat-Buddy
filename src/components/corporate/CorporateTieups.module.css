@@ -135,6 +135,10 @@
   flex-shrink: 0;
   padding: 2px 4px;
   overflow: hidden;
+  position: relative;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  contain: paint;
 }
 
 .logoImg {
@@ -142,6 +146,10 @@
   max-height: 100%;
   object-fit: contain;
   display: block;
+  pointer-events: none;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
 }
 
 .logoText {
