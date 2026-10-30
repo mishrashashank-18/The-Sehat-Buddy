@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   ArrowLeft,
+  ArrowUpDown,
   Save,
   CheckCircle2,
   ExternalLink,
@@ -51,9 +52,12 @@ import { insurancePartners, defaultAcceptedInsurances } from '../../data/insuran
 import DoctorFormModal from './DoctorFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import HospitalFaqCard from './HospitalFaqCard';
+import ReorderHospitalFaqsModal from './ReorderHospitalFaqsModal';
 import PopularDoctorActionButtons from './PopularDoctorActionButtons';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
+import { calculateHospitalProfileCompletion, getHospitalProfileCompletionDetails, MIN_PROFILE_COMPLETION_THRESHOLD } from '../../utils/hospitalProfileCompletion';
 import { getHospitalVerifiedReviews, getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import styles from './AdminHospitalEditPage.module.css';
 
 const DEFAULT_SPECIALTIES = [
@@ -227,6 +231,7 @@ export const createInitialHospitalFormData = (hosp) => {
     name: hosp.name || '',
     city: hosp.city || '',
     address: hosp.address || '',
+    state: hosp.state || '',
     latitude: hosp.latitude !== undefined && hosp.latitude !== null ? hosp.latitude : '',
     longitude: hosp.longitude !== undefined && hosp.longitude !== null ? hosp.longitude : '',
     establishedYear: hosp.establishedYear ? hosp.establishedYear : '',
@@ -238,7 +243,7 @@ export const createInitialHospitalFormData = (hosp) => {
     status: hosp.status || 'active',
     showOnHome: hosp.showOnHome !== undefined ? Boolean(hosp.showOnHome) : true,
     homeUpdatedAt: Number(hosp.homeUpdatedAt || 0),
-    profileCompletion: hosp.profileCompletion || 0,
+    profileCompletion: hosp.profileCompletion !== undefined && Number(hosp.profileCompletion) > 0 ? Number(hosp.profileCompletion) : calculateHospitalProfileCompletion(hosp),
     rating: hosp.rating !== undefined && hosp.rating !== null && !isNaN(Number(hosp.rating)) ? Number(hosp.rating) : 0,
     reviews: hosp.reviews || '0 Reviews',
     phone: hosp.phone || '',
@@ -276,6 +281,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     addFaq,
     updateFaq,
     deleteFaq,
+    reorderFaqs,
     reviews,
     addReview,
     updateReview,
@@ -419,6 +425,20 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [doctorSearch, setDoctorSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('hospital'); // 'hospital' | 'star' | 'all'
 
+  // Real-time authoritative calculation of hospital profile completion percentage & eligibility (>= 80%)
+  const completionDetails = useMemo(() => {
+    if (!formData) {
+      const fallbackPct = hospital?.profileCompletion || 0;
+      return {
+        percentage: fallbackPct,
+        isEligibleForPublication: fallbackPct >= MIN_PROFILE_COMPLETION_THRESHOLD,
+        missingRequirements: [],
+        breakdown: []
+      };
+    }
+    return getHospitalProfileCompletionDetails(formData);
+  }, [formData, hospital?.profileCompletion]);
+
   const currentHospId = useMemo(() => {
     return String(hospital?.id || hospital?._id || hospitalId || '');
   }, [hospital, hospitalId]);
@@ -505,6 +525,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [editingFaqId, setEditingFaqId] = useState(null);
   const [customFaqIconPreview, setCustomFaqIconPreview] = useState(null);
   const [isUploadingFaqIcon, setIsUploadingFaqIcon] = useState(false);
+  const [isReorderFaqsModalOpen, setIsReorderFaqsModalOpen] = useState(false);
+  const [isReorderingFaqs, setIsReorderingFaqs] = useState(false);
   const faqIconInputRef = useRef(null);
 
   // Direct Media Upload State
@@ -840,7 +862,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         (f.targetId && String(f.targetId) === hospId) ||
         (f.targetName && hospName && f.targetName.toLowerCase() === hospName)
       )
-    );
+    ).sort((a, b) => {
+      const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999999;
+      const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999999;
+      if (orderA !== orderB) return orderA - orderB;
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
   }, [faqs, hospital]);
 
   // Display FAQs filtered by search query and category (memoized)
@@ -889,6 +916,57 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   }, [deleteFaq]);
 
+  const handleMoveFaq = useCallback(async (faq, direction) => {
+    if (!faq) return;
+    const currentList = [...hospitalFaqs];
+    const currentIndex = currentList.findIndex(f => matchesId(f, faq.id || faq._id));
+    if (currentIndex === -1) return;
+
+    let newList = [...currentList];
+    const [moved] = newList.splice(currentIndex, 1);
+
+    if (direction === 'first') {
+      newList.unshift(moved);
+    } else if (direction === 'last') {
+      newList.push(moved);
+    } else if (direction === 'up') {
+      const targetIdx = Math.max(0, currentIndex - 1);
+      newList.splice(targetIdx, 0, moved);
+    } else if (direction === 'down') {
+      const targetIdx = Math.min(newList.length, currentIndex + 1);
+      newList.splice(targetIdx, 0, moved);
+    }
+
+    const updatedWithOrder = newList.map((item, idx) => ({
+      id: item.id || item._id,
+      _id: item._id || item.id,
+      order: idx + 1
+    }));
+
+    try {
+      setIsReorderingFaqs(true);
+      if (typeof reorderFaqs === 'function') {
+        await reorderFaqs(updatedWithOrder);
+      }
+    } catch (err) {
+      console.error('Failed to change FAQ order:', err);
+      alert('Failed to change FAQ order: ' + (err.message || 'Please try again.'));
+    } finally {
+      setIsReorderingFaqs(false);
+    }
+  }, [hospitalFaqs, reorderFaqs]);
+
+  const handleSaveModalFaqOrder = useCallback(async (orderedItems) => {
+    const updatedWithOrder = (orderedItems || []).map((item, idx) => ({
+      id: item.id || item._id,
+      _id: item._id || item.id,
+      order: idx + 1
+    }));
+    if (typeof reorderFaqs === 'function') {
+      await reorderFaqs(updatedWithOrder);
+    }
+  }, [reorderFaqs]);
+
   // Initialize form data when hospital loads
   useEffect(() => {
     if (!hospital) return;
@@ -905,7 +983,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       if (curStarStr !== incStarStr && togglingDoctorIds.size === 0) {
         setFormData(prev => ({ ...prev, star_doctors: incomingStarDocs }));
       }
-      const shouldSyncProfile = hospital.profileCompletion !== undefined && hospital.profileCompletion !== formData.profileCompletion;
+      const shouldSyncProfile = !isDirtyRef.current && hospital.profileCompletion !== undefined && hospital.profileCompletion !== formData.profileCompletion;
       const shouldSyncPub = hospital.publicationStatus !== undefined && hospital.publicationStatus !== formData.publicationStatus;
       const shouldSyncHome = !isHomeStatusDirtyRef.current && (
         (hospital.showOnHome !== undefined && Boolean(hospital.showOnHome) !== Boolean(formData.showOnHome)) ||
@@ -1605,6 +1683,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         name: (formData.name || '').trim(),
         city: (formData.city || '').trim(),
         address: (formData.address || '').trim(),
+        state: (formData.state || '').trim(),
         latitude: formData.latitude !== '' && formData.latitude !== null && formData.latitude !== undefined ? Number(formData.latitude) : null,
         longitude: formData.longitude !== '' && formData.longitude !== null && formData.longitude !== undefined ? Number(formData.longitude) : null,
         establishedYear: formData.establishedYear ? Number(formData.establishedYear) : null,
@@ -1615,6 +1694,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         isVerified: Boolean(formData.isVerified),
         publicationStatus: formData.publicationStatus || 'draft',
         status: formData.status || 'active',
+        profileCompletion: completionDetails.percentage,
         rating: Number(reviewStats.avg) || 0,
         reviews: reviewStats.reviewsText || '0 Reviews',
         phone: phoneValidation.normalized || formData.phone,
@@ -1667,7 +1747,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         } catch {}
         setFormData(prev => ({
           ...prev,
-          profileCompletion: res.profileCompletion !== undefined ? res.profileCompletion : prev.profileCompletion,
+          profileCompletion: res.profileCompletion !== undefined ? res.profileCompletion : completionDetails.percentage,
           publicationStatus: res.publicationStatus || prev.publicationStatus,
           status: res.status || prev.status,
           phone: res.phone || prev.phone,
@@ -1889,11 +1969,11 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     borderRadius: '9999px',
                     fontSize: '0.74rem',
                     fontWeight: 700,
-                    background: (formData.profileCompletion || 0) >= 80 ? '#ecfdf5' : (formData.profileCompletion || 0) >= 50 ? '#fffbeb' : '#fef2f2',
-                    color: (formData.profileCompletion || 0) >= 80 ? '#047857' : (formData.profileCompletion || 0) >= 50 ? '#b45309' : '#b91c1c',
-                    border: `1px solid ${(formData.profileCompletion || 0) >= 80 ? '#6ee7b7' : (formData.profileCompletion || 0) >= 50 ? '#fde68a' : '#fca5a5'}`
+                    background: completionDetails.percentage >= 80 ? '#ecfdf5' : completionDetails.percentage >= 50 ? '#fffbeb' : '#fef2f2',
+                    color: completionDetails.percentage >= 80 ? '#047857' : completionDetails.percentage >= 50 ? '#b45309' : '#b91c1c',
+                    border: `1px solid ${completionDetails.percentage >= 80 ? '#6ee7b7' : completionDetails.percentage >= 50 ? '#fde68a' : '#fca5a5'}`
                   }}>
-                    Profile: {formData.profileCompletion || 0}%
+                    Profile: {completionDetails.percentage}%
                   </span>
                 </div>
 
@@ -1969,27 +2049,27 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <span style={{
                     fontSize: '0.82rem',
                     fontWeight: 800,
-                    color: (formData.profileCompletion || 0) >= 80 ? '#16a34a' : (formData.profileCompletion || 0) >= 50 ? '#d97706' : '#dc2626'
+                    color: completionDetails.percentage >= 80 ? '#16a34a' : completionDetails.percentage >= 50 ? '#d97706' : '#dc2626'
                   }}>
-                    {formData.profileCompletion || 0}%
+                    {completionDetails.percentage}%
                   </span>
                 </div>
                 <div style={{ width: '100%', height: '7px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
                   <div style={{
-                    width: `${Math.min(100, Math.max(0, formData.profileCompletion || 0))}%`,
+                    width: `${Math.min(100, Math.max(0, completionDetails.percentage))}%`,
                     height: '100%',
-                    backgroundColor: (formData.profileCompletion || 0) >= 80 ? '#16a34a' : (formData.profileCompletion || 0) >= 50 ? '#f59e0b' : '#ef4444',
+                    backgroundColor: completionDetails.percentage >= 80 ? '#16a34a' : completionDetails.percentage >= 50 ? '#f59e0b' : '#ef4444',
                     transition: 'width 0.4s ease'
                   }} />
                 </div>
                 <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                    {(formData.profileCompletion || 0) >= 80 ? '✓ Ready for Public Website' : 'Need ≥80% to be Public'}
+                    {completionDetails.percentage >= 80 ? '✓ Ready for Public Website' : 'Need ≥80% to be Public'}
                   </span>
                   {isHospitalView && formData.publicationStatus !== 'published' && (
                     <button
                       type="button"
-                      disabled={isRequestingPublication || (formData.profileCompletion || 0) < 80}
+                      disabled={isRequestingPublication || completionDetails.percentage < 80}
                       onClick={async () => {
                         setIsRequestingPublication(true);
                         try {
@@ -2002,19 +2082,19 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                         }
                       }}
                       style={{
-                        background: (formData.profileCompletion || 0) >= 80 ? '#2563eb' : '#cbd5e1',
-                        color: (formData.profileCompletion || 0) >= 80 ? '#ffffff' : '#64748b',
+                        background: completionDetails.percentage >= 80 ? '#2563eb' : '#cbd5e1',
+                        color: completionDetails.percentage >= 80 ? '#ffffff' : '#64748b',
                         border: 'none',
                         padding: '4px 10px',
                         borderRadius: '6px',
                         fontSize: '0.74rem',
                         fontWeight: 700,
-                        cursor: (formData.profileCompletion || 0) >= 80 ? 'pointer' : 'not-allowed',
+                        cursor: completionDetails.percentage >= 80 ? 'pointer' : 'not-allowed',
                         display: 'inline-flex',
                         alignItems: 'center',
                         gap: '4px'
                       }}
-                      title={(formData.profileCompletion || 0) < 80 ? 'Complete at least 80% to submit for publication' : 'Submit profile for admin review and publication'}
+                      title={completionDetails.percentage < 80 ? 'Complete at least 80% to submit for publication' : 'Submit profile for admin review and publication'}
                     >
                       {isRequestingPublication ? <Loader2 size={12} className={styles.spinIcon} /> : <CheckCircle2 size={12} />}
                       <span>{isRequestingPublication ? 'Submitting...' : 'Request Publication'}</span>
@@ -4354,31 +4434,57 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 </p>
               </div>
 
-              {!isAddingFaq && !isHospitalView && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingFaqId(null);
-                    setFaqForm({ question: '', answer: '', category: 'General', note: '', stepsInput: '' });
-                    setIsAddingFaq(true);
-                  }}
-                  style={{
-                    background: '#2563eb',
-                    color: 'white',
-                    border: 'none',
-                    padding: '8px 16px',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <Plus size={16} />
-                  <span>Add Hospital FAQ</span>
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {hospitalFaqs.length > 1 && !isHospitalView && (
+                  <button
+                    type="button"
+                    onClick={() => setIsReorderFaqsModalOpen(true)}
+                    style={{
+                      background: '#ffffff',
+                      color: '#2563eb',
+                      border: '1.5px solid #bfdbfe',
+                      padding: '8px 14px',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      fontSize: '0.86rem',
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    title="Change display order of FAQs (choose which to put first and last)"
+                  >
+                    <ArrowUpDown size={15} />
+                    <span>Change Order</span>
+                  </button>
+                )}
+
+                {!isAddingFaq && !isHospitalView && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingFaqId(null);
+                      setFaqForm({ question: '', answer: '', category: 'General', note: '', stepsInput: '' });
+                      setIsAddingFaq(true);
+                    }}
+                    style={{
+                      background: '#2563eb',
+                      color: 'white',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Plus size={16} />
+                    <span>Add Hospital FAQ</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Filter and Search Bar for Hospital Admin or Regular Search */}
@@ -4613,19 +4719,38 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <p>{hospitalFaqs.length === 0 ? 'No hospital-specific FAQs added yet.' : 'No FAQs match your search or category filter.'}</p>
                 </div>
               ) : (
-                displayFaqs.map((faq) => (
-                  <HospitalFaqCard
-                    key={String(faq._id || faq.id)}
-                    faq={faq}
-                    isHospitalView={isHospitalView}
-                    faqIconsList={FAQ_ICONS_LIST}
-                    onEdit={handleEditFaqClick}
-                    onDelete={handleDeleteFaqClick}
-                    onPreview={setPreviewFaqItem}
-                  />
-                ))
+                displayFaqs.map((faq, displayIdx) => {
+                  const fullIndex = hospitalFaqs.findIndex(f => matchesId(f, faq.id || faq._id));
+                  const effectiveIndex = fullIndex !== -1 ? fullIndex : displayIdx;
+                  return (
+                    <HospitalFaqCard
+                      key={String(faq._id || faq.id)}
+                      faq={faq}
+                      index={effectiveIndex}
+                      total={hospitalFaqs.length}
+                      isHospitalView={isHospitalView}
+                      faqIconsList={FAQ_ICONS_LIST}
+                      onEdit={handleEditFaqClick}
+                      onDelete={handleDeleteFaqClick}
+                      onPreview={setPreviewFaqItem}
+                      onMoveFirst={() => handleMoveFaq(faq, 'first')}
+                      onMoveUp={() => handleMoveFaq(faq, 'up')}
+                      onMoveDown={() => handleMoveFaq(faq, 'down')}
+                      onMoveLast={() => handleMoveFaq(faq, 'last')}
+                      isReordering={isReorderingFaqs}
+                    />
+                  );
+                })
               )}
             </div>
+
+            <ReorderHospitalFaqsModal
+              isOpen={isReorderFaqsModalOpen}
+              onClose={() => setIsReorderFaqsModalOpen(false)}
+              faqs={hospitalFaqs}
+              hospitalName={hospital?.name || 'Hospital'}
+              onSaveOrder={handleSaveModalFaqOrder}
+            />
           </div>
         )}
         {/* TAB 8: BOOKED PATIENTS & VISITS */}
@@ -5528,9 +5653,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                         </h4>
                       )}
 
-                      <p className={styles.reviewCommentText}>
-                        "{rev.comment}"
-                      </p>
+                      <ExpandableReviewComment
+                        comment={rev.comment}
+                        maxLength={220}
+                        quotes={true}
+                        className={styles.reviewCommentText}
+                      />
 
                       <div className={styles.reviewCardFooter}>
                         <span

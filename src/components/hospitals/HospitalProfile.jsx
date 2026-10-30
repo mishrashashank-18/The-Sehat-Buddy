@@ -45,6 +45,7 @@ import WriteReviewModal from '../reviews/WriteReviewModal';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import SpecialitiesProceduresSection from '../specialities/SpecialitiesProceduresSection';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import { API_BASE } from '../../services/api';
 import styles from './HospitalProfile.module.css';
 
@@ -1637,6 +1638,12 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                           hospital.name.toLowerCase().includes(f.targetName.toLowerCase())
                         ))
                       ))
+                      .sort((a, b) => {
+                        const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999999;
+                        const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+                      })
                       .map((f, i) => ({
                         category: f.category || defaultHospitalFaqCategories[i % defaultHospitalFaqCategories.length] || 'Hospital FAQ',
                         q: f.question,
@@ -1840,9 +1847,11 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
                   {rev.title && <strong style={{ fontSize: '0.95rem', color: '#1e293b' }}>{rev.title}</strong>}
 
-                  <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.55 }}>
-                    {rev.comment}
-                  </p>
+                  <ExpandableReviewComment
+                    comment={rev.comment}
+                    maxLength={220}
+                    style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.55 }}
+                  />
 
                   {rev.insuranceUsed && rev.insuranceUsed !== 'None' && rev.insuranceUsed !== 'None / Self-pay' && (
                     <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '8px', fontSize: '0.78rem', color: '#059669', display: 'flex', alignItems: 'center', gap: '4px' }}>

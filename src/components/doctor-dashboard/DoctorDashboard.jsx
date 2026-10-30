@@ -55,6 +55,7 @@ import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import { getDoctorProfileCompletionDetails, calculateDoctorProfileCompletion, isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
 import { DEFAULT_DOCTOR_AVATARS, isPresetAvatar } from '../../constants/doctorAvatars';
 import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
 
@@ -9258,9 +9259,12 @@ const DoctorDashboard = ({ onNavigate }) => {
                           display: 'flex',
                           alignItems: 'center'
                         }}>
-                          <p style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55, fontStyle: 'italic' }}>
-                            "{rev.comment}"
-                          </p>
+                          <ExpandableReviewComment
+                            comment={rev.comment}
+                            maxLength={220}
+                            quotes={true}
+                            style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55, fontStyle: 'italic' }}
+                          />
                         </div>
                       </div>
 
@@ -9796,9 +9800,11 @@ const DoctorDashboard = ({ onNavigate }) => {
                         </h4>
                       )}
 
-                      <p style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55 }}>
-                        {rev.comment}
-                      </p>
+                      <ExpandableReviewComment
+                        comment={rev.comment}
+                        maxLength={220}
+                        style={{ margin: 0, fontSize: '0.88rem', color: '#334155', lineHeight: 1.55 }}
+                      />
 
                       {(rev.treatment || rev.insuranceUsed) && (
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Star, Trash2 } from 'lucide-react';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 
 const AdminReviewCard = React.memo(({
   review,
@@ -68,9 +69,11 @@ const AdminReviewCard = React.memo(({
         </div>
       )}
 
-      <p style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
-        {rev.comment}
-      </p>
+      <ExpandableReviewComment
+        comment={rev.comment}
+        maxLength={200}
+        style={{ margin: 0, fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}
+      />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

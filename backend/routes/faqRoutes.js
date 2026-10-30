@@ -1,5 +1,5 @@
 import express from 'express';
-import { getFaqs, createFaq, updateFaq, deleteFaq } from '../controllers/faqController.js';
+import { getFaqs, createFaq, updateFaq, deleteFaq, reorderFaqs } from '../controllers/faqController.js';
 import { getFaqSymbols, createFaqSymbol, deleteFaqSymbol } from '../controllers/faqSymbolController.js';
 import { protect, requireRole } from '../middleware/authMiddleware.js';
 
@@ -16,6 +16,7 @@ const faqProtect = (req, res, next) => {
 };
 
 router.get('/', getFaqs);
+router.put('/reorder', faqProtect, reorderFaqs);
 router.post('/', faqProtect, createFaq);
 router.put('/:id', faqProtect, updateFaq);
 router.delete('/:id', faqProtect, deleteFaq);

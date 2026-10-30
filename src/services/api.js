@@ -891,6 +891,28 @@ export const api = {
     return data.data;
   },
 
+  async reorderFaqs(items) {
+    try {
+      const res = await fetch(`${API_BASE}/faqs/reorder`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ items })
+      });
+      if (res.ok) {
+        return await handleResponse(res);
+      }
+    } catch (err) {
+      console.warn('Batch FAQ reorder fallback to individual updates:', err);
+    }
+    // Robust fallback: update individual items in parallel
+    await Promise.all(
+      items.map(item =>
+        this.updateFaq(item.id || item._id, { order: Number(item.order) || 0 })
+      )
+    );
+    return { success: true };
+  },
+
   async deleteFaq(id) {
     const res = await fetch(`${API_BASE}/faqs/${id}`, {
       method: 'DELETE',

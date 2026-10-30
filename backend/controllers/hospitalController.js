@@ -646,7 +646,14 @@ export const getHospitals = async (req, res) => {
       };
     }
     const hospitals = await Hospital.find(query).select('-password').populate('star_doctors', '-password');
-    res.json({ success: true, data: hospitals });
+    const enrichedHospitals = hospitals.map(h => {
+      const completion = calculateHospitalProfileCompletion(h);
+      const obj = h.toObject();
+      obj.profileCompletion = completion.percentage;
+      obj.isEligibleForPublication = completion.isEligibleForPublication;
+      return obj;
+    });
+    res.json({ success: true, data: enrichedHospitals });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1218,6 +1225,14 @@ export const updateHospital = async (req, res) => {
             fresh.availableBeds = Number(req.body.availableBeds);
             fresh.emptyBeds = Number(req.body.availableBeds);
           }
+          if (req.body.phone !== undefined) {
+            const phoneValidation = normalizeAndValidatePhone(req.body.phone);
+            if (phoneValidation.valid) fresh.phone = phoneValidation.normalized;
+          }
+          if (req.body.photos !== undefined) fresh.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+          if (req.body.specialities !== undefined) fresh.specialities = Array.isArray(req.body.specialities) ? req.body.specialities : [];
+          else if (req.body.specialties !== undefined) fresh.specialities = Array.isArray(req.body.specialties) ? req.body.specialties : [];
+          if (incomingImage) fresh.image = incomingImage;
           fresh.profileCompletion = calculateHospitalProfileCompletion(fresh).percentage;
           updatedHospital = await fresh.save();
         } else {

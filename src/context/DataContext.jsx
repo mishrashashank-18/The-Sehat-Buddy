@@ -545,6 +545,7 @@ export const DataProvider = ({ children }) => {
         ...h,
         id: String(h._id || h.id || existing?._id || existing?.id || ''),
         _id: h._id || existing?._id || h.id,
+        profileCompletion: h.profileCompletion !== undefined ? Number(h.profileCompletion) : (existing?.profileCompletion !== undefined ? Number(existing.profileCompletion) : 0),
         specialties: (Array.isArray(h.specialities || h.specialties) && (h.specialities || h.specialties).length > 0)
           ? (h.specialities || h.specialties)
           : (existing?.specialties || existing?.specialities || []),
@@ -2230,6 +2231,42 @@ export const DataProvider = ({ children }) => {
     }
   };
 
+  const reorderFaqs = async (items) => {
+    try {
+      const formattedItems = (items || []).map((item, idx) => ({
+        id: item.id || item._id,
+        _id: item._id || item.id,
+        order: item.order !== undefined && item.order !== null ? Number(item.order) : idx + 1
+      }));
+
+      setFaqs(prev => {
+        const orderMap = new Map();
+        formattedItems.forEach(fi => {
+          if (fi.id) orderMap.set(String(fi.id), fi.order);
+          if (fi._id) orderMap.set(String(fi._id), fi.order);
+        });
+        const next = prev.map(f => {
+          const fid = String(f.id || f._id || '');
+          if (orderMap.has(fid)) {
+            return { ...f, order: orderMap.get(fid) };
+          }
+          return f;
+        });
+        try {
+          localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+          lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(next);
+          broadcastSync(STORAGE_KEY_FAQS, next);
+        } catch {}
+        return next;
+      });
+
+      await api.reorderFaqs(formattedItems);
+    } catch (err) {
+      console.error('Failed to reorder FAQs in database:', err);
+      throw err;
+    }
+  };
+
   // FAQ Symbols CRUD
   const addFaqSymbol = async (symbolData) => {
     try {
@@ -2502,6 +2539,7 @@ export const DataProvider = ({ children }) => {
         addFaq,
         updateFaq,
         deleteFaq,
+        reorderFaqs,
         // FAQ Symbols / Presets
         faqSymbols,
         refreshFaqSymbols,

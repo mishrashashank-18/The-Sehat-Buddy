@@ -12,6 +12,7 @@ import { isDoctorProfileEligibleForListing, getDoctorProfileCompletionDetails } 
 import Container from '../layout/Container';
 import WriteReviewModal from '../reviews/WriteReviewModal';
 import ReviewFormModal from '../admin/ReviewFormModal';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import { api, API_BASE } from '../../services/api';
 import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
@@ -2799,7 +2800,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           </h4>
                         )}
 
-                        <p className={styles.reviewComment}>{rev.comment}</p>
+                        <ExpandableReviewComment
+                          comment={rev.comment}
+                          maxLength={220}
+                          className={styles.reviewComment}
+                        />
                       </div>
 
                       <div className={styles.reviewTags}>

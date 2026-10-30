@@ -28,6 +28,7 @@ import { api } from '../../services/api';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
+import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import ReviewFormModal from './ReviewFormModal';
 import {
   dedupeAppointments,
@@ -1214,9 +1215,11 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                         </div>
                       )}
 
-                      <p style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: 1.5 }}>
-                        {rev.comment}
-                      </p>
+                      <ExpandableReviewComment
+                        comment={rev.comment}
+                        maxLength={200}
+                        style={{ margin: 0, fontSize: '0.84rem', color: '#475569', lineHeight: 1.5 }}
+                      />
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
                         <span style={{

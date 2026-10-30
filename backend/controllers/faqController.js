@@ -131,6 +131,40 @@ export const createFaq = async (req, res) => {
   }
 };
 
+export const reorderFaqs = async (req, res) => {
+  try {
+    if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'hospital')) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only website administrators and hospital managers can reorder FAQs'
+      });
+    }
+
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Invalid or empty items array' });
+    }
+
+    const bulkOps = items
+      .filter(item => item && (item.id || item._id))
+      .map(item => ({
+        updateOne: {
+          filter: { _id: item.id || item._id },
+          update: { $set: { order: Number(item.order) || 0 } }
+        }
+      }));
+
+    if (bulkOps.length > 0) {
+      await Faq.bulkWrite(bulkOps);
+      broadcastDbChange('faqs', 'reorder', null, items);
+    }
+
+    res.json({ success: true, message: 'FAQ order updated successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const updateFaq = async (req, res) => {
   try {
     if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'hospital')) {
