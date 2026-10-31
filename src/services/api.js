@@ -733,6 +733,33 @@ export const api = {
     return data;
   },
 
+  async getInquiries(filter = {}) {
+    const params = new URLSearchParams(filter).toString();
+    const res = await fetch(`${API_BASE}/content/inquiries?${params}`, {
+      headers: getAuthHeaders()
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateInquiry(id, updateData) {
+    const res = await fetch(`${API_BASE}/content/inquiries/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updateData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async deleteInquiry(id) {
+    const res = await fetch(`${API_BASE}/content/inquiries/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await handleResponse(res);
+  },
+
   async updateCorporateTieups(corporateList) {
     const res = await fetch(`${API_BASE}/content/corporate`, {
       method: 'PUT',

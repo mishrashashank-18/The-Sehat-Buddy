@@ -167,6 +167,17 @@ export default function ContactUs({ onNavigate }) {
                     <span className={styles.tagEmerald}>24x7 Active</span>
                   </div>
                 </div>
+
+                <div className={styles.cardMiddle}>
+                  <p className={styles.channelDesc}>
+                    Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
+                  </p>
+                  <div className={styles.featurePills}>
+                    <span className={styles.featurePill}>⚡ Zero Waiting Time</span>
+                    <span className={styles.featurePill}>🏥 Live Bed Sync</span>
+                  </div>
+                </div>
+
                 <div className={styles.channelBody}>
                   <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
                     {primaryPhone.number}
@@ -200,6 +211,17 @@ export default function ContactUs({ onNavigate }) {
                     <span className={styles.tagBlue}>Doctor Care</span>
                   </div>
                 </div>
+
+                <div className={styles.cardMiddle}>
+                  <p className={styles.channelDesc}>
+                    Priority booking for specialist consultations, second opinions, and diagnostic evaluations with top clinicians.
+                  </p>
+                  <div className={styles.featurePills}>
+                    <span className={styles.featurePill}>👨‍⚕️ 1,200+ Verified Doctors</span>
+                    <span className={styles.featurePill}>⏱️ Same-day Slots</span>
+                  </div>
+                </div>
+
                 <div className={styles.channelBody}>
                   <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
                     {secondaryPhone.number}
@@ -229,14 +251,32 @@ export default function ContactUs({ onNavigate }) {
                     <Mail size={18} />
                   </div>
                   <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>{primaryEmail.label || 'Patient Support'}</span>
+                    <span className={styles.channelLabel}>{primaryEmail.label || 'Patient & Corporate Care'}</span>
                     <span className={styles.tagIndigo}>Avg &lt; 2 hrs</span>
                   </div>
                 </div>
+
+                <div className={styles.cardMiddle}>
+                  <p className={styles.channelDesc}>
+                    Dedicated desk for cashless health insurance claim processing, pre-authorization, and enterprise tie-ups.
+                  </p>
+                  <div className={styles.featurePills}>
+                    <span className={styles.featurePill}>🛡️ 40+ TPA Insurers</span>
+                    <span className={styles.featurePill}>💼 Partner Desk</span>
+                  </div>
+                </div>
+
                 <div className={styles.channelBody}>
-                  <a href={`mailto:${primaryEmail.email}`} className={styles.emailLink}>
-                    {primaryEmail.email}
-                  </a>
+                  <div className={styles.emailListRow}>
+                    <a href={`mailto:${primaryEmail.email}`} className={styles.emailLink}>
+                      {primaryEmail.email}
+                    </a>
+                    {secondaryEmail?.email && secondaryEmail.email !== primaryEmail.email && (
+                      <a href={`mailto:${secondaryEmail.email}`} className={styles.emailLinkSecondary}>
+                        {secondaryEmail.email}
+                      </a>
+                    )}
+                  </div>
                   <div className={styles.btnRow}>
                     <a href={`mailto:${primaryEmail.email}`} className={`${styles.actionBtn} ${styles.btnPrimaryIndigo}`}>
                       <Mail size={12} />
@@ -266,6 +306,17 @@ export default function ContactUs({ onNavigate }) {
                     <span className={styles.tagGreen}>Quick Reply</span>
                   </div>
                 </div>
+
+                <div className={styles.cardMiddle}>
+                  <p className={styles.channelDesc}>
+                    Connect directly with our clinical care concierge on WhatsApp for instant route guidance, availability, and inquiries.
+                  </p>
+                  <div className={styles.featurePills}>
+                    <span className={styles.featurePill}>💬 Reply &lt; 5 Mins</span>
+                    <span className={styles.featurePill}>📍 Live Guidance</span>
+                  </div>
+                </div>
+
                 <div className={styles.channelBody}>
                   <a
                     href={`https://wa.me/${primaryPhone.number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello Sehat Buddy Care Desk, I would like to inquire about healthcare services.')}`}
