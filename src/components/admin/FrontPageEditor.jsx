@@ -22,7 +22,9 @@ import {
   Phone,
   Mail,
   Clock,
-  Edit2
+  Edit2,
+  Image as ImageIcon,
+  RefreshCw
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
