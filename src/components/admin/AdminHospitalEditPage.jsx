@@ -302,13 +302,21 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Find target hospital
   const hospital = useMemo(() => {
+    const cleanId = String(hospitalId || hospitalData?._id || hospitalData?.id || '').trim().toLowerCase();
+    const liveHospital = (hospitals && cleanId)
+      ? hospitals.find(h => 
+          String(h.id || '').toLowerCase() === cleanId || 
+          String(h._id || '').toLowerCase() === cleanId ||
+          matchesId(h, cleanId)
+        )
+      : null;
+
+    if (liveHospital && hospitalData) {
+      return { ...hospitalData, ...liveHospital };
+    }
+    if (liveHospital) return liveHospital;
     if (hospitalData) return hospitalData;
-    if (!hospitalId || !hospitals) return null;
-    const cleanId = String(hospitalId).trim().toLowerCase();
-    return hospitals.find(h => 
-      String(h.id || '').toLowerCase() === cleanId || 
-      String(h._id || '').toLowerCase() === cleanId
-    );
+    return null;
   }, [hospitals, hospitalId, hospitalData]);
 
   // Tab State: Persistent across page reloads (checks URL query ?tab=..., hash, sessionStorage, and localStorage)
@@ -976,10 +984,13 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     // If the hospital is already initialized, synchronize star_doctors whenever not actively toggling
     if (initializedHospitalId.current === currentHospId && formData !== null) {
       const incomingStarDocs = (Array.isArray(hospital.star_doctors) ? hospital.star_doctors : [])
-        .map(d => typeof d === 'object' && d !== null ? (d._id || d.id) : d)
+        .map(d => typeof d === 'object' && d !== null ? String(d._id || d.id || '') : String(d || ''))
         .filter(Boolean);
-      const curStarStr = (formData.star_doctors || []).map(String).sort().join(',');
-      const incStarStr = incomingStarDocs.map(String).sort().join(',');
+      const curStarDocs = (Array.isArray(formData.star_doctors) ? formData.star_doctors : [])
+        .map(d => typeof d === 'object' && d !== null ? String(d._id || d.id || '') : String(d || ''))
+        .filter(Boolean);
+      const curStarStr = curStarDocs.sort().join(',');
+      const incStarStr = incomingStarDocs.sort().join(',');
       if (curStarStr !== incStarStr && togglingDoctorIds.size === 0) {
         setFormData(prev => ({ ...prev, star_doctors: incomingStarDocs }));
       }

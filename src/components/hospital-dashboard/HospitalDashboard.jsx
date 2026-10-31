@@ -50,13 +50,27 @@ const HospitalDashboard = ({ onNavigate }) => {
     return () => { isMounted = false; };
   }, [refreshHospitals]);
 
+  // Keep currentHospitalData updated when hospitals in DataContext change
+  useEffect(() => {
+    if (currentHospitalData && Array.isArray(hospitals)) {
+      const found = hospitals.find(h => matchesId(h, currentHospitalData._id || currentHospitalData.id || currentHospitalData.email));
+      if (found) {
+        const foundStarStr = JSON.stringify(found.star_doctors || []);
+        const curStarStr = JSON.stringify(currentHospitalData.star_doctors || []);
+        if (foundStarStr !== curStarStr) {
+          setCurrentHospitalData(prev => ({ ...prev, ...found }));
+        }
+      }
+    }
+  }, [hospitals, currentHospitalData]);
+
   // Active hospital: ONLY resolves to the verified authenticated hospital, prioritizing authoritative database data
   const activeHospital = useMemo(() => {
     if (currentHospitalData) {
       const foundInList = Array.isArray(hospitals)
         ? hospitals.find(h => matchesId(h, currentHospitalData._id || currentHospitalData.id || currentHospitalData.email))
         : null;
-      return { ...(foundInList || {}), ...currentHospitalData };
+      return { ...currentHospitalData, ...(foundInList || {}) };
     }
 
     const target = loggedInUser;

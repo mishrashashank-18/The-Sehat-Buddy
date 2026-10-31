@@ -72,8 +72,10 @@ export const getActiveAuthToken = () => {
       const genToken = localStorage.getItem('token');
       if (genToken && !isJwtExpired(genToken)) {
         const payload = safeDecodeJwt(genToken);
-        if (payload?.role === 'hospital') return genToken;
+        if (payload?.role === 'hospital' || payload?.role === 'admin') return genToken;
       }
+      const adminToken = localStorage.getItem('admin_token');
+      if (adminToken && !isJwtExpired(adminToken)) return adminToken;
       return null;
     }
 
@@ -133,8 +135,11 @@ export const getAuthHeaders = (isFormData = false, forcedRole = null) => {
   const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
   const isAdminRoute = path === '/admin' || path.startsWith('/admin/') || hash === '#admin' || hash === '#/admin' || hash.startsWith('#admin/') || hash.startsWith('#/admin/');
 
-  // Strictly only send x-admin-request when the active route is an admin portal route or forced admin
-  if (isAdminRoute || forcedRole === 'admin') {
+  const payload = safeDecodeJwt(token);
+  const isTokenAdmin = payload?.role === 'admin';
+
+  // Strictly only send x-admin-request when the active route is an admin portal route, forced admin, or authenticated user is admin
+  if (isAdminRoute || forcedRole === 'admin' || isTokenAdmin) {
     headers['x-admin-request'] = 'true';
   }
   if (!isFormData) headers['Content-Type'] = 'application/json';
