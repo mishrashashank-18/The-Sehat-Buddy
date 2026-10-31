@@ -144,47 +144,53 @@
   line-height: 1.45;
 }
 
-.channelGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.channelStack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  justify-content: space-between;
+}
+
+.mainBlockCard {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 16px 18px;
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   flex: 1;
   min-height: 0;
-}
-
-.channelCard {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 12px 14px;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
-  display: flex;
-  flex-direction: column;
   justify-content: space-between;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.channelCard:hover {
+.mainBlockCard:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
 }
 
-.cardEmerald { border-top: 3px solid #10b981; }
-.cardBlue { border-top: 3px solid #3b82f6; }
-.cardIndigo { border-top: 3px solid #6366f1; }
-.cardGreen { border-top: 3px solid #22c55e; }
+.blockHelpline {
+  border-left: 4px solid #10b981;
+}
 
-.channelTop {
+.blockDigital {
+  border-left: 4px solid #3b82f6;
+}
+
+.blockHeader {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 12px;
 }
 
-.iconWrap {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+.blockIconWrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -196,70 +202,77 @@
 .iconIndigo { background: #eef2ff; color: #4f46e5; }
 .iconGreen { background: #f0fdf4; color: #16a34a; }
 
-.channelMeta {
+.blockTitleWrap {
   display: flex;
   flex-direction: column;
+  gap: 3px;
+  flex: 1;
   min-width: 0;
 }
 
-.channelLabel {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #1e293b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.blockTitleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blockTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.blockDesc {
+  font-size: 0.76rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
 }
 
 .tagEmerald, .tagBlue, .tagIndigo, .tagGreen {
   font-size: 0.68rem;
   font-weight: 700;
   display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
 }
-.tagEmerald { color: #059669; }
-.tagBlue { color: #2563eb; }
-.tagIndigo { color: #4f46e5; }
-.tagGreen { color: #16a34a; }
+.tagEmerald { color: #059669; background: #ecfdf5; }
+.tagBlue { color: #2563eb; background: #eff6ff; }
+.tagIndigo { color: #4f46e5; background: #eef2ff; }
+.tagGreen { color: #16a34a; background: #f0fdf4; }
 
-.cardMiddle {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  margin: 4px 0 8px;
-}
-
-.channelDesc {
-  font-size: 0.74rem;
-  line-height: 1.4;
-  color: #475569;
-  margin: 0;
+.phonesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 
-.featurePills {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-
-.featurePill {
-  font-size: 0.67rem;
-  font-weight: 600;
-  color: #334155;
+.phoneItem {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  padding: 2px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-
-.channelBody {
+  border-radius: 10px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+.phoneLabel {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #475569;
+}
+
+.phoneActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .phoneLink {
@@ -274,10 +287,82 @@
   color: #2563eb;
 }
 
-.emailListRow {
+.phoneBtns {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.blockFooterPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+
+.digitalGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 12px;
+}
+
+.digitalItem {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.digitalLabelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.replyBadge {
+  font-size: 0.67rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.btnWhatsAppFull {
+  background: #16a34a;
+  color: #ffffff;
+  padding: 7px 12px;
+  font-weight: 700;
+  width: 100%;
+  border-radius: 7px;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.btnWhatsAppFull:hover { background: #15803d; }
+
+.emailActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.emailList {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
 }
 
 .emailLink {
@@ -287,10 +372,7 @@
   text-decoration: none;
   word-break: break-all;
 }
-
-.emailLink:hover {
-  color: #4f46e5;
-}
+.emailLink:hover { color: #4f46e5; }
 
 .emailLinkSecondary {
   font-size: 0.72rem;
@@ -299,9 +381,25 @@
   text-decoration: none;
   word-break: break-all;
 }
+.emailLinkSecondary:hover { color: #2563eb; }
 
-.emailLinkSecondary:hover {
-  color: #2563eb;
+.hubFooterBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+  padding-top: 2px;
+}
+
+.hubItem {
+  display: inline-flex;
+  align-items: center;
+}
+
+.pillDot {
+  color: #cbd5e1;
 }
 
 .btnRow {
@@ -699,7 +797,7 @@
 }
 
 @media (max-width: 600px) {
-  .channelGrid {
+  .phonesGrid, .digitalGrid {
     grid-template-columns: 1fr;
   }
 

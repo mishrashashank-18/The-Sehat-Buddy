@@ -146,7 +146,7 @@ export default function ContactUs({ onNavigate }) {
 
         {/* Main Content: 2-Panel Side-by-Side Console */}
         <div className={styles.mainConsole}>
-          {/* Left Column: Direct Communication Channels */}
+          {/* Left Column: Direct Communication Channels (2 Main Blocks) */}
           <div className={styles.leftColumn}>
             <div className={styles.columnIntro}>
               <h1 className={styles.heroHeading}>We're Here for You & Your Family</h1>
@@ -155,189 +155,162 @@ export default function ContactUs({ onNavigate }) {
               </p>
             </div>
 
-            <div className={styles.channelGrid}>
-              {/* Emergency Helpline Card */}
-              <div className={`${styles.channelCard} ${styles.cardEmerald}`}>
-                <div className={styles.channelTop}>
-                  <div className={`${styles.iconWrap} ${styles.iconEmerald}`}>
-                    <PhoneCall size={18} />
+            <div className={styles.channelStack}>
+              {/* Main Block 1: 24/7 Phone Helplines & Emergency */}
+              <div className={`${styles.mainBlockCard} ${styles.blockHelpline}`}>
+                <div className={styles.blockHeader}>
+                  <div className={`${styles.blockIconWrap} ${styles.iconEmerald}`}>
+                    <PhoneCall size={20} />
                   </div>
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
-                    <span className={styles.tagEmerald}>24x7 Active</span>
-                  </div>
-                </div>
-
-                <div className={styles.cardMiddle}>
-                  <p className={styles.channelDesc}>
-                    Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
-                  </p>
-                  <div className={styles.featurePills}>
-                    <span className={styles.featurePill}>⚡ Zero Waiting Time</span>
-                    <span className={styles.featurePill}>🏥 Live Bed Sync</span>
+                  <div className={styles.blockTitleWrap}>
+                    <div className={styles.blockTitleRow}>
+                      <h3 className={styles.blockTitle}>24/7 Helplines & Admissions</h3>
+                      <span className={styles.tagEmerald}>24x7 Live Desk</span>
+                    </div>
+                    <p className={styles.blockDesc}>
+                      Instant voice triage, emergency ICU bed allocations, and priority doctor consultations.
+                    </p>
                   </div>
                 </div>
 
-                <div className={styles.channelBody}>
-                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
-                    {primaryPhone.number}
-                  </a>
-                  <div className={styles.btnRow}>
-                    <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryEmerald}`}>
-                      <PhoneCall size={12} />
-                      <span>Call Now</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(primaryPhone.number, 'p1')}
-                      className={styles.actionBtnSecondary}
-                      title="Copy Number"
-                    >
-                      {copiedId === 'p1' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                      <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Appointments Desk Card */}
-              <div className={`${styles.channelCard} ${styles.cardBlue}`}>
-                <div className={styles.channelTop}>
-                  <div className={`${styles.iconWrap} ${styles.iconBlue}`}>
-                    <CalendarClock size={18} />
-                  </div>
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>{secondaryPhone.label || 'Appointments Desk'}</span>
-                    <span className={styles.tagBlue}>Doctor Care</span>
-                  </div>
-                </div>
-
-                <div className={styles.cardMiddle}>
-                  <p className={styles.channelDesc}>
-                    Priority booking for specialist consultations, second opinions, and diagnostic evaluations with top clinicians.
-                  </p>
-                  <div className={styles.featurePills}>
-                    <span className={styles.featurePill}>👨‍⚕️ 1,200+ Verified Doctors</span>
-                    <span className={styles.featurePill}>⏱️ Same-day Slots</span>
-                  </div>
-                </div>
-
-                <div className={styles.channelBody}>
-                  <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
-                    {secondaryPhone.number}
-                  </a>
-                  <div className={styles.btnRow}>
-                    <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryBlue}`}>
-                      <PhoneCall size={12} />
-                      <span>Call Desk</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(secondaryPhone.number, 'p2')}
-                      className={styles.actionBtnSecondary}
-                      title="Copy Number"
-                    >
-                      {copiedId === 'p2' ? <Check size={13} color="#2563eb" /> : <Copy size={13} />}
-                      <span>{copiedId === 'p2' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Email Support Card */}
-              <div className={`${styles.channelCard} ${styles.cardIndigo}`}>
-                <div className={styles.channelTop}>
-                  <div className={`${styles.iconWrap} ${styles.iconIndigo}`}>
-                    <Mail size={18} />
-                  </div>
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>{primaryEmail.label || 'Patient & Corporate Care'}</span>
-                    <span className={styles.tagIndigo}>Avg &lt; 2 hrs</span>
-                  </div>
-                </div>
-
-                <div className={styles.cardMiddle}>
-                  <p className={styles.channelDesc}>
-                    Dedicated desk for cashless health insurance claim processing, pre-authorization, and enterprise tie-ups.
-                  </p>
-                  <div className={styles.featurePills}>
-                    <span className={styles.featurePill}>🛡️ 40+ TPA Insurers</span>
-                    <span className={styles.featurePill}>💼 Partner Desk</span>
-                  </div>
-                </div>
-
-                <div className={styles.channelBody}>
-                  <div className={styles.emailListRow}>
-                    <a href={`mailto:${primaryEmail.email}`} className={styles.emailLink}>
-                      {primaryEmail.email}
-                    </a>
-                    {secondaryEmail?.email && secondaryEmail.email !== primaryEmail.email && (
-                      <a href={`mailto:${secondaryEmail.email}`} className={styles.emailLinkSecondary}>
-                        {secondaryEmail.email}
+                <div className={styles.phonesGrid}>
+                  {/* Phone 1: Emergency */}
+                  <div className={styles.phoneItem}>
+                    <span className={styles.phoneLabel}>Helpline & Emergency Admissions</span>
+                    <div className={styles.phoneActionRow}>
+                      <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                        {primaryPhone.number}
                       </a>
-                    )}
+                      <div className={styles.phoneBtns}>
+                        <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryEmerald}`}>
+                          <PhoneCall size={12} />
+                          <span>Call Now</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(primaryPhone.number, 'p1')}
+                          className={styles.actionBtnSecondary}
+                          title="Copy Number"
+                        >
+                          {copiedId === 'p1' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                          <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <div className={styles.btnRow}>
-                    <a href={`mailto:${primaryEmail.email}`} className={`${styles.actionBtn} ${styles.btnPrimaryIndigo}`}>
-                      <Mail size={12} />
-                      <span>Email Us</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(primaryEmail.email, 'e1')}
-                      className={styles.actionBtnSecondary}
-                      title="Copy Email"
-                    >
-                      {copiedId === 'e1' ? <Check size={13} color="#4f46e5" /> : <Copy size={13} />}
-                      <span>{copiedId === 'e1' ? 'Copied' : 'Copy'}</span>
-                    </button>
+
+                  {/* Phone 2: Appointments */}
+                  <div className={styles.phoneItem}>
+                    <span className={styles.phoneLabel}>Specialist Care & Appointments</span>
+                    <div className={styles.phoneActionRow}>
+                      <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                        {secondaryPhone.number}
+                      </a>
+                      <div className={styles.phoneBtns}>
+                        <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryBlue}`}>
+                          <CalendarClock size={12} />
+                          <span>Call Desk</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(secondaryPhone.number, 'p2')}
+                          className={styles.actionBtnSecondary}
+                          title="Copy Number"
+                        >
+                          {copiedId === 'p2' ? <Check size={13} color="#2563eb" /> : <Copy size={13} />}
+                          <span>{copiedId === 'p2' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                <div className={styles.blockFooterPill}>
+                  <span>⚡ Zero Waiting Time</span>
+                  <span className={styles.pillDot}>•</span>
+                  <span>🏥 Priority Bed Allocation across 40+ Network Hospitals</span>
                 </div>
               </div>
 
-              {/* WhatsApp & Operational Info Card */}
-              <div className={`${styles.channelCard} ${styles.cardGreen}`}>
-                <div className={styles.channelTop}>
-                  <div className={`${styles.iconWrap} ${styles.iconGreen}`}>
-                    <MessageSquare size={18} />
+              {/* Main Block 2: Digital Concierge & Online Support */}
+              <div className={`${styles.mainBlockCard} ${styles.blockDigital}`}>
+                <div className={styles.blockHeader}>
+                  <div className={`${styles.blockIconWrap} ${styles.iconGreen}`}>
+                    <MessageSquare size={20} />
                   </div>
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>Instant WhatsApp</span>
-                    <span className={styles.tagGreen}>Quick Reply</span>
-                  </div>
-                </div>
-
-                <div className={styles.cardMiddle}>
-                  <p className={styles.channelDesc}>
-                    Connect directly with our clinical care concierge on WhatsApp for instant route guidance, availability, and inquiries.
-                  </p>
-                  <div className={styles.featurePills}>
-                    <span className={styles.featurePill}>💬 Reply &lt; 5 Mins</span>
-                    <span className={styles.featurePill}>📍 Live Guidance</span>
+                  <div className={styles.blockTitleWrap}>
+                    <div className={styles.blockTitleRow}>
+                      <h3 className={styles.blockTitle}>Digital Care Desk & Concierge</h3>
+                      <span className={styles.tagGreen}>Fast Digital Response</span>
+                    </div>
+                    <p className={styles.blockDesc}>
+                      Direct chat for cashless pre-authorization, claim guidance, and clinical route assistance.
+                    </p>
                   </div>
                 </div>
 
-                <div className={styles.channelBody}>
-                  <a
-                    href={`https://wa.me/${primaryPhone.number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello Sehat Buddy Care Desk, I would like to inquire about healthcare services.')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`${styles.actionBtn} ${styles.btnWhatsApp}`}
-                  >
-                    <MessageSquare size={13} />
-                    <span>Chat on WhatsApp</span>
-                    <ExternalLink size={12} style={{ marginLeft: 'auto' }} />
-                  </a>
-                  <div className={styles.hubDetails}>
-                    <span className={styles.hubHours}>
-                      <Clock size={11} style={{ display: 'inline', marginRight: '4px' }} />
-                      {workingHours} (24x7 ER)
-                    </span>
-                    <span className={styles.hubLoc}>
-                      <MapPin size={11} style={{ display: 'inline', marginRight: '4px' }} />
-                      Bengaluru Hub
-                    </span>
+                <div className={styles.digitalGrid}>
+                  {/* WhatsApp Quick CTA */}
+                  <div className={styles.digitalItem}>
+                    <div className={styles.digitalLabelRow}>
+                      <span className={styles.phoneLabel}>Instant WhatsApp Concierge</span>
+                      <span className={styles.replyBadge}>Avg Reply &lt; 5 mins</span>
+                    </div>
+                    <a
+                      href={`https://wa.me/${primaryPhone.number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello Sehat Buddy Care Desk, I would like to inquire about healthcare services.')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`${styles.actionBtn} ${styles.btnWhatsAppFull}`}
+                    >
+                      <MessageSquare size={14} />
+                      <span>Chat on WhatsApp</span>
+                      <ExternalLink size={13} style={{ marginLeft: 'auto' }} />
+                    </a>
                   </div>
+
+                  {/* Email Support */}
+                  <div className={styles.digitalItem}>
+                    <span className={styles.phoneLabel}>Patient & Enterprise Email Desks</span>
+                    <div className={styles.emailActionRow}>
+                      <div className={styles.emailList}>
+                        <a href={`mailto:${primaryEmail.email}`} className={styles.emailLink}>
+                          {primaryEmail.email}
+                        </a>
+                        {secondaryEmail?.email && secondaryEmail.email !== primaryEmail.email && (
+                          <a href={`mailto:${secondaryEmail.email}`} className={styles.emailLinkSecondary}>
+                            {secondaryEmail.email}
+                          </a>
+                        )}
+                      </div>
+                      <div className={styles.phoneBtns}>
+                        <a href={`mailto:${primaryEmail.email}`} className={`${styles.actionBtn} ${styles.btnPrimaryIndigo}`}>
+                          <Mail size={12} />
+                          <span>Email</span>
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(primaryEmail.email, 'e1')}
+                          className={styles.actionBtnSecondary}
+                          title="Copy Email"
+                        >
+                          {copiedId === 'e1' ? <Check size={13} color="#4f46e5" /> : <Copy size={13} />}
+                          <span>{copiedId === 'e1' ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={styles.hubFooterBar}>
+                  <span className={styles.hubItem}>
+                    <Clock size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                    {workingHours} (24x7 ER)
+                  </span>
+                  <span className={styles.pillDot}>•</span>
+                  <span className={styles.hubItem}>
+                    <MapPin size={12} style={{ display: 'inline', marginRight: '4px' }} />
+                    Bengaluru Healthcare Hub
+                  </span>
                 </div>
               </div>
             </div>
