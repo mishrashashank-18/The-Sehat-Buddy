@@ -526,10 +526,9 @@ function AppContent() {
 
   if (currentView === 'contact') {
     return (
-      <div className="app">
+      <div className="app contactViewApp">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <ContactUs onNavigate={navigateTo} />
-        <Footer onNavigate={navigateTo} />
       </div>
     );
   }

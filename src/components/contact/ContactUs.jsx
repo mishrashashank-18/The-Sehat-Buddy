@@ -12,14 +12,13 @@ import {
   Copy,
   Check,
   MessageSquare,
-  ArrowRight,
-  ShieldCheck,
-  ChevronDown,
-  ChevronUp,
   ExternalLink,
-  Loader2
+  Loader2,
+  ShieldCheck,
+  ChevronRight
 } from 'lucide-react';
 import Container from '../layout/Container';
+import PolicyViewerModal from '../common/PolicyViewerModal';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
 import styles from './ContactUs.module.css';
@@ -32,25 +31,6 @@ const INQUIRY_CATEGORIES = [
   'Lab Tests & Health Packages',
   'Hospital or Clinic Tie-up',
   'General Inquiries & Feedback'
-];
-
-const FAQS_LIST = [
-  {
-    q: 'How quickly does your healthcare desk respond to inquiries?',
-    a: 'For emergency and urgent inquiries submitted via our 24/7 helpline, support is immediate. Standard digital inquiries submitted through this form are typically answered within 1 to 2 business hours.'
-  },
-  {
-    q: 'Can I book a priority hospital bed through Sehat Buddy?',
-    a: 'Yes. Our direct enterprise network connects with leading accredited partner hospitals. Use our 24/7 helpline or the Hospital Admission category above for immediate live bed coordination.'
-  },
-  {
-    q: 'How does cashless insurance coverage work at partner hospitals?',
-    a: 'All our accredited partner hospitals feature dedicated Cashless Insurance & TPA desks supporting 40+ leading public and private insurance providers. Bring your policy e-card for on-the-spot pre-authorization.'
-  },
-  {
-    q: 'How can a hospital or clinician join The Sehat Buddy network?',
-    a: 'Registered healthcare institutions can select "Hospital or Clinic Tie-up" in the contact form or register directly via our Hospital Portal to start the clinical verification workflow.'
-  }
 ];
 
 export default function ContactUs({ onNavigate }) {
@@ -71,7 +51,6 @@ export default function ContactUs({ onNavigate }) {
       ];
 
   const workingHours = contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM';
-
   const primaryPhone = phones.find(p => p.isPrimary) || phones[0];
   const secondaryPhone = phones.find(p => !p.isPrimary) || phones[1] || phones[0];
   const primaryEmail = emails.find(e => e.isPrimary) || emails[0];
@@ -91,7 +70,7 @@ export default function ContactUs({ onNavigate }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedId, setCopiedId] = useState(null);
-  const [openFaq, setOpenFaq] = useState(0);
+  const [activePolicyType, setActivePolicyType] = useState(null);
 
   const handleCopy = (text, id) => {
     if (navigator?.clipboard?.writeText) {
@@ -115,7 +94,7 @@ export default function ContactUs({ onNavigate }) {
       return;
     }
     if (!formData.message.trim()) {
-      setErrorMsg('Please write your message or medical query.');
+      setErrorMsg('Please write your message or query.');
       return;
     }
 
@@ -124,7 +103,7 @@ export default function ContactUs({ onNavigate }) {
       if (api.submitInquiry) {
         await api.submitInquiry(formData);
       }
-      setSuccessMsg(`Thank you, ${formData.name}! Your inquiry has been received. Our healthcare care team will contact you shortly.`);
+      setSuccessMsg(`Thank you, ${formData.name}! Your inquiry has been received. Our care desk will get in touch shortly.`);
       setFormData({
         name: '',
         email: '',
@@ -141,200 +120,216 @@ export default function ContactUs({ onNavigate }) {
   };
 
   return (
-    <div className={styles.pageWrapper}>
-      {/* Hero Section */}
-      <section className={styles.heroSection}>
-        <Container>
-          <div className={styles.breadcrumb}>
-            <button type="button" onClick={() => onNavigate && onNavigate('site')} className={styles.breadLink}>
+    <div className={styles.singlePageWrapper}>
+      <Container className={styles.containerFlex}>
+        {/* Top Compact Bar */}
+        <div className={styles.topBar}>
+          <div className={styles.breadcrumbRow}>
+            <button
+              type="button"
+              onClick={() => onNavigate && onNavigate('site')}
+              className={styles.breadBtn}
+            >
               Home
             </button>
-            <span className={styles.breadSep}>/</span>
-            <span className={styles.breadCurrent}>Contact Us</span>
+            <ChevronRight size={13} className={styles.breadIcon} />
+            <span className={styles.breadActive}>Contact Us</span>
+            <span className={styles.dotDivider}>•</span>
+            <span className={styles.topPageTitle}>Healthcare Coordination & Care Desk</span>
           </div>
 
-          <div className={styles.heroContent}>
-            <span className={styles.heroBadge}>
-              <HeadphonesIcon size={14} /> 24/7 Patient & Partner Support
-            </span>
-            <h1 className={styles.heroTitle}>We're Here to Help You and Your Family</h1>
-            <p className={styles.heroSubtitle}>
-              Whether you need priority hospital admissions, consultations with top clinicians, cashless insurance guidance, or enterprise tie-ups — our dedicated healthcare care desk is ready.
-            </p>
+          <div className={styles.statusPill}>
+            <span className={styles.livePulse} />
+            <span className={styles.statusText}>24/7 Live Patient Support Active</span>
           </div>
-        </Container>
-      </section>
+        </div>
 
-      {/* Quick Helplines Grid */}
-      <section className={styles.cardsSection}>
-        <Container>
-          <div className={styles.cardsGrid}>
-            {/* Helpline 1 */}
-            <div className={styles.contactCard}>
-              <div className={`${styles.cardIconCircle} ${styles.bgEmerald}`}>
-                <PhoneCall size={22} color="#059669" />
-              </div>
-              <div className={styles.cardTagRow}>
-                <span className={styles.cardLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
-                <span className={`${styles.statusBadge} ${styles.statusActive}`}>24x7 Active</span>
-              </div>
-              <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.cardValue}>
-                {primaryPhone.number}
-              </a>
-              <div className={styles.cardActionRow}>
-                <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.cardActionBtnPrimary}>
-                  <PhoneCall size={13} />
-                  <span>Call Now</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(primaryPhone.number, 'p1')}
-                  className={styles.cardActionBtnSecondary}
-                  title="Copy Phone Number"
-                >
-                  {copiedId === 'p1' ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
-                  <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
+        {/* Main Content: 2-Panel Side-by-Side Console */}
+        <div className={styles.mainConsole}>
+          {/* Left Column: Direct Communication Channels */}
+          <div className={styles.leftColumn}>
+            <div className={styles.columnIntro}>
+              <h1 className={styles.heroHeading}>We're Here for You & Your Family</h1>
+              <p className={styles.heroSubtext}>
+                Reach our dedicated care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.
+              </p>
             </div>
 
-            {/* Helpline 2 */}
-            <div className={styles.contactCard}>
-              <div className={`${styles.cardIconCircle} ${styles.bgBlue}`}>
-                <CalendarClock size={22} color="#2563eb" />
+            <div className={styles.channelGrid}>
+              {/* Emergency Helpline Card */}
+              <div className={`${styles.channelCard} ${styles.cardEmerald}`}>
+                <div className={styles.channelTop}>
+                  <div className={`${styles.iconWrap} ${styles.iconEmerald}`}>
+                    <PhoneCall size={18} />
+                  </div>
+                  <div className={styles.channelMeta}>
+                    <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
+                    <span className={styles.tagEmerald}>24x7 Active</span>
+                  </div>
+                </div>
+                <div className={styles.channelBody}>
+                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                    {primaryPhone.number}
+                  </a>
+                  <div className={styles.btnRow}>
+                    <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryEmerald}`}>
+                      <PhoneCall size={12} />
+                      <span>Call Now</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(primaryPhone.number, 'p1')}
+                      className={styles.actionBtnSecondary}
+                      title="Copy Number"
+                    >
+                      {copiedId === 'p1' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                      <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className={styles.cardTagRow}>
-                <span className={styles.cardLabel}>{secondaryPhone.label || 'Appointments Desk'}</span>
-                <span className={`${styles.statusBadge} ${styles.statusBlue}`}>Doctor Care</span>
-              </div>
-              <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.cardValue}>
-                {secondaryPhone.number}
-              </a>
-              <div className={styles.cardActionRow}>
-                <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.cardActionBtnPrimary}>
-                  <PhoneCall size={13} />
-                  <span>Call Desk</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(secondaryPhone.number, 'p2')}
-                  className={styles.cardActionBtnSecondary}
-                  title="Copy Phone Number"
-                >
-                  {copiedId === 'p2' ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
-                  <span>{copiedId === 'p2' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Email 1 */}
-            <div className={styles.contactCard}>
-              <div className={`${styles.cardIconCircle} ${styles.bgIndigo}`}>
-                <Mail size={22} color="#4f46e5" />
+              {/* Appointments Desk Card */}
+              <div className={`${styles.channelCard} ${styles.cardBlue}`}>
+                <div className={styles.channelTop}>
+                  <div className={`${styles.iconWrap} ${styles.iconBlue}`}>
+                    <CalendarClock size={18} />
+                  </div>
+                  <div className={styles.channelMeta}>
+                    <span className={styles.channelLabel}>{secondaryPhone.label || 'Appointments Desk'}</span>
+                    <span className={styles.tagBlue}>Doctor Care</span>
+                  </div>
+                </div>
+                <div className={styles.channelBody}>
+                  <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                    {secondaryPhone.number}
+                  </a>
+                  <div className={styles.btnRow}>
+                    <a href={`tel:${secondaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryBlue}`}>
+                      <PhoneCall size={12} />
+                      <span>Call Desk</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(secondaryPhone.number, 'p2')}
+                      className={styles.actionBtnSecondary}
+                      title="Copy Number"
+                    >
+                      {copiedId === 'p2' ? <Check size={13} color="#2563eb" /> : <Copy size={13} />}
+                      <span>{copiedId === 'p2' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className={styles.cardTagRow}>
-                <span className={styles.cardLabel}>{primaryEmail.label || 'Patient Support'}</span>
-                <span className={`${styles.statusBadge} ${styles.statusIndigo}`}>Avg &lt; 2 hrs</span>
-              </div>
-              <a href={`mailto:${primaryEmail.email}`} className={styles.cardValue} style={{ fontSize: '1.05rem' }}>
-                {primaryEmail.email}
-              </a>
-              <div className={styles.cardActionRow}>
-                <a href={`mailto:${primaryEmail.email}`} className={styles.cardActionBtnPrimary}>
-                  <Mail size={13} />
-                  <span>Email Us</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(primaryEmail.email, 'e1')}
-                  className={styles.cardActionBtnSecondary}
-                  title="Copy Email Address"
-                >
-                  {copiedId === 'e1' ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
-                  <span>{copiedId === 'e1' ? 'Copied' : 'Copy'}</span>
-                </button>
-              </div>
-            </div>
 
-            {/* Email 2 */}
-            <div className={styles.contactCard}>
-              <div className={`${styles.cardIconCircle} ${styles.bgPurple}`}>
-                <Building2 size={22} color="#7c3aed" />
+              {/* Email Support Card */}
+              <div className={`${styles.channelCard} ${styles.cardIndigo}`}>
+                <div className={styles.channelTop}>
+                  <div className={`${styles.iconWrap} ${styles.iconIndigo}`}>
+                    <Mail size={18} />
+                  </div>
+                  <div className={styles.channelMeta}>
+                    <span className={styles.channelLabel}>{primaryEmail.label || 'Patient Support'}</span>
+                    <span className={styles.tagIndigo}>Avg &lt; 2 hrs</span>
+                  </div>
+                </div>
+                <div className={styles.channelBody}>
+                  <a href={`mailto:${primaryEmail.email}`} className={styles.emailLink}>
+                    {primaryEmail.email}
+                  </a>
+                  <div className={styles.btnRow}>
+                    <a href={`mailto:${primaryEmail.email}`} className={`${styles.actionBtn} ${styles.btnPrimaryIndigo}`}>
+                      <Mail size={12} />
+                      <span>Email Us</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(primaryEmail.email, 'e1')}
+                      className={styles.actionBtnSecondary}
+                      title="Copy Email"
+                    >
+                      {copiedId === 'e1' ? <Check size={13} color="#4f46e5" /> : <Copy size={13} />}
+                      <span>{copiedId === 'e1' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className={styles.cardTagRow}>
-                <span className={styles.cardLabel}>{secondaryEmail.label || 'Hospital & Enterprise'}</span>
-                <span className={`${styles.statusBadge} ${styles.statusPurple}`}>Partnerships</span>
-              </div>
-              <a href={`mailto:${secondaryEmail.email}`} className={styles.cardValue} style={{ fontSize: '1.05rem' }}>
-                {secondaryEmail.email}
-              </a>
-              <div className={styles.cardActionRow}>
-                <a href={`mailto:${secondaryEmail.email}`} className={styles.cardActionBtnPrimary}>
-                  <Mail size={13} />
-                  <span>Partner Desk</span>
-                </a>
-                <button
-                  type="button"
-                  onClick={() => handleCopy(secondaryEmail.email, 'e2')}
-                  className={styles.cardActionBtnSecondary}
-                  title="Copy Email Address"
-                >
-                  {copiedId === 'e2' ? <Check size={14} color="#16a34a" /> : <Copy size={14} />}
-                  <span>{copiedId === 'e2' ? 'Copied' : 'Copy'}</span>
-                </button>
+
+              {/* WhatsApp & Operational Info Card */}
+              <div className={`${styles.channelCard} ${styles.cardGreen}`}>
+                <div className={styles.channelTop}>
+                  <div className={`${styles.iconWrap} ${styles.iconGreen}`}>
+                    <MessageSquare size={18} />
+                  </div>
+                  <div className={styles.channelMeta}>
+                    <span className={styles.channelLabel}>Instant WhatsApp</span>
+                    <span className={styles.tagGreen}>Quick Reply</span>
+                  </div>
+                </div>
+                <div className={styles.channelBody}>
+                  <a
+                    href={`https://wa.me/${primaryPhone.number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello Sehat Buddy Care Desk, I would like to inquire about healthcare services.')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.actionBtn} ${styles.btnWhatsApp}`}
+                  >
+                    <MessageSquare size={13} />
+                    <span>Chat on WhatsApp</span>
+                    <ExternalLink size={12} style={{ marginLeft: 'auto' }} />
+                  </a>
+                  <div className={styles.hubDetails}>
+                    <span className={styles.hubHours}>
+                      <Clock size={11} style={{ display: 'inline', marginRight: '4px' }} />
+                      {workingHours} (24x7 ER)
+                    </span>
+                    <span className={styles.hubLoc}>
+                      <MapPin size={11} style={{ display: 'inline', marginRight: '4px' }} />
+                      Bengaluru Hub
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </Container>
-      </section>
 
-      {/* Main 2-Column Section: Form + Details */}
-      <section className={styles.mainSection}>
-        <Container>
-          <div className={styles.twoColumnGrid}>
-            {/* Left Column: Form */}
-            <div className={styles.formContainer}>
+          {/* Right Column: Send Message Form */}
+          <div className={styles.rightColumn}>
+            <div className={styles.formCard}>
               <div className={styles.formHeader}>
-                <div className={styles.formIconBadge}>
-                  <MessageSquare size={20} color="#2563eb" />
+                <div className={styles.formBadge}>
+                  <Send size={15} color="#2563eb" />
                 </div>
                 <div>
                   <h2 className={styles.formTitle}>Send Us a Message</h2>
                   <p className={styles.formSubtitle}>
-                    Fill out the form below and an assigned healthcare coordinator will get back to you immediately.
+                    Submit your query and an assigned healthcare coordinator will contact you promptly.
                   </p>
                 </div>
               </div>
 
               {successMsg && (
-                <div className={styles.successBox}>
-                  <CheckCircle2 size={20} color="#16a34a" style={{ flexShrink: 0 }} />
-                  <div>
-                    <strong>Message Sent Successfully</strong>
-                    <p style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>{successMsg}</p>
-                  </div>
+                <div className={styles.successBanner}>
+                  <CheckCircle2 size={18} color="#16a34a" style={{ flexShrink: 0 }} />
+                  <span>{successMsg}</span>
                 </div>
               )}
 
               {errorMsg && (
-                <div className={styles.errorBox}>
-                  <AlertTriangle size={20} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <div>
-                    <strong>Unable to Submit</strong>
-                    <p style={{ margin: '4px 0 0', fontSize: '0.9rem' }}>{errorMsg}</p>
-                  </div>
+                <div className={styles.errorBanner}>
+                  <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
+                  <span>{errorMsg}</span>
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className={styles.form}>
-                <div className={styles.fieldRow}>
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>
-                      Full Name <span className={styles.required}>*</span>
+              <form onSubmit={handleSubmit} className={styles.formElement}>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.inputLabel}>
+                      Full Name <span className={styles.reqStar}>*</span>
                     </label>
                     <input
                       type="text"
-                      className={styles.input}
+                      className={styles.textInput}
                       placeholder="e.g. Rahul Sharma"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -342,13 +337,13 @@ export default function ContactUs({ onNavigate }) {
                     />
                   </div>
 
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>
-                      Email Address <span className={styles.required}>*</span>
+                  <div className={styles.formGroup}>
+                    <label className={styles.inputLabel}>
+                      Email Address <span className={styles.reqStar}>*</span>
                     </label>
                     <input
                       type="email"
-                      className={styles.input}
+                      className={styles.textInput}
                       placeholder="e.g. rahul@example.com"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -357,22 +352,22 @@ export default function ContactUs({ onNavigate }) {
                   </div>
                 </div>
 
-                <div className={styles.fieldRow}>
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Phone Number (Optional)</label>
+                <div className={styles.formRow}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.inputLabel}>Phone Number (Optional)</label>
                     <input
                       type="tel"
-                      className={styles.input}
+                      className={styles.textInput}
                       placeholder="e.g. +91 98765 43210"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     />
                   </div>
 
-                  <div className={styles.fieldGroup}>
-                    <label className={styles.label}>Inquiry Category</label>
+                  <div className={styles.formGroup}>
+                    <label className={styles.inputLabel}>Inquiry Category</label>
                     <select
-                      className={styles.select}
+                      className={styles.selectInput}
                       value={formData.category}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     >
@@ -383,9 +378,9 @@ export default function ContactUs({ onNavigate }) {
                   </div>
                 </div>
 
-                <div className={styles.fieldGroup}>
-                  <label className={styles.label}>Priority Level</label>
-                  <div className={styles.priorityPills}>
+                <div className={styles.formGroup}>
+                  <label className={styles.inputLabel}>Priority Level</label>
+                  <div className={styles.priorityRow}>
                     {['Normal', 'Urgent', 'Medical Emergency'].map(p => (
                       <button
                         key={p}
@@ -401,22 +396,22 @@ export default function ContactUs({ onNavigate }) {
                 </div>
 
                 {formData.priority === 'Medical Emergency' && (
-                  <div className={styles.emergencyWarning}>
-                    <AlertTriangle size={18} color="#b91c1c" />
+                  <div className={styles.emergencyNotice}>
+                    <AlertTriangle size={15} color="#b91c1c" style={{ flexShrink: 0 }} />
                     <span>
-                      <strong>Notice:</strong> For life-threatening clinical emergencies requiring instant triage, please dial <strong>108 / 112</strong> or call our 24/7 Helpline at <strong>{primaryPhone.number}</strong> immediately.
+                      For immediate life-threatening emergencies, dial <strong>108 / 112</strong> or call our 24/7 Helpline <strong>{primaryPhone.number}</strong>.
                     </span>
                   </div>
                 )}
 
-                <div className={styles.fieldGroup}>
-                  <label className={styles.label}>
-                    Message / Medical Query <span className={styles.required}>*</span>
+                <div className={styles.formGroup} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                  <label className={styles.inputLabel}>
+                    Message / Medical Query <span className={styles.reqStar}>*</span>
                   </label>
                   <textarea
-                    rows={5}
-                    className={styles.textarea}
-                    placeholder="Tell us more about how our clinical and patient desk can assist you..."
+                    rows={3}
+                    className={styles.textareaInput}
+                    placeholder="Describe how our care desk can assist you with beds, doctors, or treatments..."
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                     required
@@ -426,155 +421,64 @@ export default function ContactUs({ onNavigate }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className={styles.submitBtn}
+                  className={styles.submitButton}
                 >
                   {loading ? (
                     <>
-                      <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                      <span>Sending Your Message...</span>
+                      <Loader2 size={16} className={styles.spinIcon} />
+                      <span>Submitting Inquiry...</span>
                     </>
                   ) : (
                     <>
-                      <Send size={16} />
+                      <Send size={15} />
                       <span>Submit Message</span>
                     </>
                   )}
                 </button>
               </form>
             </div>
-
-            {/* Right Column: Platform Assistance & Physical Hub */}
-            <div className={styles.infoContainer}>
-              {/* Timing Card */}
-              <div className={styles.infoCard}>
-                <div className={styles.infoHeader}>
-                  <Clock size={20} color="#2563eb" />
-                  <h3 className={styles.infoTitle}>Operational Timings</h3>
-                </div>
-                <div className={styles.timingList}>
-                  <div className={styles.timingItem}>
-                    <span className={styles.timingLabel}>Standard Support Desk:</span>
-                    <span className={styles.timingVal}>{workingHours}</span>
-                  </div>
-                  <div className={styles.timingItem}>
-                    <span className={styles.timingLabel}>Emergency Medical Helpline:</span>
-                    <span className={styles.timingValBadge}>24 Hours / 7 Days Uninterrupted</span>
-                  </div>
-                  <div className={styles.timingItem}>
-                    <span className={styles.timingLabel}>Cashless Pre-Auth Desk:</span>
-                    <span className={styles.timingVal}>Mon – Sun: 24x7 In-Hospital Desk</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Physical Hub Location */}
-              <div className={styles.infoCard}>
-                <div className={styles.infoHeader}>
-                  <MapPin size={20} color="#2563eb" />
-                  <h3 className={styles.infoTitle}>Healthcare Coordination Hub</h3>
-                </div>
-                <p className={styles.infoDesc}>
-                  Headquartered in the technology and healthcare capital of India, orchestrating clinical networks and cashless priority hospital beds across major metropolitan centers.
-                </p>
-                <div className={styles.locationPill}>
-                  <MapPin size={15} color="#059669" />
-                  <span>Bengaluru, Karnataka 560076, India</span>
-                </div>
-              </div>
-
-              {/* Direct WhatsApp Channel */}
-              <div className={`${styles.infoCard} ${styles.whatsappCard}`}>
-                <div className={styles.infoHeader}>
-                  <MessageSquare size={20} color="#16a34a" />
-                  <h3 className={styles.infoTitle}>Instant WhatsApp Assistance</h3>
-                </div>
-                <p className={styles.infoDesc}>
-                  Connect directly with a patient care representative via WhatsApp for quick questions on appointment availability and hospital routes.
-                </p>
-                <a
-                  href={`https://wa.me/${primaryPhone.number.replace(/[^0-9]/g, '')}?text=${encodeURIComponent('Hello Sehat Buddy Team, I would like to inquire about healthcare services.')}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={styles.whatsappBtn}
-                >
-                  <span>Chat on WhatsApp</span>
-                  <ExternalLink size={15} />
-                </a>
-              </div>
-
-              {/* Quick Navigation Shortcuts */}
-              <div className={styles.quickShortcuts}>
-                <h4 className={styles.shortcutsTitle}>Quick Navigation</h4>
-                <div className={styles.shortcutBtns}>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate && onNavigate('find-doctors')}
-                    className={styles.shortcutBtn}
-                  >
-                    <span>Browse Verified Doctors</span>
-                    <ArrowRight size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate && onNavigate('find-hospitals')}
-                    className={styles.shortcutBtn}
-                  >
-                    <span>Explore Partner Hospitals</span>
-                    <ArrowRight size={14} />
-                  </button>
-                </div>
-              </div>
-            </div>
           </div>
-        </Container>
-      </section>
+        </div>
 
-      {/* Frequently Asked Questions */}
-      <section className={styles.faqSection}>
-        <Container>
-          <div className={styles.faqHeader}>
-            <span className={styles.faqBadge}>COMMON QUESTIONS</span>
-            <h2 className={styles.faqTitle}>Frequently Asked Questions</h2>
-            <p className={styles.faqSubtitle}>
-              Find quick answers to common inquiries regarding appointments, hospital beds, and clinical coordination.
-            </p>
+        {/* Single-Page Bottom Strip */}
+        <div className={styles.bottomStrip}>
+          <div className={styles.bottomLeft}>
+            <span>© 2026 The Sehat Buddy. Your Health, Our Priority.</span>
           </div>
 
-          <div className={styles.faqGrid}>
-            {FAQS_LIST.map((faq, index) => {
-              const isOpen = openFaq === index;
-              return (
-                <div
-                  key={index}
-                  className={`${styles.faqCard} ${isOpen ? styles.faqCardOpen : ''}`}
-                  onClick={() => setOpenFaq(isOpen ? null : index)}
-                >
-                  <div className={styles.faqQuestionRow}>
-                    <h3 className={styles.faqQuestion}>{faq.q}</h3>
-                    <div className={styles.faqChevron}>
-                      {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </div>
-                  </div>
-                  {isOpen && (
-                    <div className={styles.faqAnswer}>
-                      <p>{faq.a}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          <div className={styles.bottomCenter}>
+            <ShieldCheck size={14} color="#059669" />
+            <span>National Emergency Medical Triage: <strong>Dial 108 / 112</strong></span>
           </div>
-        </Container>
-      </section>
+
+          <div className={styles.bottomRight}>
+            <button
+              type="button"
+              className={styles.policyLink}
+              onClick={() => setActivePolicyType('privacy')}
+            >
+              Privacy Policy
+            </button>
+            <span className={styles.linkSep}>•</span>
+            <button
+              type="button"
+              className={styles.policyLink}
+              onClick={() => setActivePolicyType('terms')}
+            >
+              Terms & Conditions
+            </button>
+          </div>
+        </div>
+      </Container>
+
+      {/* Policy Viewer Modal */}
+      {activePolicyType && (
+        <PolicyViewerModal
+          isOpen={Boolean(activePolicyType)}
+          onClose={() => setActivePolicyType(null)}
+          type={activePolicyType}
+        />
+      )}
     </div>
-  );
-}
-
-function HeadphonesIcon({ size = 16, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
-      <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
-    </svg>
   );
 }
