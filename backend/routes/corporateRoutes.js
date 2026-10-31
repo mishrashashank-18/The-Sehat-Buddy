@@ -3,6 +3,7 @@ import Corporate from '../models/Corporate.js';
 import Content from '../models/Content.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
+import { extractCloudinaryPublicId, getCloudinary } from './uploadRoutes.js';
 
 const router = express.Router();
 
@@ -21,14 +22,9 @@ export const syncContentFromCorporates = async () => {
       _id: c._id,
       id: c.id || c._id,
       name: c.name,
-      shortName: c.shortName || (c.name ? c.name.split(' ')[0] : 'Partner'),
-      logoText: c.logoText || (c.shortName || c.name || 'CORP').slice(0, 10),
-      category: c.category || 'Enterprise Partner',
-      benefit: c.benefit || '',
-      employeesCovered: c.employeesCovered || '50,000+',
-      color: c.color || '#2563EB',
-      bgColor: c.bgColor || '#EFF6FF',
-      logo: c.logo || ''
+      logo: c.logo || '',
+      website: c.website || '',
+      order: c.order || 0
     }));
 
     await Content.findOneAndUpdate(
@@ -61,14 +57,8 @@ router.post('/', checkAdminAuth, async (req, res) => {
     const newCorp = await Corporate.create({
       id: data.id || Date.now(),
       name: data.name,
-      shortName: data.shortName || (data.name ? data.name.split(' ')[0] : 'Partner'),
-      logoText: data.logoText || (data.name ? data.name.slice(0, 4).toUpperCase() : 'CORP'),
-      category: data.category || 'Enterprise Partner',
-      benefit: data.benefit || '',
-      employeesCovered: data.employeesCovered || '50,000+',
-      color: data.color || '#2563EB',
-      bgColor: data.bgColor || '#EFF6FF',
       logo: data.logo || '',
+      website: data.website || '',
       order: count + 1
     });
 
@@ -87,35 +77,42 @@ router.put('/', checkAdminAuth, async (req, res) => {
   try {
     const list = Array.isArray(req.body) ? req.body : [];
     
+    // Check which logos were in DB before and are no longer in list -> destroy from Cloudinary
+    const currentCorps = await Corporate.find({});
+    const newLogos = new Set(list.map(item => item.logo).filter(Boolean));
+    for (const oldCorp of currentCorps) {
+      if (oldCorp.logo && oldCorp.logo.includes('cloudinary.com') && !newLogos.has(oldCorp.logo)) {
+        const publicId = extractCloudinaryPublicId(oldCorp.logo);
+        if (publicId) {
+          try {
+            const cld = getCloudinary();
+            await cld.uploader.destroy(publicId, { invalidate: true });
+          } catch (cldErr) {
+            console.warn('Failed to delete removed corporate logo from Cloudinary:', cldErr.message);
+          }
+        }
+      }
+    }
+
     // Replace all in Corporate collection
     await Corporate.deleteMany({});
     if (list.length > 0) {
       const docs = list.map((item, idx) => ({
         id: item.id || Date.now() + idx,
         name: item.name,
-        shortName: item.shortName || (item.name ? item.name.split(' ')[0] : 'Partner'),
-        logoText: item.logoText || (item.name ? item.name.slice(0, 4).toUpperCase() : 'CORP'),
-        category: item.category || 'Enterprise Partner',
-        benefit: item.benefit || '',
-        employeesCovered: item.employeesCovered || '50,000+',
-        color: item.color || '#2563EB',
-        bgColor: item.bgColor || '#EFF6FF',
         logo: item.logo || '',
+        website: item.website || '',
         order: idx + 1
       }));
       await Corporate.insertMany(docs);
     }
 
-    await Content.findOneAndUpdate(
-      { type: 'corporate' },
-      { data: list },
-      { new: true, upsert: true }
-    );
+    const allFormatted = await syncContentFromCorporates();
 
-    broadcastDbChange('corporates', 'update', 'all', list);
-    broadcastDbChange('contents', 'update', 'corporate', { type: 'corporate', data: list });
+    broadcastDbChange('corporates', 'update', 'all', allFormatted);
+    broadcastDbChange('contents', 'update', 'corporate', { type: 'corporate', data: allFormatted });
 
-    res.json({ success: true, data: list, message: 'Corporate partners updated' });
+    res.json({ success: true, data: allFormatted, message: 'Corporate partners updated' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -130,7 +127,27 @@ router.put('/:id', checkAdminAuth, async (req, res) => {
       query = { id: Number(id) || id };
     }
 
-    const updated = await Corporate.findOneAndUpdate(query, req.body, { new: true });
+    const existing = await Corporate.findOne(query);
+    // If the logo changed, delete the old logo from Cloudinary
+    if (existing && existing.logo && req.body.logo && existing.logo !== req.body.logo && existing.logo.includes('cloudinary.com')) {
+      const oldPublicId = extractCloudinaryPublicId(existing.logo);
+      if (oldPublicId) {
+        try {
+          const cld = getCloudinary();
+          await cld.uploader.destroy(oldPublicId, { invalidate: true });
+        } catch (cldErr) {
+          console.warn('Failed to delete replaced corporate logo from Cloudinary:', cldErr.message);
+        }
+      }
+    }
+
+    const updated = await Corporate.findOneAndUpdate(query, {
+      name: req.body.name,
+      logo: req.body.logo || '',
+      website: req.body.website || '',
+      order: req.body.order !== undefined ? req.body.order : existing?.order || 0
+    }, { new: true });
+
     const allFormatted = await syncContentFromCorporates();
 
     broadcastDbChange('corporates', 'update', updated?._id || id, updated);
@@ -145,6 +162,21 @@ router.put('/:id', checkAdminAuth, async (req, res) => {
 // DELETE /api/corporate - Delete all corporate partners
 router.delete('/', checkAdminAuth, async (req, res) => {
   try {
+    const allCorps = await Corporate.find({});
+    for (const corp of allCorps) {
+      if (corp.logo && corp.logo.includes('cloudinary.com')) {
+        const publicId = extractCloudinaryPublicId(corp.logo);
+        if (publicId) {
+          try {
+            const cld = getCloudinary();
+            await cld.uploader.destroy(publicId, { invalidate: true });
+          } catch (cldErr) {
+            console.warn('Failed to delete corporate logo from Cloudinary:', cldErr.message);
+          }
+        }
+      }
+    }
+
     await Corporate.deleteMany({});
     await Content.findOneAndUpdate(
       { type: 'corporate' },
@@ -155,7 +187,7 @@ router.delete('/', checkAdminAuth, async (req, res) => {
     broadcastDbChange('corporates', 'delete', 'all', []);
     broadcastDbChange('contents', 'update', 'corporate', { type: 'corporate', data: [] });
 
-    res.json({ success: true, message: 'All corporate partners deleted' });
+    res.json({ success: true, message: 'All corporate partners deleted from database and Cloudinary' });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -170,13 +202,26 @@ router.delete('/:id', checkAdminAuth, async (req, res) => {
       query = { id: Number(id) || id };
     }
 
+    const corp = await Corporate.findOne(query);
+    if (corp && corp.logo && corp.logo.includes('cloudinary.com')) {
+      const publicId = extractCloudinaryPublicId(corp.logo);
+      if (publicId) {
+        try {
+          const cld = getCloudinary();
+          await cld.uploader.destroy(publicId, { invalidate: true });
+        } catch (cldErr) {
+          console.warn('Failed to delete corporate logo from Cloudinary:', cldErr.message);
+        }
+      }
+    }
+
     await Corporate.findOneAndDelete(query);
     const allFormatted = await syncContentFromCorporates();
 
     broadcastDbChange('corporates', 'delete', id, { id });
     broadcastDbChange('contents', 'update', 'corporate', { type: 'corporate', data: allFormatted });
 
-    res.json({ success: true, message: 'Corporate partner deleted', data: allFormatted });
+    res.json({ success: true, message: 'Corporate partner and Cloudinary logo deleted', data: allFormatted });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

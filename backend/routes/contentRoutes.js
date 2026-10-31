@@ -320,14 +320,8 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
           const docs = finalData.map((item, idx) => ({
             id: item.id || Date.now() + idx,
             name: item.name,
-            shortName: item.shortName || (item.name ? item.name.split(' ')[0] : 'Partner'),
-            logoText: item.logoText || (item.name ? item.name.slice(0, 4).toUpperCase() : 'CORP'),
-            category: item.category || 'Enterprise Partner',
-            benefit: item.benefit || '',
-            employeesCovered: item.employeesCovered || '50,000+',
-            color: item.color || '#2563EB',
-            bgColor: item.bgColor || '#EFF6FF',
             logo: item.logo || '',
+            website: item.website || '',
             order: idx + 1
           }));
           await Corporate.insertMany(docs);

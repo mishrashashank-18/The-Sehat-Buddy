@@ -82,43 +82,25 @@ const CorporatePartnerRow = React.memo(({
 
   const [draft, setDraft] = useState({
     name: corp.name || '',
-    shortName: corp.shortName || '',
-    logoText: corp.logoText || '',
-    category: corp.category || '',
-    benefit: corp.benefit || '',
-    employeesCovered: corp.employeesCovered || '',
-    color: corp.color || '#2563EB',
-    bgColor: corp.bgColor || '#EFF6FF',
-    logo: corp.logo || ''
+    logo: corp.logo || '',
+    website: corp.website || ''
   });
   const [isSaving, setIsSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
-  // Synchronize draft if corp updates externally (e.g. initial fetch or database reload)
   useEffect(() => {
     setDraft({
       name: corp.name || '',
-      shortName: corp.shortName || '',
-      logoText: corp.logoText || '',
-      category: corp.category || '',
-      benefit: corp.benefit || '',
-      employeesCovered: corp.employeesCovered || '',
-      color: corp.color || '#2563EB',
-      bgColor: corp.bgColor || '#EFF6FF',
-      logo: corp.logo || ''
+      logo: corp.logo || '',
+      website: corp.website || ''
     });
-  }, [corp.name, corp.shortName, corp.logoText, corp.category, corp.benefit, corp.employeesCovered, corp.color, corp.bgColor, corp.logo]);
+  }, [corp.name, corp.logo, corp.website]);
 
   const hasChanges = (
     (draft.name || '').trim() !== (corp.name || '').trim() ||
-    (draft.logoText || '').trim() !== (corp.logoText || '').trim() ||
-    (draft.category || '').trim() !== (corp.category || '').trim() ||
-    (draft.benefit || '').trim() !== (corp.benefit || '').trim() ||
-    (draft.employeesCovered || '').trim() !== (corp.employeesCovered || '').trim() ||
-    (draft.color || '#2563EB').toLowerCase() !== (corp.color || '#2563EB').toLowerCase() ||
-    (draft.bgColor || '#EFF6FF').toLowerCase() !== (corp.bgColor || '#EFF6FF').toLowerCase() ||
-    (draft.logo || '') !== (corp.logo || '')
+    (draft.logo || '') !== (corp.logo || '') ||
+    (draft.website || '').trim() !== (corp.website || '').trim()
   );
 
   const handleLogoUpload = async (e) => {
@@ -126,7 +108,7 @@ const CorporatePartnerRow = React.memo(({
     if (!file) return;
 
     if (!file.type.startsWith('image/') && !file.name.match(/\.(png|jpe?g|svg|webp|ico)$/i)) {
-      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP, ICO).');
+      showToast('Please upload a valid image file (PNG, JPG, SVG, WebP).');
       e.target.value = '';
       return;
     }
@@ -144,18 +126,12 @@ const CorporatePartnerRow = React.memo(({
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
       if (uploadedUrl) {
         setDraft(prev => ({ ...prev, logo: uploadedUrl }));
-        showToast('Logo loaded into draft! Click "Save" on card to publish.');
+        showToast('Logo uploaded to Cloudinary! Click "Save" on card to publish.');
       } else {
         throw new Error('Upload returned no URL');
       }
     } catch (err) {
-      console.warn('Fallback Data URI logo upload used:', err.message);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setDraft(prev => ({ ...prev, logo: reader.result }));
-        showToast('Logo loaded into draft! Click "Save" on card to publish.');
-      };
-      reader.readAsDataURL(file);
+      showToast(`Upload failed: ${err.message || 'Server error'}`);
     } finally {
       setIsUploadingLogo(false);
     }
@@ -163,7 +139,7 @@ const CorporatePartnerRow = React.memo(({
 
   const handleLogoRemove = () => {
     setDraft(prev => ({ ...prev, logo: '' }));
-    showToast('Logo removed from draft. Click "Save" on card to publish.');
+    showToast('Logo removed from card draft. Click "Save" to apply.');
   };
 
   const handleSave = async () => {
@@ -181,47 +157,54 @@ const CorporatePartnerRow = React.memo(({
   };
 
   return (
-    <div className={styles.itemRowCard} style={{ alignItems: 'flex-start' }}>
-      {/* Visual Preview Badge with Icon Upload */}
+    <div className={styles.itemRowCard} style={{ alignItems: 'center' }}>
+      {/* Sleek Partner Card Preview matching the new homepage style */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         <div
-          className={styles.corpBadgePreview}
           style={{
-            backgroundColor: draft.bgColor || '#EFF6FF',
-            color: draft.color || '#2563EB'
+            width: '160px',
+            height: '62px',
+            background: '#FFFFFF',
+            border: '1px solid #E2E8F0',
+            borderRadius: '12px',
+            padding: '8px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)',
+            overflow: 'hidden'
           }}
-          title={draft.logo ? `Custom icon for ${draft.name || 'Company'}` : "Badge Live Preview"}
+          title={draft.name || 'Partner Logo Preview'}
         >
           {isUploadingLogo ? (
-            <span style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: 600 }}>Loading...</span>
+            <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600 }}>Uploading...</span>
           ) : draft.logo ? (
             <img
-              key={draft.logo}
               src={draft.logo}
-              alt={draft.name || 'Company icon'}
-              className={styles.corpBadgeImg}
-              loading="eager"
-              decoding="async"
+              alt={draft.name || 'Partner logo'}
+              style={{ maxWidth: '100%', maxHeight: '42px', objectFit: 'contain', display: 'block' }}
             />
           ) : (
-            <span>{draft.logoText || draft.shortName || 'CORP'}</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+              {draft.name || 'No Logo'}
+            </span>
           )}
         </div>
 
         <div className={styles.corpLogoUploadWrap}>
           <label
             className={styles.corpUploadIconBtn}
-            title="Upload custom company icon (PNG, JPG, SVG, WebP, ICO)"
+            title="Upload partner logo to Cloudinary (PNG, SVG, JPG, WebP)"
             style={{
               opacity: isUploadingLogo ? 0.6 : 1,
               pointerEvents: isUploadingLogo ? 'none' : 'auto'
             }}
           >
             <Upload size={11} />
-            <span>{isUploadingLogo ? 'Uploading...' : (draft.logo ? 'Change' : 'Upload Icon')}</span>
+            <span>{isUploadingLogo ? 'Uploading...' : (draft.logo ? 'Change' : 'Upload Logo')}</span>
             <input
               type="file"
-              accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
+              accept="image/*,.png,.jpg,.jpeg,.svg,.webp"
               style={{ display: 'none' }}
               disabled={isUploadingLogo}
               onChange={handleLogoUpload}
@@ -232,7 +215,7 @@ const CorporatePartnerRow = React.memo(({
               type="button"
               className={styles.corpRemoveIconBtn}
               onClick={handleLogoRemove}
-              title="Remove custom icon and revert to text code"
+              title="Remove logo"
               disabled={isUploadingLogo}
             >
               <X size={11} />
@@ -241,11 +224,12 @@ const CorporatePartnerRow = React.memo(({
         </div>
       </div>
 
-      <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.4fr 1fr 1fr' }}>
+      <div className={styles.itemInputGroup} style={{ gridTemplateColumns: '1.2fr 1fr' }}>
         <div className={styles.formGroup}>
-          <label>Company Name</label>
+          <label>Company / Partner Name *</label>
           <input
             type="text"
+            required
             value={draft.name}
             onChange={(e) => setDraft(prev => ({ ...prev, name: e.target.value }))}
             onKeyDown={(e) => {
@@ -254,116 +238,24 @@ const CorporatePartnerRow = React.memo(({
                 handleSave();
               }
             }}
-            placeholder="e.g. Tata Consultancy Services"
+            placeholder="e.g. Microsoft, Flipkart, Swiggy"
           />
         </div>
 
         <div className={styles.formGroup}>
-          <label>Logo Text (Short Code)</label>
+          <label>Company Website URL (Optional)</label>
           <input
-            type="text"
-            value={draft.logoText}
-            onChange={(e) => setDraft(prev => ({ ...prev, logoText: e.target.value }))}
+            type="url"
+            value={draft.website}
+            onChange={(e) => setDraft(prev => ({ ...prev, website: e.target.value }))}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
                 handleSave();
               }
             }}
-            placeholder="e.g. TCS"
+            placeholder="e.g. https://www.microsoft.com"
           />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label>Industry / Category</label>
-          <input
-            type="text"
-            value={draft.category}
-            onChange={(e) => setDraft(prev => ({ ...prev, category: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-            placeholder="e.g. IT & Consulting"
-          />
-        </div>
-
-        <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-          <label>Benefit Offered</label>
-          <input
-            type="text"
-            value={draft.benefit}
-            onChange={(e) => setDraft(prev => ({ ...prev, benefit: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-            placeholder="e.g. Comprehensive Employee Wellness & Health Checks"
-          />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label>Employees Covered</label>
-          <input
-            type="text"
-            value={draft.employeesCovered}
-            onChange={(e) => setDraft(prev => ({ ...prev, employeesCovered: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSave();
-              }
-            }}
-            placeholder="e.g. 500,000+"
-          />
-        </div>
-      </div>
-
-      {/* Color Controls */}
-      <div className={styles.colorPillsGroup} style={{ flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
-        <div className={styles.colorInputWrap}>
-          <label>Text Color</label>
-          <div className={styles.colorInputInline}>
-            <input
-              type="color"
-              value={isValidHex(draft.color) ? draft.color : '#2563EB'}
-              onChange={(e) => setDraft(prev => ({ ...prev, color: e.target.value }))}
-              title="Choose text color swatch"
-            />
-            <input
-              type="text"
-              className={styles.colorHexText}
-              value={draft.color}
-              onChange={(e) => setDraft(prev => ({ ...prev, color: e.target.value }))}
-              placeholder="#2563EB"
-              maxLength={9}
-              title="Enter hex color code (e.g. #2563EB)"
-            />
-          </div>
-        </div>
-        <div className={styles.colorInputWrap}>
-          <label>Badge BG</label>
-          <div className={styles.colorInputInline}>
-            <input
-              type="color"
-              value={isValidHex(draft.bgColor) ? draft.bgColor : '#EFF6FF'}
-              onChange={(e) => setDraft(prev => ({ ...prev, bgColor: e.target.value }))}
-              title="Choose badge background swatch"
-            />
-            <input
-              type="text"
-              className={styles.colorHexText}
-              value={draft.bgColor}
-              onChange={(e) => setDraft(prev => ({ ...prev, bgColor: e.target.value }))}
-              placeholder="#EFF6FF"
-              maxLength={9}
-              title="Enter hex color code (e.g. #EFF6FF)"
-            />
-          </div>
         </div>
       </div>
 
@@ -374,7 +266,7 @@ const CorporatePartnerRow = React.memo(({
           className={`${styles.saveCardBtn} ${hasChanges ? styles.saveCardBtnActive : ''} ${justSaved ? styles.saveCardBtnSuccess : ''}`}
           onClick={handleSave}
           disabled={isSaving}
-          title={hasChanges ? "Save changes to frontend and database" : "Click to save card"}
+          title={hasChanges ? "Save changes to Cloudinary & Database" : "Click to save card"}
         >
           {isSaving ? (
             <>
@@ -398,7 +290,7 @@ const CorporatePartnerRow = React.memo(({
           type="button"
           className={styles.deleteRowBtn}
           onClick={() => onDelete(corpId, draft.name || corp.name)}
-          title="Delete corporate partner"
+          title="Delete corporate partner from database and Cloudinary"
           disabled={isSaving}
         >
           <Trash2 size={15} />
@@ -889,27 +781,15 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   const [isNewCorporateUploading, setIsNewCorporateUploading] = useState(false);
   const [newCorporate, setNewCorporate] = useState({
     name: '',
-    shortName: '',
-    category: '',
-    benefit: '',
-    color: '#0054A6',
-    bgColor: '#EFF6FF',
-    logoText: '',
     logo: '',
-    employeesCovered: ''
+    website: ''
   });
 
   const handleOpenAddCorporate = () => {
     setNewCorporate({
       name: '',
-      shortName: '',
-      category: '',
-      benefit: '',
-      color: '#0054A6',
-      bgColor: '#EFF6FF',
-      logoText: '',
       logo: '',
-      employeesCovered: ''
+      website: ''
     });
     setIsAddCorporateOpen(true);
   };
@@ -1399,33 +1279,23 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   const handleCreateCorporate = async (e) => {
     e.preventDefault();
     const companyName = newCorporate.name.trim();
-    if (!companyName) return;
-    const short = newCorporate.shortName.trim() || companyName.split(' ')[0];
+    if (!companyName) {
+      showToast('Please enter a partner company name.');
+      return;
+    }
     try {
       await addCorporateTieup({
         name: companyName,
-        shortName: short,
-        logoText: (newCorporate.logoText.trim() || short).slice(0, 10),
-        category: newCorporate.category.trim() || 'Enterprise Partner',
-        benefit: newCorporate.benefit.trim() || 'Comprehensive healthcare coverage and priority care',
-        employeesCovered: newCorporate.employeesCovered.trim() || '50,000+',
-        color: newCorporate.color || '#2563EB',
-        bgColor: newCorporate.bgColor || '#EFF6FF',
-        logo: newCorporate.logo || ''
+        logo: newCorporate.logo || '',
+        website: (newCorporate.website || '').trim()
       });
       setIsAddCorporateOpen(false);
       setNewCorporate({
         name: '',
-        shortName: '',
-        category: '',
-        benefit: '',
-        color: '#0054A6',
-        bgColor: '#EFF6FF',
-        logoText: '',
         logo: '',
-        employeesCovered: ''
+        website: ''
       });
-      showToast(`Partner "${companyName}" saved to database!`);
+      showToast(`Partner "${companyName}" saved to Cloudinary & database!`);
     } catch (err) {
       showToast(`Failed to add partner: ${err.message || 'Server error'}`);
     }
@@ -1434,10 +1304,10 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   // Delete All Corporate Partners
   const handleDeleteAllCorporate = async () => {
     const count = corporateTieups?.length || 0;
-    if (window.confirm(`Are you sure you want to delete all ${count} corporate partners from the database?`)) {
+    if (window.confirm(`Are you sure you want to delete all ${count} corporate partners? This will permanently remove them from both the database and Cloudinary.`)) {
       try {
         await deleteAllCorporateTieups();
-        showToast('All corporate partners deleted from database.');
+        showToast('All corporate partners and logos deleted from database and Cloudinary.');
       } catch (err) {
         showToast(`Failed to delete partners: ${err.message || 'Server error'}`);
       }
@@ -2542,37 +2412,17 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   type="text"
                   value={corporateHeaderForm.corporateBadge ?? ''}
                   onChange={(e) => handleCorporateHeaderChange('corporateBadge', e.target.value)}
-                  placeholder="e.g. ENTERPRISE HEALTHCARE NETWORK"
+                  placeholder="e.g. OUR PARTNERS"
                 />
               </div>
 
               <div className={styles.formGroup}>
-                <label>Covered Lives Stat Pill</label>
-                <input
-                  type="text"
-                  value={corporateHeaderForm.corporateStat ?? ''}
-                  onChange={(e) => handleCorporateHeaderChange('corporateStat', e.target.value)}
-                  placeholder="e.g. 2.5M+ Corporate Lives Covered"
-                />
-              </div>
-
-              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
                 <label>Section Heading Title</label>
                 <input
                   type="text"
                   value={corporateHeaderForm.corporateTitle ?? ''}
                   onChange={(e) => handleCorporateHeaderChange('corporateTitle', e.target.value)}
-                  placeholder="e.g. Corporate Tie-ups & Partners"
-                />
-              </div>
-
-              <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                <label>Section Subtitle</label>
-                <textarea
-                  rows={2}
-                  value={corporateHeaderForm.corporateSubtitle ?? ''}
-                  onChange={(e) => handleCorporateHeaderChange('corporateSubtitle', e.target.value)}
-                  placeholder="Describe your corporate healthcare partnership network..."
+                  placeholder="e.g. We work with the best partners"
                 />
               </div>
             </div>
@@ -2581,8 +2431,8 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
           {/* Action Header */}
           <div className={styles.paneActionHeader}>
             <div>
-              <h3>Corporate Partners & Enterprises ({corporateTieups?.length || 0})</h3>
-              <p>Manage enterprise companies, custom brand colors, logo initials, and employee benefit packages.</p>
+              <h3>Corporate Partners ({corporateTieups?.length || 0})</h3>
+              <p>Add and manage enterprise partner companies and logos displayed in the homepage partners marquee. All logos are saved to Cloudinary and deleted from Cloudinary when removed.</p>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
               {corporateTieups && corporateTieups.length > 0 && (
@@ -3385,96 +3235,26 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Tata Consultancy Services"
+                  placeholder="e.g. Microsoft, Flipkart, Google, Zepto"
                   value={newCorporate.name}
                   onChange={(e) => setNewCorporate({ ...newCorporate, name: e.target.value })}
+                  autoFocus
                 />
               </div>
 
-              <div className={styles.formGrid2}>
-                <div className={styles.formGroup}>
-                  <label>Badge Logo Text *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. TCS or MSFT"
-                    value={newCorporate.logoText}
-                    onChange={(e) => setNewCorporate({ ...newCorporate, logoText: e.target.value })}
-                  />
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Industry / Category</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. IT & Consulting"
-                    value={newCorporate.category}
-                    onChange={(e) => setNewCorporate({ ...newCorporate, category: e.target.value })}
-                  />
-                </div>
-              </div>
-
               <div className={styles.formGroup}>
-                <label>Healthcare Benefit Offered</label>
+                <label>Company Website URL (Optional)</label>
                 <input
-                  type="text"
-                  placeholder="e.g. Comprehensive Annual Health Checks & Family Benefits"
-                  value={newCorporate.benefit}
-                  onChange={(e) => setNewCorporate({ ...newCorporate, benefit: e.target.value })}
+                  type="url"
+                  placeholder="e.g. https://www.microsoft.com"
+                  value={newCorporate.website}
+                  onChange={(e) => setNewCorporate({ ...newCorporate, website: e.target.value })}
                 />
               </div>
 
+              {/* Upload Company Logo */}
               <div className={styles.formGroup}>
-                <label>Employees Covered</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 500,000+"
-                  value={newCorporate.employeesCovered}
-                  onChange={(e) => setNewCorporate({ ...newCorporate, employeesCovered: e.target.value })}
-                />
-              </div>
-
-              <div className={styles.formGrid2}>
-                <div className={styles.formGroup}>
-                  <label>Logo Text Color</label>
-                  <div className={styles.colorInputRow}>
-                    <input
-                      type="color"
-                      className={styles.colorSwatchInput}
-                      value={newCorporate.color}
-                      onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
-                    />
-                    <input
-                      type="text"
-                      className={styles.colorHexInput}
-                      value={newCorporate.color}
-                      onChange={(e) => setNewCorporate({ ...newCorporate, color: e.target.value })}
-                      placeholder="#2563EB"
-                    />
-                  </div>
-                </div>
-                <div className={styles.formGroup}>
-                  <label>Badge Background Color</label>
-                  <div className={styles.colorInputRow}>
-                    <input
-                      type="color"
-                      className={styles.colorSwatchInput}
-                      value={newCorporate.bgColor}
-                      onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
-                    />
-                    <input
-                      type="text"
-                      className={styles.colorHexInput}
-                      value={newCorporate.bgColor}
-                      onChange={(e) => setNewCorporate({ ...newCorporate, bgColor: e.target.value })}
-                      placeholder="#EFF6FF"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Upload Company Icon / Logo */}
-              <div className={styles.formGroup}>
-                <label>Upload Company Icon / Logo (Optional)</label>
+                <label>Upload Company Logo (PNG, SVG, JPG, WebP) *</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <label
                     className={styles.corpUploadIconBtn}
@@ -3486,10 +3266,10 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                     }}
                   >
                     <Upload size={14} />
-                    <span>{isNewCorporateUploading ? 'Uploading...' : (newCorporate.logo ? 'Change Icon' : 'Upload Icon (PNG, SVG, JPG)')}</span>
+                    <span>{isNewCorporateUploading ? 'Uploading to Cloudinary...' : (newCorporate.logo ? 'Change Logo' : 'Upload Logo to Cloudinary')}</span>
                     <input
                       type="file"
-                      accept="image/*,.png,.jpg,.jpeg,.svg,.webp,.ico"
+                      accept="image/*,.png,.jpg,.jpeg,.svg,.webp"
                       style={{ display: 'none' }}
                       disabled={isNewCorporateUploading}
                       onChange={handleNewCorporateLogoUpload}
@@ -3501,7 +3281,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                       className={styles.corpRemoveIconBtn}
                       style={{ width: '32px', height: '32px' }}
                       onClick={() => setNewCorporate(prev => ({ ...prev, logo: '' }))}
-                      title="Remove Icon"
+                      title="Remove Logo"
                       disabled={isNewCorporateUploading}
                     >
                       <Trash2 size={14} />
@@ -3510,45 +3290,45 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 </div>
               </div>
 
-              {/* Live Preview Box */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px', display: 'flex', alignItems: 'center', gap: '14px' }}>
+              {/* Live Preview Box in new partner card style */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Homepage Live Card Preview
+                </span>
                 <div
-                  className={styles.corpBadgePreview}
                   style={{
-                    backgroundColor: newCorporate.bgColor || '#EFF6FF',
-                    color: newCorporate.color || '#2563EB',
-                    width: '60px',
-                    height: '40px',
-                    margin: 0
+                    width: '220px',
+                    height: '76px',
+                    background: '#FFFFFF',
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '14px',
+                    padding: '12px 24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
                   }}
-                  title="Live Preview"
+                  title="Card Preview"
                 >
                   {newCorporate.logo ? (
                     <img
-                      key={newCorporate.logo}
                       src={newCorporate.logo}
                       alt="Logo preview"
-                      className={styles.corpBadgeImg}
-                      loading="eager"
-                      decoding="async"
+                      style={{ maxWidth: '170px', maxHeight: '40px', objectFit: 'contain', display: 'block' }}
                     />
                   ) : (
-                    <span>{newCorporate.logoText || 'CORP'}</span>
+                    <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#0F172A' }}>
+                      {newCorporate.name || 'Company Name'}
+                    </span>
                   )}
-                </div>
-                <div>
-                  <strong style={{ fontSize: '0.88rem', color: '#0F172A', display: 'block' }}>
-                    {newCorporate.name || 'Company Name'}
-                  </strong>
-                  <span style={{ fontSize: '0.78rem', color: '#64748B' }}>
-                    {newCorporate.benefit || 'Healthcare Benefit preview'}
-                  </span>
                 </div>
               </div>
 
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.cancelBtn} onClick={() => setIsAddCorporateOpen(false)}>Cancel</button>
-                <button type="submit" className={styles.submitBtn}>Add Corporate Partner</button>
+                <button type="submit" className={styles.submitBtn} disabled={isNewCorporateUploading}>
+                  {isNewCorporateUploading ? 'Uploading...' : 'Add Partner'}
+                </button>
               </div>
             </form>
           </div>

@@ -2265,10 +2265,9 @@ export const DataProvider = ({ children }) => {
       broadcastSync(STORAGE_KEY_CORPORATE, next);
     } catch {}
     try {
+      await api.deleteCorporate(id);
+    } catch {
       await api.updateCorporateTieups(next);
-    } catch (err) {
-      console.error('Failed to delete corporate tieup on server:', err);
-      throw err;
     }
     return next;
   };
