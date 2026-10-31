@@ -1,76 +1,49 @@
 .section {
-  padding: 44px 0 40px 0;
-  background-color: var(--color-white, #ffffff);
-  border-top: 1px solid var(--color-border, #E2E8F0);
+  padding: 56px 0 60px 0;
+  background-color: #FFFFFF;
   position: relative;
   overflow: hidden;
 }
 
-.headerRow {
+.header {
+  text-align: center;
+  margin-bottom: 36px;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  gap: 20px;
-}
-
-.headerInfo {
-  max-width: 680px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
 }
 
 .topBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--color-bg-mint);
-  color: var(--color-primary);
-  font-size: 0.72rem;
+  display: inline-block;
+  color: #6366F1;
+  font-size: 0.82rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  margin-bottom: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .title {
-  font-size: 1.75rem;
+  font-size: 2.25rem;
   font-weight: 700;
-  color: var(--color-heading);
-  margin: 0 0 6px 0;
-  letter-spacing: -0.01em;
-}
-
-.subtitle {
-  font-size: 0.88rem;
-  color: var(--color-body);
+  color: #0F172A;
   margin: 0;
-  line-height: 1.5;
-}
-
-.statsPill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 999px;
-  padding: 8px 16px;
-  font-size: 0.82rem;
-  color: #334155;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  white-space: nowrap;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
 .marqueeWrapper {
   width: 100%;
   overflow: hidden;
   position: relative;
-  padding: 8px 0 12px 0;
+  padding: 10px 0;
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
 }
 
 .marqueeTrack {
   display: flex;
-  gap: 16px;
+  gap: 20px;
   width: max-content;
   animation: runLeft 32s linear infinite;
   will-change: transform;
@@ -90,170 +63,105 @@
 }
 
 .cardItem {
-  width: 240px;
+  width: 220px;
+  height: 76px;
   flex-shrink: 0;
   display: flex;
 }
 
 .card {
   width: 100%;
-  background: #ffffff;
-  border: 1px solid #E2E8F0;
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.09);
-  border-color: #CBD5E1;
-}
-
-.cardTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.logoBadge {
-  width: 50px;
-  height: 28px;
-  border-radius: 6px;
+  height: 100%;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.74rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  flex-shrink: 0;
-  padding: 2px 4px;
-  overflow: hidden;
-  position: relative;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  contain: paint;
-}
-
-.logoImg {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  display: block;
-  pointer-events: none;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  will-change: transform;
-}
-
-.logoText {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  cursor: pointer;
   user-select: none;
 }
 
-.categoryTag {
-  font-size: 0.68rem;
-  color: #64748B;
-  background: #F1F5F9;
-  padding: 2px 6px;
-  border-radius: 5px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 140px;
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  border-color: #CBD5E1;
 }
 
-.companyName {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #0F172A;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.logoImg {
+  max-width: 170px;
+  max-height: 40px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
 }
 
-.benefitText {
-  font-size: 0.73rem;
-  color: #475569;
-  margin: 0;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: 2.05em;
-}
-
-.cardBottom {
-  margin-top: auto;
-  padding-top: 8px;
-  border-top: 1px solid #F1F5F9;
+.fallbackBadge {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  padding: 4px 8px;
 }
 
-.verifiedPartner {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #16A34A;
-}
-
-.empCovered {
-  font-size: 0.68rem;
-  color: #64748B;
-  font-weight: 500;
+.fallbackText {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   white-space: nowrap;
-}
-
-@media (max-width: 1024px) {
-  .headerRow {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 768px) {
   .section {
-    padding: 30px 0;
+    padding: 40px 0 44px 0;
   }
 
   .title {
-    font-size: 1.35rem;
+    font-size: 1.75rem;
   }
 
   .cardItem {
-    width: 205px;
+    width: 180px;
+    height: 68px;
+  }
+
+  .logoImg {
+    max-width: 140px;
+    max-height: 34px;
   }
 
   .marqueeTrack {
-    animation-duration: 24s;
-    gap: 12px;
+    gap: 14px;
+    animation-duration: 26s;
+  }
+
+  .marqueeWrapper {
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
   }
 }
 
 @media (max-width: 480px) {
   .title {
-    font-size: 1.2rem;
+    font-size: 1.45rem;
   }
 
   .cardItem {
-    width: 175px;
+    width: 160px;
+    height: 62px;
   }
 
-  .statsPill {
-    width: 100%;
-    justify-content: center;
+  .logoImg {
+    max-width: 125px;
+    max-height: 30px;
   }
 }
