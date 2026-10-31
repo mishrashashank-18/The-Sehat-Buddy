@@ -15,6 +15,12 @@ const TopHospitals = ({ onNavigate }) => {
   const displayHospitals = allHospitals.filter(
     h => (!h.publicationStatus || h.publicationStatus === 'published') && (h.showOnHome !== false)
   );
+
+  // If all hospitals are marked hidden from home page or unpublished, do not render the section or heading
+  if (displayHospitals.length === 0) {
+    return null;
+  }
+
   // Duplicate hospitals for seamless infinite marquee loop (running right)
   const marqueeHospitals = displayHospitals.length > 0
     ? (displayHospitals.length < 5
