@@ -222,7 +222,7 @@ const Footer = ({ onNavigate }) => {
           <div className={styles.linkSection}>
             <h3>Company</h3>
             <ul>
-              <li><a href="/about" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'about'); }}>About Us</a></li>
+              <li><a href="/about" onClick={(e) => { e.preventDefault(); setActivePolicyType('about'); }}>About Us</a></li>
               <li>
                 <a
                   href="/contact"

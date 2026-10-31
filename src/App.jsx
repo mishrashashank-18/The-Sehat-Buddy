@@ -507,7 +507,7 @@ function AppContent() {
 
   if (currentView.startsWith('coming-soon:')) {
     const feature = currentView.split(':')[1];
-    const isPolicy = feature === 'privacy' || feature === 'terms';
+    const isPolicy = feature === 'privacy' || feature === 'terms' || feature === 'about' || feature === 'aboutus';
     return (
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
@@ -516,7 +516,7 @@ function AppContent() {
         {isPolicy && (
           <PolicyViewerModal
             isOpen={true}
-            type={feature}
+            type={feature === 'aboutus' ? 'about' : feature}
             onClose={() => navigateTo('home')}
           />
         )}

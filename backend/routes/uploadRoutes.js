@@ -79,13 +79,17 @@ const uploadPolicyPdf = multer({
   storage: policyDocumentStorage,
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit strictly enforced
   fileFilter: (req, file, cb) => {
-    if (
+    const isPdf =
       file.mimetype === 'application/pdf' ||
-      (file.originalname && file.originalname.toLowerCase().endsWith('.pdf'))
-    ) {
+      (file.originalname && file.originalname.toLowerCase().endsWith('.pdf'));
+    const isImage =
+      (file.mimetype && file.mimetype.startsWith('image/')) ||
+      (file.originalname && file.originalname.match(/\.(jpg|jpeg|png|webp|svg|gif)$/i));
+
+    if (isPdf || isImage) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type: Only PDF documents (.pdf) up to 25MB are allowed.'), false);
+      cb(new Error('Invalid file type: Only PDF documents (.pdf) and images (PNG, JPG, WEBP, SVG) up to 25MB are allowed.'), false);
     }
   }
 });
@@ -347,16 +351,16 @@ router.post('/pdf', optionalProtect, (req, res, next) => {
 });
 
 /**
- * Upload Policy PDF (Privacy Policy, Terms & Conditions)
- * Maximum size limit: 25MB
- * Saves to /uploads/documents/ and optionally syncs to Cloudinary
- * Returns { success: true, url, name, size, sizeFormatted, updatedAt, provider }
+ * Upload Policy Document / Photo (Privacy Policy, Terms & Conditions, About Us)
+ * Maximum size limit: 25MB (PDF or Image)
+ * Saves to /uploads/documents/ and syncs to Cloudinary
+ * Returns { success: true, url, name, size, sizeFormatted, fileType, updatedAt, provider }
  */
 router.post('/policy-pdf', optionalProtect, (req, res, next) => {
   uploadPolicyPdf.single('pdf')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ success: false, message: 'PDF file size exceeds maximum limit of 25MB.' });
+        return res.status(400).json({ success: false, message: 'File size exceeds maximum limit of 25MB.' });
       }
       return res.status(400).json({ success: false, message: err.message });
     } else if (err) {
@@ -367,8 +371,12 @@ router.post('/policy-pdf', optionalProtect, (req, res, next) => {
 }, async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No PDF file uploaded.' });
+      return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
+
+    const isImage = (req.file.mimetype && req.file.mimetype.startsWith('image/')) ||
+      (req.file.originalname && req.file.originalname.match(/\.(jpg|jpeg|png|webp|svg|gif)$/i));
+    const fileType = isImage ? 'image' : 'pdf';
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
     const apiKey = process.env.CLOUDINARY_API_KEY;
@@ -391,15 +399,17 @@ router.post('/policy-pdf', optionalProtect, (req, res, next) => {
         const cld = getCloudinary();
         const result = await cld.uploader.upload(req.file.path, {
           folder,
-          resource_type: 'auto',
+          resource_type: isImage ? 'image' : 'auto',
           use_filename: true
         });
         if (result && (result.secure_url || result.url)) {
+          finalUrl = result.secure_url || result.url;
           publicId = result.public_id;
-          notifyStorageChanged('cloudinary:raw');
+          provider = 'cloudinary';
+          notifyStorageChanged(isImage ? 'cloudinary:image' : 'cloudinary:raw');
         }
       } catch (cldErr) {
-        console.warn('[Upload] Cloudinary backup skipped:', cldErr.message);
+        console.warn('[Upload] Cloudinary upload skipped:', cldErr.message);
       }
     }
 
@@ -413,12 +423,13 @@ router.post('/policy-pdf', optionalProtect, (req, res, next) => {
       name: req.file.originalname,
       size: bytes,
       sizeFormatted,
+      fileType,
       updatedAt: new Date().toISOString(),
       provider
     });
   } catch (error) {
-    console.error('Policy PDF upload error:', error);
-    return res.status(500).json({ success: false, message: error.message || 'Policy PDF upload failed' });
+    console.error('Policy document upload error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Document upload failed' });
   }
 });
 

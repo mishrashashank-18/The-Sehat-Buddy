@@ -378,6 +378,14 @@ export default function ContactUs({ onNavigate }) {
             >
               Terms & Conditions
             </button>
+            <span className={styles.linkSep}>•</span>
+            <button
+              type="button"
+              className={styles.policyLink}
+              onClick={() => setActivePolicyType('about')}
+            >
+              About Us
+            </button>
           </div>
         </div>
       </Container>

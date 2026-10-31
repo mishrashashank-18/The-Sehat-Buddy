@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   FileText,
+  Building2,
   X,
   Maximize2,
   Minimize2,
@@ -26,9 +27,21 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(true);
 
-  const isPrivacy = type === 'privacy' || type === 'privacypolicy';
-  const policyMeta = isPrivacy ? legalPolicies?.privacyPolicy : legalPolicies?.termsAndConditions;
-  const hasUploadedPdf = Boolean(policyMeta?.url && policyMeta.url.trim());
+  const normalizedType = (type || '').toLowerCase();
+  const isPrivacy = normalizedType === 'privacy' || normalizedType === 'privacypolicy';
+  const isAbout = normalizedType === 'about' || normalizedType === 'aboutus';
+
+  const policyMeta = isPrivacy
+    ? legalPolicies?.privacyPolicy
+    : isAbout
+      ? legalPolicies?.aboutUs
+      : legalPolicies?.termsAndConditions;
+
+  const hasUploadedDoc = Boolean(policyMeta?.url && policyMeta.url.trim());
+  const isImageDoc =
+    policyMeta?.fileType === 'image' ||
+    Boolean(policyMeta?.url && policyMeta.url.match(/\.(jpg|jpeg|png|webp|svg|gif)(\?.*)?$/i)) ||
+    Boolean(policyMeta?.fileName && policyMeta.fileName.match(/\.(jpg|jpeg|png|webp|svg|gif)$/i));
 
   // Real-time refresh when modal opens or document type changes
   useEffect(() => {
@@ -59,10 +72,10 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
 
   if (!isOpen) return null;
 
-  const title = isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
-  const rawPdfUrl = resolvePdfSrc(policyMeta?.url);
+  const title = isPrivacy ? 'Privacy Policy' : isAbout ? 'About Us' : 'Terms & Conditions';
+  const rawDocUrl = resolvePdfSrc(policyMeta?.url);
   // Add parameters to suppress download/print toolbars in browser viewer
-  const securePdfUrl = rawPdfUrl ? `${rawPdfUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : '';
+  const securePdfUrl = rawDocUrl ? `${rawDocUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : '';
 
   return (
     <div
@@ -82,7 +95,7 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
         <div className={styles.modalHeader}>
           <div className={styles.headerLeft}>
             <div className={styles.iconBadge}>
-              {isPrivacy ? <ShieldCheck size={24} /> : <FileText size={24} />}
+              {isPrivacy ? <ShieldCheck size={24} /> : isAbout ? <Building2 size={24} /> : <FileText size={24} />}
             </div>
             <div className={styles.titleBox}>
               <h2 id="policy-dialog-title">
@@ -90,10 +103,13 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
                 <span className={styles.viewOnlyPill}>PROTECTED VIEW</span>
               </h2>
               <div className={styles.subMeta}>
-                <span>The Sehat Buddy Legal</span>
+                <span>The Sehat Buddy {isAbout ? 'Company' : 'Legal'}</span>
                 <span className={styles.metaDot} />
-                {hasUploadedPdf ? (
-                  <span>PDF Document {policyMeta?.fileSizeFormatted ? `(${policyMeta.fileSizeFormatted})` : ''}</span>
+                {hasUploadedDoc ? (
+                  <span>
+                    {isImageDoc ? 'Photo / Image' : 'PDF Document'}{' '}
+                    {policyMeta?.fileSizeFormatted ? `(${policyMeta.fileSizeFormatted})` : ''}
+                  </span>
                 ) : (
                   <span style={{ color: '#dc2626', fontWeight: 600 }}>Not Added</span>
                 )}
@@ -136,24 +152,36 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
 
         {/* Body Content */}
         <div className={styles.modalBody}>
-          {hasUploadedPdf ? (
-            <div className={styles.iframeWrapper}>
-              {isLoadingPdf && (
-                <div className={styles.loadingOverlay}>
-                  <div className={styles.spinner} />
-                  <p style={{ fontSize: '0.88rem', color: '#475569', fontWeight: 500 }}>
-                    Rendering protected PDF document...
-                  </p>
-                </div>
-              )}
-              {/* Embed PDF inline with toolbar suppressed to prevent download/print tools */}
-              <iframe
-                src={securePdfUrl}
-                title={title}
-                className={styles.pdfFrame}
-                onLoad={() => setIsLoadingPdf(false)}
-              />
-            </div>
+          {hasUploadedDoc ? (
+            isImageDoc ? (
+              <div className={styles.imageViewerWrapper}>
+                <img
+                  src={rawDocUrl}
+                  alt={title}
+                  className={styles.protectedImage}
+                  onContextMenu={(e) => e.preventDefault()}
+                  draggable={false}
+                />
+              </div>
+            ) : (
+              <div className={styles.iframeWrapper}>
+                {isLoadingPdf && (
+                  <div className={styles.loadingOverlay}>
+                    <div className={styles.spinner} />
+                    <p style={{ fontSize: '0.88rem', color: '#475569', fontWeight: 500 }}>
+                      Rendering protected document...
+                    </p>
+                  </div>
+                )}
+                {/* Embed PDF inline with toolbar suppressed to prevent download/print tools */}
+                <iframe
+                  src={securePdfUrl}
+                  title={title}
+                  className={styles.pdfFrame}
+                  onLoad={() => setIsLoadingPdf(false)}
+                />
+              </div>
+            )
           ) : (
             <div className={styles.emptyPolicyContainer}>
               <div className={styles.emptyPolicyCard}>
@@ -161,16 +189,20 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
                   <FileX size={40} />
                 </div>
                 <h3 className={styles.emptyPolicyTitle}>
-                  {isPrivacy ? 'Privacy Policy Not Added' : 'Terms & Conditions Not Added'}
+                  {title} Not Added
                 </h3>
                 <p className={styles.emptyPolicyMessage}>
-                  {isPrivacy 
-                    ? 'The official Privacy Policy document has not been uploaded by the platform administrator yet.' 
-                    : 'The official Terms & Conditions document has not been uploaded by the platform administrator yet.'}
+                  {isAbout
+                    ? 'The official About Us document or photo has not been uploaded by the platform administrator yet.'
+                    : isPrivacy
+                      ? 'The official Privacy Policy document has not been uploaded by the platform administrator yet.'
+                      : 'The official Terms & Conditions document has not been uploaded by the platform administrator yet.'}
                 </p>
                 <div className={styles.emptyPolicyNote}>
                   <AlertCircle size={15} style={{ flexShrink: 0 }} />
-                  <span>Real-time status: Once an administrator uploads the PDF document from the Admin Panel, it will automatically appear here.</span>
+                  <span>
+                    Real-time status: Once an administrator uploads the photo or document from the Admin Panel, it will automatically appear here.
+                  </span>
                 </div>
               </div>
             </div>
@@ -181,7 +213,11 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
         <div className={styles.modalFooter}>
           <div className={styles.footerLeft}>
             <AlertCircle size={14} />
-            <span>Official Policy &bull; Registered with The Sehat Buddy Healthcare Network</span>
+            <span>
+              {isAbout
+                ? 'Official Company Overview • The Sehat Buddy Healthcare Network'
+                : 'Official Policy • Registered with The Sehat Buddy Healthcare Network'}
+            </span>
           </div>
           <button type="button" className={styles.doneBtn} onClick={onClose}>
             Close Document

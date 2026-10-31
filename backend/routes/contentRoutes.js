@@ -73,6 +73,13 @@ export const seedContentIfEmpty = async () => {
           fileSize: 0,
           fileSizeFormatted: '',
           updatedAt: null
+        },
+        aboutUs: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
         }
       };
       await Content.create({ type: 'legal_policies', data: defaultLegal });
@@ -268,9 +275,24 @@ router.get('/legal-policies', async (req, res) => {
           fileSize: 0,
           fileSizeFormatted: '',
           updatedAt: null
+        },
+        aboutUs: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
         }
       };
       doc = await Content.create({ type: 'legal_policies', data: defaultLegal });
+    } else if (doc.data && !doc.data.aboutUs) {
+      doc.data.aboutUs = {
+        url: '',
+        fileName: '',
+        fileSize: 0,
+        fileSizeFormatted: '',
+        updatedAt: null
+      };
     }
     return res.json({ success: true, data: doc.data });
   } catch (err) {
@@ -279,7 +301,7 @@ router.get('/legal-policies', async (req, res) => {
 });
 
 /**
- * Stream/View policy PDF inline in browser with strict inline headers
+ * Stream/View policy PDF or photo inline in browser with strict inline headers
  * Prevents forced file download on client machines
  */
 router.get('/view-document/:type', async (req, res) => {
@@ -287,17 +309,18 @@ router.get('/view-document/:type', async (req, res) => {
     const rawType = (req.params.type || '').toLowerCase();
     const isPrivacy = rawType === 'privacy' || rawType === 'privacypolicy';
     const isTerms = rawType === 'terms' || rawType === 'termsandconditions';
+    const isAbout = rawType === 'about' || rawType === 'aboutus';
 
-    if (!isPrivacy && !isTerms) {
-      return res.status(400).json({ success: false, message: 'Invalid document type. Must be "privacy" or "terms".' });
+    if (!isPrivacy && !isTerms && !isAbout) {
+      return res.status(400).json({ success: false, message: 'Invalid document type. Must be "privacy", "terms", or "about".' });
     }
 
     const doc = await Content.findOne({ type: 'legal_policies' });
-    const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
+    const policyKey = isPrivacy ? 'privacyPolicy' : isTerms ? 'termsAndConditions' : 'aboutUs';
     const policyData = doc?.data?.[policyKey];
 
     if (!policyData || !policyData.url) {
-      return res.status(404).json({ success: false, message: 'No custom PDF has been uploaded for this document.' });
+      return res.status(404).json({ success: false, message: 'No custom document or photo has been uploaded for this item.' });
     }
 
     const docUrl = policyData.url;
@@ -307,8 +330,9 @@ router.get('/view-document/:type', async (req, res) => {
       const cleanRel = docUrl.replace(/^\/?uploads\//, '');
       const absPath = path.resolve(__dirname, '../uploads', cleanRel);
       if (fs.existsSync(absPath)) {
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || 'policy.pdf') + '"');
+        const isPdf = absPath.toLowerCase().endsWith('.pdf');
+        res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'image/jpeg');
+        res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || (isPdf ? 'document.pdf' : 'document.jpg')) + '"');
         res.setHeader('X-Content-Type-Options', 'nosniff');
         return res.sendFile(absPath);
       }

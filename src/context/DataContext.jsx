@@ -51,6 +51,13 @@ export const DEFAULT_LEGAL_POLICIES = {
     fileSize: 0,
     fileSizeFormatted: '',
     updatedAt: null
+  },
+  aboutUs: {
+    url: '',
+    fileName: '',
+    fileSize: 0,
+    fileSizeFormatted: '',
+    updatedAt: null
   }
 };
 
@@ -2659,10 +2666,13 @@ export const DataProvider = ({ children }) => {
       const updated = {
         privacyPolicy: newLegalData.privacyPolicy !== undefined 
           ? (typeof newLegalData.privacyPolicy === 'object' ? { ...legalPolicies.privacyPolicy, ...newLegalData.privacyPolicy } : newLegalData.privacyPolicy)
-          : legalPolicies.privacyPolicy,
+          : (legalPolicies.privacyPolicy || DEFAULT_LEGAL_POLICIES.privacyPolicy),
         termsAndConditions: newLegalData.termsAndConditions !== undefined 
           ? (typeof newLegalData.termsAndConditions === 'object' ? { ...legalPolicies.termsAndConditions, ...newLegalData.termsAndConditions } : newLegalData.termsAndConditions)
-          : legalPolicies.termsAndConditions
+          : (legalPolicies.termsAndConditions || DEFAULT_LEGAL_POLICIES.termsAndConditions),
+        aboutUs: newLegalData.aboutUs !== undefined
+          ? (typeof newLegalData.aboutUs === 'object' ? { ...legalPolicies.aboutUs, ...newLegalData.aboutUs } : newLegalData.aboutUs)
+          : (legalPolicies.aboutUs || DEFAULT_LEGAL_POLICIES.aboutUs)
       };
 
       setLegalPolicies(updated);
