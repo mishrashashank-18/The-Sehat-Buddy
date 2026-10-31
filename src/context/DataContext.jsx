@@ -1151,6 +1151,36 @@ export const DataProvider = ({ children }) => {
                     return updated;
                   });
                 }
+              } else if (payload.operation === 'reorder' || payload.action === 'reorder') {
+                const reorderedItems = payload.data || payload.items;
+                if (Array.isArray(reorderedItems) && reorderedItems.length > 0) {
+                  setFaqs(prev => {
+                    const orderMap = new Map();
+                    reorderedItems.forEach((it, idx) => {
+                      const orderVal = it.order !== undefined && it.order !== null ? Number(it.order) : idx + 1;
+                      if (it.id) orderMap.set(String(it.id), orderVal);
+                      if (it._id) orderMap.set(String(it._id), orderVal);
+                    });
+                    let changed = false;
+                    const next = prev.map(f => {
+                      const fid = String(f.id || f._id || '');
+                      if (orderMap.has(fid)) {
+                        const newOrder = orderMap.get(fid);
+                        if (f.order !== newOrder) {
+                          changed = true;
+                          return { ...f, order: newOrder };
+                        }
+                      }
+                      return f;
+                    });
+                    if (!changed) return prev;
+                    try {
+                      localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(next));
+                      lastSyncRef.current[STORAGE_KEY_FAQS] = JSON.stringify(next);
+                    } catch {}
+                    return next;
+                  });
+                }
               } else if (payload.docId && payload.fullDocument) {
                 setFaqs(prev => {
                   const targetDocId = payload.docId || payload.fullDocument._id || payload.fullDocument.id;

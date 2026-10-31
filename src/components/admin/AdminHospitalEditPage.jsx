@@ -536,7 +536,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [customFaqIconPreview, setCustomFaqIconPreview] = useState(null);
   const [isUploadingFaqIcon, setIsUploadingFaqIcon] = useState(false);
   const [isReorderFaqsModalOpen, setIsReorderFaqsModalOpen] = useState(false);
-  const [isReorderingFaqs, setIsReorderingFaqs] = useState(false);
   const faqIconInputRef = useRef(null);
 
   // Direct Media Upload State
@@ -876,7 +875,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       const orderA = a.order !== undefined && a.order !== null ? Number(a.order) : 999999;
       const orderB = b.order !== undefined && b.order !== null ? Number(b.order) : 999999;
       if (orderA !== orderB) return orderA - orderB;
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) return timeB - timeA;
+      return String(a._id || a.id || '').localeCompare(String(b._id || b.id || ''));
     });
   }, [faqs, hospital]);
 
@@ -926,8 +928,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   }, [deleteFaq]);
 
+  const isReorderingFaqsRef = useRef(false);
   const handleMoveFaq = useCallback(async (faq, direction) => {
-    if (!faq) return;
+    if (!faq || isReorderingFaqsRef.current) return;
     const currentList = [...hospitalFaqs];
     const currentIndex = currentList.findIndex(f => matchesId(f, faq.id || faq._id));
     if (currentIndex === -1) return;
@@ -953,8 +956,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       order: idx + 1
     }));
 
+    isReorderingFaqsRef.current = true;
     try {
-      setIsReorderingFaqs(true);
       if (typeof reorderFaqs === 'function') {
         await reorderFaqs(updatedWithOrder);
       }
@@ -962,9 +965,14 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       console.error('Failed to change FAQ order:', err);
       alert('Failed to change FAQ order: ' + (err.message || 'Please try again.'));
     } finally {
-      setIsReorderingFaqs(false);
+      isReorderingFaqsRef.current = false;
     }
   }, [hospitalFaqs, reorderFaqs]);
+
+  const handleMoveFirst = useCallback((faq) => handleMoveFaq(faq, 'first'), [handleMoveFaq]);
+  const handleMoveUp = useCallback((faq) => handleMoveFaq(faq, 'up'), [handleMoveFaq]);
+  const handleMoveDown = useCallback((faq) => handleMoveFaq(faq, 'down'), [handleMoveFaq]);
+  const handleMoveLast = useCallback((faq) => handleMoveFaq(faq, 'last'), [handleMoveFaq]);
 
   const handleSaveModalFaqOrder = useCallback(async (orderedItems) => {
     const updatedWithOrder = (orderedItems || []).map((item, idx) => ({
@@ -4765,11 +4773,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       onEdit={handleEditFaqClick}
                       onDelete={handleDeleteFaqClick}
                       onPreview={setPreviewFaqItem}
-                      onMoveFirst={() => handleMoveFaq(faq, 'first')}
-                      onMoveUp={() => handleMoveFaq(faq, 'up')}
-                      onMoveDown={() => handleMoveFaq(faq, 'down')}
-                      onMoveLast={() => handleMoveFaq(faq, 'last')}
-                      isReordering={isReorderingFaqs}
+                      onMoveFirst={handleMoveFirst}
+                      onMoveUp={handleMoveUp}
+                      onMoveDown={handleMoveDown}
+                      onMoveLast={handleMoveLast}
                     />
                   );
                 })

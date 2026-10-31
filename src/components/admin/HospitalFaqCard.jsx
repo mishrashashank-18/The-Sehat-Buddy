@@ -99,7 +99,7 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               <button
                 type="button"
-                disabled={index === 0 || isReordering}
+                disabled={index === 0}
                 onClick={() => onMoveFirst && onMoveFirst(faq)}
                 className={styles.iconBtn}
                 title="Put First (Move to top #1)"
@@ -118,7 +118,7 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
 
               <button
                 type="button"
-                disabled={index === 0 || isReordering}
+                disabled={index === 0}
                 onClick={() => onMoveUp && onMoveUp(faq)}
                 className={styles.iconBtn}
                 title="Move up one position"
@@ -133,7 +133,7 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
 
               <button
                 type="button"
-                disabled={index === total - 1 || isReordering}
+                disabled={index === total - 1}
                 onClick={() => onMoveDown && onMoveDown(faq)}
                 className={styles.iconBtn}
                 title="Move down one position"
@@ -148,7 +148,7 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
 
               <button
                 type="button"
-                disabled={index === total - 1 || isReordering}
+                disabled={index === total - 1}
                 onClick={() => onMoveLast && onMoveLast(faq)}
                 className={styles.iconBtn}
                 title="Put Last (Move to bottom)"

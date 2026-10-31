@@ -1078,7 +1078,14 @@ export const api = {
       if (res.ok) {
         return await handleResponse(res);
       }
+      if (res.status === 401 || res.status === 403) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Unauthorized or forbidden to reorder FAQs');
+      }
     } catch (err) {
+      if (err.message && (err.message.includes('Unauthorized') || err.message.includes('forbidden') || err.message.includes('Forbidden'))) {
+        throw err;
+      }
       console.warn('Batch FAQ reorder fallback to individual updates:', err);
     }
     // Robust fallback: update individual items in parallel
