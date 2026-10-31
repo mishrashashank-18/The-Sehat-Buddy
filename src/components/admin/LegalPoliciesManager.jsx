@@ -75,9 +75,11 @@ const LegalPoliciesManager = ({ showToast }) => {
 
       const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
       const oldUrl = legalPolicies?.[policyKey]?.url;
+      const oldPublicId = legalPolicies?.[policyKey]?.publicId;
 
       const updatedMeta = {
         url: res.url,
+        publicId: res.public_id || null,
         fileName: res.name || file.name,
         fileSize: res.size || file.size,
         fileSizeFormatted: res.sizeFormatted || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
@@ -88,9 +90,13 @@ const LegalPoliciesManager = ({ showToast }) => {
         [policyKey]: updatedMeta
       });
 
-      // Clean up previous replaced file from server storage
+      // Clean up previous replaced file from server storage and Cloudinary
+      if (oldPublicId) {
+        api.deleteMedia(oldPublicId, 'image').catch(() => {});
+        api.deleteMedia(oldPublicId, 'raw').catch(() => {});
+      }
       if (oldUrl && oldUrl !== res.url) {
-        api.deleteMedia(oldUrl, 'raw').catch(() => {});
+        api.deleteMedia(oldUrl).catch(() => {});
       }
 
       showToast && showToast(`${label} PDF (${updatedMeta.fileSizeFormatted}) uploaded successfully!`, 'success');
@@ -110,21 +116,27 @@ const LegalPoliciesManager = ({ showToast }) => {
     const label = isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
     const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
     const existingUrl = legalPolicies?.[policyKey]?.url;
+    const existingPublicId = legalPolicies?.[policyKey]?.publicId;
 
     if (!window.confirm(`Are you sure you want to remove the ${label} PDF? Patients viewing this policy will see "${label} Not Added" until a new document is uploaded.`)) {
       return;
     }
 
     try {
-      // 1. Delete the physical file from server disk / cloud storage
+      // 1. Delete the physical file from server disk and Cloudinary
+      if (existingPublicId) {
+        await api.deleteMedia(existingPublicId, 'image').catch(() => {});
+        await api.deleteMedia(existingPublicId, 'raw').catch(() => {});
+      }
       if (existingUrl) {
-        await api.deleteMedia(existingUrl, 'raw').catch(() => {});
+        await api.deleteMedia(existingUrl).catch(() => {});
       }
 
       // 2. Clear from MongoDB database
       await updateLegalPolicies({
         [policyKey]: {
           url: '',
+          publicId: null,
           fileName: '',
           fileSize: 0,
           fileSizeFormatted: '',

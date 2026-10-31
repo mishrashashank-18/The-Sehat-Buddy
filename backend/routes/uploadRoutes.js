@@ -710,6 +710,7 @@ const handleDeleteMedia = async (req, res) => {
     const { url, resource_type = 'image' } = req.body;
     let public_id = req.body.public_id;
 
+    let localDeleted = false;
     // Handle local file deletion if stored locally
     if (url && typeof url === 'string' && url.startsWith('/uploads/')) {
       const localFilePath = path.resolve(__dirname, `..${url}`);
@@ -717,14 +718,19 @@ const handleDeleteMedia = async (req, res) => {
         try {
           fs.unlinkSync(localFilePath);
           notifyStorageChanged(resource_type === 'video' ? 'local:video' : 'local:image');
-          return res.json({
-            success: true,
-            message: 'Local file deleted from server disk.'
-          });
+          localDeleted = true;
         } catch (unlinkErr) {
           console.error('Failed to unlink local file:', unlinkErr);
         }
       }
+    }
+
+    // If local file was deleted and no Cloudinary public_id or URL was provided, return
+    if (localDeleted && !public_id && (!url || !url.includes('cloudinary.com'))) {
+      return res.json({
+        success: true,
+        message: 'Local file deleted from server disk.'
+      });
     }
 
     const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
