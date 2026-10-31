@@ -723,6 +723,16 @@ export const api = {
     return data.data;
   },
 
+  async submitInquiry(inquiryData) {
+    const res = await fetch(`${API_BASE}/content/inquiry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inquiryData)
+    });
+    const data = await handleResponse(res);
+    return data;
+  },
+
   async updateCorporateTieups(corporateList) {
     const res = await fetch(`${API_BASE}/content/corporate`, {
       method: 'PUT',

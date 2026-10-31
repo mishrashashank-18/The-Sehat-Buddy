@@ -23,6 +23,7 @@ import FindHospitals from './components/hospitals/FindHospitals';
 import HospitalProfile from './components/hospitals/HospitalProfile';
 import ComingSoon from './components/common/ComingSoon';
 import PolicyViewerModal from './components/common/PolicyViewerModal';
+import ContactUs from './components/contact/ContactUs';
 import { useData } from './context/useData';
 import { NEW_SEHAT_BUDDY_FAVICON } from './data/faviconDataUri';
 import './styles/global.css';
@@ -91,12 +92,12 @@ const resolveCurrentView = () => {
   }
   if (path.startsWith('/coming-soon/')) {
     const clean = path.replace(/^\/coming-soon\//, '').trim();
-    if (clean === 'contact') return 'site';
+    if (clean === 'contact' || clean === 'contact-us') return 'contact';
     if (clean) return 'coming-soon:' + clean;
   }
   if (hash.startsWith('#/coming-soon/') || hash.startsWith('#coming-soon/')) {
     const clean = hash.replace(/^#\/?coming-soon\//, '').trim();
-    if (clean === 'contact') return 'site';
+    if (clean === 'contact' || clean === 'contact-us') return 'contact';
     if (clean) return 'coming-soon:' + clean;
   }
   if (path === '/lab-tests' || path === '/services/lab-tests' || hash === '#lab-tests') return 'coming-soon:lab-tests';
@@ -107,7 +108,7 @@ const resolveCurrentView = () => {
   if (path === '/care-services' || hash === '#care-services') return 'coming-soon:care-services';
   if (path === '/services' || hash === '#services') return 'coming-soon:all-services';
   if (path === '/about' || hash === '#about') return 'coming-soon:about';
-  if (path === '/contact' || hash === '#contact') return 'site';
+  if (path === '/contact' || path === '/contact-us' || hash === '#contact' || hash === '#contact-us') return 'contact';
   if (path === '/privacy' || hash === '#privacy') return 'coming-soon:privacy';
   if (path === '/terms' || hash === '#terms') return 'coming-soon:terms';
   if (path === '/support' || path === '/provider-support' || hash === '#support') return 'coming-soon:provider-support';
@@ -397,6 +398,7 @@ function AppContent() {
     else if (resolvedView === 'doctor-profile') targetPath = `/doctors/${resolvedParam}`;
     else if (resolvedView === 'hospital-profile') targetPath = `/hospitals/${resolvedParam}`;
     else if (resolvedView === 'coming-soon') targetPath = `/coming-soon/${resolvedParam || 'feature'}`;
+    else if (resolvedView === 'contact') targetPath = '/contact';
 
     if (resolvedView === 'user-login' && resolvedParam) {
       setRedirectAfterLogin(resolvedParam);
@@ -518,6 +520,16 @@ function AppContent() {
             onClose={() => navigateTo('home')}
           />
         )}
+      </div>
+    );
+  }
+
+  if (currentView === 'contact') {
+    return (
+      <div className="app">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <ContactUs onNavigate={navigateTo} />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }

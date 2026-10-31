@@ -218,155 +218,23 @@ const Footer = ({ onNavigate }) => {
             </ul>
           </div>
           
-          {/* Company with Interactive Real-Time Contact Dropdown */}
+          {/* Company */}
           <div className={styles.linkSection}>
             <h3>Company</h3>
             <ul>
               <li><a href="/about" onClick={(e) => { e.preventDefault(); onNavigate && onNavigate('coming-soon', 'about'); }}>About Us</a></li>
-              
-              {/* Contact Us Dropdown beside/on Contact Us in Footer */}
-              <li className={styles.contactDropdownWrapper} ref={contactDropdownRef}>
-                <button
-                  type="button"
-                  className={`${styles.footerContactTrigger} ${isContactOpen ? styles.footerContactTriggerActive : ''}`}
-                  onClick={() => setIsContactOpen(!isContactOpen)}
-                  aria-expanded={isContactOpen}
-                  title="View Platform Contact Helplines & Desks"
+              <li>
+                <a
+                  href="/contact"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (onNavigate) onNavigate('contact');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
                 >
-                  <span>Contact Us</span>
-                  {isContactOpen ? (
-                    <ChevronDown size={14} className={styles.footerChevron} />
-                  ) : (
-                    <ChevronUp size={14} className={styles.footerChevron} />
-                  )}
-                </button>
-
-                {/* Popover Menu that opens above the footer link */}
-                {isContactOpen && (
-                  <div className={styles.footerContactPopover}>
-                    {/* Header */}
-                    <div className={styles.contactHeaderRow}>
-                      <div className={styles.contactHeaderTitle}>
-                        <Headphones size={15} style={{ color: '#2563eb' }} />
-                        <span>Platform Helplines & Support</span>
-                      </div>
-                      {isAdmin && (
-                        <button
-                          type="button"
-                          className={styles.adminDashboardLink}
-                          onClick={() => {
-                            setIsContactOpen(false);
-                            if (onNavigate) {
-                              onNavigate('admin', 'contact');
-                            } else {
-                              window.location.href = '/admin?tab=contact';
-                            }
-                          }}
-                          title="Open Admin Dashboard to edit contact information"
-                        >
-                          <Settings size={12} />
-                          <span>Edit in Admin</span>
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Section 1: Phone Numbers */}
-                    <div className={styles.contactSection}>
-                      <div className={styles.contactSectionHeader}>
-                        <span className={styles.contactSectionTitle}>
-                          <Phone size={13} /> Direct Helplines
-                        </span>
-                      </div>
-
-                      {/* Phone List */}
-                      <div className={styles.contactList}>
-                        {phones.length === 0 ? (
-                          <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0' }}>No helpline numbers configured.</p>
-                        ) : (
-                          phones.map((phone) => (
-                            <div key={phone.id} className={styles.contactItemCard}>
-                              <div className={styles.contactIconCirclePhone}>
-                                <Phone size={15} />
-                              </div>
-                              <div className={styles.contactItemInfo}>
-                                <div className={styles.contactItemLabelRow}>
-                                  <span className={styles.contactItemLabel}>{phone.label}</span>
-                                  {phone.isPrimary && <span className={styles.primaryPill}>Primary</span>}
-                                </div>
-                                <a href={`tel:${phone.number.replace(/\s+/g, '')}`} className={styles.contactItemValueLink}>
-                                  {phone.number}
-                                </a>
-                              </div>
-                              <div className={styles.contactItemActions}>
-                                <button
-                                  type="button"
-                                  className={`${styles.contactActionBtn} ${copiedId === phone.id ? styles.contactActionBtnSuccess : ''}`}
-                                  onClick={(e) => handleCopy(phone.number, phone.id, e)}
-                                  title={copiedId === phone.id ? 'Copied!' : 'Copy Phone Number'}
-                                >
-                                  {copiedId === phone.id ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Section 2: Email Addresses */}
-                    <div className={styles.contactSection}>
-                      <div className={styles.contactSectionHeader}>
-                        <span className={styles.contactSectionTitle}>
-                          <Mail size={13} /> Email Desks
-                        </span>
-                      </div>
-
-                      {/* Email List */}
-                      <div className={styles.contactList}>
-                        {emails.length === 0 ? (
-                          <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0' }}>No email addresses configured.</p>
-                        ) : (
-                          emails.map((em) => (
-                            <div key={em.id} className={styles.contactItemCard}>
-                              <div className={styles.contactIconCircleMail}>
-                                <Mail size={15} />
-                              </div>
-                              <div className={styles.contactItemInfo}>
-                                <div className={styles.contactItemLabelRow}>
-                                  <span className={styles.contactItemLabel}>{em.label}</span>
-                                  {em.isPrimary && <span className={styles.primaryPill}>Primary</span>}
-                                </div>
-                                <a href={`mailto:${em.email}`} className={styles.contactItemValueLink}>
-                                  {em.email}
-                                </a>
-                              </div>
-                              <div className={styles.contactItemActions}>
-                                <button
-                                  type="button"
-                                  className={`${styles.contactActionBtn} ${copiedId === em.id ? styles.contactActionBtnSuccess : ''}`}
-                                  onClick={(e) => handleCopy(em.email, em.id, e)}
-                                  title={copiedId === em.id ? 'Copied!' : 'Copy Email Address'}
-                                >
-                                  {copiedId === em.id ? <Check size={14} /> : <Copy size={14} />}
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Section 3: Operating Hours */}
-                    <div className={styles.contactHoursBox}>
-                      <div className={styles.contactHoursText}>
-                        <Clock size={13} color="#64748b" />
-                        <span>Hours: <strong>{workingHours}</strong></span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  Contact Us
+                </a>
               </li>
-
               <li><a href="/privacy" onClick={(e) => { e.preventDefault(); setActivePolicyType('privacy'); }}>Privacy Policy</a></li>
               <li><a href="/terms" onClick={(e) => { e.preventDefault(); setActivePolicyType('terms'); }}>Terms & Conditions</a></li>
             </ul>

@@ -6,6 +6,7 @@ import Content from '../models/Content.js';
 import Corporate from '../models/Corporate.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+import { sendEmail } from '../utils/email.js';
 
 import { v2 as cloudinary } from 'cloudinary';
 
@@ -99,6 +100,55 @@ router.get('/contact', async (req, res) => {
       doc = await Content.create({ type: 'contact', data: defaultContact });
     }
     return res.json({ success: true, data: doc.data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.post('/inquiry', async (req, res) => {
+  try {
+    const { name, email, phone, category, priority, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ success: false, message: 'Name, email, and message are required.' });
+    }
+    const inquiryData = {
+      name: String(name).trim(),
+      email: String(email).trim().toLowerCase(),
+      phone: String(phone || '').trim(),
+      category: String(category || 'General Inquiry').trim(),
+      priority: String(priority || 'Normal').trim(),
+      message: String(message).trim(),
+      createdAt: new Date()
+    };
+
+    if (process.env.EMAIL_FROM) {
+      sendEmail({
+        email: process.env.EMAIL_FROM,
+        subject: `[Sehat Buddy Inquiry] ${inquiryData.category} - ${inquiryData.name}`,
+        message: `Name: ${inquiryData.name}\nEmail: ${inquiryData.email}\nPhone: ${inquiryData.phone}\nPriority: ${inquiryData.priority}\nCategory: ${inquiryData.category}\n\nMessage:\n${inquiryData.message}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 600px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
+              <h2 style="color: #2563eb; margin: 0; font-size: 20px;">The Sehat Buddy • New Patient Inquiry</h2>
+            </div>
+            <p><strong>Name:</strong> ${inquiryData.name}</p>
+            <p><strong>Email:</strong> <a href="mailto:${inquiryData.email}">${inquiryData.email}</a></p>
+            <p><strong>Phone:</strong> ${inquiryData.phone || 'N/A'}</p>
+            <p><strong>Category:</strong> ${inquiryData.category}</p>
+            <p><strong>Priority:</strong> <span style="background: ${inquiryData.priority === 'Urgent' ? '#fee2e2; color: #dc2626' : (inquiryData.priority === 'Emergency' ? '#fef2f2; color: #991b1b; font-weight: 800' : '#eff6ff; color: #2563eb')}; padding: 3px 8px; border-radius: 4px; font-weight: bold;">${inquiryData.priority}</span></p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+            <p><strong>Message:</strong></p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${inquiryData.message}</div>
+          </div>
+        `
+      }).catch(emailErr => console.warn('Inquiry email notice failed:', emailErr.message));
+    }
+
+    return res.json({
+      success: true,
+      message: 'Thank you! Your message has been received. Our healthcare care team will respond shortly.',
+      data: inquiryData
+    });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

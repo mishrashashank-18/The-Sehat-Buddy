@@ -81,6 +81,9 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
     if (currentView === 'find-hospitals' || currentView.startsWith('hospital-profile:')) {
       return 'hospitals';
     }
+    if (currentView === 'contact') {
+      return 'contact';
+    }
     return 'home';
   };
 
@@ -284,6 +287,19 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
                 ))}
               </div>
             )}
+          </li>
+
+          <li className={styles.navItem}>
+            <button
+              type="button"
+              className={`${styles.navLink} ${activeTab === 'contact' || currentView === 'contact' ? styles.active : ''}`}
+              onClick={() => {
+                if (onNavigate) onNavigate('contact');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            >
+              Contact Us
+            </button>
           </li>
         </ul>
 
