@@ -1,21 +1,18 @@
 import React, { useState } from 'react';
 import {
   PhoneCall,
-  CalendarClock,
-  Mail,
-  Building2,
-  Clock,
-  MapPin,
   Send,
   CheckCircle2,
   AlertTriangle,
   Copy,
   Check,
-  MessageSquare,
-  ExternalLink,
-  Loader2,
+  ChevronRight,
   ShieldCheck,
-  ChevronRight
+  Clock,
+  MapPin,
+  Sparkles,
+  Loader2,
+  Lock
 } from 'lucide-react';
 import Container from '../layout/Container';
 import PolicyViewerModal from '../common/PolicyViewerModal';
@@ -34,7 +31,7 @@ const INQUIRY_CATEGORIES = [
 ];
 
 export default function ContactUs({ onNavigate }) {
-  const { contactInfo, branding } = useData();
+  const { contactInfo } = useData();
 
   const phones = Array.isArray(contactInfo?.phones) && contactInfo.phones.length > 0
     ? contactInfo.phones
@@ -43,18 +40,7 @@ export default function ContactUs({ onNavigate }) {
         { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
       ];
 
-  const emails = Array.isArray(contactInfo?.emails) && contactInfo.emails.length > 0
-    ? contactInfo.emails
-    : [
-        { id: 'email-1', label: 'Patient Support', email: 'support@thesehatbuddy.com', isPrimary: true },
-        { id: 'email-2', label: 'General Inquiries', email: 'contact@thesehatbuddy.com', isPrimary: false }
-      ];
-
-  const workingHours = contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM';
   const primaryPhone = phones.find(p => p.isPrimary) || phones[0];
-  const secondaryPhone = phones.find(p => !p.isPrimary) || phones[1] || phones[0];
-  const primaryEmail = emails.find(e => e.isPrimary) || emails[0];
-  const secondaryEmail = emails.find(e => !e.isPrimary) || emails[1] || emails[0];
 
   // Form State
   const [formData, setFormData] = useState({
@@ -144,188 +130,213 @@ export default function ContactUs({ onNavigate }) {
           </div>
         </div>
 
-        {/* Main Content: 2-Panel Side-by-Side Console */}
-        <div className={styles.mainConsole}>
-          {/* Left Column: Single Dedicated Helpline Block */}
-          <div className={styles.leftColumn}>
-            <div className={styles.columnIntro}>
+        {/* Unified Master Console Canvas */}
+        <div className={styles.masterCanvas}>
+          {/* Left Hero & Helpline Panel */}
+          <div className={styles.leftPanel}>
+            <div className={styles.leftGlowEffect} />
+
+            <div className={styles.leftPanelContent}>
+              <div className={styles.introBadge}>
+                <Sparkles size={13} color="#38bdf8" />
+                <span>24/7 Verified Healthcare Concierge</span>
+              </div>
+
               <h1 className={styles.heroHeading}>We're Here for You & Your Family</h1>
               <p className={styles.heroSubtext}>
                 Reach our dedicated care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.
               </p>
-            </div>
 
-            {/* Helpline & Emergency Card */}
-            <div className={`${styles.channelCard} ${styles.cardEmerald}`}>
-              <div className={styles.channelTop}>
-                <div className={`${styles.iconWrap} ${styles.iconEmerald}`}>
-                  <PhoneCall size={18} />
+              {/* Helpline & Emergency Card */}
+              <div className={styles.helplineCard}>
+                <div className={styles.channelTop}>
+                  <div className={styles.iconWrap}>
+                    <PhoneCall size={18} />
+                  </div>
+                  <div className={styles.channelMeta}>
+                    <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
+                    <span className={styles.tagEmerald}>24x7 Active</span>
+                  </div>
                 </div>
-                <div className={styles.channelMeta}>
-                  <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
-                  <span className={styles.tagEmerald}>24x7 Active</span>
-                </div>
-              </div>
 
-              <div className={styles.cardMiddle}>
-                <p className={styles.channelDesc}>
-                  Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
-                </p>
-                <div className={styles.featurePills}>
-                  <span className={styles.featurePill}>⚡ Zero Waiting Time</span>
-                  <span className={styles.featurePill}>🏥 Live Bed Sync</span>
+                <div className={styles.cardMiddle}>
+                  <p className={styles.channelDesc}>
+                    Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
+                  </p>
+                  <div className={styles.featurePills}>
+                    <span className={styles.featurePill}>⚡ Zero Waiting Time</span>
+                    <span className={styles.featurePill}>🏥 Live Bed Sync</span>
+                  </div>
                 </div>
-              </div>
 
-              <div className={styles.channelBody}>
-                <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
-                  {primaryPhone.number}
-                </a>
-                <div className={styles.btnRow}>
-                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={`${styles.actionBtn} ${styles.btnPrimaryEmerald}`}>
-                    <PhoneCall size={12} />
-                    <span>Call Now</span>
+                <div className={styles.channelBody}>
+                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                    {primaryPhone.number}
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(primaryPhone.number, 'p1')}
-                    className={styles.actionBtnSecondary}
-                    title="Copy Number"
-                  >
-                    {copiedId === 'p1' ? <Check size={13} color="#059669" /> : <Copy size={13} />}
-                    <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
-                  </button>
+                  <div className={styles.btnRow}>
+                    <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.btnCallNow}>
+                      <PhoneCall size={13} />
+                      <span>Call Now</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(primaryPhone.number, 'p1')}
+                      className={styles.btnCopy}
+                      title="Copy Number"
+                    >
+                      {copiedId === 'p1' ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+                      <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Trust Indicators Strip */}
+              <div className={styles.trustStrip}>
+                <div className={styles.trustItem}>
+                  <Clock size={12} color="#38bdf8" />
+                  <span>Immediate Triage</span>
+                </div>
+                <span className={styles.trustDot}>•</span>
+                <div className={styles.trustItem}>
+                  <ShieldCheck size={12} color="#34d399" />
+                  <span>40+ Network Hospitals</span>
+                </div>
+                <span className={styles.trustDot}>•</span>
+                <div className={styles.trustItem}>
+                  <MapPin size={12} color="#a78bfa" />
+                  <span>Bengaluru Hub</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Send Message Form */}
-          <div className={styles.rightColumn}>
-            <div className={styles.formCard}>
-              <div className={styles.formHeader}>
-                <div className={styles.formBadge}>
-                  <Send size={15} color="#2563eb" />
-                </div>
-                <div>
-                  <h2 className={styles.formTitle}>Send Us a Message</h2>
-                  <p className={styles.formSubtitle}>
-                    Submit your query and an assigned healthcare coordinator will contact you promptly.
-                  </p>
-                </div>
+          {/* Right Form Panel */}
+          <div className={styles.rightPanel}>
+            <div className={styles.formHeader}>
+              <div className={styles.formBadge}>
+                <Send size={15} color="#2563eb" />
               </div>
+              <div>
+                <h2 className={styles.formTitle}>Send Us a Message</h2>
+                <p className={styles.formSubtitle}>
+                  Submit your query and an assigned healthcare coordinator will contact you promptly.
+                </p>
+              </div>
+            </div>
 
-              {successMsg && (
-                <div className={styles.successBanner}>
-                  <CheckCircle2 size={18} color="#16a34a" style={{ flexShrink: 0 }} />
-                  <span>{successMsg}</span>
-                </div>
-              )}
+            {successMsg && (
+              <div className={styles.successBanner}>
+                <CheckCircle2 size={16} color="#16a34a" style={{ flexShrink: 0 }} />
+                <span>{successMsg}</span>
+              </div>
+            )}
 
-              {errorMsg && (
-                <div className={styles.errorBanner}>
-                  <AlertTriangle size={18} color="#dc2626" style={{ flexShrink: 0 }} />
-                  <span>{errorMsg}</span>
-                </div>
-              )}
+            {errorMsg && (
+              <div className={styles.errorBanner}>
+                <AlertTriangle size={16} color="#dc2626" style={{ flexShrink: 0 }} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
-              <form onSubmit={handleSubmit} className={styles.formElement}>
-                <div className={styles.formRow}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.inputLabel}>
-                      Full Name <span className={styles.reqStar}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      className={styles.textInput}
-                      placeholder="e.g. Rahul Sharma"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.inputLabel}>
-                      Email Address <span className={styles.reqStar}>*</span>
-                    </label>
-                    <input
-                      type="email"
-                      className={styles.textInput}
-                      placeholder="e.g. rahul@example.com"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className={styles.formRow}>
-                  <div className={styles.formGroup}>
-                    <label className={styles.inputLabel}>Phone Number (Optional)</label>
-                    <input
-                      type="tel"
-                      className={styles.textInput}
-                      placeholder="e.g. +91 98765 43210"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                  </div>
-
-                  <div className={styles.formGroup}>
-                    <label className={styles.inputLabel}>Inquiry Category</label>
-                    <select
-                      className={styles.selectInput}
-                      value={formData.category}
-                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    >
-                      {INQUIRY_CATEGORIES.map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
+            <form onSubmit={handleSubmit} className={styles.formElement}>
+              <div className={styles.formRow}>
                 <div className={styles.formGroup}>
-                  <label className={styles.inputLabel}>Priority Level</label>
-                  <div className={styles.priorityRow}>
-                    {['Normal', 'Urgent', 'Medical Emergency'].map(p => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, priority: p })}
-                        className={`${styles.priorityPill} ${formData.priority === p ? styles.priorityPillActive : ''} ${p === 'Medical Emergency' && formData.priority === p ? styles.priorityPillEmergency : ''}`}
-                      >
-                        {p === 'Medical Emergency' ? '🚨 ' : p === 'Urgent' ? '⚡ ' : '📋 '}
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {formData.priority === 'Medical Emergency' && (
-                  <div className={styles.emergencyNotice}>
-                    <AlertTriangle size={15} color="#b91c1c" style={{ flexShrink: 0 }} />
-                    <span>
-                      For immediate life-threatening emergencies, dial <strong>108 / 112</strong> or call our 24/7 Helpline <strong>{primaryPhone.number}</strong>.
-                    </span>
-                  </div>
-                )}
-
-                <div className={styles.formGroup} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                   <label className={styles.inputLabel}>
-                    Message / Medical Query <span className={styles.reqStar}>*</span>
+                    Full Name <span className={styles.reqStar}>*</span>
                   </label>
-                  <textarea
-                    rows={3}
-                    className={styles.textareaInput}
-                    placeholder="Describe how our care desk can assist you with beds, doctors, or treatments..."
-                    value={formData.message}
-                    onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  <input
+                    type="text"
+                    className={styles.textInput}
+                    placeholder="e.g. Rahul Sharma"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     required
                   />
                 </div>
 
+                <div className={styles.formGroup}>
+                  <label className={styles.inputLabel}>
+                    Email Address <span className={styles.reqStar}>*</span>
+                  </label>
+                  <input
+                    type="email"
+                    className={styles.textInput}
+                    placeholder="e.g. rahul@example.com"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className={styles.formRow}>
+                <div className={styles.formGroup}>
+                  <label className={styles.inputLabel}>Phone Number (Optional)</label>
+                  <input
+                    type="tel"
+                    className={styles.textInput}
+                    placeholder="e.g. +91 98765 43210"
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.inputLabel}>Inquiry Category</label>
+                  <select
+                    className={styles.selectInput}
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  >
+                    {INQUIRY_CATEGORIES.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.inputLabel}>Priority Level</label>
+                <div className={styles.priorityRow}>
+                  {['Normal', 'Urgent', 'Medical Emergency'].map(p => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, priority: p })}
+                      className={`${styles.priorityPill} ${formData.priority === p ? styles.priorityPillActive : ''} ${p === 'Medical Emergency' && formData.priority === p ? styles.priorityPillEmergency : ''}`}
+                    >
+                      {p === 'Medical Emergency' ? '🚨 ' : p === 'Urgent' ? '⚡ ' : '📋 '}
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {formData.priority === 'Medical Emergency' && (
+                <div className={styles.emergencyNotice}>
+                  <AlertTriangle size={14} color="#b91c1c" style={{ flexShrink: 0 }} />
+                  <span>
+                    For life-threatening emergencies, dial <strong>108 / 112</strong> or call our 24/7 Helpline <strong>{primaryPhone.number}</strong>.
+                  </span>
+                </div>
+              )}
+
+              <div className={styles.formGroup} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <label className={styles.inputLabel}>
+                  Message / Medical Query <span className={styles.reqStar}>*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  className={styles.textareaInput}
+                  placeholder="Describe how our care desk can assist you with beds, doctors, or treatments..."
+                  value={formData.message}
+                  onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className={styles.actionFooter}>
                 <button
                   type="submit"
                   disabled={loading}
@@ -333,18 +344,23 @@ export default function ContactUs({ onNavigate }) {
                 >
                   {loading ? (
                     <>
-                      <Loader2 size={16} className={styles.spinIcon} />
+                      <Loader2 size={15} className={styles.spinIcon} />
                       <span>Submitting Inquiry...</span>
                     </>
                   ) : (
                     <>
-                      <Send size={15} />
+                      <Send size={14} />
                       <span>Submit Message</span>
                     </>
                   )}
                 </button>
-              </form>
-            </div>
+
+                <div className={styles.privacyNote}>
+                  <Lock size={12} color="#64748b" />
+                  <span>Encrypted & strictly confidential</span>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
 
@@ -355,7 +371,7 @@ export default function ContactUs({ onNavigate }) {
           </div>
 
           <div className={styles.bottomCenter}>
-            <ShieldCheck size={14} color="#059669" />
+            <ShieldCheck size={13} color="#059669" />
             <span>National Emergency Medical Triage: <strong>Dial 108 / 112</strong></span>
           </div>
 
