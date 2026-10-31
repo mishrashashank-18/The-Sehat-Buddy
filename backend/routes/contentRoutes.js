@@ -43,6 +43,10 @@ export const seedContentIfEmpty = async () => {
     const existingContact = await Content.findOne({ type: 'contact' });
     if (!existingContact) {
       const defaultContact = {
+        title: "We're Here for You & Your Family",
+        subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
+        image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80",
+        imagePublicId: null,
         phones: [
           { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
           { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
@@ -95,6 +99,10 @@ router.get('/contact', async (req, res) => {
     let doc = await Content.findOne({ type: 'contact' });
     if (!doc) {
       const defaultContact = {
+        title: "We're Here for You & Your Family",
+        subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
+        image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80",
+        imagePublicId: null,
         phones: [
           { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
           { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }

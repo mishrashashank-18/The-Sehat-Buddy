@@ -29,6 +29,8 @@ const INQUIRY_CATEGORIES = [
   'General Inquiries & Feedback'
 ];
 
+const DEFAULT_SHOWCASE_IMAGE = "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80";
+
 export default function ContactUs({ onNavigate }) {
   const { contactInfo } = useData();
 
@@ -40,6 +42,9 @@ export default function ContactUs({ onNavigate }) {
       ];
 
   const primaryPhone = phones.find(p => p.isPrimary) || phones[0];
+  const liveImage = contactInfo?.image || DEFAULT_SHOWCASE_IMAGE;
+  const pageHeading = contactInfo?.title || "We're Here for You & Your Family";
+  const pageSubheading = contactInfo?.subtitle || "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.";
 
   // Form State
   const [formData, setFormData] = useState({
@@ -120,7 +125,7 @@ export default function ContactUs({ onNavigate }) {
             <ChevronRight size={13} className={styles.breadIcon} />
             <span className={styles.breadActive}>Contact Us</span>
             <span className={styles.dotDivider}>•</span>
-            <span className={styles.topPageTitle}>Healthcare Coordination & Care Desk</span>
+            <span className={styles.topPageTitle}>Healthcare Coordination &amp; Care Desk</span>
           </div>
 
           <div className={styles.statusPill}>
@@ -131,17 +136,15 @@ export default function ContactUs({ onNavigate }) {
 
         {/* Master Equal-Column Canvas */}
         <div className={styles.masterCanvas}>
-          {/* Left Column (50%): Header, Helpline Card, and Beautiful Photo */}
+          {/* Left Column (50%): Header, Helpline Card, and Live Showcase Photo */}
           <div className={styles.leftColumn}>
-            <div className={styles.leftHeader}>
+            <div className={styles.columnHeader}>
               <div className={styles.introBadge}>
                 <Sparkles size={13} color="#0284c7" />
                 <span>Verified Healthcare Concierge</span>
               </div>
-              <h1 className={styles.heroHeading}>We're Here for You & Your Family</h1>
-              <p className={styles.heroSubtext}>
-                Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.
-              </p>
+              <h1 className={styles.heroHeading}>{pageHeading}</h1>
+              <p className={styles.heroSubtext}>{pageSubheading}</p>
             </div>
 
             {/* Helpline & Emergency Card */}
@@ -157,7 +160,7 @@ export default function ContactUs({ onNavigate }) {
               </div>
 
               <p className={styles.channelDesc}>
-                Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
+                Direct 24/7 hotline for critical triage, live ICU &amp; inpatient bed reservations across accredited partner hospitals.
               </p>
 
               <div className={styles.channelBody}>
@@ -182,34 +185,36 @@ export default function ContactUs({ onNavigate }) {
               </div>
             </div>
 
-            {/* Photo Filling Vacant Space to make it beautiful */}
+            {/* Showcase Photo: Fills Remaining Vertical Height */}
             <div className={styles.leftPhotoContainer}>
               <img
-                src="https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1000&q=80"
+                src={liveImage}
                 alt="Healthcare Care Desk"
                 className={styles.leftPhoto}
+                onError={(e) => {
+                  e.target.src = DEFAULT_SHOWCASE_IMAGE;
+                }}
               />
               <div className={styles.photoOverlay}>
                 <div className={styles.photoBadge}>
                   <Building2 size={13} color="#ffffff" />
-                  <span>40+ Network Hospitals • Bengaluru Care Hub</span>
+                  <span>40+ Network Hospitals &bull; Bengaluru Care Hub</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column (50%): Clean Send Message Form */}
+          {/* Right Column (50%): Form with Symmetrically Aligned Header */}
           <div className={styles.rightColumn}>
-            <div className={styles.formHeader}>
-              <div className={styles.formBadge}>
-                <Send size={15} color="#2563eb" />
+            <div className={styles.columnHeader}>
+              <div className={styles.introBadgeRight}>
+                <Send size={13} color="#2563eb" />
+                <span>Direct Patient Care Desk</span>
               </div>
-              <div>
-                <h2 className={styles.formTitle}>Send Us a Message</h2>
-                <p className={styles.formSubtitle}>
-                  Submit your query and an assigned healthcare coordinator will contact you promptly.
-                </p>
-              </div>
+              <h2 className={styles.formTitle}>Send Us a Message</h2>
+              <p className={styles.formSubtitle}>
+                Submit your query and an assigned healthcare coordinator will contact you promptly.
+              </p>
             </div>
 
             {successMsg && (
@@ -344,7 +349,7 @@ export default function ContactUs({ onNavigate }) {
 
                 <div className={styles.privacyNote}>
                   <Lock size={12} color="#64748b" />
-                  <span>Encrypted & strictly confidential</span>
+                  <span>Encrypted &amp; strictly confidential</span>
                 </div>
               </div>
             </form>
@@ -354,7 +359,7 @@ export default function ContactUs({ onNavigate }) {
         {/* Single-Page Bottom Strip */}
         <div className={styles.bottomStrip}>
           <div className={styles.bottomLeft}>
-            <span>© 2026 The Sehat Buddy. Your Health, Our Priority.</span>
+            <span>&copy; 2026 The Sehat Buddy. Your Health, Our Priority.</span>
           </div>
 
           <div className={styles.bottomCenter}>
@@ -370,15 +375,15 @@ export default function ContactUs({ onNavigate }) {
             >
               Privacy Policy
             </button>
-            <span className={styles.linkSep}>•</span>
+            <span className={styles.linkSep}>&bull;</span>
             <button
               type="button"
               className={styles.policyLink}
               onClick={() => setActivePolicyType('terms')}
             >
-              Terms & Conditions
+              Terms &amp; Conditions
             </button>
-            <span className={styles.linkSep}>•</span>
+            <span className={styles.linkSep}>&bull;</span>
             <button
               type="button"
               className={styles.policyLink}

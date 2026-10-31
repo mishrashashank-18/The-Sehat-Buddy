@@ -363,12 +363,111 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   const [editEmailPrimary, setEditEmailPrimary] = useState(false);
 
   const [workingHoursInput, setWorkingHoursInput] = useState(contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM');
+  const [contactTitleInput, setContactTitleInput] = useState(contactInfo?.title || "We're Here for You & Your Family");
+  const [contactSubtitleInput, setContactSubtitleInput] = useState(contactInfo?.subtitle || "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.");
+  const [uploadingContactPhoto, setUploadingContactPhoto] = useState(false);
+  const [contactPhotoProgress, setContactPhotoProgress] = useState(0);
+  const contactPhotoRef = useRef(null);
 
   useEffect(() => {
     if (contactInfo?.workingHours) {
       setWorkingHoursInput(contactInfo.workingHours);
     }
-  }, [contactInfo?.workingHours]);
+    if (contactInfo?.title) {
+      setContactTitleInput(contactInfo.title);
+    }
+    if (contactInfo?.subtitle) {
+      setContactSubtitleInput(contactInfo.subtitle);
+    }
+  }, [contactInfo?.workingHours, contactInfo?.title, contactInfo?.subtitle]);
+
+  const handleUploadContactPhoto = async (file) => {
+    if (!file) return;
+    const isImage = file.type?.startsWith('image/') || file.name.match(/\.(png|jpg|jpeg|webp|svg)$/i);
+    if (!isImage) {
+      if (showToast) showToast('Please select a valid image (PNG, JPG, WEBP).', 'error');
+      return;
+    }
+
+    try {
+      setUploadingContactPhoto(true);
+      setContactPhotoProgress(0);
+      const res = await api.uploadPolicyPdf(file, 'contact', (pct) => setContactPhotoProgress(pct));
+      if (!res?.url) throw new Error(res?.message || 'Upload failed');
+
+      const oldPublicId = contactInfo?.imagePublicId;
+      const oldUrl = contactInfo?.image;
+
+      const updated = {
+        ...contactInfo,
+        image: res.url,
+        imagePublicId: res.public_id || null
+      };
+
+      await updateContactInfo(updated);
+
+      if (oldPublicId && oldPublicId !== res.public_id) {
+        api.deleteMedia(oldPublicId, 'image').catch(() => {});
+      }
+      if (oldUrl && oldUrl !== res.url && !oldUrl.includes('unsplash.com')) {
+        api.deleteMedia(oldUrl).catch(() => {});
+      }
+
+      if (showToast) showToast('Contact Us page photo uploaded successfully!', 'success');
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Failed to upload photo', 'error');
+    } finally {
+      setUploadingContactPhoto(false);
+      setContactPhotoProgress(0);
+      if (contactPhotoRef.current) contactPhotoRef.current.value = '';
+    }
+  };
+
+  const handleRemoveContactPhoto = async () => {
+    const defaultImg = "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80";
+    if (contactInfo?.image === defaultImg) {
+      if (showToast) showToast('Default showcase photo is already active.', 'info');
+      return;
+    }
+    if (!window.confirm('Reset the Contact Us showcase photo to default?')) return;
+
+    try {
+      const oldPublicId = contactInfo?.imagePublicId;
+      const oldUrl = contactInfo?.image;
+
+      const updated = {
+        ...contactInfo,
+        image: defaultImg,
+        imagePublicId: null
+      };
+      await updateContactInfo(updated);
+
+      if (oldPublicId) {
+        api.deleteMedia(oldPublicId, 'image').catch(() => {});
+      }
+      if (oldUrl && !oldUrl.includes('unsplash.com')) {
+        api.deleteMedia(oldUrl).catch(() => {});
+      }
+      if (showToast) showToast('Contact Us showcase photo reset to default.', 'info');
+    } catch (err) {
+      if (showToast) showToast(err.message || 'Failed to reset photo', 'error');
+    }
+  };
+
+  const handleSaveContactHeader = async (e) => {
+    e.preventDefault();
+    try {
+      const updated = {
+        ...contactInfo,
+        title: contactTitleInput.trim() || "We're Here for You & Your Family",
+        subtitle: contactSubtitleInput.trim() || "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries."
+      };
+      await updateContactInfo(updated);
+      if (showToast) showToast('Contact page header updated successfully!', 'success');
+    } catch {
+      if (showToast) showToast('Failed to update contact header', 'error');
+    }
+  };
 
   const phonesList = Array.isArray(contactInfo?.phones) ? contactInfo.phones : [];
   const emailsList = Array.isArray(contactInfo?.emails) ? contactInfo.emails : [];
@@ -2534,6 +2633,163 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
             </div>
           </div>
 
+          {/* TOP CARD: CONTACT PAGE SHOWCASE PHOTO & HEADER */}
+          <div className={styles.formCard} style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ImageIcon size={18} />
+                </div>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Contact Us Page Showcase Photo &amp; Headlines</h4>
+                  <span style={{ fontSize: '0.76rem', color: '#64748b' }}>Upload custom photos and edit the primary welcoming headlines on the live contact console.</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: '22px', alignItems: 'start' }}>
+              {/* Photo Preview & Controls */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ position: 'relative', width: '100%', height: '190px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#0f172a' }}>
+                  <img
+                    src={contactInfo?.image || "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80"}
+                    alt="Contact Page Showcase"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  />
+                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 12px', background: 'linear-gradient(to top, rgba(15, 23, 42, 0.8) 0%, transparent 100%)', color: '#ffffff', fontSize: '0.74rem', fontWeight: 600 }}>
+                    Live Contact Page Photo
+                  </div>
+                </div>
+
+                {uploadingContactPhoto && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#2563eb', fontWeight: 600 }}>
+                      <span>Uploading Photo to Cloudinary...</span>
+                      <span>{contactPhotoProgress}%</span>
+                    </div>
+                    <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                      <div style={{ width: `${contactPhotoProgress}%`, height: '100%', background: '#2563eb', transition: 'width 0.2s' }} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={uploadingContactPhoto}
+                    onClick={() => contactPhotoRef.current?.click()}
+                    style={{
+                      flex: 1,
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Upload size={14} />
+                    <span>{contactInfo?.image ? 'Change Photo' : 'Upload Photo'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRemoveContactPhoto}
+                    title="Reset to default medical concierge photo"
+                    style={{
+                      background: '#ffffff',
+                      color: '#64748b',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '8px',
+                      padding: '7px 12px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <RefreshCw size={13} />
+                    <span>Reset Default</span>
+                  </button>
+
+                  <input
+                    ref={contactPhotoRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        handleUploadContactPhoto(e.target.files[0]);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Headlines Form */}
+              <form onSubmit={handleSaveContactHeader} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                    Contact Page Primary Heading
+                  </label>
+                  <input
+                    type="text"
+                    value={contactTitleInput}
+                    onChange={(e) => setContactTitleInput(e.target.value)}
+                    placeholder="e.g. We're Here for You & Your Family"
+                    className={styles.input}
+                    style={{ width: '100%' }}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                    Contact Page Subtitle / Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={contactSubtitleInput}
+                    onChange={(e) => setContactSubtitleInput(e.target.value)}
+                    placeholder="e.g. Reach our care coordinators directly for emergency hospital beds..."
+                    className={styles.input}
+                    style={{ width: '100%', resize: 'none', lineHeight: '1.4' }}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <button
+                    type="submit"
+                    style={{
+                      background: '#059669',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '7px 16px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <Save size={14} /> Save Headlines
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
             {/* CARD 1: PHONE NUMBERS */}
             <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column' }}>
@@ -2959,7 +3215,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Clock size={18} color="#2563eb" />
-                <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Platform Support & Operating Hours</h4>
+                <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Platform Support &amp; Operating Hours</h4>
               </div>
               <button
                 type="submit"
@@ -2990,11 +3246,11 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 onChange={(e) => setWorkingHoursInput(e.target.value)}
                 placeholder="e.g. Mon – Sat: 8:00 AM – 8:00 PM"
                 className={styles.input}
-                style={{ width: '100%', maxWidth: '400px' }}
+                style={{ width: '100%', maxWidth: '600px' }}
                 required
               />
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginTop: '4px' }}>
-                Displayed across patient consultation FAQ sections and the Contact Us navigation dropdown.
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginTop: '6px' }}>
+                Displayed across patient consultation FAQ sections, footer cards, and the Contact Us navigation dropdown.
               </span>
             </div>
           </form>

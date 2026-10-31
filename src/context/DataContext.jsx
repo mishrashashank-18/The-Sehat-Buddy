@@ -26,6 +26,10 @@ const STORAGE_KEY_CONTACT = 'sehat_buddy_contact_v1';
 const STORAGE_KEY_LEGAL = 'sehat_buddy_legal_policies_v1';
 
 export const DEFAULT_CONTACT_INFO = {
+  title: "We're Here for You & Your Family",
+  subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
+  image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80",
+  imagePublicId: null,
   phones: [
     { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
     { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
