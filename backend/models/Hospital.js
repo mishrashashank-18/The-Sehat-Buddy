@@ -55,6 +55,8 @@ const hospitalSchema = new mongoose.Schema({
   establishedYear: { type: Number },
   instagram: { type: String, default: '' },
   facebook: { type: String, default: '' },
+  youtube: { type: String, default: '' },
+  website: { type: String, default: '' },
   reels: [mongoose.Schema.Types.Mixed],
   youtube_videos: [mongoose.Schema.Types.Mixed],
   photos: [{

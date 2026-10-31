@@ -1941,6 +1941,8 @@ export const DataProvider = ({ children }) => {
             longitude: updatedData.longitude !== undefined ? (updatedData.longitude === '' || updatedData.longitude === null ? undefined : Number(updatedData.longitude)) : hosp.longitude,
             instagram: updatedData.instagram !== undefined ? updatedData.instagram : (hosp.instagram || ''),
             facebook: updatedData.facebook !== undefined ? updatedData.facebook : (hosp.facebook || ''),
+            youtube: updatedData.youtube !== undefined ? updatedData.youtube : (hosp.youtube || ''),
+            website: updatedData.website !== undefined ? updatedData.website : (hosp.website || ''),
             showOnHome: updatedData.showOnHome !== undefined ? Boolean(updatedData.showOnHome) : (hosp.showOnHome ?? true),
             homeUpdatedAt: updatedData.showOnHome !== undefined
               ? (updatedData.homeMutationTimestamp ? Number(updatedData.homeMutationTimestamp) : (updatedData.homeUpdatedAt ? Number(updatedData.homeUpdatedAt) : Math.max(Number(hosp.homeUpdatedAt || 0) + 1, Date.now())))

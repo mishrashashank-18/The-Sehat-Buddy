@@ -263,6 +263,8 @@ export const createInitialHospitalFormData = (hosp) => {
     tpaPreAuthTime: hosp.tpaHelpdesk?.preAuthTime || '',
     instagram: hosp.instagram || '',
     facebook: hosp.facebook || '',
+    youtube: hosp.youtube || '',
+    website: hosp.website || '',
     reels: existingReels,
     youtube_videos: existingVideos
   };
@@ -1721,6 +1723,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         },
         instagram: (formData.instagram || '').trim(),
         facebook: (formData.facebook || '').trim(),
+        youtube: (formData.youtube || '').trim(),
+        website: (formData.website || '').trim(),
         reels: Array.isArray(formData.reels) ? formData.reels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim()))) : [],
         youtube_videos: Array.isArray(formData.youtube_videos) ? formData.youtube_videos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim()))) : [],
         erCases: Array.isArray(erCases) ? erCases : [],
@@ -3770,6 +3774,30 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     value={formData.facebook || ''}
                     onChange={(e) => handleChange('facebook', e.target.value)}
                     placeholder="e.g. https://facebook.com/manipalhospitals"
+                  />
+                </div>
+              </div>
+
+              <div className={styles.gridTwo} style={{ marginTop: '16px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>YouTube Channel / URL</label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    value={formData.youtube || ''}
+                    onChange={(e) => handleChange('youtube', e.target.value)}
+                    placeholder="e.g. https://youtube.com/@manipalhospitals"
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Official Website URL</label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    value={formData.website || ''}
+                    onChange={(e) => handleChange('website', e.target.value)}
+                    placeholder="e.g. https://www.manipalhospitals.com"
                   />
                 </div>
               </div>

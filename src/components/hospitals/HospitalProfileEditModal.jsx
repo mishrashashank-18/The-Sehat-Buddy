@@ -64,6 +64,8 @@ const HospitalProfileEditModal = ({ isOpen, onClose, hospital, initialTab = 'gen
     image: '',
     instagram: '',
     facebook: '',
+    youtube: '',
+    website: '',
     specialties: [],
     description: ''
   });
@@ -91,6 +93,8 @@ const HospitalProfileEditModal = ({ isOpen, onClose, hospital, initialTab = 'gen
         image: hospital.image || 'https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&w=800&q=80',
         instagram: hospital.instagram || '',
         facebook: hospital.facebook || '',
+        youtube: hospital.youtube || '',
+        website: hospital.website || '',
         specialties: [...specs],
         description: hospital.description || ''
       });
@@ -166,6 +170,8 @@ const HospitalProfileEditModal = ({ isOpen, onClose, hospital, initialTab = 'gen
         image: formData.image.trim(),
         instagram: formData.instagram.trim(),
         facebook: formData.facebook.trim(),
+        youtube: formData.youtube.trim(),
+        website: formData.website.trim(),
         specialties: formData.specialties,
         specialities: formData.specialties,
         description: formData.description.trim()
@@ -484,6 +490,41 @@ const HospitalProfileEditModal = ({ isOpen, onClose, hospital, initialTab = 'gen
                       placeholder="e.g. https://facebook.com/manipalhospitals"
                     />
                     <span className={styles.hint}>Clickable Facebook icon displays directly below hospital image</span>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"></path>
+                        <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" fill="#ef4444"></polygon>
+                      </svg>
+                      YouTube Channel / URL
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.youtube}
+                      onChange={(e) => setFormData({ ...formData, youtube: e.target.value })}
+                      placeholder="e.g. https://youtube.com/@manipalhospitals"
+                    />
+                    <span className={styles.hint}>Clickable YouTube icon displays directly below hospital image</span>
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                      </svg>
+                      Official Website URL
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.website}
+                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                      placeholder="e.g. https://www.manipalhospitals.com"
+                    />
+                    <span className={styles.hint}>Clickable Website globe icon displays directly below hospital image</span>
                   </div>
                 </div>
               </>

@@ -196,6 +196,26 @@
   border-color: #1877f2;
 }
 
+.socialYoutube {
+  color: #ef4444;
+}
+
+.socialYoutube:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+.socialWebsite {
+  color: #0284c7;
+}
+
+.socialWebsite:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
 .contactCard {
   background: #f8fafc;
   border: 1px solid #e2e8f0;

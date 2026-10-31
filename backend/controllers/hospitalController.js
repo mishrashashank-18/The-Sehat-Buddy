@@ -544,6 +544,10 @@ export const registerHospital = async (req, res) => {
       insuranceHelpline: req.body.insuranceHelpline || '',
       latitude: latitude !== undefined && latitude !== '' ? Number(latitude) : undefined,
       longitude: longitude !== undefined && longitude !== '' ? Number(longitude) : undefined,
+      instagram: req.body.instagram || '',
+      facebook: req.body.facebook || '',
+      youtube: req.body.youtube || '',
+      website: req.body.website || '',
       erCases: Array.isArray(req.body.erCases) ? req.body.erCases : [],
       ambulances: Array.isArray(req.body.ambulances) ? req.body.ambulances : [],
       status: req.body.status || 'active'
@@ -828,7 +832,7 @@ export const updateHospital = async (req, res) => {
       'name', 'email', 'address', 'city', 'state', 'zip', 'description',
       'rating', 'reviews', 'emergency24x7', 'establishedYear',
       'cashlessInsurance', 'insuranceHelpline', 'latitude', 'longitude',
-      'instagram', 'facebook', 'erCases', 'ambulances'
+      'instagram', 'facebook', 'youtube', 'website', 'erCases', 'ambulances'
     ];
 
     allowedFields.forEach((field) => {

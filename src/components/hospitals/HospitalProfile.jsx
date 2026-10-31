@@ -247,6 +247,20 @@ const SocialFacebookIcon = ({ size = 18 }) => (
   </svg>
 );
 
+const SocialYoutubeIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.5 12 3.5 12 3.5s-7.505 0-9.377.55a3.016 3.016 0 0 0-2.122 2.136C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.55 9.376.55 9.376.55s7.505 0 9.377-.55a3.016 3.016 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+  </svg>
+);
+
+const SocialWebsiteIcon = ({ size = 18 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"></circle>
+    <line x1="2" y1="12" x2="22" y2="12"></line>
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+  </svg>
+);
+
 const formatSocialUrl = (url, platform) => {
   if (!url) return '#';
   const trimmed = String(url).trim();
@@ -255,9 +269,9 @@ const formatSocialUrl = (url, platform) => {
   }
   if (trimmed.startsWith('@')) {
     const handle = trimmed.slice(1);
-    return platform === 'instagram'
-      ? `https://www.instagram.com/${handle}`
-      : `https://www.facebook.com/${handle}`;
+    if (platform === 'instagram') return `https://www.instagram.com/${handle}`;
+    if (platform === 'facebook') return `https://www.facebook.com/${handle}`;
+    if (platform === 'youtube') return `https://www.youtube.com/@${handle}`;
   }
   return `https://${trimmed}`;
 };
@@ -1163,8 +1177,8 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             </div>
 
-            {/* Official Social Media Links Below Hospital Image */}
-            {(hospital.instagram || hospital.facebook) && (
+            {/* Official Social Media & Web Links Below Hospital Image */}
+            {(hospital.instagram || hospital.facebook || hospital.youtube || hospital.website) && (
               <div className={styles.heroSocialLinks}>
                 {hospital.instagram && (
                   <a
@@ -1188,6 +1202,30 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     aria-label="Facebook Page"
                   >
                     <SocialFacebookIcon size={19} />
+                  </a>
+                )}
+                {hospital.youtube && (
+                  <a
+                    href={formatSocialUrl(hospital.youtube, 'youtube')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialYoutube}`}
+                    title="Visit Official YouTube Channel"
+                    aria-label="YouTube Channel"
+                  >
+                    <SocialYoutubeIcon size={19} />
+                  </a>
+                )}
+                {hospital.website && (
+                  <a
+                    href={formatSocialUrl(hospital.website, 'website')}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`${styles.socialIconBtn} ${styles.socialWebsite}`}
+                    title="Visit Official Website"
+                    aria-label="Official Website"
+                  >
+                    <SocialWebsiteIcon size={19} />
                   </a>
                 )}
               </div>
