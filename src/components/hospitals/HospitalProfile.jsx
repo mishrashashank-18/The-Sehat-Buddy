@@ -1025,7 +1025,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
   // Alias for nav tab usage
   const displayReels = parsedReels;
 
-  // Resolve star doctors for this hospital center (all designated star doctors)
+  // Resolve star doctors for this hospital center (strictly doctors designated in hospital.star_doctors)
   let starDoctorsList = [];
   if (Array.isArray(hospital?.star_doctors) && hospital.star_doctors.length > 0) {
     starDoctorsList = hospital.star_doctors.map(sd => {
@@ -1083,20 +1083,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
       return null;
     }).filter(Boolean);
-  }
-
-  // Fallback: If no explicit star doctors were selected, display doctors affiliated with this hospital
-  if (starDoctorsList.length === 0 && doctors && doctors.length > 0 && hospital) {
-    starDoctorsList = doctors
-      .filter(d => isDoctorAffiliatedWithHospital(d, hospital))
-      .map(matchedGlobal => ({
-        ...matchedGlobal,
-        id: matchedGlobal._id || matchedGlobal.id,
-        _id: matchedGlobal._id || matchedGlobal.id,
-        specialty: matchedGlobal.specialization || matchedGlobal.specialty || 'Specialist',
-        price: matchedGlobal.fees || matchedGlobal.price || 750,
-        experience: typeof matchedGlobal.experience === 'number' ? `${matchedGlobal.experience}+ Years Experience` : (matchedGlobal.experience || '10+ Years Experience')
-      }));
   }
 
 

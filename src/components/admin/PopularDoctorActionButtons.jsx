@@ -94,11 +94,12 @@ const PopularDoctorActionButtons = React.memo(({
     setIsPending(true);
 
     // Instant optimistic toast notification with zero network latency delay
+    const isHospitalContext = Boolean(onSetPopular);
     if (showToast) {
       showToast(
         targetValue
-          ? `⭐ ${doctor?.name || 'Doctor'} marked as Popular Doctor!`
-          : `Removed ${doctor?.name || 'Doctor'} from Popular Doctors.`,
+          ? (isHospitalContext ? `⭐ ${doctor?.name || 'Doctor'} marked as Hospital Star Doctor!` : `⭐ ${doctor?.name || 'Doctor'} marked as Popular Doctor!`)
+          : (isHospitalContext ? `Removed ${doctor?.name || 'Doctor'} from Hospital Star Doctors.` : `Removed ${doctor?.name || 'Doctor'} from Popular Doctors.`),
         'success',
         2500
       );
@@ -143,9 +144,11 @@ const PopularDoctorActionButtons = React.memo(({
     }
   }, [disabled, docId, serverPopular, doctor?.name, doctor?.starUpdatedAt, onSetPopular, onToggle, showToast]);
 
+  const isHospitalContext = Boolean(onSetPopular);
+
   return (
     <div className={styles.popularBtnGroup} role="group" aria-label="Popular Doctor Controls">
-      {/* Button 1: Green Tick (✓) - Mark as Popular */}
+      {/* Button 1: Green Tick (✓) */}
       <button
         type="button"
         disabled={disabled}
@@ -153,12 +156,12 @@ const PopularDoctorActionButtons = React.memo(({
         onClick={(e) => handleAction(e, true)}
         aria-busy={isPending}
         aria-pressed={currentPopular}
-        title="Mark as Popular"
+        title={isHospitalContext ? "Feature as Hospital Star Doctor" : "Mark as Popular"}
       >
         <Check size={14} strokeWidth={2.8} />
       </button>
 
-      {/* Button 2: Red Cross (✕) - Remove from Popular */}
+      {/* Button 2: Red Cross (✕) */}
       <button
         type="button"
         disabled={disabled}
@@ -166,7 +169,7 @@ const PopularDoctorActionButtons = React.memo(({
         onClick={(e) => handleAction(e, false)}
         aria-busy={isPending}
         aria-pressed={!currentPopular}
-        title="Remove from Popular"
+        title={isHospitalContext ? "Remove from Hospital Star Doctors" : "Remove from Popular"}
       >
         <X size={14} strokeWidth={2.8} />
       </button>
