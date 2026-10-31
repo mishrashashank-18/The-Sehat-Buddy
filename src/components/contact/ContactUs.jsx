@@ -8,11 +8,10 @@ import {
   Check,
   ChevronRight,
   ShieldCheck,
-  Clock,
-  MapPin,
   Sparkles,
   Loader2,
-  Lock
+  Lock,
+  Building2
 } from 'lucide-react';
 import Container from '../layout/Container';
 import PolicyViewerModal from '../common/PolicyViewerModal';
@@ -108,7 +107,7 @@ export default function ContactUs({ onNavigate }) {
   return (
     <div className={styles.singlePageWrapper}>
       <Container className={styles.containerFlex}>
-        {/* Top Compact Bar */}
+        {/* Top Breadcrumb & Live Support Bar */}
         <div className={styles.topBar}>
           <div className={styles.breadcrumbRow}>
             <button
@@ -130,89 +129,77 @@ export default function ContactUs({ onNavigate }) {
           </div>
         </div>
 
-        {/* Unified Master Console Canvas */}
+        {/* Master Equal-Column Canvas */}
         <div className={styles.masterCanvas}>
-          {/* Left Hero & Helpline Panel */}
-          <div className={styles.leftPanel}>
-            <div className={styles.leftGlowEffect} />
-
-            <div className={styles.leftPanelContent}>
+          {/* Left Column (50%): Header, Helpline Card, and Beautiful Photo */}
+          <div className={styles.leftColumn}>
+            <div className={styles.leftHeader}>
               <div className={styles.introBadge}>
-                <Sparkles size={13} color="#38bdf8" />
-                <span>24/7 Verified Healthcare Concierge</span>
+                <Sparkles size={13} color="#0284c7" />
+                <span>Verified Healthcare Concierge</span>
               </div>
-
               <h1 className={styles.heroHeading}>We're Here for You & Your Family</h1>
               <p className={styles.heroSubtext}>
-                Reach our dedicated care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.
+                Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.
               </p>
+            </div>
 
-              {/* Helpline & Emergency Card */}
-              <div className={styles.helplineCard}>
-                <div className={styles.channelTop}>
-                  <div className={styles.iconWrap}>
-                    <PhoneCall size={18} />
-                  </div>
-                  <div className={styles.channelMeta}>
-                    <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
-                    <span className={styles.tagEmerald}>24x7 Active</span>
-                  </div>
+            {/* Helpline & Emergency Card */}
+            <div className={styles.helplineCard}>
+              <div className={styles.channelTop}>
+                <div className={styles.iconWrap}>
+                  <PhoneCall size={18} />
                 </div>
-
-                <div className={styles.cardMiddle}>
-                  <p className={styles.channelDesc}>
-                    Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
-                  </p>
-                  <div className={styles.featurePills}>
-                    <span className={styles.featurePill}>⚡ Zero Waiting Time</span>
-                    <span className={styles.featurePill}>🏥 Live Bed Sync</span>
-                  </div>
-                </div>
-
-                <div className={styles.channelBody}>
-                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
-                    {primaryPhone.number}
-                  </a>
-                  <div className={styles.btnRow}>
-                    <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.btnCallNow}>
-                      <PhoneCall size={13} />
-                      <span>Call Now</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(primaryPhone.number, 'p1')}
-                      className={styles.btnCopy}
-                      title="Copy Number"
-                    >
-                      {copiedId === 'p1' ? <Check size={14} color="#059669" /> : <Copy size={14} />}
-                      <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
+                <div className={styles.channelMeta}>
+                  <span className={styles.channelLabel}>{primaryPhone.label || 'Helpline & Emergency'}</span>
+                  <span className={styles.tagEmerald}>24x7 Active</span>
                 </div>
               </div>
 
-              {/* Trust Indicators Strip */}
-              <div className={styles.trustStrip}>
-                <div className={styles.trustItem}>
-                  <Clock size={12} color="#38bdf8" />
-                  <span>Immediate Triage</span>
+              <p className={styles.channelDesc}>
+                Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.
+              </p>
+
+              <div className={styles.channelBody}>
+                <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.phoneLink}>
+                  {primaryPhone.number}
+                </a>
+                <div className={styles.btnRow}>
+                  <a href={`tel:${primaryPhone.number.replace(/\s+/g, '')}`} className={styles.btnCallNow}>
+                    <PhoneCall size={13} />
+                    <span>Call Now</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(primaryPhone.number, 'p1')}
+                    className={styles.btnCopy}
+                    title="Copy Number"
+                  >
+                    {copiedId === 'p1' ? <Check size={14} color="#059669" /> : <Copy size={14} />}
+                    <span>{copiedId === 'p1' ? 'Copied' : 'Copy'}</span>
+                  </button>
                 </div>
-                <span className={styles.trustDot}>•</span>
-                <div className={styles.trustItem}>
-                  <ShieldCheck size={12} color="#34d399" />
-                  <span>40+ Network Hospitals</span>
-                </div>
-                <span className={styles.trustDot}>•</span>
-                <div className={styles.trustItem}>
-                  <MapPin size={12} color="#a78bfa" />
-                  <span>Bengaluru Hub</span>
+              </div>
+            </div>
+
+            {/* Photo Filling Vacant Space to make it beautiful */}
+            <div className={styles.leftPhotoContainer}>
+              <img
+                src="https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1000&q=80"
+                alt="Healthcare Care Desk"
+                className={styles.leftPhoto}
+              />
+              <div className={styles.photoOverlay}>
+                <div className={styles.photoBadge}>
+                  <Building2 size={13} color="#ffffff" />
+                  <span>40+ Network Hospitals • Bengaluru Care Hub</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Form Panel */}
-          <div className={styles.rightPanel}>
+          {/* Right Column (50%): Clean Send Message Form */}
+          <div className={styles.rightColumn}>
             <div className={styles.formHeader}>
               <div className={styles.formBadge}>
                 <Send size={15} color="#2563eb" />
@@ -322,7 +309,7 @@ export default function ContactUs({ onNavigate }) {
                 </div>
               )}
 
-              <div className={styles.formGroup} style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <div className={styles.formGroupTextarea}>
                 <label className={styles.inputLabel}>
                   Message / Medical Query <span className={styles.reqStar}>*</span>
                 </label>
