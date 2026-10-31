@@ -936,10 +936,10 @@ export const api = {
             if (xhr.status >= 200 && xhr.status < 300 && data.success) {
               resolve(data);
             } else {
-              reject(new Error(data.message || 'Policy PDF upload failed'));
+              reject(new Error(data.message || 'Document upload failed'));
             }
           } catch (e) {
-            reject(new Error('Invalid response from upload server'));
+            reject(new Error('Upload server error: ' + (xhr.statusText || xhr.status || 'Connection failed')));
           }
         };
         xhr.onerror = () => reject(new Error('Network error during PDF upload'));

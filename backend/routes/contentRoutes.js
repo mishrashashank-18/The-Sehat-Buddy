@@ -16,6 +16,13 @@ const __dirname = path.dirname(__filename);
 
 const router = express.Router();
 
+const checkAdminAuth = async (req, res, next) => {
+  if (process.env.NODE_ENV !== 'production') {
+    return next();
+  }
+  return protect(req, res, () => requireAdmin(req, res, next));
+};
+
 /**
  * Ensures all standard front-page content types ('hero', 'services', 'features', 'articles', 'branding', 'corporate')
  * are seeded in MongoDB Atlas from content.json if they do not yet exist.
@@ -378,13 +385,6 @@ router.get('/', async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
-const checkAdminAuth = async (req, res, next) => {
-  if (process.env.NODE_ENV !== 'production') {
-    return next();
-  }
-  return protect(req, res, () => requireAdmin(req, res, next));
-};
 
 router.put('/:type', checkAdminAuth, async (req, res) => {
   try {
