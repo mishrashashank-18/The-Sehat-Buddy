@@ -108,8 +108,8 @@
 /* Main Split Console */
 .mainConsole {
   display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: 20px;
+  grid-template-columns: minmax(320px, 420px) 1fr;
+  gap: 28px;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
@@ -119,8 +119,7 @@
 .leftColumn {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   min-height: 0;
 }
 
@@ -132,7 +131,7 @@
   font-size: 1.55rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -144,52 +143,38 @@
   line-height: 1.45;
 }
 
-.channelStack {
+/* Single Helpline Card on Left */
+.channelCard {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 18px 20px;
+  border: 1.5px solid #e2e8f0;
+  border-top: 4px solid #10b981;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
   gap: 14px;
-  flex: 1;
-  min-height: 0;
-  justify-content: space-between;
-}
-
-.mainBlockCard {
-  background: #ffffff;
-  border-radius: 14px;
-  padding: 16px 18px;
-  border: 1.5px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  flex: 1;
-  min-height: 0;
-  justify-content: space-between;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.mainBlockCard:hover {
+.channelCard:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
 }
 
-.blockHelpline {
-  border-left: 4px solid #10b981;
+.cardEmerald {
+  border-top: 4px solid #10b981;
 }
 
-.blockDigital {
-  border-left: 4px solid #3b82f6;
-}
-
-.blockHeader {
+.channelTop {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
 }
 
-.blockIconWrap {
-  width: 36px;
-  height: 36px;
+.iconWrap {
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -197,86 +182,75 @@
   flex-shrink: 0;
 }
 
-.iconEmerald { background: #ecfdf5; color: #059669; }
-.iconBlue { background: #eff6ff; color: #2563eb; }
-.iconIndigo { background: #eef2ff; color: #4f46e5; }
-.iconGreen { background: #f0fdf4; color: #16a34a; }
+.iconEmerald {
+  background: #ecfdf5;
+  color: #059669;
+}
 
-.blockTitleWrap {
+.channelMeta {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  flex: 1;
+  gap: 2px;
   min-width: 0;
 }
 
-.blockTitleRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.blockTitle {
-  font-size: 1.05rem;
+.channelLabel {
+  font-size: 0.95rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0;
-  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.blockDesc {
-  font-size: 0.76rem;
-  color: #64748b;
-  margin: 0;
-  line-height: 1.35;
-}
-
-.tagEmerald, .tagBlue, .tagIndigo, .tagGreen {
-  font-size: 0.68rem;
+.tagEmerald {
+  font-size: 0.72rem;
   font-weight: 700;
+  color: #059669;
   display: inline-block;
-  padding: 2px 7px;
-  border-radius: 4px;
-}
-.tagEmerald { color: #059669; background: #ecfdf5; }
-.tagBlue { color: #2563eb; background: #eff6ff; }
-.tagIndigo { color: #4f46e5; background: #eef2ff; }
-.tagGreen { color: #16a34a; background: #f0fdf4; }
-
-.phonesGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
 }
 
-.phoneItem {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 10px 12px;
+.cardMiddle {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
-.phoneLabel {
-  font-size: 0.73rem;
-  font-weight: 700;
+.channelDesc {
+  font-size: 0.82rem;
+  line-height: 1.45;
   color: #475569;
+  margin: 0;
 }
 
-.phoneActionRow {
+.featurePills {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.featurePill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.channelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .phoneLink {
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   font-weight: 800;
   color: #0f172a;
   text-decoration: none;
@@ -284,128 +258,13 @@
 }
 
 .phoneLink:hover {
-  color: #2563eb;
-}
-
-.phoneBtns {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.blockFooterPill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #065f46;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  padding: 5px 10px;
-  border-radius: 6px;
-}
-
-.digitalGrid {
-  display: grid;
-  grid-template-columns: 1fr 1.15fr;
-  gap: 12px;
-}
-
-.digitalItem {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.digitalLabelRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-.replyBadge {
-  font-size: 0.67rem;
-  font-weight: 700;
-  color: #15803d;
-  background: #dcfce7;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.btnWhatsAppFull {
-  background: #16a34a;
-  color: #ffffff;
-  padding: 7px 12px;
-  font-weight: 700;
-  width: 100%;
-  border-radius: 7px;
-  text-decoration: none;
-  box-sizing: border-box;
-}
-.btnWhatsAppFull:hover { background: #15803d; }
-
-.emailActionRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.emailList {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.emailLink {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #1e293b;
-  text-decoration: none;
-  word-break: break-all;
-}
-.emailLink:hover { color: #4f46e5; }
-
-.emailLinkSecondary {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: #64748b;
-  text-decoration: none;
-  word-break: break-all;
-}
-.emailLinkSecondary:hover { color: #2563eb; }
-
-.hubFooterBar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.72rem;
-  color: #64748b;
-  font-weight: 500;
-  padding-top: 2px;
-}
-
-.hubItem {
-  display: inline-flex;
-  align-items: center;
-}
-
-.pillDot {
-  color: #cbd5e1;
+  color: #059669;
 }
 
 .btnRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .actionBtn {
@@ -413,11 +272,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 7px;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border-radius: 8px;
   text-decoration: none;
   border: none;
   cursor: pointer;
@@ -428,38 +287,21 @@
   background: #059669;
   color: #ffffff;
 }
-.btnPrimaryEmerald:hover { background: #047857; }
-
-.btnPrimaryBlue {
-  background: #2563eb;
-  color: #ffffff;
+.btnPrimaryEmerald:hover {
+  background: #047857;
 }
-.btnPrimaryBlue:hover { background: #1d4ed8; }
-
-.btnPrimaryIndigo {
-  background: #4f46e5;
-  color: #ffffff;
-}
-.btnPrimaryIndigo:hover { background: #4338ca; }
-
-.btnWhatsApp {
-  background: #16a34a;
-  color: #ffffff;
-  padding: 7px 10px;
-}
-.btnWhatsApp:hover { background: #15803d; }
 
 .actionBtnSecondary {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 9px;
+  gap: 5px;
+  padding: 8px 12px;
   background: #f8fafc;
   border: 1px solid #cbd5e1;
   color: #475569;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  border-radius: 7px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -467,19 +309,6 @@
 .actionBtnSecondary:hover {
   background: #f1f5f9;
   color: #0f172a;
-}
-
-.hubDetails {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 2px;
-}
-
-.hubHours, .hubLoc {
-  font-size: 0.7rem;
-  color: #64748b;
-  font-weight: 500;
 }
 
 /* Right Column: Form */
