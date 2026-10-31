@@ -17,6 +17,7 @@ const doctorSchema = new mongoose.Schema({
   image: { type: String },
   available: { type: Boolean, default: true },
   availabilityStatus: { type: String, enum: ['Available', 'Busy', 'On Leave'], default: 'Available' },
+  statusUpdatedAt: { type: Number, default: 0 },
   address: {
     line1: { type: String },
     line2: { type: String },
@@ -26,6 +27,9 @@ const doctorSchema = new mongoose.Schema({
   degree: { type: String },
   contact_number: { type: String },
   phone: { type: String },
+  helplineNumber: { type: String, default: '+91 98765 43210' },
+  helplineDays: { type: String, default: 'Mon – Sat' },
+  helplineTime: { type: String, default: '8:00 AM – 8:00 PM' },
   instagram: { type: String },
   facebook: { type: String },
   linkedin: { type: String },
@@ -71,12 +75,41 @@ const doctorSchema = new mongoose.Schema({
   dateWiseSlots: { type: Object, default: {} },
   date: { type: Number, default: Date.now },
   slots_booked: { type: Object, default: {} },
-}, { timestamps: true, minimize: false, versionKey: false });
+}, { 
+  timestamps: true, 
+  minimize: false, 
+  versionKey: false,
+  toJSON: {
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.otp;
+      delete ret.otpExpires;
+      delete ret.otpAttempts;
+      return ret;
+    }
+  },
+  toObject: {
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.otp;
+      delete ret.otpExpires;
+      delete ret.otpAttempts;
+      return ret;
+    }
+  }
+});
 
 doctorSchema.pre('save', async function() {
   if (this.isModified('password')) {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
+    if (!this.password || typeof this.password !== 'string' || !this.password.trim()) {
+      return;
+    }
+    // Prevent double hashing if password is already a valid bcrypt hash
+    const isAlreadyBcryptHash = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(this.password);
+    if (!isAlreadyBcryptHash) {
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+    }
   }
 
   // Mirror paired fields to prevent desync across schemas and legacy clients

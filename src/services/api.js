@@ -18,69 +18,125 @@ export const resolveApiBase = () => {
 
 export const API_BASE = resolveApiBase();
 
+export const safeDecodeJwt = (tok) => {
+  if (!tok || typeof tok !== 'string') return null;
+  try {
+    const parts = tok.split('.');
+    if (parts.length !== 3) return null;
+    const base64Url = parts[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+    const jsonPayload = decodeURIComponent(
+      atob(padded)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+export const isJwtExpired = (tok) => {
+  if (!tok || typeof tok !== 'string') return true;
+  const payload = safeDecodeJwt(tok);
+  if (!payload || !payload.exp) return false;
+  return payload.exp * 1000 < Date.now();
+};
+
 export const getActiveAuthToken = () => {
   try {
+    const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
+    const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+
+    const isDoctorRoute = path === '/doctor' || path.startsWith('/doctor/') || hash === '#doctor' || hash === '#/doctor' || hash.startsWith('#doctor/') || hash.startsWith('#/doctor/');
+    const isHospitalRoute = path === '/hospital' || path.startsWith('/hospital/') || hash === '#hospital' || hash === '#/hospital' || hash.startsWith('#hospital/') || hash.startsWith('#/hospital/');
+    const isAdminRoute = path === '/admin' || path.startsWith('/admin/') || hash === '#admin' || hash === '#/admin' || hash.startsWith('#admin/') || hash.startsWith('#/admin/');
+
+    // 1. Strict route-level isolation first
+    if (isDoctorRoute) {
+      const docToken = localStorage.getItem('doctor_token');
+      if (docToken && !isJwtExpired(docToken)) return docToken;
+      const genToken = localStorage.getItem('token');
+      if (genToken && !isJwtExpired(genToken)) {
+        const payload = safeDecodeJwt(genToken);
+        if (payload?.role === 'doctor') return genToken;
+      }
+      return null;
+    }
+
+    if (isHospitalRoute) {
+      const hospToken = localStorage.getItem('hospital_token');
+      if (hospToken && !isJwtExpired(hospToken)) return hospToken;
+      const genToken = localStorage.getItem('token');
+      if (genToken && !isJwtExpired(genToken)) {
+        const payload = safeDecodeJwt(genToken);
+        if (payload?.role === 'hospital') return genToken;
+      }
+      return null;
+    }
+
+    if (isAdminRoute) {
+      const adminToken = localStorage.getItem('admin_token');
+      if (adminToken && !isJwtExpired(adminToken)) return adminToken;
+      const genToken = localStorage.getItem('token');
+      if (genToken && !isJwtExpired(genToken)) {
+        const payload = safeDecodeJwt(genToken);
+        if (payload?.role === 'admin' || !payload?.role) return genToken;
+      }
+      return null;
+    }
+
+    // 2. Non-portal routes (e.g. patient browsing public site, /doctors list, /hospitals list)
     let storedUser = null;
     try {
       storedUser = JSON.parse(localStorage.getItem('user') || '{}');
     } catch {}
 
-    const isTokenExpired = (tok) => {
-      if (!tok || typeof tok !== 'string') return true;
-      try {
-        const parts = tok.split('.');
-        if (parts.length !== 3) return false;
-        const payload = JSON.parse(atob(parts[1]));
-        return Boolean(payload?.exp && payload.exp * 1000 < Date.now());
-      } catch {
-        return false;
-      }
-    };
+    if (storedUser?.role === 'doctor') {
+      const docToken = localStorage.getItem('doctor_token') || localStorage.getItem('token');
+      if (docToken && !isJwtExpired(docToken)) return docToken;
+    }
+    if (storedUser?.role === 'hospital') {
+      const hospToken = localStorage.getItem('hospital_token') || localStorage.getItem('token');
+      if (hospToken && !isJwtExpired(hospToken)) return hospToken;
+    }
+    if (storedUser?.role === 'admin') {
+      const adminToken = localStorage.getItem('admin_token') || localStorage.getItem('token');
+      if (adminToken && !isJwtExpired(adminToken)) return adminToken;
+    }
 
-    const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
-    const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+    // Generic fallback for patients / normal users
+    const patientToken = localStorage.getItem('patient_token') || localStorage.getItem('user_token') || localStorage.getItem('token');
+    if (patientToken && !isJwtExpired(patientToken)) return patientToken;
 
-    if (storedUser?.role === 'admin' || path.startsWith('/admin') || hash.includes('admin') || localStorage.getItem('admin_logged_in') === 'true') {
-      const adminToken = localStorage.getItem('admin_token');
-      if (adminToken) {
-        if (isTokenExpired(adminToken)) {
-          localStorage.removeItem('admin_token');
-        } else {
-          return adminToken;
-        }
-      }
-      const genericToken = localStorage.getItem('token');
-      if (genericToken) {
-        if (isTokenExpired(genericToken)) {
-          localStorage.removeItem('token');
-        } else {
-          try {
-            const payload = JSON.parse(atob(genericToken.split('.')[1]));
-            if (payload?.role === 'admin' || !payload?.role) return genericToken;
-          } catch {
-            return genericToken;
-          }
-        }
-      }
-      return null;
-    }
-    if (storedUser?.role === 'doctor' || path.startsWith('/doctor') || hash.includes('doctor')) {
-      return localStorage.getItem('doctor_token') || localStorage.getItem('token');
-    }
-    if (storedUser?.role === 'hospital' || path.startsWith('/hospital') || hash.includes('hospital')) {
-      return localStorage.getItem('hospital_token') || localStorage.getItem('token');
-    }
-    return localStorage.getItem('admin_token') || localStorage.getItem('token') || localStorage.getItem('hospital_token') || localStorage.getItem('doctor_token') || localStorage.getItem('patient_token');
+    return localStorage.getItem('doctor_token') || localStorage.getItem('hospital_token') || localStorage.getItem('admin_token') || localStorage.getItem('token') || null;
   } catch {
-    return localStorage.getItem('admin_token') || localStorage.getItem('token');
+    return localStorage.getItem('doctor_token') || localStorage.getItem('admin_token') || localStorage.getItem('token');
   }
 };
 
-const getAuthHeaders = (isFormData = false) => {
-  const token = getActiveAuthToken();
+export const getAuthHeaders = (isFormData = false, forcedRole = null) => {
+  const token = forcedRole === 'doctor' 
+    ? (localStorage.getItem('doctor_token') || getActiveAuthToken())
+    : forcedRole === 'hospital'
+    ? (localStorage.getItem('hospital_token') || getActiveAuthToken())
+    : forcedRole === 'admin'
+    ? (localStorage.getItem('admin_token') || getActiveAuthToken())
+    : getActiveAuthToken();
+
   const headers = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  headers['x-admin-request'] = 'true';
+
+  const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
+  const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+  const isAdminRoute = path === '/admin' || path.startsWith('/admin/') || hash === '#admin' || hash === '#/admin' || hash.startsWith('#admin/') || hash.startsWith('#/admin/');
+
+  // Strictly only send x-admin-request when the active route is an admin portal route or forced admin
+  if (isAdminRoute || forcedRole === 'admin') {
+    headers['x-admin-request'] = 'true';
+  }
   if (!isFormData) headers['Content-Type'] = 'application/json';
   return headers;
 };
@@ -89,11 +145,13 @@ const handleResponse = async (res) => {
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     if (res.status === 401) {
-      if (typeof window !== 'undefined' && (errorData.message?.includes('no longer exists') || errorData.message?.includes('Not authorized'))) {
-        window.dispatchEvent(new CustomEvent('sehat_auth_unauthorized', { detail: { message: errorData.message } }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sehat_auth_unauthorized', { detail: { message: errorData.message || '' } }));
       }
     }
-    throw new Error(errorData.message || `HTTP error ${res.status}`);
+    const err = new Error(errorData.message || `HTTP error ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return res.json();
 };
@@ -159,23 +217,29 @@ export const api = {
     return null;
   },
 
-  async getMyDoctor() {
+  async getMyDoctor(overrideToken) {
+    const token = overrideToken || (typeof window !== 'undefined' ? (localStorage.getItem('doctor_token') || getActiveAuthToken()) : null);
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     const res = await fetch(`${API_BASE}/doctors/me`, {
-      headers: getAuthHeaders()
+      headers
     });
-    if (res.status === 401 || res.status === 403 || res.status === 404) {
-      const err = new Error('Doctor session invalid or doctor deleted');
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const err = new Error(errorData.message || 'Doctor session invalid or expired');
       err.status = res.status;
       throw err;
     }
-    const data = await handleResponse(res);
+    const data = await res.json();
     return data.doctor || data.data || data;
   },
 
   async addDoctor(doctorData) {
     const res = await fetch(`${API_BASE}/admin/add-doctor`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(false, 'admin'),
       body: JSON.stringify(doctorData)
     });
     const data = await handleResponse(res);
@@ -185,7 +249,7 @@ export const api = {
   async addDoctorByHospital(doctorData) {
     const res = await fetch(`${API_BASE}/doctors/add-by-hospital`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders(false, 'hospital'),
       body: JSON.stringify(doctorData)
     });
     const data = await handleResponse(res);
@@ -194,12 +258,19 @@ export const api = {
 
   async updateDoctor(id, doctorData) {
     let role = null;
-    try {
-      const user = JSON.parse(localStorage.getItem('admin_user') || localStorage.getItem('user') || '{}');
-      role = user.role;
-    } catch {}
-    if (!role && typeof window !== 'undefined' && (window.location.pathname || '').startsWith('/admin')) {
+    const path = typeof window !== 'undefined' ? (window.location.pathname || '') : '';
+    const hash = typeof window !== 'undefined' ? (window.location.hash || '') : '';
+    if (path === '/doctor' || path.startsWith('/doctor/') || hash === '#doctor' || hash === '#/doctor') {
+      role = 'doctor';
+    } else if (path === '/admin' || path.startsWith('/admin/') || hash === '#admin' || hash === '#/admin') {
       role = 'admin';
+    } else if (path === '/hospital' || path.startsWith('/hospital/') || hash === '#hospital' || hash === '#/hospital') {
+      role = 'hospital';
+    } else {
+      try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        role = user.role;
+      } catch {}
     }
 
     const payload = { ...doctorData };
@@ -215,7 +286,7 @@ export const api = {
       try {
         const res = await fetch(`${API_BASE}/admin/update-doctor/${id}`, {
           method: 'PUT',
-          headers: getAuthHeaders(),
+          headers: getAuthHeaders(false, 'admin'),
           body: JSON.stringify(payload)
         });
         if (res.ok) {
@@ -235,7 +306,7 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/doctors/${id}`, {
         method: 'PUT',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders(false, role || 'doctor'),
         body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -575,6 +646,38 @@ export const api = {
     return data.data;
   },
 
+  async getContact() {
+    const res = await fetch(`${API_BASE}/content/contact`);
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateContact(contactData) {
+    const res = await fetch(`${API_BASE}/content/contact`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(contactData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async getLegalPolicies() {
+    const res = await fetch(`${API_BASE}/content/legal-policies`);
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
+  async updateLegalPolicies(legalData) {
+    const res = await fetch(`${API_BASE}/content/legal_policies`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(legalData)
+    });
+    const data = await handleResponse(res);
+    return data.data;
+  },
+
   async updateHero(heroData) {
     const res = await fetch(`${API_BASE}/content/hero`, {
       method: 'PUT',
@@ -768,22 +871,81 @@ export const api = {
     return data;
   },
 
-  // Delete Media / Image completely from Cloudinary
-  async deleteImage(urlOrPublicId, resourceType = 'image') {
+  // Policy PDF Document Upload (Cloudinary / Backend storage) - Max 25MB
+  async uploadPolicyPdf(file, policyType = 'privacy', onProgress = null) {
+    const token = getActiveAuthToken();
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    if (onProgress && typeof onProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/upload/policy-pdf`);
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const percent = Math.round((e.loaded / e.total) * 100);
+            onProgress(percent);
+          }
+        };
+        xhr.onload = () => {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+              resolve(data);
+            } else {
+              reject(new Error(data.message || 'Policy PDF upload failed'));
+            }
+          } catch (e) {
+            reject(new Error('Invalid response from upload server'));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during PDF upload'));
+        const formData = new FormData();
+        formData.append('pdf', file);
+        formData.append('policyType', policyType);
+        xhr.send(formData);
+      });
+    }
+
+    const formData = new FormData();
+    formData.append('pdf', file);
+    formData.append('policyType', policyType);
+
+    const res = await fetch(`${API_BASE}/upload/policy-pdf`, {
+      method: 'POST',
+      headers,
+      body: formData
+    });
+    return handleResponse(res);
+  },
+
+  // Delete Media / Image / PDF completely from Server Disk and Cloudinary
+  async deleteMedia(urlOrPublicId, resourceType = 'raw') {
     const token = getActiveAuthToken();
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch(`${API_BASE}/upload/delete`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        url: urlOrPublicId && urlOrPublicId.startsWith('http') ? urlOrPublicId : undefined,
-        public_id: urlOrPublicId && !urlOrPublicId.startsWith('http') ? urlOrPublicId : undefined,
-        resource_type: resourceType
-      })
-    });
-    return handleResponse(res);
+    const isLocalOrHttpUrl = typeof urlOrPublicId === 'string' && (urlOrPublicId.startsWith('http') || urlOrPublicId.startsWith('/uploads/') || urlOrPublicId.startsWith('uploads/'));
+    try {
+      const res = await fetch(`${API_BASE}/upload/delete`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          url: isLocalOrHttpUrl ? urlOrPublicId : undefined,
+          public_id: !isLocalOrHttpUrl ? urlOrPublicId : undefined,
+          resource_type: resourceType
+        })
+      });
+      return await handleResponse(res);
+    } catch (e) {
+      console.warn('deleteMedia error:', e.message);
+      return { success: false, message: e.message };
+    }
+  },
+
+  async deleteImage(urlOrPublicId, resourceType = 'image') {
+    return this.deleteMedia(urlOrPublicId, resourceType);
   },
 
   // Video Upload (Cloudinary)

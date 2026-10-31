@@ -1107,44 +1107,8 @@ export const updateHospital = async (req, res) => {
         }
       }
 
-      // Identify added and removed doctor IDs for bidirectional synchronization
-      const oldStarDoctors = (hospital.star_doctors || []).map(sid => String(sid));
-      const newStarDoctorStrings = new Set(uniqueStarDoctors.map(sid => String(sid)));
-      const removedDoctorIds = oldStarDoctors.filter(oldId => !newStarDoctorStrings.has(oldId));
-
       hospital.star_doctors = uniqueStarDoctors;
       hospital.markModified('star_doctors');
-
-      // Bidirectional synchronization: keep Doctor.isStarDoctor strictly aligned with Hospital.star_doctors
-      const nowTs = Date.now();
-      if (uniqueStarDoctors.length > 0) {
-        Doctor.updateMany(
-          { _id: { $in: uniqueStarDoctors } },
-          { $set: { isStarDoctor: true, starUpdatedAt: nowTs } }
-        ).catch(err => console.warn('Sync Doctor.isStarDoctor true failed:', err.message));
-      }
-
-      if (removedDoctorIds.length > 0) {
-        (async () => {
-          for (const remId of removedDoctorIds) {
-            if (!mongoose.Types.ObjectId.isValid(remId)) continue;
-            try {
-              const otherHospitalHas = await Hospital.exists({
-                _id: { $ne: hospital._id },
-                star_doctors: remId
-              });
-              if (!otherHospitalHas) {
-                await Doctor.updateOne(
-                  { _id: remId },
-                  { $set: { isStarDoctor: false, starUpdatedAt: nowTs } }
-                );
-              }
-            } catch (syncErr) {
-              console.warn('Sync Doctor.isStarDoctor false failed:', syncErr.message);
-            }
-          }
-        })();
-      }
     }
     if (req.body.photos !== undefined) {
       hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];

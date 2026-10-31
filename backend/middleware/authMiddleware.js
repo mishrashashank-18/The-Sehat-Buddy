@@ -119,39 +119,45 @@ export const protect = async (req, res, next) => {
         }
       }
 
-      // If token expired/invalid, but request originates from trusted admin panel
-      if (isAdminRequest || process.env.NODE_ENV !== 'production') {
+      // If token expired/invalid, but request originates specifically from admin panel
+      const isExplicitDoctorOrHospitalEndpoint = req.originalUrl?.includes('/doctors/me') || req.originalUrl?.includes('/hospital/me');
+      if (isAdminRequest && !isExplicitDoctorOrHospitalEndpoint) {
         const adminDoc = await Admin.findOne().catch(() => null);
-        req.user = {
-          id: adminDoc ? adminDoc._id.toString() : 'admin_dev_local',
-          role: 'admin',
-          email: adminDoc ? adminDoc.email : 'admin@sehatbuddy.com',
-          name: adminDoc ? adminDoc.name : 'Super Admin',
-          doc: adminDoc
-        };
-        return next();
+        if (adminDoc) {
+          req.user = {
+            id: adminDoc._id.toString(),
+            role: 'admin',
+            email: adminDoc.email,
+            name: adminDoc.name,
+            doc: adminDoc
+          };
+          return next();
+        }
       }
 
       return res.status(401).json({
         success: false,
-        message: 'Not authorized: Token verification failed or expired'
+        message: 'Not authorized: Token verification failed or session expired. Please log in again.'
       });
     } catch (error) {
       console.error('Auth verification error:', error.message);
-      if (isAdminRequest || process.env.NODE_ENV !== 'production') {
+      const isExplicitDoctorOrHospitalEndpoint = req.originalUrl?.includes('/doctors/me') || req.originalUrl?.includes('/hospital/me');
+      if (isAdminRequest && !isExplicitDoctorOrHospitalEndpoint) {
         const adminDoc = await Admin.findOne().catch(() => null);
-        req.user = {
-          id: adminDoc ? adminDoc._id.toString() : 'admin_dev_local',
-          role: 'admin',
-          email: adminDoc ? adminDoc.email : 'admin@sehatbuddy.com',
-          name: adminDoc ? adminDoc.name : 'Super Admin',
-          doc: adminDoc
-        };
-        return next();
+        if (adminDoc) {
+          req.user = {
+            id: adminDoc._id.toString(),
+            role: 'admin',
+            email: adminDoc.email,
+            name: adminDoc.name,
+            doc: adminDoc
+          };
+          return next();
+        }
       }
       return res.status(401).json({
         success: false,
-        message: 'Not authorized: Token verification failed or expired'
+        message: 'Not authorized: Session expired or invalid. Please log in again.'
       });
     }
   }

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, 
   Plus, Trash2, Edit2, Star, Loader2, Award, GraduationCap, 
-  Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag 
+  Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag,
+  Phone, Clock 
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
@@ -159,6 +160,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         phone: cleanPhone,
         email: doctorToEdit.email || '',
         availableDays: doctorToEdit.availableDays || '',
+        helplineNumber: doctorToEdit.helplineNumber || '+91 98765 43210',
+        helplineDays: doctorToEdit.helplineDays || 'Mon – Sat',
+        helplineTime: doctorToEdit.helplineTime || '8:00 AM – 8:00 PM',
         about: doctorToEdit.about || '',
         available: doctorToEdit.available !== undefined ? doctorToEdit.available : true,
         isStarDoctor: Boolean(doctorToEdit.isStarDoctor),
@@ -190,6 +194,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       phone: '',
       email: '',
       availableDays: '',
+      helplineNumber: '+91 98765 43210',
+      helplineDays: 'Mon – Sat',
+      helplineTime: '8:00 AM – 8:00 PM',
       about: '',
       available: true,
       isStarDoctor: false,
@@ -263,6 +270,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       if (remoteTagsChanged) next.tags = Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags : [];
       if (doctorToEdit.jobTitle !== undefined && !dirtyFieldsRef.current.has('jobTitle')) next.jobTitle = doctorToEdit.jobTitle || '';
       if (doctorToEdit.licenseNumber !== undefined && !dirtyFieldsRef.current.has('licenseNumber')) next.licenseNumber = doctorToEdit.licenseNumber || '';
+      if (doctorToEdit.helplineNumber !== undefined && !dirtyFieldsRef.current.has('helplineNumber')) next.helplineNumber = doctorToEdit.helplineNumber || '+91 98765 43210';
+      if (doctorToEdit.helplineDays !== undefined && !dirtyFieldsRef.current.has('helplineDays')) next.helplineDays = doctorToEdit.helplineDays || 'Mon – Sat';
+      if (doctorToEdit.helplineTime !== undefined && !dirtyFieldsRef.current.has('helplineTime')) next.helplineTime = doctorToEdit.helplineTime || '8:00 AM – 8:00 PM';
       return next;
     });
 
@@ -965,8 +975,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         phone: formData.phone,
         email: formData.email.trim().toLowerCase(),
         availableDays: formData.availableDays,
-        scheduleDays: parseAvailableDaysAndHours(formData.availableDays, doctorToEdit?.slotDuration || 30).days,
-        availableSlots: parseAvailableDaysAndHours(formData.availableDays, doctorToEdit?.slotDuration || 30).slots,
+        scheduleDays: (doctorToEdit && Array.isArray(doctorToEdit.scheduleDays) && doctorToEdit.scheduleDays.length > 0)
+          ? doctorToEdit.scheduleDays
+          : (formData.availableDays ? parseAvailableDaysAndHours(formData.availableDays).days : []),
+        availableSlots: (doctorToEdit && Array.isArray(doctorToEdit.availableSlots))
+          ? doctorToEdit.availableSlots
+          : [],
         about: formData.about,
         image: finalImage,
         instagram: formData.instagram,
@@ -987,6 +1001,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
         qualifications: formData.degree,
         contact_number: formData.phone,
+        helplineNumber: formData.helplineNumber ? String(formData.helplineNumber).trim() : '+91 98765 43210',
+        helplineDays: formData.helplineDays ? String(formData.helplineDays).trim() : 'Mon – Sat',
+        helplineTime: formData.helplineTime ? String(formData.helplineTime).trim() : '8:00 AM – 8:00 PM',
         available: formData.available,
         faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== ''),
         awards: Array.isArray(formData.awards) ? formData.awards.filter(Boolean) : [],
@@ -1270,6 +1287,111 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               value={formData.availableDays}
               onChange={(e) => setFormData({ ...formData, availableDays: e.target.value })}
             />
+          </div>
+
+          {/* Clinic Desk & Patient Helpline Support */}
+          <div style={{
+            margin: '20px 0',
+            padding: '16px 18px',
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            borderRadius: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <Phone size={16} color="#2563eb" />
+              <strong style={{ fontSize: '0.95rem', color: '#0f172a' }}>Clinic Desk & Patient Helpline Support</strong>
+            </div>
+            <p style={{ margin: '0 0 14px 0', fontSize: '0.78rem', color: '#64748b', lineHeight: 1.4 }}>
+              Configures the direct call button and operating hours displayed in the doctor profile's "Have a Specific Question? Call Clinic Desk" FAQ support card.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+              <div className={styles.formGroup} style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>Helpline Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="+91 98765 43210"
+                  value={formData.helplineNumber}
+                  onChange={(e) => {
+                    dirtyFieldsRef.current.add('helplineNumber');
+                    setFormData({ ...formData, helplineNumber: e.target.value });
+                  }}
+                />
+                <small style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '3px', display: 'block' }}>
+                  e.g. +91 98765 43210
+                </small>
+              </div>
+
+              <div className={styles.formGroup} style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>Operating Days</label>
+                <input
+                  type="text"
+                  placeholder="Mon – Sat"
+                  value={formData.helplineDays}
+                  onChange={(e) => {
+                    dirtyFieldsRef.current.add('helplineDays');
+                    setFormData({ ...formData, helplineDays: e.target.value });
+                  }}
+                />
+                <small style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '3px', display: 'block' }}>
+                  e.g. Mon – Sat or All 7 Days
+                </small>
+              </div>
+
+              <div className={styles.formGroup} style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>Operating Hours / Time</label>
+                <input
+                  type="text"
+                  placeholder="8:00 AM – 8:00 PM"
+                  value={formData.helplineTime}
+                  onChange={(e) => {
+                    dirtyFieldsRef.current.add('helplineTime');
+                    setFormData({ ...formData, helplineTime: e.target.value });
+                  }}
+                />
+                <small style={{ color: '#64748b', fontSize: '0.72rem', marginTop: '3px', display: 'block' }}>
+                  e.g. 8:00 AM – 8:00 PM
+                </small>
+              </div>
+            </div>
+
+            {/* Live Visual Preview */}
+            <div style={{
+              marginTop: '14px',
+              padding: '10px 14px',
+              background: '#eff6ff',
+              border: '1px dashed #93c5fd',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '10px'
+            }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#1e40af' }}>
+                Profile Card Preview:
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <span style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  padding: '5px 12px',
+                  borderRadius: '20px',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <Phone size={12} />
+                  Call Clinic Desk: {formData.helplineNumber || '+91 98765 43210'}
+                </span>
+                <span style={{ fontSize: '0.78rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  <Clock size={12} color="#64748b" />
+                  {formData.helplineDays || 'Mon – Sat'} • {formData.helplineTime || '8:00 AM – 8:00 PM'}
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Profile Avatar / Photo */}

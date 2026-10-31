@@ -118,7 +118,20 @@ const videosDir = path.join(uploadsDir, 'videos');
 if (!fs.existsSync(videosDir)) {
   fs.mkdirSync(videosDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadsDir));
+const documentsDir = path.join(uploadsDir, 'documents');
+if (!fs.existsSync(documentsDir)) {
+  fs.mkdirSync(documentsDir, { recursive: true });
+}
+app.use('/uploads', (req, res, next) => {
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  if (req.path.endsWith('.pdf')) {
+    res.setHeader('Content-Disposition', 'inline');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+  next();
+}, express.static(uploadsDir));
 
 // 4. NoSQL Query & Body Sanitization (blocks operator injection like $gt, $where)
 app.use(mongoSanitize);
@@ -190,6 +203,9 @@ app.get('/api/stats', (req, res) => {
 // Realtime Server-Sent Events stream for entire website, pages, and all dashboards
 app.get('/api/realtime-stream', streamRealtimeDatabase);
 
+// In-memory cache for reel covers (24 hour TTL)
+const reelCoverCache = new Map();
+
 // Dedicated Instagram Reel Cover & Media Proxy Endpoint
 app.get('/api/reel-cover', async (req, res) => {
   try {
@@ -205,6 +221,15 @@ app.get('/api/reel-cover', async (req, res) => {
     }
     shortcode = shortcode.replace(/[^a-zA-Z0-9_-]/g, '');
 
+    const cacheKey = shortcode || rawUrl;
+    const cachedCover = reelCoverCache.get(cacheKey);
+    if (cachedCover && cachedCover.expiresAt > Date.now() && cachedCover.buffer) {
+      res.setHeader('Content-Type', cachedCover.contentType || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(cachedCover.buffer);
+    }
+
     const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
       redirect: 'manual',
       headers: {
@@ -214,15 +239,40 @@ app.get('/api/reel-cover', async (req, res) => {
 
     const location = igRes.headers.get('location');
     if (location && (igRes.status === 301 || igRes.status === 302)) {
+      try {
+        const directImgRes = await fetch(location, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (directImgRes.ok) {
+          const buffer = Buffer.from(await directImgRes.arrayBuffer());
+          const contentType = directImgRes.headers.get('content-type') || 'image/jpeg';
+          reelCoverCache.set(cacheKey, {
+            buffer,
+            contentType,
+            expiresAt: Date.now() + 86400 * 1000
+          });
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(buffer);
+        }
+      } catch {}
       res.setHeader('Cache-Control', 'public, max-age=86400');
       return res.redirect(location);
     }
 
     if (igRes.ok && igRes.headers.get('content-type')?.includes('image')) {
-      const buffer = await igRes.arrayBuffer();
-      res.setHeader('Content-Type', igRes.headers.get('content-type') || 'image/jpeg');
+      const buffer = Buffer.from(await igRes.arrayBuffer());
+      const contentType = igRes.headers.get('content-type') || 'image/jpeg';
+      reelCoverCache.set(cacheKey, {
+        buffer,
+        contentType,
+        expiresAt: Date.now() + 86400 * 1000
+      });
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      return res.send(Buffer.from(buffer));
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      return res.send(buffer);
     }
 
     return res.status(404).send('Cover image not found');

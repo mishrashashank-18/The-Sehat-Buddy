@@ -22,6 +22,37 @@ const STORAGE_KEY_FAQ_SYMBOLS = 'sehat_buddy_faq_symbols_v2';
 const STORAGE_KEY_REVIEWS = 'sehat_buddy_reviews_v2';
 const STORAGE_KEY_SPECIALITIES = 'sehat_buddy_specialities_v2';
 const STORAGE_KEY_BRANDING = 'sehat_buddy_branding_v3';
+const STORAGE_KEY_CONTACT = 'sehat_buddy_contact_v1';
+const STORAGE_KEY_LEGAL = 'sehat_buddy_legal_policies_v1';
+
+export const DEFAULT_CONTACT_INFO = {
+  phones: [
+    { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
+    { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
+  ],
+  emails: [
+    { id: 'email-1', label: 'Patient Support', email: 'support@thesehatbuddy.com', isPrimary: true },
+    { id: 'email-2', label: 'General Inquiries', email: 'contact@thesehatbuddy.com', isPrimary: false }
+  ],
+  workingHours: 'Mon – Sat: 8:00 AM – 8:00 PM'
+};
+
+export const DEFAULT_LEGAL_POLICIES = {
+  privacyPolicy: {
+    url: '',
+    fileName: '',
+    fileSize: 0,
+    fileSizeFormatted: '',
+    updatedAt: null
+  },
+  termsAndConditions: {
+    url: '',
+    fileName: '',
+    fileSize: 0,
+    fileSizeFormatted: '',
+    updatedAt: null
+  }
+};
 
 // Real-time synchronization channel across browser tabs & windows
 const SYNC_CHANNEL_NAME = 'sehat_buddy_sync_bus_v1';
@@ -439,6 +470,34 @@ export const DataProvider = ({ children }) => {
     return initialBranding;
   });
 
+  // 12. Platform Contact Support Info State
+  const [contactInfo, setContactInfo] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_CONTACT);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (Array.isArray(parsed.phones) || Array.isArray(parsed.emails))) {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_CONTACT_INFO;
+  });
+
+  // 13. Platform Legal & Policy Documents (Privacy Policy & Terms and Conditions)
+  const [legalPolicies, setLegalPolicies] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_LEGAL);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && (parsed.privacyPolicy || parsed.termsAndConditions)) {
+          return { ...DEFAULT_LEGAL_POLICIES, ...parsed };
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_LEGAL_POLICIES;
+  });
+
   // Sanitizer for reels to ensure only healthy, active Instagram reels are served
   const sanitizeReels = (reelsList) => {
     if (!reelsList) return [];
@@ -467,11 +526,10 @@ export const DataProvider = ({ children }) => {
         ? d.specialization
         : ((d.specialty && d.specialty !== 'General Medicine') ? d.specialty : (d.specialization || d.specialty || existing?.specialization || existing?.specialty || 'General Physician'));
       const resolvedSpecialty = rawSpec || 'General Physician';
-      const resolvedPrice = (d.fees !== undefined && d.fees !== 500)
-        ? d.fees
-        : (d.price !== undefined && d.price !== 500
-          ? d.price
-          : (d.fees ?? d.price ?? existing?.fees ?? existing?.price ?? 500));
+      const rawPrice = d.price !== undefined ? d.price : d.fees;
+      const resolvedPrice = (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)))
+        ? Number(rawPrice)
+        : (existing?.price ?? existing?.fees ?? 500);
       const resolvedPhone = d.phone || d.contact_number || existing?.phone || existing?.contact_number || '';
       const resolvedDegree = d.degree || d.qualifications || existing?.degree || existing?.qualifications || '';
       return {
@@ -491,9 +549,10 @@ export const DataProvider = ({ children }) => {
         rating: d.rating !== undefined ? d.rating : existing?.rating,
         reviews: d.reviews !== undefined ? d.reviews : (existing?.reviews || '50+'),
         availabilityStatus: d.availabilityStatus || existing?.availabilityStatus || 'Available',
+        statusUpdatedAt: Number(d.statusUpdatedAt || existing?.statusUpdatedAt || 0),
         experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
         jobTitle: d.jobTitle !== undefined ? d.jobTitle : (existing?.jobTitle || ''),
-        licenseNumber: d.licenseNumber || existing?.licenseNumber || '',
+        licenseNumber: d.licenseNumber !== undefined ? d.licenseNumber : (existing?.licenseNumber || ''),
         profileCompletion: d.profileCompletion !== undefined ? Number(d.profileCompletion) : (existing?.profileCompletion || 0),
         isProfileComplete: d.isProfileComplete !== undefined ? Boolean(d.isProfileComplete) : Boolean(existing?.isProfileComplete),
         awards: Array.isArray(d.awards) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
@@ -512,10 +571,10 @@ export const DataProvider = ({ children }) => {
         dateWiseSlots: (d.dateWiseSlots && typeof d.dateWiseSlots === 'object') ? d.dateWiseSlots : (existing?.dateWiseSlots || {}),
         slots_booked: { ...(existing?.slots_booked || {}), ...(d.slots_booked || {}) },
         isStarDoctor: (() => {
-          const keepExisting = Number(existing?.starUpdatedAt || 0) >= Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined;
+          const keepExisting = Number(existing?.starUpdatedAt || 0) > Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined;
           return keepExisting ? Boolean(existing.isStarDoctor) : (d.isStarDoctor !== undefined ? Boolean(d.isStarDoctor) : Boolean(existing?.isStarDoctor));
         })(),
-        starUpdatedAt: (Number(existing?.starUpdatedAt || 0) >= Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined)
+        starUpdatedAt: (Number(existing?.starUpdatedAt || 0) > Number(d.starUpdatedAt || 0) && existing?.isStarDoctor !== undefined)
           ? Number(existing.starUpdatedAt)
           : (d.starUpdatedAt !== undefined ? Number(d.starUpdatedAt) : Number(existing?.starUpdatedAt || 0))
       };
@@ -583,6 +642,9 @@ export const DataProvider = ({ children }) => {
       if (Array.isArray(data) && data.length > 0) {
         setDoctors(prev => {
           const mapped = mapDoctorList(data, prev);
+          if (JSON.stringify(prev) === JSON.stringify(mapped)) {
+            return prev;
+          }
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(mapped));
             broadcastSync(STORAGE_KEY_DOCTORS, mapped);
@@ -616,7 +678,7 @@ export const DataProvider = ({ children }) => {
     try {
       const data = await api.getContent();
       if (data) {
-        const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData } = data;
+        const { hero, services: sList, features: fList, articles: aList, corporate: cList, branding: bData, contact: contactData, legal_policies: legalData } = data;
         if (hero && typeof hero === 'object') {
           setHeroContent(prev => {
             const cleanHero = { ...hero };
@@ -647,6 +709,26 @@ export const DataProvider = ({ children }) => {
             localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(cList));
           } catch {}
         }
+        if (contactData && typeof contactData === 'object') {
+          setContactInfo(prev => {
+            const next = { ...prev, ...contactData };
+            try {
+              localStorage.setItem(STORAGE_KEY_CONTACT, JSON.stringify(next));
+              broadcastSync(STORAGE_KEY_CONTACT, next);
+            } catch {}
+            return isSame(prev, next) ? prev : next;
+          });
+        }
+        if (legalData && typeof legalData === 'object') {
+          setLegalPolicies(prev => {
+            const next = { ...prev, ...legalData };
+            try {
+              localStorage.setItem(STORAGE_KEY_LEGAL, JSON.stringify(next));
+              broadcastSync(STORAGE_KEY_LEGAL, next);
+            } catch {}
+            return isSame(prev, next) ? prev : next;
+          });
+        }
       }
     } catch {}
   }, []);
@@ -655,7 +737,11 @@ export const DataProvider = ({ children }) => {
     try {
       const data = await api.getFaqs();
       if (Array.isArray(data)) {
-        setFaqs(data.map(f => ({ ...f, id: f._id || f.id })));
+        const clean = data.map(f => ({ ...f, id: f._id || f.id }));
+        setFaqs(clean);
+        try {
+          localStorage.setItem(STORAGE_KEY_FAQS, JSON.stringify(clean));
+        } catch {}
       }
     } catch {}
   }, []);
@@ -791,7 +877,7 @@ export const DataProvider = ({ children }) => {
                       const resolvedPh = ph !== undefined ? ph : (d.phone || d.contact_number || '');
                       const currentStarTs = Number(d.starUpdatedAt || 0);
                       const incomingStarTs = Number(docData.starUpdatedAt || 0);
-                      const keepCurrentStar = currentStarTs >= incomingStarTs && d.isStarDoctor !== undefined;
+                      const keepCurrentStar = currentStarTs > incomingStarTs && d.isStarDoctor !== undefined;
                       const nextStar = keepCurrentStar
                         ? Boolean(d.isStarDoctor)
                         : (docData.isStarDoctor !== undefined ? Boolean(docData.isStarDoctor) : Boolean(d.isStarDoctor));
@@ -1015,6 +1101,24 @@ export const DataProvider = ({ children }) => {
                     localStorage.setItem(STORAGE_KEY_CORPORATE, JSON.stringify(safeData));
                     broadcastSync(STORAGE_KEY_CORPORATE, safeData);
                   } catch {}
+                } else if (type === 'contact' && data && typeof data === 'object') {
+                  setContactInfo(prev => {
+                    const safeContact = { ...prev, ...data };
+                    try {
+                      localStorage.setItem(STORAGE_KEY_CONTACT, JSON.stringify(safeContact));
+                      broadcastSync(STORAGE_KEY_CONTACT, safeContact);
+                    } catch {}
+                    return isSame(prev, safeContact) ? prev : safeContact;
+                  });
+                } else if (type === 'legal_policies' && data && typeof data === 'object') {
+                  setLegalPolicies(prev => {
+                    const safeLegal = { ...prev, ...data };
+                    try {
+                      localStorage.setItem(STORAGE_KEY_LEGAL, JSON.stringify(safeLegal));
+                      broadcastSync(STORAGE_KEY_LEGAL, safeLegal);
+                    } catch {}
+                    return isSame(prev, safeLegal) ? prev : safeLegal;
+                  });
                 }
               }
             } else if (collection === 'corporates') {
@@ -1196,6 +1300,8 @@ export const DataProvider = ({ children }) => {
       else if (key === STORAGE_KEY_FAQ_SYMBOLS && Array.isArray(data)) setFaqSymbols(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_REVIEWS && Array.isArray(data)) setReviews(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_SPECIALITIES && Array.isArray(data)) setSpecialitiesProcedures(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_CONTACT && typeof data === 'object') setContactInfo(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_LEGAL && typeof data === 'object') setLegalPolicies(prev => (isSame(prev, data) ? prev : data));
     };
 
     if (broadcastChan) {
@@ -1223,6 +1329,8 @@ export const DataProvider = ({ children }) => {
         else if (e.key === STORAGE_KEY_FAQ_SYMBOLS && Array.isArray(parsed)) setFaqSymbols(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_REVIEWS && Array.isArray(parsed)) setReviews(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_SPECIALITIES && Array.isArray(parsed)) setSpecialitiesProcedures(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_CONTACT && typeof parsed === 'object') setContactInfo(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_LEGAL && typeof parsed === 'object') setLegalPolicies(prev => (isSame(prev, parsed) ? prev : parsed));
       } catch {}
     };
 
@@ -1321,20 +1429,25 @@ export const DataProvider = ({ children }) => {
     setDoctors(prev => {
       const updated = prev.map(doc => {
         if (matchesId(doc, id)) {
-          const incomingSpec = updatedData.specialization || updatedData.specialty;
-          const resolvedSpecialty = (incomingSpec && incomingSpec !== 'General Medicine')
+          const incomingSpec = (updatedData.specialty !== undefined) ? updatedData.specialty : updatedData.specialization;
+          const resolvedSpecialty = incomingSpec !== undefined
             ? incomingSpec
             : ((doc.specialization && doc.specialization !== 'General Medicine') ? doc.specialization : (doc.specialty || doc.specialization || 'General Physician'));
-          const resolvedPrice = (updatedData.fees !== undefined && updatedData.fees !== 500)
-            ? parseInt(updatedData.fees, 10)
-            : (updatedData.price !== undefined && updatedData.price !== 500
-              ? parseInt(updatedData.price, 10)
-              : (updatedData.fees !== undefined
-                ? parseInt(updatedData.fees, 10)
-                : (updatedData.price !== undefined
-                  ? parseInt(updatedData.price, 10)
-                  : (doc.fees ?? doc.price ?? 500))));
+          const rawPrice = updatedData.price !== undefined ? updatedData.price : updatedData.fees;
+          const resolvedPrice = (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)))
+            ? Number(rawPrice)
+            : (doc.price ?? doc.fees ?? 500);
           const resolvedPhone = updatedData.phone !== undefined ? updatedData.phone : (updatedData.contact_number !== undefined ? updatedData.contact_number : (doc.phone || doc.contact_number || ''));
+          const currentStatusTs = Number(doc.statusUpdatedAt || 0);
+          const incomingStatusTs = Number(updatedData.statusUpdatedAt || 0);
+          const keepCurrentStatus = incomingStatusTs && currentStatusTs > incomingStatusTs;
+          const nextStatus = keepCurrentStatus
+            ? doc.availabilityStatus
+            : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus);
+          const nextStatusTs = keepCurrentStatus
+            ? currentStatusTs
+            : (incomingStatusTs || currentStatusTs || (updatedData.availabilityStatus !== undefined ? Date.now() : 0));
+
           mergedDoctor = {
             ...doc,
             ...updatedData,
@@ -1351,10 +1464,11 @@ export const DataProvider = ({ children }) => {
             specialization: resolvedSpecialty,
             price: resolvedPrice,
             fees: resolvedPrice,
-            experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
+            experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (!isNaN(parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10)) ? parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10) : (updatedData.experience === '' ? 0 : doc.experience))) : doc.experience,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
             reviews: updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews,
-            availabilityStatus: updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus,
+            availabilityStatus: nextStatus,
+            statusUpdatedAt: nextStatusTs,
             awards: updatedData.awards !== undefined ? updatedData.awards : doc.awards,
             certifications: updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications,
             memberships: updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships,
@@ -1403,7 +1517,12 @@ export const DataProvider = ({ children }) => {
     });
 
     try {
-      const res = await api.updateDoctor(id, updatedData);
+      const cleanedData = { ...updatedData };
+      delete cleanedData.password;
+      delete cleanedData.otp;
+      delete cleanedData.otpExpires;
+      delete cleanedData.otpAttempts;
+      const res = await api.updateDoctor(id, cleanedData);
       if (res && (res._id || res.id)) {
         setDoctors(prev => {
           let hasDiff = false;
@@ -1411,14 +1530,13 @@ export const DataProvider = ({ children }) => {
             if (matchesId(doc, id) || (res._id && matchesId(doc, res._id)) || (res.id && matchesId(doc, res.id))) {
               const currentStarTs = Number(doc.starUpdatedAt || 0);
               const incomingStarTs = Number(res.starUpdatedAt || 0);
-              const isStarExplicitlyUpdated = updatedData.isStarDoctor !== undefined || updatedData.starMutationTimestamp !== undefined;
-              const keepCurrentStar = isStarExplicitlyUpdated && currentStarTs > incomingStarTs;
-              const nextStar = keepCurrentStar
-                ? Boolean(doc.isStarDoctor)
-                : (res.isStarDoctor !== undefined ? Boolean(res.isStarDoctor) : (updatedData.isStarDoctor !== undefined ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor)));
-              const nextStarTs = keepCurrentStar
-                ? currentStarTs
-                : (incomingStarTs || (isStarExplicitlyUpdated && updatedData.starMutationTimestamp ? Number(updatedData.starMutationTimestamp) : currentStarTs));
+              const isStarExplicitlyUpdated = updatedData.isStarDoctor !== undefined;
+              const nextStar = res.isStarDoctor !== undefined
+                ? Boolean(res.isStarDoctor)
+                : (isStarExplicitlyUpdated ? Boolean(updatedData.isStarDoctor) : Boolean(doc.isStarDoctor));
+              const nextStarTs = isStarExplicitlyUpdated
+                ? Math.max(currentStarTs, incomingStarTs, Number(res.starUpdatedAt || 0), Number(updatedData.starMutationTimestamp || 0), Date.now())
+                : (incomingStarTs || currentStarTs || 0);
               const rawResSpec = (res.specialization && res.specialization !== 'General Medicine')
                 ? res.specialization
                 : ((res.specialty && res.specialty !== 'General Medicine') ? res.specialty : (res.specialization || res.specialty));
@@ -1433,6 +1551,15 @@ export const DataProvider = ({ children }) => {
               const resName = res.name ?? doc.name;
               const resEmail = res.email ? String(res.email).trim().toLowerCase() : (updatedData.email ? String(updatedData.email).trim().toLowerCase() : doc.email);
               const resPhone = res.phone !== undefined ? res.phone : (res.contact_number !== undefined ? res.contact_number : (updatedData.phone !== undefined ? updatedData.phone : (doc.phone || doc.contact_number || '')));
+              const resStatusTs = Number(res.statusUpdatedAt || 0);
+              const curStatusTs = Number(doc.statusUpdatedAt || 0);
+              const keepCurStatus = Boolean(updatedData.statusUpdatedAt && curStatusTs > resStatusTs);
+              const nextStatusFromRes = keepCurStatus
+                ? doc.availabilityStatus
+                : (res.availabilityStatus !== undefined ? res.availabilityStatus : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus));
+              const nextStatusTsFromRes = keepCurStatus
+                ? curStatusTs
+                : (resStatusTs || curStatusTs || 0);
               const candidate = {
                 ...doc,
                 ...res,
@@ -1457,9 +1584,10 @@ export const DataProvider = ({ children }) => {
                   ...res,
                   availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays)
                 }),
-                availabilityStatus: res.availabilityStatus !== undefined ? res.availabilityStatus : (updatedData.availabilityStatus !== undefined ? updatedData.availabilityStatus : doc.availabilityStatus),
+                availabilityStatus: nextStatusFromRes,
+                statusUpdatedAt: nextStatusTsFromRes,
                 available: res.available !== undefined ? res.available : (updatedData.available !== undefined ? updatedData.available : doc.available),
-                experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (parseInt(String(res.experience || '').replace(/\D/g, ''), 10) || doc.experience)) : doc.experience,
+                experience: res.experience !== undefined ? (typeof res.experience === 'number' ? res.experience : (!isNaN(parseInt(String(res.experience || '').replace(/\D/g, ''), 10)) ? parseInt(String(res.experience || '').replace(/\D/g, ''), 10) : (res.experience === '' ? 0 : doc.experience))) : doc.experience,
                 awards: Array.isArray(res.awards) ? res.awards : (updatedData.awards !== undefined ? updatedData.awards : doc.awards),
                 certifications: Array.isArray(res.certifications) ? res.certifications : (updatedData.certifications !== undefined ? updatedData.certifications : doc.certifications),
                 memberships: Array.isArray(res.memberships) ? res.memberships : (updatedData.memberships !== undefined ? updatedData.memberships : doc.memberships),
@@ -2452,6 +2580,74 @@ export const DataProvider = ({ children }) => {
     api.updateBranding(initialBranding).catch(() => {});
   };
 
+  // 11. Platform Contact Info CRUD
+  const updateContactInfo = useCallback(async (newContactData) => {
+    try {
+      const updated = {
+        phones: Array.isArray(newContactData.phones) ? newContactData.phones : (contactInfo?.phones || []),
+        emails: Array.isArray(newContactData.emails) ? newContactData.emails : (contactInfo?.emails || []),
+        workingHours: newContactData.workingHours || contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM'
+      };
+
+      setContactInfo(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_CONTACT, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_CONTACT, updated);
+      } catch {}
+
+      await api.updateContact(updated);
+      return { success: true, data: updated };
+    } catch (err) {
+      console.error('Failed to update contact info in DB:', err);
+      throw err;
+    }
+  }, [contactInfo]);
+
+  // 12. Platform Legal & Policy Documents CRUD (25MB PDFs)
+  const refreshLegalPolicies = useCallback(async () => {
+    try {
+      const data = await api.getLegalPolicies();
+      if (data && typeof data === 'object') {
+        setLegalPolicies(prev => {
+          const next = { ...prev, ...data };
+          try {
+            localStorage.setItem(STORAGE_KEY_LEGAL, JSON.stringify(next));
+            broadcastSync(STORAGE_KEY_LEGAL, next);
+          } catch {}
+          return isSame(prev, next) ? prev : next;
+        });
+        return data;
+      }
+    } catch (err) {
+      console.warn('Failed to refresh legal policies:', err);
+    }
+  }, []);
+
+  const updateLegalPolicies = useCallback(async (newLegalData) => {
+    try {
+      const updated = {
+        privacyPolicy: newLegalData.privacyPolicy !== undefined 
+          ? (typeof newLegalData.privacyPolicy === 'object' ? { ...legalPolicies.privacyPolicy, ...newLegalData.privacyPolicy } : newLegalData.privacyPolicy)
+          : legalPolicies.privacyPolicy,
+        termsAndConditions: newLegalData.termsAndConditions !== undefined 
+          ? (typeof newLegalData.termsAndConditions === 'object' ? { ...legalPolicies.termsAndConditions, ...newLegalData.termsAndConditions } : newLegalData.termsAndConditions)
+          : legalPolicies.termsAndConditions
+      };
+
+      setLegalPolicies(updated);
+      try {
+        localStorage.setItem(STORAGE_KEY_LEGAL, JSON.stringify(updated));
+        broadcastSync(STORAGE_KEY_LEGAL, updated);
+      } catch {}
+
+      await api.updateLegalPolicies(updated);
+      return { success: true, data: updated };
+    } catch (err) {
+      console.error('Failed to update legal policies in DB:', err);
+      throw err;
+    }
+  }, [legalPolicies]);
+
   // Reset Front Page Defaults
   const resetFrontPageDefaults = () => {
     setHeroContent(initialHeroContent);
@@ -2513,6 +2709,13 @@ export const DataProvider = ({ children }) => {
         branding,
         updateBranding,
         resetBranding,
+        // Platform Contact Info
+        contactInfo,
+        updateContactInfo,
+        // Legal Policies & Compliance (25MB PDFs)
+        legalPolicies,
+        updateLegalPolicies,
+        refreshLegalPolicies,
         // Front page content
         heroContent,
         updateHeroContent,

@@ -81,14 +81,40 @@ const hospitalSchema = new mongoose.Schema({
   longitude: { type: Number },
   erCases: { type: [mongoose.Schema.Types.Mixed], default: [] },
   ambulances: { type: [mongoose.Schema.Types.Mixed], default: [] },
-}, { timestamps: true, minimize: false, versionKey: false });
+}, { 
+  timestamps: true, 
+  minimize: false, 
+  versionKey: false,
+  toJSON: {
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.otp;
+      delete ret.otpExpires;
+      delete ret.otpAttempts;
+      return ret;
+    }
+  },
+  toObject: {
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.otp;
+      delete ret.otpExpires;
+      delete ret.otpAttempts;
+      return ret;
+    }
+  }
+});
 
 hospitalSchema.pre('save', async function() {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password || typeof this.password !== 'string' || !this.password.trim()) {
     return;
   }
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  // Prevent double hashing if password is already a valid bcrypt hash
+  const isAlreadyBcryptHash = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/.test(this.password);
+  if (!isAlreadyBcryptHash) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  }
 });
 
 hospitalSchema.methods.matchPassword = async function(enteredPassword) {

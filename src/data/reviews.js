@@ -15,21 +15,6 @@ export const initialReviews = [
     createdAt: '2026-10-12T10:30:00.000Z'
   },
   {
-    id: 2,
-    patientName: 'Priya Sundaram',
-    patientCity: 'Bengaluru',
-    targetType: 'surgery',
-    targetName: 'Laparoscopic Gallbladder Removal',
-    rating: 5,
-    title: 'Discharged in 24 hours with full insurance coverage',
-    comment: 'I was nervous about surgery costs, but HDFC ERGO covered the entire laparoscopic cholecystectomy. The cashless desk handled everything from admission to discharge smoothly.',
-    isVerified: true,
-    status: 'approved',
-    treatment: 'Laparoscopic Gallbladder Surgery',
-    insuranceUsed: 'HDFC ERGO',
-    createdAt: '2026-10-08T14:15:00.000Z'
-  },
-  {
     id: 3,
     patientName: 'Dr. Amitav Mukherjee',
     patientCity: 'Bengaluru',
@@ -43,21 +28,6 @@ export const initialReviews = [
     treatment: 'Cardiac Sciences / Angioplasty',
     insuranceUsed: 'ICICI Lombard',
     createdAt: '2026-10-01T09:40:00.000Z'
-  },
-  {
-    id: 4,
-    patientName: 'Sneha Kulkarni',
-    patientCity: 'Bengaluru',
-    targetType: 'surgery',
-    targetName: 'Cataract Surgery',
-    rating: 5,
-    title: 'Blade-free Robotic Cataract with 100% cashless settlement',
-    comment: 'Both eyes treated in daycare. Care Health settled the cashless claim within 40 minutes. No hidden fees or paperwork hassles.',
-    isVerified: true,
-    status: 'approved',
-    treatment: 'Robotic Cataract Surgery',
-    insuranceUsed: 'Care Health',
-    createdAt: '2026-09-24T16:20:00.000Z'
   },
   {
     id: 5,

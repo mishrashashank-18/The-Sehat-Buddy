@@ -22,6 +22,7 @@ import { DEFAULT_FAVICON, DEFAULT_FAVICON_CIRCULAR, DEFAULT_SOCIAL_LINKS } from 
 import { SocialIcon, SUPPORTED_PLATFORMS } from '../common/SocialIcon';
 import { NEW_SEHAT_BUDDY_FAVICON } from '../../data/faviconDataUri';
 import logoImg from '../../assets/images/logo.png';
+import LegalPoliciesManager from './LegalPoliciesManager';
 import styles from './BrandingManager.module.css';
 
 // Client-side helper to crop any image into a high-res circular favicon
@@ -86,7 +87,7 @@ const makeCircularFavicon = (imageUrl) => {
 };
 
 const BrandingManager = ({ showToast }) => {
-  const { branding, updateBranding, resetBranding } = useData();
+  const { branding, updateBranding } = useData();
 
   const isDirtyRef = useRef(false);
   const syncTimeoutRef = useRef(null);
@@ -101,7 +102,7 @@ const BrandingManager = ({ showToast }) => {
     faviconType: branding?.faviconType ?? 'default', // 'default' | 'custom' | 'logo'
     favicon: branding?.favicon ?? DEFAULT_FAVICON,
     faviconCircular: branding?.faviconCircular !== false,
-    socialLinks: Array.isArray(branding?.socialLinks) && branding.socialLinks.length > 0
+    socialLinks: Array.isArray(branding?.socialLinks)
       ? branding.socialLinks
       : DEFAULT_SOCIAL_LINKS
   });
@@ -110,6 +111,7 @@ const BrandingManager = ({ showToast }) => {
 
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingFavicon, setIsUploadingFavicon] = useState(false);
+  const [savedCardIdx, setSavedCardIdx] = useState(null);
   const fileInputRef = useRef(null);
   const faviconInputRef = useRef(null);
 
@@ -168,7 +170,7 @@ const BrandingManager = ({ showToast }) => {
           faviconType: branding.faviconType ?? 'default',
           favicon: branding.favicon ?? DEFAULT_FAVICON,
           faviconCircular: branding.faviconCircular !== false,
-          socialLinks: Array.isArray(branding.socialLinks) && branding.socialLinks.length > 0
+          socialLinks: Array.isArray(branding.socialLinks)
             ? branding.socialLinks
             : (prev.socialLinks || DEFAULT_SOCIAL_LINKS)
         };
@@ -360,21 +362,38 @@ const BrandingManager = ({ showToast }) => {
     updateFormField('socialLinks', list);
   };
 
+  const handleSaveSocialCard = (index) => {
+    const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
+    const currentItem = list[index];
+
+    // Immediately persist to database and sync state
+    updateMultipleFields({ socialLinks: list });
+
+    setSavedCardIdx(index);
+    setTimeout(() => {
+      setSavedCardIdx((prev) => (prev === index ? null : prev));
+    }, 2000);
+
+    if (showToast) {
+      showToast(`Saved ${currentItem?.label || currentItem?.platform || 'social'} link to database!`);
+    }
+  };
+
   const handleToggleSocialLink = (index) => {
     const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
     const currentItem = list[index] || {};
     const isEnabled = currentItem.enabled !== false;
     list[index] = { ...currentItem, enabled: !isEnabled };
-    updateFormField('socialLinks', list);
+    updateMultipleFields({ socialLinks: list });
   };
 
   const handleDeleteSocialLink = (index) => {
     const list = Array.isArray(formData.socialLinks) ? [...formData.socialLinks] : [...DEFAULT_SOCIAL_LINKS];
     const itemToDelete = list[index];
     const updated = list.filter((_, i) => i !== index);
-    updateFormField('socialLinks', updated);
+    updateMultipleFields({ socialLinks: updated });
     if (showToast) {
-      showToast(`Removed ${itemToDelete?.label || itemToDelete?.platform || 'social'} link.`);
+      showToast(`Permanently removed ${itemToDelete?.label || itemToDelete?.platform || 'social'} link.`);
     }
   };
 
@@ -388,18 +407,9 @@ const BrandingManager = ({ showToast }) => {
       enabled: true
     };
     const updated = [...list, newLink];
-    updateFormField('socialLinks', updated);
+    updateMultipleFields({ socialLinks: updated });
     if (showToast) {
-      showToast('New YouTube social link added. Enter URL and save.');
-    }
-  };
-
-  const handleResetSocialLinks = () => {
-    if (window.confirm('Reset all social links back to defaults (Facebook, Twitter, Instagram, LinkedIn, YouTube)?')) {
-      updateFormField('socialLinks', DEFAULT_SOCIAL_LINKS);
-      if (showToast) {
-        showToast('Social links reset to default channels.');
-      }
+      showToast('New social link added. Enter URL to display icon in footer.');
     }
   };
 
@@ -416,18 +426,6 @@ const BrandingManager = ({ showToast }) => {
     updateBranding(formDataRef.current);
     if (showToast) {
       showToast('Brand identity and logo successfully saved!');
-    }
-  };
-
-  // Reset to original defaults
-  const handleReset = () => {
-    if (window.confirm('Are you sure you want to reset site name and logo back to defaults?')) {
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
-      isDirtyRef.current = false;
-      resetBranding();
-      if (showToast) {
-        showToast('Site branding reset to default values.');
-      }
     }
   };
 
@@ -872,7 +870,7 @@ const BrandingManager = ({ showToast }) => {
             <div>
               <h2 className={styles.sectionTitle}>Social Media Links (Footer)</h2>
               <p className={styles.sectionDescription}>
-                Manage the circular social links displayed in the website footer. Add YouTube, Facebook, Twitter, Instagram, LinkedIn, or custom links.
+                Manage the circular social links displayed in the website footer. If a link's URL is empty or toggled to Hidden, its icon will automatically not be displayed.
               </p>
             </div>
           </div>
@@ -883,7 +881,11 @@ const BrandingManager = ({ showToast }) => {
               <span className={styles.footerPreviewLabel}>Live Footer Preview:</span>
               <div className={styles.footerPreviewCircles}>
                 {(formData.socialLinks || [])
-                  .filter((l) => l.enabled !== false)
+                  .filter((l) => {
+                    if (l.enabled === false) return false;
+                    const cleanUrl = (l.url || '').trim();
+                    return Boolean(cleanUrl && cleanUrl !== '#');
+                  })
                   .map((l, idx) => (
                     <a
                       key={l.id || idx}
@@ -891,14 +893,16 @@ const BrandingManager = ({ showToast }) => {
                       target="_blank"
                       rel="noopener noreferrer"
                       className={styles.footerPreviewCircle}
-                      title={`${l.label || l.platform}: ${l.url || 'No URL configured'}`}
-                      onClick={(e) => {
-                        if (!l.url) e.preventDefault();
-                      }}
+                      title={`${l.label || l.platform}: ${l.url}`}
                     >
                       <SocialIcon platform={l.platform} size={18} />
                     </a>
                   ))}
+                {(formData.socialLinks || []).filter(l => l.enabled !== false && Boolean(l.url && l.url.trim() && l.url !== '#')).length === 0 && (
+                  <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                    No active social links with URLs configured. (No icons will be shown in footer)
+                  </span>
+                )}
               </div>
             </div>
 
@@ -981,6 +985,16 @@ const BrandingManager = ({ showToast }) => {
                     <div className={styles.socialActionsRow}>
                       <button
                         type="button"
+                        onClick={() => handleSaveSocialCard(idx)}
+                        className={`${styles.socialSaveCardBtn} ${savedCardIdx === idx ? styles.socialSaveCardBtnSuccess : ''}`}
+                        title="Save this link to database"
+                      >
+                        {savedCardIdx === idx ? <Check size={14} /> : <Save size={14} />}
+                        <span>{savedCardIdx === idx ? 'Saved!' : 'Save'}</span>
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => handleToggleSocialLink(idx)}
                         className={`${styles.socialToggleBtn} ${isEnabled ? styles.socialToggleActive : styles.socialToggleInactive}`}
                         title={isEnabled ? 'Visible in footer (Click to hide)' : 'Hidden from footer (Click to show)'}
@@ -1024,30 +1038,12 @@ const BrandingManager = ({ showToast }) => {
               >
                 <Plus size={16} /> Add Social Link
               </button>
-
-              <button
-                type="button"
-                onClick={handleResetSocialLinks}
-                className={styles.resetSocialBtn}
-                title="Restore default social links"
-              >
-                <RotateCcw size={14} /> Reset Links
-              </button>
             </div>
           </div>
         </div>
 
         {/* Action Bar */}
         <div className={styles.actionBar}>
-          <button
-            type="button"
-            onClick={handleReset}
-            className={styles.resetBtn}
-            title="Reset site name and logo back to defaults"
-          >
-            <RotateCcw size={16} /> Reset Defaults
-          </button>
-
           <button
             type="submit"
             className={styles.saveBtn}
@@ -1056,6 +1052,11 @@ const BrandingManager = ({ showToast }) => {
           </button>
         </div>
       </form>
+
+      {/* Legal Policies & Compliance Documents (25MB PDFs) */}
+      <div style={{ marginTop: '36px', paddingTop: '28px', borderTop: '2px dashed #e2e8f0' }}>
+        <LegalPoliciesManager showToast={showToast} />
+      </div>
     </div>
   );
 };

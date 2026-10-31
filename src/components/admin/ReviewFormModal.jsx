@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Star, Save, Building2, Stethoscope, Check } from 'lucide-react';
+import { X, Star, Save, Building2, Stethoscope, Activity, Check } from 'lucide-react';
 import { useData } from '../../context/useData';
 import styles from './DoctorFormModal.module.css';
 
@@ -145,12 +145,12 @@ const ReviewFormModal = ({ reviewToEdit, preselectedDoctor = null, initialTarget
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           
-          {/* STEP 1: CHOOSE TARGET TYPE (DOCTOR VS HOSPITAL) */}
+          {/* STEP 1: CHOOSE TARGET TYPE (HOSPITAL VS DOCTOR) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <label style={{ fontSize: '0.84rem', fontWeight: 700, color: '#1e293b' }}>
               1. Choose Review Target *
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <button
                 type="button"
                 onClick={() => handleTypeChange('hospital')}
@@ -158,21 +158,21 @@ const ReviewFormModal = ({ reviewToEdit, preselectedDoctor = null, initialTarget
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '10px',
-                  padding: '12px 16px',
+                  gap: '8px',
+                  padding: '11px 12px',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   border: formData.targetType === 'hospital' ? '2px solid #2563eb' : '1.5px solid #cbd5e1',
                   background: formData.targetType === 'hospital' ? '#eff6ff' : '#ffffff',
                   color: formData.targetType === 'hospital' ? '#1d4ed8' : '#475569',
                   fontWeight: 700,
-                  fontSize: '0.92rem',
+                  fontSize: '0.88rem',
                   transition: 'all 0.2s ease'
                 }}
               >
-                <Building2 size={20} color={formData.targetType === 'hospital' ? '#2563eb' : '#64748b'} />
-                <span>Hospital Review</span>
-                {formData.targetType === 'hospital' && <Check size={16} color="#2563eb" style={{ marginLeft: 'auto' }} />}
+                <Building2 size={18} color={formData.targetType === 'hospital' ? '#2563eb' : '#64748b'} />
+                <span>Hospital</span>
+                {formData.targetType === 'hospital' && <Check size={14} color="#2563eb" style={{ marginLeft: 'auto' }} />}
               </button>
 
               <button
@@ -182,21 +182,21 @@ const ReviewFormModal = ({ reviewToEdit, preselectedDoctor = null, initialTarget
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '10px',
-                  padding: '12px 16px',
+                  gap: '8px',
+                  padding: '11px 12px',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   border: formData.targetType === 'doctor' ? '2px solid #7c3aed' : '1.5px solid #cbd5e1',
                   background: formData.targetType === 'doctor' ? '#f5f3ff' : '#ffffff',
                   color: formData.targetType === 'doctor' ? '#6d28d9' : '#475569',
                   fontWeight: 700,
-                  fontSize: '0.92rem',
+                  fontSize: '0.88rem',
                   transition: 'all 0.2s ease'
                 }}
               >
-                <Stethoscope size={20} color={formData.targetType === 'doctor' ? '#7c3aed' : '#64748b'} />
-                <span>Doctor Review</span>
-                {formData.targetType === 'doctor' && <Check size={16} color="#7c3aed" style={{ marginLeft: 'auto' }} />}
+                <Stethoscope size={18} color={formData.targetType === 'doctor' ? '#7c3aed' : '#64748b'} />
+                <span>Doctor</span>
+                {formData.targetType === 'doctor' && <Check size={14} color="#7c3aed" style={{ marginLeft: 'auto' }} />}
               </button>
             </div>
           </div>
@@ -204,7 +204,9 @@ const ReviewFormModal = ({ reviewToEdit, preselectedDoctor = null, initialTarget
           {/* STEP 2: SELECT SPECIFIC HOSPITAL OR DOCTOR */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1e293b' }}>
-              {formData.targetType === 'hospital' ? '2. Select Specific Hospital *' : '2. Select Specific Doctor *'}
+              {formData.targetType === 'hospital'
+                ? '2. Select Specific Hospital *'
+                : '2. Select Specific Doctor *'}
             </label>
             
             {formData.targetType === 'hospital' ? (

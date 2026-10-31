@@ -202,5 +202,21 @@
       "image": "https://res.cloudinary.com/nehlbmp2/image/upload/v1793190464/sehatbuddy/articles/article-4.jpg"
     }
   ],
-  "corporate": []
+  "corporate": [],
+  "legal_policies": {
+    "privacyPolicy": {
+      "url": "",
+      "fileName": "",
+      "fileSize": 0,
+      "fileSizeFormatted": "",
+      "updatedAt": null
+    },
+    "termsAndConditions": {
+      "url": "",
+      "fileName": "",
+      "fileSize": 0,
+      "fileSizeFormatted": "",
+      "updatedAt": null
+    }
+  }
 }

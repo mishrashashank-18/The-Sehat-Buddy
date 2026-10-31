@@ -59,6 +59,37 @@ const uploadPdf = multer({
   }
 });
 
+// Disk storage for Policy & Compliance PDF documents (Privacy Policy, Terms & Conditions) - Up to 25MB
+const policyDocumentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const docDir = path.join(__dirname, '../uploads/documents');
+    if (!fs.existsSync(docDir)) {
+      fs.mkdirSync(docDir, { recursive: true });
+    }
+    cb(null, docDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.pdf';
+    const cleanBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    cb(null, `policy-${Date.now()}-${cleanBase}${ext}`);
+  }
+});
+
+const uploadPolicyPdf = multer({
+  storage: policyDocumentStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit strictly enforced
+  fileFilter: (req, file, cb) => {
+    if (
+      file.mimetype === 'application/pdf' ||
+      (file.originalname && file.originalname.toLowerCase().endsWith('.pdf'))
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type: Only PDF documents (.pdf) up to 25MB are allowed.'), false);
+    }
+  }
+});
+
 // Disk storage for videos to handle large files smoothly without RAM bloat
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -312,6 +343,82 @@ router.post('/pdf', optionalProtect, (req, res, next) => {
   } catch (error) {
     console.error('PDF upload error:', error);
     return res.status(500).json({ success: false, message: error.message || 'PDF upload failed' });
+  }
+});
+
+/**
+ * Upload Policy PDF (Privacy Policy, Terms & Conditions)
+ * Maximum size limit: 25MB
+ * Saves to /uploads/documents/ and optionally syncs to Cloudinary
+ * Returns { success: true, url, name, size, sizeFormatted, updatedAt, provider }
+ */
+router.post('/policy-pdf', optionalProtect, (req, res, next) => {
+  uploadPolicyPdf.single('pdf')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, message: 'PDF file size exceeds maximum limit of 25MB.' });
+      }
+      return res.status(400).json({ success: false, message: err.message });
+    } else if (err) {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No PDF file uploaded.' });
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    const isCloudinaryConfigured =
+      cloudName &&
+      apiKey &&
+      apiSecret &&
+      cloudName !== 'your_cloudinary_cloud_name' &&
+      !cloudName.includes('your_');
+
+    const folder = req.body?.folder || 'sehatbuddy/documents';
+    let finalUrl = `/uploads/documents/${req.file.filename}`;
+    let provider = 'local-disk';
+    let publicId = null;
+
+    if (isCloudinaryConfigured) {
+      try {
+        const cld = getCloudinary();
+        const result = await cld.uploader.upload(req.file.path, {
+          folder,
+          resource_type: 'auto',
+          use_filename: true
+        });
+        if (result && (result.secure_url || result.url)) {
+          publicId = result.public_id;
+          notifyStorageChanged('cloudinary:raw');
+        }
+      } catch (cldErr) {
+        console.warn('[Upload] Cloudinary backup skipped:', cldErr.message);
+      }
+    }
+
+    const bytes = req.file.size || 0;
+    const sizeFormatted = (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+
+    return res.json({
+      success: true,
+      url: finalUrl,
+      public_id: publicId,
+      name: req.file.originalname,
+      size: bytes,
+      sizeFormatted,
+      updatedAt: new Date().toISOString(),
+      provider
+    });
+  } catch (error) {
+    console.error('Policy PDF upload error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Policy PDF upload failed' });
   }
 });
 

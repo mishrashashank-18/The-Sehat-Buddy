@@ -2,6 +2,10 @@ import express from 'express';
 import {
   authAdmin,
   registerAdmin,
+  forgotAdminPassword,
+  verifyAdminResetOtp,
+  resetAdminPassword,
+  changeAdminPassword,
   addDoctor,
   allDoctors,
   getDashboardData,
@@ -60,6 +64,10 @@ const adminProtect = async (req, res, next) => {
 };
 
 router.post('/login', authAdmin);
+router.post('/forgot-password', forgotAdminPassword);
+router.post('/verify-reset-otp', verifyAdminResetOtp);
+router.post('/reset-password', resetAdminPassword);
+router.post('/change-password', adminProtect, changeAdminPassword);
 router.post('/register', optionalProtect, registerAdmin);
 router.post('/add-doctor', adminProtect, upload.single('image'), addDoctor);
 router.put('/update-doctor/:id', adminProtect, upload.single('image'), updateDoctor);

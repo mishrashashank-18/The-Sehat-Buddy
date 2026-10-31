@@ -46,7 +46,9 @@ import {
   Sparkles,
   Info,
   Lock,
-  Copy
+  Copy,
+  Phone,
+  UserCheck
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { broadcastSync, matchesId } from '../../context/DataContext';
@@ -368,7 +370,7 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
   }, []);
 
-  const executeDoctorLogout = useCallback((reason = 'Your doctor account has been removed. You have been logged out automatically.') => {
+  const executeDoctorLogout = useCallback((reason = 'Session expired. Please log in again.') => {
     localStorage.removeItem('doctor_token');
     localStorage.removeItem('doctor_user');
     try {
@@ -460,7 +462,14 @@ const DoctorDashboard = ({ onNavigate }) => {
 
     // 4. Unauthorized 401 handler
     const handleUnauthorized = (e) => {
-      executeDoctorLogout('Your session has ended because your doctor account was deleted. You have been logged out automatically.');
+      const msg = e.detail?.message || '';
+      if (msg.includes('password change') || msg.includes('revoked')) {
+        executeDoctorLogout('Your password was updated. Please log in with your new password.');
+      } else if (msg.includes('no longer exists') || msg.includes('deleted')) {
+        executeDoctorLogout('Your doctor profile has been removed by the hospital or administrator. You have been logged out automatically.');
+      } else if (msg.includes('doctor') || !localStorage.getItem('doctor_token')) {
+        executeDoctorLogout('Your session has expired. Please log in again.');
+      }
     };
 
     // 5. Real-time doctor update handler (Available Hours / Days reflection in dashboard)
@@ -507,7 +516,7 @@ const DoctorDashboard = ({ onNavigate }) => {
           executeDoctorLogout('Session expired. Please log in again.');
           return;
         }
-        const fresh = await api.getMyDoctor();
+        const fresh = await api.getMyDoctor(token);
         if (fresh && isMounted) {
           try {
             localStorage.setItem('doctor_user', JSON.stringify(fresh));
@@ -526,8 +535,15 @@ const DoctorDashboard = ({ onNavigate }) => {
           }
         }
       } catch (err) {
-        if (isMounted && (err?.status === 401 || err?.status === 403 || err?.status === 404 || err?.message?.includes('deleted') || err?.message?.includes('no longer exists'))) {
-          executeDoctorLogout('Your doctor account has been removed. You have been logged out automatically.');
+        if (isMounted) {
+          const msg = err?.message || '';
+          if (msg.includes('password change') || msg.includes('revoked')) {
+            executeDoctorLogout('Your password was updated. Please log in with your new password.');
+          } else if (err?.status === 404 || msg.includes('no longer exists') || msg.includes('deleted')) {
+            executeDoctorLogout('Your doctor account has been removed. You have been logged out automatically.');
+          } else if (err?.status === 401 || err?.status === 403) {
+            executeDoctorLogout('Session expired. Please log in again.');
+          }
         }
       }
     };
@@ -613,7 +629,14 @@ const DoctorDashboard = ({ onNavigate }) => {
     return activeDoctor.availabilityStatus || (activeDoctor.available === false ? 'On Leave' : 'Available');
   });
 
+  const lastStatusMutationRef = React.useRef(0);
+  const statusDebounceTimerRef = React.useRef(null);
+
   React.useEffect(() => {
+    // If user clicked or changed status recently (within 4000ms), ignore stale remote snapshots
+    if (Date.now() - lastStatusMutationRef.current < 4000) {
+      return;
+    }
     if (activeDoctor?.availabilityStatus) {
       setAvailabilityStatus(activeDoctor.availabilityStatus);
     } else if (activeDoctor?.available === false) {
@@ -623,17 +646,34 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
   }, [activeDoctor?.availabilityStatus, activeDoctor?.available, activeDoctor?.id, activeDoctor?._id]);
 
-  const handleSetAvailabilityStatus = async (newStatus) => {
+  const handleSetAvailabilityStatus = (newStatus) => {
+    // 1. Instant optimistic update - 0ms UI response
     setAvailabilityStatus(newStatus);
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    if (docId) {
-      await updateDoctor(docId, {
-        availabilityStatus: newStatus,
-        available: true // Doctor remains listed in directory regardless of shift status
-      });
-    }
+    const now = Date.now();
+    lastStatusMutationRef.current = now;
+
     const label = newStatus === 'Busy' ? 'In Surgery / Busy' : newStatus;
     showToast(`Status set to ${label}`);
+
+    // 2. Debounce network persistence to completely eliminate out-of-order race conditions
+    if (statusDebounceTimerRef.current) {
+      clearTimeout(statusDebounceTimerRef.current);
+    }
+
+    statusDebounceTimerRef.current = setTimeout(async () => {
+      const docId = activeDoctor?._id || activeDoctor?.id;
+      if (docId) {
+        try {
+          await updateDoctor(docId, {
+            availabilityStatus: newStatus,
+            available: true,
+            statusUpdatedAt: now
+          });
+        } catch (err) {
+          console.error('Failed to update doctor availability status:', err);
+        }
+      }
+    }, 200);
   };
 
   const activeDocId = activeDoctor?._id || activeDoctor?.id || 'default';
@@ -793,6 +833,62 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [editingCert, setEditingCert] = useState({ index: null, text: '', board: 'Accredited Medical Board', tag: 'Certified' });
   const [editingMembership, setEditingMembership] = useState({ index: null, title: '', council: 'Official Medical Council', status: 'Active Member', showStatus: true });
   const [editingCareerExp, setEditingCareerExp] = useState({ index: null, role: '', hospital: '', startYear: '', endYear: '', isPresent: false });
+
+  // Dedicated local state for Clinic Desk & Helpline Support (isolated from continuous profileForm sync to eliminate flickering/lag)
+  const [helplineDraft, setHelplineDraft] = useState(() => ({
+    number: activeDoctor?.helplineNumber || '+91 98765 43210',
+    days: activeDoctor?.helplineDays || 'Mon – Sat',
+    time: activeDoctor?.helplineTime || '8:00 AM – 8:00 PM'
+  }));
+
+  // Synchronize helplineDraft strictly when doctor identity changes
+  React.useEffect(() => {
+    if (activeDoctor) {
+      setHelplineDraft({
+        number: activeDoctor.helplineNumber || '+91 98765 43210',
+        days: activeDoctor.helplineDays || 'Mon – Sat',
+        time: activeDoctor.helplineTime || '8:00 AM – 8:00 PM'
+      });
+    }
+  }, [activeDoctor?._id, activeDoctor?.id]);
+
+  // Dedicated local state for Basic Clinical & Consultation Details inputs (isolated from continuous profileForm sync to eliminate flickering/lag)
+  const [clinicalDraft, setClinicalDraft] = useState(() => ({
+    name: activeDoctor?.name || '',
+    specialty: activeDoctor?.specialization || activeDoctor?.specialty || 'General Medicine',
+    jobTitle: activeDoctor?.jobTitle || '',
+    experience: activeDoctor?.experience !== undefined ? activeDoctor.experience : 5,
+    hospital: activeDoctor?.hospital || '',
+    degree: activeDoctor?.degree || activeDoctor?.qualifications || '',
+    price: activeDoctor?.fees ?? activeDoctor?.price ?? 500,
+    phone: (() => {
+      const raw = String(activeDoctor?.phone || activeDoctor?.contact_number || '').replace(/\D/g, '');
+      return raw.length > 10 ? raw.slice(-10) : raw;
+    })(),
+    licenseNumber: activeDoctor?.licenseNumber || '',
+    availableDays: activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)'
+  }));
+
+  // Synchronize clinicalDraft strictly when doctor identity changes
+  React.useEffect(() => {
+    if (activeDoctor) {
+      setClinicalDraft({
+        name: activeDoctor.name || '',
+        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+        jobTitle: activeDoctor.jobTitle || '',
+        experience: activeDoctor.experience !== undefined ? activeDoctor.experience : 5,
+        hospital: activeDoctor.hospital || '',
+        degree: activeDoctor.degree || activeDoctor.qualifications || '',
+        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
+        phone: (() => {
+          const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+          return raw.length > 10 ? raw.slice(-10) : raw;
+        })(),
+        licenseNumber: activeDoctor.licenseNumber || '',
+        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
+      });
+    }
+  }, [activeDoctor?._id, activeDoctor?.id]);
 
   // Schedule & Time Slots Management state (persisted across refresh)
   const [slotConfigMode, setSlotConfigModeState] = useState(() => {
@@ -955,6 +1051,8 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [isEarningsBreakdownOpen, setIsEarningsBreakdownOpen] = useState(false);
   const [isReviewsModalOpen, setIsReviewsModalOpen] = useState(false);
   const [reviewRatingFilter, setReviewRatingFilter] = useState('all');
+  const [isScheduledAppointmentsModalOpen, setIsScheduledAppointmentsModalOpen] = useState(false);
+  const [scheduledModalFilter, setScheduledModalFilter] = useState('all-scheduled');
   const scheduleDateInputRef = React.useRef(null);
 
   // Refresh reviews from DB when opening Patient Satisfaction modal
@@ -1299,6 +1397,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Load initial profile data strictly when the doctor identity changes (prevents flickering/overwriting during in-place edits)
   React.useEffect(() => {
+    if (isEditingFieldRef.current) return;
     const currentId = activeDoctor?._id || activeDoctor?.id;
     const currentEmail = (activeDoctor?.email || storedUser?.email || '').toLowerCase().trim();
     if (!currentId && !currentEmail) return;
@@ -1307,7 +1406,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       (initialDoctorIdRef.current && String(currentId) === String(initialDoctorIdRef.current)) ||
       (initialDoctorEmailRef.current && currentEmail === initialDoctorEmailRef.current);
 
-    if (!isSameDoctor || !profileForm?.name) {
+    if (!isSameDoctor || !initialDoctorIdRef.current) {
       initialDoctorIdRef.current = String(currentId);
       initialDoctorEmailRef.current = currentEmail;
       lastSyncedRemoteDocRef.current = activeDoctor;
@@ -1315,6 +1414,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         ...activeDoctor,
         name: activeDoctor.name || '',
         specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+        specialization: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
         price: activeDoctor.fees ?? activeDoctor.price ?? 500,
         fees: activeDoctor.fees ?? activeDoctor.price ?? 500,
         experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : (activeDoctor.experience || 5),
@@ -1339,6 +1439,9 @@ const DoctorDashboard = ({ onNavigate }) => {
         reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : [],
         youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : [],
         availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
+        helplineNumber: activeDoctor.helplineNumber || '+91 98765 43210',
+        helplineDays: activeDoctor.helplineDays || 'Mon – Sat',
+        helplineTime: activeDoctor.helplineTime || '8:00 AM – 8:00 PM',
         scheduleDays: Array.isArray(activeDoctor.scheduleDays) && activeDoctor.scheduleDays.length > 0 
           ? activeDoctor.scheduleDays 
           : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -1375,7 +1478,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       // 2. Specialty & Specialization
       const incomingSpec = activeDoctor.specialization || activeDoctor.specialty || '';
       const prevRemoteSpec = prevRemote.specialization || prevRemote.specialty || '';
-      if (incomingSpec !== prevRemoteSpec && incomingSpec && isEditingFieldRef.current !== 'specialty') {
+      if (incomingSpec !== prevRemoteSpec && incomingSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
         next.specialty = incomingSpec;
         next.specialization = incomingSpec;
         changed = true;
@@ -1501,7 +1604,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         changed = true;
       }
 
-      // 16. FAQs
+      // 16. FAQs (Helpline is managed independently via dedicated draft & save handler)
       if (Array.isArray(activeDoctor.faqs) && JSON.stringify(activeDoctor.faqs) !== JSON.stringify(prevRemote.faqs)) {
         next.faqs = activeDoctor.faqs;
         changed = true;
@@ -2707,10 +2810,34 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Helper to verify if profile form has any unsaved modifications
   const isProfileFormDirty = () => {
-    if (!activeDoctor || !profileForm) return false;
+    if (!activeDoctor) return false;
+
+    // Check clinicalDraft against activeDoctor
+    if (clinicalDraft) {
+      if ((clinicalDraft.name || '').trim() !== (activeDoctor.name || '').trim()) return true;
+      const curSpec = clinicalDraft.specialty || '';
+      const docSpec = activeDoctor.specialization || activeDoctor.specialty || '';
+      if (curSpec.trim() !== docSpec.trim()) return true;
+      if ((clinicalDraft.jobTitle || '').trim() !== (activeDoctor.jobTitle || '').trim()) return true;
+      const curExp = clinicalDraft.experience === '' ? 0 : parseInt(clinicalDraft.experience, 10);
+      const docExp = activeDoctor.experience === '' ? 0 : parseInt(activeDoctor.experience, 10);
+      if (curExp !== docExp) return true;
+      if ((clinicalDraft.hospital || '').trim() !== (activeDoctor.hospital || '').trim()) return true;
+      const curDeg = clinicalDraft.degree || '';
+      const docDeg = activeDoctor.degree || activeDoctor.qualifications || '';
+      if (curDeg.trim() !== docDeg.trim()) return true;
+      const curPrice = Number(clinicalDraft.price);
+      const docPrice = Number(activeDoctor.fees ?? activeDoctor.price);
+      if (!isNaN(curPrice) && !isNaN(docPrice) && curPrice !== docPrice) return true;
+      const curPhone = String(clinicalDraft.phone || '').replace(/\D/g, '');
+      const docPhone = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+      if (curPhone !== docPhone) return true;
+      if ((clinicalDraft.licenseNumber || '').trim() !== (activeDoctor.licenseNumber || '').trim()) return true;
+      if ((clinicalDraft.availableDays || '').trim() !== (activeDoctor.availableDays || '').trim()) return true;
+    }
+
     const textFields = [
-      'name', 'specialty', 'specialization', 'phone', 'contact_number',
-      'licenseNumber', 'hospital', 'jobTitle', 'about', 'availableDays'
+      'about', 'instagram', 'facebook', 'linkedin', 'twitter'
     ];
     for (const f of textFields) {
       if (profileForm[f] !== undefined && activeDoctor[f] !== undefined) {
@@ -2718,16 +2845,6 @@ const DoctorDashboard = ({ onNavigate }) => {
           return true;
         }
       }
-    }
-    const formPrice = Number(profileForm.price ?? profileForm.fees);
-    const docPrice = Number(activeDoctor.price ?? activeDoctor.fees);
-    if (!isNaN(formPrice) && !isNaN(docPrice) && formPrice !== docPrice) {
-      return true;
-    }
-    const formExp = parseInt(profileForm.experience, 10);
-    const docExp = parseInt(activeDoctor.experience, 10);
-    if (!isNaN(formExp) && !isNaN(docExp) && formExp !== docExp) {
-      return true;
     }
     const formDur = Number(profileForm.slotDuration);
     const docDur = Number(activeDoctor.slotDuration);
@@ -2747,19 +2864,62 @@ const DoctorDashboard = ({ onNavigate }) => {
     return false;
   };
 
+  // Dedicated Save Handler for Clinic Desk & Helpline Support
+  const [isSavingHelpline, setIsSavingHelpline] = useState(false);
+  const [isHelplineSaved, setIsHelplineSaved] = useState(false);
+
+  const handleSaveHelplineSettings = async (e) => {
+    e?.preventDefault?.();
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (!docId) return;
+
+    setIsSavingHelpline(true);
+    try {
+      const payload = {
+        helplineNumber: (helplineDraft.number || '').trim(),
+        helplineDays: (helplineDraft.days || '').trim(),
+        helplineTime: (helplineDraft.time || '').trim()
+      };
+
+      // Persist to database and sync to Context & active doctor state
+      if (updateDoctor) {
+        await updateDoctor(docId, payload);
+      } else if (api.updateDoctor) {
+        await api.updateDoctor(docId, payload);
+      }
+      setActiveDoctor(prev => ({ ...prev, ...payload }));
+      setProfileForm(prev => ({ ...prev, ...payload }));
+
+      setIsHelplineSaved(true);
+      setTimeout(() => setIsHelplineSaved(false), 2500);
+
+      showToast('Clinic helpline details saved and published to public profile!');
+    } catch (err) {
+      console.error('Failed to save helpline settings:', err);
+      showToast('Failed to save helpline settings. Please try again.', 'error');
+    } finally {
+      setIsSavingHelpline(false);
+    }
+  };
+
+  // Dedicated Save State for Profile Clinical & Consultation Details
+  const [isSavingProfileSettings, setIsSavingProfileSettings] = useState(false);
+  const [isProfileSettingsSaved, setIsProfileSettingsSaved] = useState(false);
+
   // Save All Profile Settings
   const handleSaveAllProfileSettings = async (e, options = {}) => {
     e?.preventDefault?.();
-    const isExplicitUserSave = options.explicit === true || (e && (e.type === 'click' || e.type === 'submit'));
+    const isExplicitUserSave = options.explicit === true || (e && (e.type === 'click' || e.type === 'submit' || (e.type === 'keydown' && e.key === 'Enter')));
     const docId = activeDoctor._id || activeDoctor.id;
     if (!docId) return;
 
-    const isDirty = isProfileFormDirty();
-
-    // If nothing changed and this was an automatic trigger (e.g. onBlur), do nothing
-    if (!isDirty && !isExplicitUserSave) {
+    // Disallow any automatic onBlur saving.
+    // Changes must only be saved when the user presses Enter or clicks a Save button.
+    if (!isExplicitUserSave) {
       return;
     }
+
+    const isDirty = isProfileFormDirty();
 
     // If user clicked Save Settings but no changes were made
     if (!isDirty && isExplicitUserSave) {
@@ -2767,60 +2927,101 @@ const DoctorDashboard = ({ onNavigate }) => {
       return;
     }
 
-    const payload = {
-      ...profileForm,
-      _id: activeDoctor._id,
-      id: activeDoctor.id,
-      email: activeDoctor.email,
-      phone: (profileForm.phone !== undefined ? profileForm.phone : (profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || '')),
-      contact_number: (profileForm.phone !== undefined ? profileForm.phone : (profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || '')),
-      name: profileForm.name || activeDoctor.name || 'Doctor',
-      specialization: profileForm.specialty || profileForm.specialization || 'General Medicine',
-      specialty: profileForm.specialty || profileForm.specialization || 'General Medicine',
-      fees: Number(profileForm.price ?? profileForm.fees) || 500,
-      price: Number(profileForm.price ?? profileForm.fees) || 500,
-      experience: parseInt(profileForm.experience, 10) || 0,
-      jobTitle: profileForm.jobTitle !== undefined ? profileForm.jobTitle : (activeDoctor.jobTitle || ''),
-      licenseNumber: profileForm.licenseNumber || '',
-      hospital: profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || ''),
-      degree: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
-      qualifications: profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
-      image: profileForm.image !== undefined ? profileForm.image : (activeDoctor.image || ''),
-      about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
-      awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
-      certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : (Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : []),
-      memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : (Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : []),
-      careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : (Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []),
-      tags: Array.isArray(profileForm.tags) ? profileForm.tags : (Array.isArray(activeDoctor.tags) ? activeDoctor.tags : []),
-      reels: Array.isArray(profileForm.reels) ? profileForm.reels : (Array.isArray(activeDoctor.reels) ? activeDoctor.reels : []),
-      youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : (Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []),
-      availableDays: profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
-      scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : (activeDoctor.scheduleDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
-      availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : (activeDoctor.availableSlots || []),
-      slotDuration: Number(profileForm.slotDuration) || activeDoctor.slotDuration || 20,
-      dayWiseSlots: (profileForm.dayWiseSlots && typeof profileForm.dayWiseSlots === 'object') ? profileForm.dayWiseSlots : (activeDoctor.dayWiseSlots || {}),
-      dateWiseSlots: (profileForm.dateWiseSlots && typeof profileForm.dateWiseSlots === 'object') ? profileForm.dateWiseSlots : (activeDoctor.dateWiseSlots || {})
-    };
-
-    const compPercent = calculateDoctorProfileCompletion(payload);
-    payload.profileCompletion = compPercent;
-    payload.isProfileComplete = compPercent >= 80;
-
-    await updateDoctor(docId, payload);
-    isAboutDirtyRef.current = false;
-    isEditingAboutRef.current = false;
-    // Update localStorage user object so all fields survive refresh
+    setIsSavingProfileSettings(true);
     try {
-      const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
-      const stored = rawStored ? JSON.parse(rawStored) : {};
-      if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
-        Object.assign(stored, payload);
-        stored.role = 'doctor';
-        localStorage.setItem('doctor_user', JSON.stringify(stored));
-        localStorage.setItem('user', JSON.stringify(stored));
+      const payload = {
+        ...profileForm,
+        _id: activeDoctor._id,
+        id: activeDoctor.id,
+        email: activeDoctor.email,
+        phone: clinicalDraft.phone !== undefined ? clinicalDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
+        contact_number: clinicalDraft.phone !== undefined ? clinicalDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
+        name: clinicalDraft.name !== undefined ? (clinicalDraft.name.trim() || activeDoctor.name || 'Doctor') : (profileForm.name?.trim() || activeDoctor.name || 'Doctor'),
+        specialization: clinicalDraft.specialty || profileForm.specialty || profileForm.specialization || 'General Medicine',
+        specialty: clinicalDraft.specialty || profileForm.specialty || profileForm.specialization || 'General Medicine',
+        fees: (clinicalDraft.price !== undefined && clinicalDraft.price !== '') ? Number(clinicalDraft.price) : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 500),
+        price: (clinicalDraft.price !== undefined && clinicalDraft.price !== '') ? Number(clinicalDraft.price) : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 500),
+        experience: clinicalDraft.experience !== undefined && clinicalDraft.experience !== '' ? (parseInt(clinicalDraft.experience, 10) || 0) : (parseInt(profileForm.experience, 10) || 0),
+        jobTitle: clinicalDraft.jobTitle !== undefined ? clinicalDraft.jobTitle : (profileForm.jobTitle !== undefined ? profileForm.jobTitle : (activeDoctor.jobTitle || '')),
+        licenseNumber: clinicalDraft.licenseNumber !== undefined ? clinicalDraft.licenseNumber : (profileForm.licenseNumber !== undefined ? profileForm.licenseNumber : (activeDoctor.licenseNumber || '')),
+        hospital: clinicalDraft.hospital !== undefined ? clinicalDraft.hospital : (profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || '')),
+        degree: clinicalDraft.degree || profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
+        qualifications: clinicalDraft.degree || profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
+        image: profileForm.image !== undefined ? profileForm.image : (activeDoctor.image || ''),
+        about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
+        awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
+        certifications: Array.isArray(profileForm.certifications) ? profileForm.certifications : (Array.isArray(activeDoctor.certifications) ? activeDoctor.certifications : []),
+        memberships: Array.isArray(profileForm.memberships) ? profileForm.memberships : (Array.isArray(activeDoctor.memberships) ? activeDoctor.memberships : []),
+        careerExperience: Array.isArray(profileForm.careerExperience) ? profileForm.careerExperience : (Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : []),
+        tags: Array.isArray(profileForm.tags) ? profileForm.tags : (Array.isArray(activeDoctor.tags) ? activeDoctor.tags : []),
+        reels: Array.isArray(profileForm.reels) ? profileForm.reels : (Array.isArray(activeDoctor.reels) ? activeDoctor.reels : []),
+        youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : (Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []),
+        availableDays: clinicalDraft.availableDays || profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
+        helplineNumber: activeDoctor.helplineNumber || '+91 98765 43210',
+        helplineDays: activeDoctor.helplineDays || 'Mon – Sat',
+        helplineTime: activeDoctor.helplineTime || '8:00 AM – 8:00 PM',
+        scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : (activeDoctor.scheduleDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
+        availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : (activeDoctor.availableSlots || []),
+        slotDuration: Number(profileForm.slotDuration) || activeDoctor.slotDuration || 20,
+        dayWiseSlots: (profileForm.dayWiseSlots && typeof profileForm.dayWiseSlots === 'object') ? profileForm.dayWiseSlots : (activeDoctor.dayWiseSlots || {}),
+        dateWiseSlots: (profileForm.dateWiseSlots && typeof profileForm.dateWiseSlots === 'object') ? profileForm.dateWiseSlots : (activeDoctor.dateWiseSlots || {})
+      };
+
+      delete payload.password;
+      delete payload.otp;
+      delete payload.otpExpires;
+      delete payload.otpAttempts;
+
+      const compPercent = calculateDoctorProfileCompletion(payload);
+      payload.profileCompletion = compPercent;
+      payload.isProfileComplete = compPercent >= 80;
+
+      isAboutDirtyRef.current = false;
+      isEditingAboutRef.current = false;
+      isEditingFieldRef.current = null;
+
+      // Update localStorage user object immediately so all fields survive refresh
+      try {
+        const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
+        const stored = rawStored ? JSON.parse(rawStored) : {};
+        if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
+          Object.assign(stored, payload);
+          stored.role = 'doctor';
+          localStorage.setItem('doctor_user', JSON.stringify(stored));
+          localStorage.setItem('user', JSON.stringify(stored));
+        }
+      } catch {}
+
+      if (updateDoctor) {
+        await updateDoctor(docId, payload);
+      } else if (api.updateDoctor) {
+        await api.updateDoctor(docId, payload);
       }
-    } catch {}
-    showToast('All profile details, credentials, schedule & fees saved successfully!');
+      setProfileForm(prev => ({ ...prev, ...payload }));
+      setClinicalDraft({
+        name: payload.name,
+        specialty: payload.specialty,
+        jobTitle: payload.jobTitle,
+        experience: payload.experience,
+        hospital: payload.hospital,
+        degree: payload.degree,
+        price: payload.price,
+        phone: payload.phone,
+        licenseNumber: payload.licenseNumber,
+        availableDays: payload.availableDays
+      });
+      setActiveDoctor(prev => ({ ...prev, ...payload }));
+
+      setIsProfileSettingsSaved(true);
+      setTimeout(() => setIsProfileSettingsSaved(false), 2500);
+
+      showToast('Profile information saved and updated on public doctor page!');
+    } catch (saveErr) {
+      console.error('Failed to sync profile settings with backend:', saveErr);
+      showToast('⚠️ Failed to save changes: ' + (saveErr?.message || 'Server error'), 'error');
+    } finally {
+      setIsSavingProfileSettings(false);
+    }
   };
 
   // Save About Section directly
@@ -2840,17 +3041,10 @@ const DoctorDashboard = ({ onNavigate }) => {
       const aboutText = profileForm.about || '';
       const mergedAbout = { ...activeDoctor, ...profileForm, about: aboutText };
       const compPercent = calculateDoctorProfileCompletion(mergedAbout);
-      await updateDoctor(docId, {
-        _id: activeDoctor._id,
-        id: activeDoctor.id,
-        email: activeDoctor.email,
-        about: aboutText,
-        profileCompletion: compPercent,
-        isProfileComplete: compPercent >= 80
-      });
+
       isAboutDirtyRef.current = false;
       isEditingAboutRef.current = false;
-      // Update localStorage user object so it survives refresh
+      // Update localStorage user object immediately so it survives refresh
       try {
         const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
         const stored = rawStored ? JSON.parse(rawStored) : {};
@@ -2861,7 +3055,17 @@ const DoctorDashboard = ({ onNavigate }) => {
           localStorage.setItem('user', JSON.stringify(stored));
         }
       } catch {}
+
       showToast('About section updated and saved successfully!');
+
+      await updateDoctor(docId, {
+        _id: activeDoctor._id,
+        id: activeDoctor.id,
+        email: activeDoctor.email,
+        about: aboutText,
+        profileCompletion: compPercent,
+        isProfileComplete: compPercent >= 80
+      });
     } catch (err) {
       console.error('Failed to save about section:', err);
       showToast('Failed to save about section');
@@ -3274,6 +3478,73 @@ const DoctorDashboard = ({ onNavigate }) => {
       return isCompleted && isTodayAppointment(a);
     });
   }, [appointments, isTodayAppointment]);
+
+  // All active/scheduled appointments across the queue
+  const allScheduledAppointments = React.useMemo(() => {
+    return appointments.filter(a => {
+      const isCompleted = a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed';
+      const isCancelled = a.status === 'Cancelled' || String(a.status).toLowerCase() === 'cancelled';
+      return !isCompleted && !isCancelled;
+    });
+  }, [appointments]);
+
+  // All appointments booked for today
+  const todayAppointments = React.useMemo(() => {
+    return appointments.filter(a => isTodayAppointment(a));
+  }, [appointments, isTodayAppointment]);
+
+  // Today's scheduled appointments (not yet completed or cancelled)
+  const todayScheduledAppointments = React.useMemo(() => {
+    return appointments.filter(a => {
+      const isCompleted = a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed';
+      const isCancelled = a.status === 'Cancelled' || String(a.status).toLowerCase() === 'cancelled';
+      return isTodayAppointment(a) && !isCompleted && !isCancelled;
+    });
+  }, [appointments, isTodayAppointment]);
+
+  // Filtered appointments displayed inside Scheduled Appointments Modal
+  const scheduledModalAppointments = React.useMemo(() => {
+    if (scheduledModalFilter === 'today') {
+      return todayAppointments;
+    }
+    if (scheduledModalFilter === 'today-scheduled') {
+      return todayScheduledAppointments;
+    }
+    if (scheduledModalFilter === 'all-scheduled') {
+      return allScheduledAppointments;
+    }
+    if (scheduledModalFilter === 'completed') {
+      return appointments.filter(a => a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed');
+    }
+    return appointments;
+  }, [appointments, scheduledModalFilter, todayAppointments, todayScheduledAppointments, allScheduledAppointments]);
+
+  // Navigate & scroll directly to appointments queue
+  const handleJumpToQueue = React.useCallback((appointmentId = null) => {
+    setIsScheduledAppointmentsModalOpen(false);
+    setActiveTab('appointments');
+    setAppointmentFilter('all');
+    setTimeout(() => {
+      if (appointmentId) {
+        const el = document.getElementById(`apt-card-${appointmentId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.style.transition = 'box-shadow 0.3s ease, border-color 0.3s ease';
+          el.style.borderColor = '#2563eb';
+          el.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, 0.25)';
+          setTimeout(() => {
+            el.style.borderColor = '';
+            el.style.boxShadow = '';
+          }, 3000);
+          return;
+        }
+      }
+      const tabsEl = document.querySelector(`.${styles.tabsBar}`);
+      if (tabsEl) {
+        tabsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 120);
+  }, [setActiveTab]);
 
   // Amount made today = sum of actual consultation amounts for today's completed visits
   const amountMadeToday = React.useMemo(() => {
@@ -3877,7 +4148,15 @@ const DoctorDashboard = ({ onNavigate }) => {
 
         {/* KPI Cards */}
         <div className={styles.kpiGrid}>
-          <div className={styles.kpiCard}>
+          <div
+            className={styles.kpiCard}
+            onClick={() => {
+              setScheduledModalFilter('all-scheduled');
+              setIsScheduledAppointmentsModalOpen(true);
+            }}
+            style={{ cursor: 'pointer' }}
+            title="Click to view all scheduled appointments"
+          >
             <div className={`${styles.kpiIconWrap} ${styles.kpiGreen}`}>
               <Calendar size={22} />
             </div>
@@ -3887,7 +4166,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 {scheduledTodayCount} Scheduled
               </div>
               <span className={styles.kpiSub}>
-                {completedTodayCount} Completed
+                {completedTodayCount} Completed • Click to view
               </span>
             </div>
           </div>
@@ -4588,7 +4867,11 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               ) : (
                 filteredAppointments.map((apt) => (
-                <div key={apt.id || apt._id || `${apt.patientName}-${apt.time}-${apt.date}`} className={styles.appointmentCard}>
+                <div
+                  key={apt.id || apt._id || `${apt.patientName}-${apt.time}-${apt.date}`}
+                  id={`apt-card-${apt.id || apt._id}`}
+                  className={styles.appointmentCard}
+                >
                   <div className={styles.aptTimeCol}>
                     <Clock size={16} className={styles.timeIcon} />
                     <span className={styles.aptTime}>{apt.time}</span>
@@ -5115,11 +5398,64 @@ const DoctorDashboard = ({ onNavigate }) => {
               </div>
 
               {/* SECTION: BASIC CLINICAL & CONSULTATION DETAILS */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px',
+                marginTop: '28px',
+                marginBottom: '16px',
+                paddingBottom: '12px',
+                borderBottom: '1.5px solid #e2e8f0'
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <UserCheck size={19} color="#2563eb" />
+                    Basic Clinical & Consultation Details
+                  </h3>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                    Information is only updated in the database and doctor's public page when you click <strong>Save Details</strong> or press <strong>Enter</strong>.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => handleSaveAllProfileSettings(e, { explicit: true })}
+                  disabled={isSavingProfileSettings}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: isProfileSettingsSaved ? '#16a34a' : '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 18px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    cursor: isSavingProfileSettings ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  title="Save clinical details to database and public profile"
+                >
+                  {isProfileSettingsSaved ? <Check size={15} /> : <Save size={15} />}
+                  <span>{isSavingProfileSettings ? 'Saving...' : isProfileSettingsSaved ? 'Saved to Database!' : 'Save Details'}</span>
+                </button>
+              </div>
+
               <form
-                onSubmit={handleSaveAllProfileSettings}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSaveAllProfileSettings(e, { explicit: true });
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    handleSaveAllProfileSettings(e);
+                    e.preventDefault();
+                    isEditingFieldRef.current = null;
+                    handleSaveAllProfileSettings(e, { explicit: true });
+                    e.target?.blur?.();
                   }
                 }}
                 className={styles.settingsGrid}
@@ -5128,9 +5464,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Full Name</label>
                   <input
                     type="text"
-                    value={profileForm.name || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.name ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, name: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
                 
@@ -5138,9 +5483,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Specialty / Department</label>
                   <input
                     type="text"
-                    value={profileForm.specialty || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, specialty: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.specialty ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, specialty: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5149,9 +5503,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <input
                     type="text"
                     placeholder="e.g. Senior consultant"
-                    value={profileForm.jobTitle !== undefined ? profileForm.jobTitle : ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, jobTitle: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.jobTitle !== undefined ? clinicalDraft.jobTitle : ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, jobTitle: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5159,9 +5522,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Experience (Years)</label>
                   <input
                     type="number"
-                    value={profileForm.experience ?? ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, experience: e.target.value === '' ? '' : Number(e.target.value) })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.experience ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, experience: val === '' ? '' : Number(val) }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5169,9 +5541,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Hospital Affiliation</label>
                   <input
                     type="text"
-                    value={profileForm.hospital || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, hospital: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.hospital ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, hospital: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5179,9 +5560,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Degrees / Qualifications</label>
                   <input
                     type="text"
-                    value={profileForm.degree || profileForm.qualifications || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, degree: e.target.value, qualifications: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.degree ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, degree: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5189,9 +5579,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Consultation Fee (₹)</label>
                   <input
                     type="number"
-                    value={profileForm.price ?? profileForm.fees ?? ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, price: e.target.value === '' ? '' : Number(e.target.value) })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.price ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, price: val === '' ? '' : Number(val) }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5202,12 +5601,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                     inputMode="numeric"
                     maxLength={10}
                     placeholder="Enter 10-digit mobile number"
-                    value={profileForm.phone || profileForm.contact_number || ''}
+                    value={clinicalDraft.phone ?? ''}
                     onChange={(e) => {
                       const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setProfileForm({ ...profileForm, phone: digits, contact_number: digits });
+                      setClinicalDraft(prev => ({ ...prev, phone: digits }));
                     }}
-                    onBlur={handleSaveAllProfileSettings}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5219,9 +5624,18 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <input
                     type="text"
                     placeholder="e.g. DMC-2009-44182 or MCI-48291"
-                    value={profileForm.licenseNumber || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, licenseNumber: e.target.value })}
-                    onBlur={handleSaveAllProfileSettings}
+                    value={clinicalDraft.licenseNumber ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, licenseNumber: val }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
 
@@ -5229,23 +5643,243 @@ const DoctorDashboard = ({ onNavigate }) => {
                   <label>Available Consultation Hours</label>
                   <input
                     type="text"
-                    value={profileForm.availableDays || ''}
-                    onFocus={() => {
-                      isEditingAvailableDaysRef.current = true;
-                    }}
+                    value={clinicalDraft.availableDays ?? ''}
                     onChange={(e) => {
-                      isEditingAvailableDaysRef.current = true;
-                      setProfileForm({ ...profileForm, availableDays: e.target.value });
+                      const val = e.target.value;
+                      setClinicalDraft(prev => ({ ...prev, availableDays: val }));
                     }}
-                    onBlur={(e) => {
-                      isEditingAvailableDaysRef.current = false;
-                      handleSaveAllProfileSettings(e);
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
                     }}
                     style={{
                       fontVariantNumeric: 'tabular-nums',
                       fontFeatureSettings: '"tnum"',
                     }}
                   />
+                </div>
+
+                {/* Bottom Action Save Button */}
+                <div style={{
+                  gridColumn: 'span 2',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: '8px',
+                  marginBottom: '6px'
+                }}>
+                  <button
+                    type="button"
+                    onClick={(e) => handleSaveAllProfileSettings(e, { explicit: true })}
+                    disabled={isSavingProfileSettings}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      background: isProfileSettingsSaved ? '#16a34a' : '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '9px 22px',
+                      fontSize: '0.86rem',
+                      fontWeight: 600,
+                      cursor: isSavingProfileSettings ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    title="Click to save clinical details to database and public profile"
+                  >
+                    {isProfileSettingsSaved ? <Check size={16} /> : <Save size={16} />}
+                    <span>{isSavingProfileSettings ? 'Saving...' : isProfileSettingsSaved ? 'Saved to Database!' : 'Save Clinical Details'}</span>
+                  </button>
+                </div>
+
+                {/* DEDICATED SECTION: CLINIC DESK & PATIENT HELPLINE */}
+                <div style={{
+                  gridColumn: 'span 2',
+                  marginTop: '12px',
+                  padding: '18px 20px',
+                  background: '#f8fafc',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: '12px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Phone size={18} color="#2563eb" />
+                      <strong style={{ fontSize: '1rem', color: '#0f172a' }}>Clinic Desk & Patient Helpline Support</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.75rem', background: '#e0e7ff', color: '#3730a3', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>
+                        Public Profile FAQ Card
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleSaveHelplineSettings}
+                        disabled={isSavingHelpline}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: isHelplineSaved ? '#16a34a' : '#2563eb',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 14px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: isSavingHelpline ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease',
+                          boxShadow: '0 2px 6px rgba(37,99,235,0.2)'
+                        }}
+                        title="Click to save helpline details to database & public profile"
+                      >
+                        {isHelplineSaved ? <Check size={14} /> : <Save size={14} />}
+                        <span>{isSavingHelpline ? 'Saving...' : isHelplineSaved ? 'Saved to Database!' : 'Save Information'}</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p style={{ margin: '0 0 16px 0', fontSize: '0.82rem', color: '#64748b', lineHeight: 1.4 }}>
+                    These details appear directly on your public profile's FAQ section under <em>"Have a Specific Question? Call Clinic Desk"</em> so patients can reach your care team for appointments, inquiries, or cashless claims. (Changes are only saved when you click <strong>Save Information</strong> or press <strong>Enter</strong>).
+                  </p>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                    <div className={styles.formGroup} style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Helpline Phone Number</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. +91 98765 43210"
+                        value={helplineDraft.number ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setHelplineDraft(prev => ({ ...prev, number: val }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveHelplineSettings(e);
+                          }
+                        }}
+                      />
+                      <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '4px', display: 'block' }}>
+                        Displayed on "Call Clinic Desk" button
+                      </small>
+                    </div>
+
+                    <div className={styles.formGroup} style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Helpline Operating Days</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Mon – Sat or All 7 Days"
+                        value={helplineDraft.days ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setHelplineDraft(prev => ({ ...prev, days: val }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveHelplineSettings(e);
+                          }
+                        }}
+                      />
+                      <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '4px', display: 'block' }}>
+                        e.g. Mon – Sat, Mon – Fri, Daily
+                      </small>
+                    </div>
+
+                    <div className={styles.formGroup} style={{ margin: 0 }}>
+                      <label style={{ fontSize: '0.84rem', fontWeight: 600 }}>Helpline Operating Time</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 8:00 AM – 8:00 PM"
+                        value={helplineDraft.time ?? ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setHelplineDraft(prev => ({ ...prev, time: val }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveHelplineSettings(e);
+                          }
+                        }}
+                      />
+                      <small style={{ color: '#64748b', fontSize: '0.74rem', marginTop: '4px', display: 'block' }}>
+                        e.g. 8:00 AM – 8:00 PM
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* Live Visual Card Preview */}
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '12px 16px',
+                    background: '#eff6ff',
+                    border: '1px dashed #93c5fd',
+                    borderRadius: '10px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e40af', display: 'block' }}>
+                        Patient Profile Preview:
+                      </span>
+                      <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                        How it looks to patients visiting your profile
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                      <span style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        padding: '7px 16px',
+                        borderRadius: '24px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                      }}>
+                        <Phone size={13} />
+                        Call Clinic Desk: {helplineDraft.number || '+91 98765 43210'}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={13} color="#64748b" />
+                        {helplineDraft.days || 'Mon – Sat'} • {helplineDraft.time || '8:00 AM – 8:00 PM'}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={handleSaveHelplineSettings}
+                        disabled={isSavingHelpline}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          background: isHelplineSaved ? '#16a34a' : '#2563eb',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 14px',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: isSavingHelpline ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.2s ease',
+                          marginLeft: '8px'
+                        }}
+                      >
+                        {isHelplineSaved ? <Check size={13} /> : <Save size={13} />}
+                        <span>{isSavingHelpline ? 'Saving...' : isHelplineSaved ? 'Saved!' : 'Save'}</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </form>
 
@@ -6703,9 +7337,16 @@ const DoctorDashboard = ({ onNavigate }) => {
                         isEditingAvailableDaysRef.current = true;
                         setProfileForm({ ...profileForm, availableDays: e.target.value });
                       }}
-                      onBlur={(e) => {
+                      onBlur={() => {
                         isEditingAvailableDaysRef.current = false;
-                        handleSaveAllProfileSettings(e);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          isEditingAvailableDaysRef.current = false;
+                          handleSaveAllProfileSettings(e, { explicit: true });
+                          e.target?.blur?.();
+                        }
                       }}
                       style={{
                         width: '100%',
@@ -8301,7 +8942,10 @@ const DoctorDashboard = ({ onNavigate }) => {
                 onSubmit={handleSaveAllProfileSettings}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
-                    handleSaveAllProfileSettings(e);
+                    e.preventDefault();
+                    isEditingFieldRef.current = null;
+                    handleSaveAllProfileSettings(e, { explicit: true });
+                    e.target?.blur?.();
                   }
                 }}
                 className={styles.settingsGrid}
@@ -8312,7 +8956,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="url"
                     placeholder="https://instagram.com/dr.username"
                     value={profileForm.instagram || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, instagram: e.target.value })}
+                    onFocus={() => { isEditingFieldRef.current = 'instagram'; }}
+                    onChange={(e) => {
+                      isEditingFieldRef.current = 'instagram';
+                      setProfileForm({ ...profileForm, instagram: e.target.value });
+                    }}
+                    onBlur={() => {
+                      isEditingFieldRef.current = null;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        isEditingFieldRef.current = null;
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -8321,7 +8980,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="url"
                     placeholder="https://facebook.com/dr.username"
                     value={profileForm.facebook || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, facebook: e.target.value })}
+                    onFocus={() => { isEditingFieldRef.current = 'facebook'; }}
+                    onChange={(e) => {
+                      isEditingFieldRef.current = 'facebook';
+                      setProfileForm({ ...profileForm, facebook: e.target.value });
+                    }}
+                    onBlur={() => {
+                      isEditingFieldRef.current = null;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        isEditingFieldRef.current = null;
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -8330,7 +9004,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="url"
                     placeholder="https://linkedin.com/in/dr.username"
                     value={profileForm.linkedin || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, linkedin: e.target.value })}
+                    onFocus={() => { isEditingFieldRef.current = 'linkedin'; }}
+                    onChange={(e) => {
+                      isEditingFieldRef.current = 'linkedin';
+                      setProfileForm({ ...profileForm, linkedin: e.target.value });
+                    }}
+                    onBlur={() => {
+                      isEditingFieldRef.current = null;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        isEditingFieldRef.current = null;
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
                 <div className={styles.formGroup}>
@@ -8339,7 +9028,22 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="url"
                     placeholder="https://x.com/dr_username"
                     value={profileForm.twitter || ''}
-                    onChange={(e) => setProfileForm({ ...profileForm, twitter: e.target.value })}
+                    onFocus={() => { isEditingFieldRef.current = 'twitter'; }}
+                    onChange={(e) => {
+                      isEditingFieldRef.current = 'twitter';
+                      setProfileForm({ ...profileForm, twitter: e.target.value });
+                    }}
+                    onBlur={() => {
+                      isEditingFieldRef.current = null;
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        isEditingFieldRef.current = null;
+                        handleSaveAllProfileSettings(e, { explicit: true });
+                        e.target?.blur?.();
+                      }
+                    }}
                   />
                 </div>
               </form>
@@ -8434,27 +9138,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </p>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => setIsResetModalOpen(true)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      border: '1px solid #f87171',
-                      background: '#ffffff',
-                      color: '#b91c1c',
-                      fontSize: '0.84rem',
-                      fontWeight: 600,
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <RotateCcw size={14} />
-                    <span>Reset Optional Info</span>
-                  </button>
-
                   <button
                     type="button"
                     onClick={() => {
@@ -9022,78 +9705,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         </div>
       )}
 
-      {/* Reset Optional Info Confirmation Modal */}
-      {isResetModalOpen && (
-        <div
-          className={styles.modalOverlay}
-          onClick={() => setIsResetModalOpen(false)}
-          style={{ zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0, 0, 0, 0.65)', backdropFilter: 'blur(4px)' }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              background: '#ffffff',
-              borderRadius: '16px',
-              maxWidth: '480px',
-              width: '90%',
-              padding: '24px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.2)',
-              border: '1px solid #f1f5f9'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d97706' }}>
-                <RotateCcw size={22} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#0f172a', fontWeight: 700 }}>Reset Optional Profile Details?</h3>
-                <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Doctor Page Profile Reset</span>
-              </div>
-            </div>
 
-            <p style={{ color: '#475569', fontSize: '0.9rem', lineHeight: 1.5, margin: '0 0 20px 0' }}>
-              This will clear your <strong>About Bio, Awards, Certifications, Memberships, and Career Timeline</strong> from your public doctor profile. (Featured Media is managed separately by the Admin).
-              <br /><br />
-              Your basic clinic profile details (Name, Specialty, Experience, Hospital, Fees, Phone) will remain intact.
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setIsResetModalOpen(false)}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '10px',
-                  border: '1px solid #cbd5e1',
-                  background: '#f8fafc',
-                  color: '#475569',
-                  fontWeight: 600,
-                  fontSize: '0.88rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleResetOptionalInfo}
-                style={{
-                  padding: '10px 18px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  background: '#d97706',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  fontSize: '0.88rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Reset & Clear Details
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* TAB 4: PATIENT REVIEWS & EXPERIENCES */}
       {activeTab === 'reviews' && (
@@ -9563,6 +10175,404 @@ const DoctorDashboard = ({ onNavigate }) => {
                   color: '#334155',
                   fontWeight: 600,
                   fontSize: '0.86rem',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scheduled Appointments Modal */}
+      {isScheduledAppointmentsModalOpen && (
+        <div
+          className={styles.modalOverlay}
+          onClick={() => setIsScheduledAppointmentsModalOpen(false)}
+          style={{
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            animation: 'fadeIn 0.15s ease-out'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '18px',
+              width: '92%',
+              maxWidth: '640px',
+              padding: '24px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1.5px solid #e2e8f0',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '42px', height: '42px', borderRadius: '12px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#16a34a', flexShrink: 0 }}>
+                  <Calendar size={22} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700, color: '#0f172a' }}>Scheduled Appointments</h3>
+                  <p style={{ margin: '2px 0 0', fontSize: '0.82rem', color: '#64748b' }}>
+                    Today ({todayDateStr}) • {todayScheduledAppointments.length} scheduled today • {allScheduledAppointments.length} active scheduled
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsScheduledAppointmentsModalOpen(false)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '8px',
+                  width: '32px',
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                  cursor: 'pointer'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Filter Pills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '14px 0 10px', flexWrap: 'wrap', borderBottom: '1px solid #f1f5f9' }}>
+              <button
+                type="button"
+                onClick={() => setScheduledModalFilter('all-scheduled')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: scheduledModalFilter === 'all-scheduled' ? '1px solid #16a34a' : '1px solid #e2e8f0',
+                  background: scheduledModalFilter === 'all-scheduled' ? '#dcfce7' : '#ffffff',
+                  color: scheduledModalFilter === 'all-scheduled' ? '#15803d' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                All Scheduled ({allScheduledAppointments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduledModalFilter('today')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: scheduledModalFilter === 'today' ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                  background: scheduledModalFilter === 'today' ? '#eff6ff' : '#ffffff',
+                  color: scheduledModalFilter === 'today' ? '#1d4ed8' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Today's ({todayAppointments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduledModalFilter('completed')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: scheduledModalFilter === 'completed' ? '1px solid #059669' : '1px solid #e2e8f0',
+                  background: scheduledModalFilter === 'completed' ? '#ecfdf5' : '#ffffff',
+                  color: scheduledModalFilter === 'completed' ? '#047857' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                Completed Today ({todayCompletedAppointments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduledModalFilter('all')}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '20px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: scheduledModalFilter === 'all' ? '1px solid #0f172a' : '1px solid #e2e8f0',
+                  background: scheduledModalFilter === 'all' ? '#0f172a' : '#ffffff',
+                  color: scheduledModalFilter === 'all' ? '#ffffff' : '#64748b',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                All Queue ({appointments.length})
+              </button>
+            </div>
+
+            {/* Appointments Scrollable List */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '12px 2px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {scheduledModalAppointments.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
+                  <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f1f5f9', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', marginBottom: '10px' }}>
+                    <Calendar size={24} />
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#1e293b' }}>
+                    No appointments in this view
+                  </p>
+                  <p style={{ margin: '4px 0 16px', fontSize: '0.82rem', color: '#94a3b8' }}>
+                    New patient bookings and consultations will appear here automatically.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsScheduledAppointmentsModalOpen(false);
+                      setIsNewAppointmentModalOpen(true);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 16px',
+                      background: '#16a34a',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Plus size={15} /> Schedule New Patient
+                  </button>
+                </div>
+              ) : (
+                scheduledModalAppointments.map((apt, idx) => {
+                  const patientName = apt.patientName || apt.userData?.name || 'Patient';
+                  const timeSlot = apt.slotTime || apt.time || 'Scheduled';
+                  const consultDate = apt.slotDate || apt.date || 'Today';
+                  const consultType = apt.consultationType || apt.type || 'In-Clinic Consultation';
+                  const isVideo = consultType === 'Video Call' || apt.type === 'Video Call';
+                  const isCompleted = apt.status === 'Completed' || apt.isCompleted === true;
+                  const aptId = apt.id || apt._id || idx;
+                  const isToday = isTodayAppointment(apt);
+
+                  return (
+                    <div
+                      key={aptId}
+                      style={{
+                        padding: '14px 16px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '10px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {/* Top Row: Time, Date, Type Badge, Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '3px 8px', borderRadius: '6px' }}>
+                            <Clock size={13} color="#2563eb" />
+                            {timeSlot}
+                          </span>
+                          <span style={{ fontSize: '0.78rem', color: isToday ? '#15803d' : '#64748b', fontWeight: isToday ? 700 : 500, background: isToday ? '#dcfce7' : '#f1f5f9', padding: '3px 7px', borderRadius: '6px' }}>
+                            {consultDate}
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.76rem', fontWeight: 600, color: isVideo ? '#7c3aed' : '#0369a1', background: isVideo ? '#f5f3ff' : '#e0f2fe', padding: '3px 7px', borderRadius: '6px' }}>
+                            {isVideo ? <Video size={12} /> : <User size={12} />}
+                            {consultType}
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span
+                          style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.03em',
+                            background: isCompleted ? '#dcfce7' : (apt.status === 'In-Progress' ? '#fef3c7' : '#eff6ff'),
+                            color: isCompleted ? '#166534' : (apt.status === 'In-Progress' ? '#92400e' : '#1d4ed8'),
+                            border: `1px solid ${isCompleted ? '#bbf7d0' : (apt.status === 'In-Progress' ? '#fde68a' : '#bfdbfe')}`
+                          }}
+                        >
+                          {apt.status || 'Scheduled'}
+                        </span>
+                      </div>
+
+                      {/* Middle Row: Patient Avatar, Name, Demographics & Symptoms */}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                        <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem', flexShrink: 0, marginTop: '2px' }}>
+                          {patientName.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 700, fontSize: '0.96rem', color: '#0f172a' }}>{patientName}</span>
+                            {apt.isRealtime && (
+                              <span style={{ fontSize: '0.68rem', background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, border: '1px solid #bbf7d0' }}>
+                                ● Online
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span>{apt.gender || 'Patient'}{apt.age ? `, ${apt.age} yrs` : ''}</span>
+                            {apt.phone && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                • <Phone size={12} color="#64748b" /> {apt.phone}
+                              </span>
+                            )}
+                          </div>
+                          {apt.symptoms && (
+                            <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '4px', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', borderLeft: '3px solid #cbd5e1' }}>
+                              <strong>Reason:</strong> {apt.symptoms}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Quick Actions */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px', borderTop: '1px solid #f1f5f9', flexWrap: 'wrap', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleJumpToQueue(apt.id || apt._id)}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#2563eb',
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            padding: '4px 0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          View in queue <ChevronRight size={13} />
+                        </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {isVideo && !isCompleted && (
+                            <button
+                              type="button"
+                              onClick={() => showToast(`Starting teleconsultation call with ${patientName}...`)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #c4b5fd',
+                                background: '#f5f3ff',
+                                color: '#7c3aed',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Video size={12} /> Call
+                            </button>
+                          )}
+
+                          {!isCompleted ? (
+                            <button
+                              type="button"
+                              onClick={() => updateAppointmentStatus(apt.id || apt._id, 'Completed')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 12px',
+                                borderRadius: '6px',
+                                border: 'none',
+                                background: '#16a34a',
+                                color: '#ffffff',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <Check size={12} /> Mark Completed
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => updateAppointmentStatus(apt.id || apt._id, 'Confirmed')}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 10px',
+                                borderRadius: '6px',
+                                border: '1px solid #fde68a',
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                fontSize: '0.76rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <RotateCcw size={12} /> Reopen
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{ paddingTop: '16px', borderTop: '1px solid #e2e8f0', marginTop: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => handleJumpToQueue()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  color: '#1e293b',
+                  fontWeight: 600,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer'
+                }}
+              >
+                <span>Go to Full Appointments Queue</span>
+                <ChevronRight size={15} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsScheduledAppointmentsModalOpen(false)}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#ffffff',
+                  color: '#475569',
+                  fontWeight: 600,
+                  fontSize: '0.84rem',
                   cursor: 'pointer'
                 }}
               >

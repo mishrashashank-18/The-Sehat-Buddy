@@ -7,11 +7,13 @@ import Appointment from '../models/Appointment.js';
 import validatePassword from '../utils/validatePassword.js';
 import { cloudinary } from '../config/cloudinary.js';
 import EmailLog from '../models/EmailLog.js';
+import { sendEmail } from '../utils/email.js';
 import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
+import { processDoctorReelsInBackground } from '../utils/reelService.js';
 
 export const generateStandardDoctorFaqs = (docName) => {
   const cleanName = (docName || '').trim().startsWith('Dr.') ? (docName || '').trim() : `Dr. ${(docName || 'the doctor').trim()}`;
@@ -118,6 +120,232 @@ export const authAdmin = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Admin requested OTP for password reset
+ */
+export const forgotAdminPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Please provide an administrator email address.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const admin = await Admin.findOne({ email: cleanEmail });
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'No registered administrator account found with this email. Please check your credentials.'
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    admin.otp = otp;
+    admin.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    admin.otpAttempts = 0;
+    await admin.save();
+
+    try {
+      await sendEmail({
+        email: admin.email,
+        subject: 'Password Reset OTP - Sehat Buddy Admin Portal',
+        message: `Hello ${admin.name},\n\nYour 6-digit OTP for resetting your Administrator Portal password is ${otp}. It is valid for 10 minutes.\n\nIf you did not request this, please ignore this email.`,
+        html: `
+          <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 520px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+            <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
+              <h2 style="color: #2563eb; margin: 0; font-size: 20px;">The Sehat Buddy • Admin Portal</h2>
+            </div>
+            <p style="font-size: 15px;">Hello <strong>${admin.name}</strong>,</p>
+            <p style="font-size: 14px; color: #475569;">You requested to reset your Administrator password. Use the 6-digit OTP below to verify your identity and set a new password:</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <div style="background: #eff6ff; border: 1px dashed #3b82f6; padding: 14px 28px; font-size: 28px; font-weight: 700; letter-spacing: 8px; color: #1d4ed8; border-radius: 10px; display: inline-block;">
+                ${otp}
+              </div>
+            </div>
+            <p style="font-size: 13px; color: #64748b;">⏱️ This OTP is valid for <strong>10 minutes</strong>. If you did not request a password reset, please ignore this email.</p>
+          </div>
+        `
+      });
+    } catch (emailErr) {
+      console.error('Error sending admin reset OTP email:', emailErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: `A 6-digit verification OTP has been sent to ${admin.email}.`
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Verify admin reset OTP
+ */
+export const verifyAdminResetOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required.' });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const admin = await Admin.findOne({ email: cleanEmail }).select('+otp +otpExpires +otpAttempts');
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Administrator account not found.' });
+    }
+
+    if (admin.otpAttempts && admin.otpAttempts >= 5) {
+      admin.otp = undefined;
+      admin.otpExpires = undefined;
+      await admin.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has been invalidated for security. Please request a new OTP.'
+      });
+    }
+
+    if (admin.otpExpires && new Date(admin.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!admin.otp || admin.otp !== String(otp).trim()) {
+      admin.otpAttempts = (admin.otpAttempts || 0) + 1;
+      await admin.save();
+      const remaining = Math.max(0, 5 - admin.otpAttempts);
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. ${remaining} attempt(s) remaining.`
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'OTP verified successfully.'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Reset admin password with verified OTP
+ */
+export const resetAdminPassword = async (req, res) => {
+  try {
+    const { email, otp, password } = req.body;
+    if (!email || !otp || !password) {
+      return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required.' });
+    }
+
+    const passwordCheck = validatePassword(password);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const admin = await Admin.findOne({ email: cleanEmail }).select('+otp +otpExpires +otpAttempts');
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Administrator account not found.' });
+    }
+
+    if (admin.otpAttempts && admin.otpAttempts >= 5) {
+      admin.otp = undefined;
+      admin.otpExpires = undefined;
+      await admin.save();
+      return res.status(400).json({
+        success: false,
+        message: 'Too many invalid attempts. This OTP has expired. Please request a new OTP.'
+      });
+    }
+
+    if (admin.otpExpires && new Date(admin.otpExpires) < new Date()) {
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (!admin.otp || admin.otp !== String(otp).trim()) {
+      admin.otpAttempts = (admin.otpAttempts || 0) + 1;
+      await admin.save();
+      return res.status(400).json({ success: false, message: 'Invalid OTP. Please check and try again.' });
+    }
+
+    admin.password = password;
+    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+    admin.failedLoginAttempts = 0;
+    admin.lockUntil = undefined;
+    admin.otp = undefined;
+    admin.otpExpires = undefined;
+    admin.otpAttempts = 0;
+    await admin.save();
+
+    const adminObj = admin.toObject();
+    delete adminObj.password;
+    delete adminObj.otp;
+    delete adminObj.otpExpires;
+    delete adminObj.otpAttempts;
+
+    return res.json({
+      success: true,
+      message: 'Password reset successfully! Logging in...',
+      token: generateToken(admin._id, 'admin', admin.tokenVersion),
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        role: 'admin'
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Change admin password while authenticated
+ */
+export const changeAdminPassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+
+    const passwordCheck = validatePassword(newPassword);
+    if (!passwordCheck.isValid) {
+      return res.status(400).json({ success: false, message: passwordCheck.message });
+    }
+
+    const adminId = req.user?.id;
+    let admin = null;
+    if (adminId && mongoose.Types.ObjectId.isValid(adminId)) {
+      admin = await Admin.findById(adminId).select('+password');
+    }
+    if (!admin) {
+      admin = await Admin.findOne().select('+password');
+    }
+    if (!admin) {
+      return res.status(404).json({ success: false, message: 'Administrator record not found.' });
+    }
+
+    const isMatch = await admin.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+    }
+
+    admin.password = newPassword;
+    admin.tokenVersion = (admin.tokenVersion || 0) + 1;
+    await admin.save();
+
+    return res.json({
+      success: true,
+      message: 'Password updated successfully.',
+      token: generateToken(admin._id, 'admin', admin.tokenVersion)
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -239,9 +467,11 @@ export const addDoctor = async (req, res) => {
     if (image && image.trim().length > 0) initPct += 10;
     if (availableDays) initPct += 5;
 
-    const parsedSched = parseAvailableDaysAndHours(availableDays || 'Mon - Sat (10am - 4pm)', 30);
+    const parsedSched = (availableDays && typeof availableDays === 'string' && availableDays.trim()) 
+      ? parseAvailableDaysAndHours(availableDays, 30) 
+      : { days: [], slots: [] };
     const finalScheduleDays = (Array.isArray(req.body.scheduleDays) && req.body.scheduleDays.length > 0) ? req.body.scheduleDays : parsedSched.days;
-    const finalAvailableSlots = (Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) ? req.body.availableSlots : parsedSched.slots;
+    const finalAvailableSlots = (Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) ? req.body.availableSlots : [];
 
     const doctor = await Doctor.create({
       _id: newDocId,
@@ -271,15 +501,24 @@ export const addDoctor = async (req, res) => {
       degree: docDegree,
       contact_number: docPhone,
       phone: docPhone,
+      helplineNumber: req.body.helplineNumber !== undefined ? String(req.body.helplineNumber).trim() : '+91 98765 43210',
+      helplineDays: req.body.helplineDays !== undefined ? String(req.body.helplineDays).trim() : 'Mon – Sat',
+      helplineTime: req.body.helplineTime !== undefined ? String(req.body.helplineTime).trim() : '8:00 AM – 8:00 PM',
       available: available !== undefined ? available : true,
-      availableDays: availableDays || 'Mon - Sat (10am - 4pm)',
+      availableDays: availableDays || '',
       scheduleDays: finalScheduleDays,
       availableSlots: finalAvailableSlots,
       isStarDoctor: Boolean(isStarDoctor),
       starUpdatedAt: Date.now(),
       profileCompletion: Math.min(100, initPct),
       isProfileComplete: initPct >= 80,
-      faqs: Array.isArray(faqs) ? faqs.filter(f => (f?.q || f?.question || '').trim() !== '') : [],
+      faqs: (() => {
+        let parsed = faqs;
+        if (typeof parsed === 'string') {
+          try { parsed = JSON.parse(parsed); } catch { parsed = []; }
+        }
+        return Array.isArray(parsed) ? parsed.filter(f => (f?.q || f?.question || '').trim() !== '') : [];
+      })(),
       awards: Array.isArray(awards) ? awards.filter(Boolean) : [],
       certifications: Array.isArray(certifications) ? certifications.filter(Boolean) : [],
       memberships: Array.isArray(memberships) ? memberships.filter(Boolean) : [],
@@ -305,12 +544,7 @@ export const addDoctor = async (req, res) => {
           if (!hospDoc.staff_doctors.some(d => d.email === cleanEmail)) {
             hospDoc.staff_doctors.push({ name: doctor.name, email: cleanEmail });
           }
-          if (Boolean(isStarDoctor)) {
-            if (!Array.isArray(hospDoc.star_doctors)) hospDoc.star_doctors = [];
-            if (!hospDoc.star_doctors.some(id => String(id) === String(doctor._id))) {
-              hospDoc.star_doctors.push(doctor._id);
-            }
-          }
+          // Doctor staff roster association
           await hospDoc.save();
           broadcastDbChange('hospitals', 'update', hospDoc._id, hospDoc);
         }
@@ -321,6 +555,10 @@ export const addDoctor = async (req, res) => {
 
     // Send temporary password credentials email to the doctor
     sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName: hospital });
+
+    if (doctor.reels && doctor.reels.length > 0) {
+      processDoctorReelsInBackground(doctor._id, doctor.reels);
+    }
 
     broadcastDbChange('doctors', 'insert', doctor._id, doctor);
     res.status(201).json({
@@ -455,6 +693,10 @@ export const updateDoctor = async (req, res) => {
       const existingStarTimestamp = Number(doctor.starUpdatedAt || 0);
 
       const safeBody = { ...req.body };
+      delete safeBody.password;
+      delete safeBody.otp;
+      delete safeBody.otpExpires;
+      delete safeBody.otpAttempts;
       delete safeBody.isStarDoctor;
       delete safeBody.starMutationTimestamp;
       delete safeBody.starUpdatedAt;
@@ -529,8 +771,14 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.availabilityStatus !== undefined) {
-        doctor.availabilityStatus = req.body.availabilityStatus;
-        doctor.markModified('availabilityStatus');
+        const incomingStatusTs = Number(req.body.statusUpdatedAt || 0);
+        const currentStatusTs = Number(doctor.statusUpdatedAt || 0);
+        if (!incomingStatusTs || incomingStatusTs >= currentStatusTs) {
+          doctor.availabilityStatus = req.body.availabilityStatus;
+          doctor.statusUpdatedAt = incomingStatusTs || Date.now();
+          doctor.markModified('availabilityStatus');
+          doctor.markModified('statusUpdatedAt');
+        }
       }
 
       if (req.body.fees !== undefined || req.body.price !== undefined) {
@@ -542,63 +790,19 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (incomingStar !== undefined) {
-        const targetTimestamp = incomingStarTimestamp || Math.max(Date.now(), existingStarTimestamp + 1);
-        if (incomingStarTimestamp && existingStarTimestamp && incomingStarTimestamp <= existingStarTimestamp) {
-          doctor.isStarDoctor = existingStar;
-          doctor.starUpdatedAt = existingStarTimestamp;
-        } else {
-          // Perform atomic conditional write directly on MongoDB Atlas
-          // Guarantees ordering across multi-process Node.js clusters and multiple server instances
-          const atomicStarRes = await Doctor.findOneAndUpdate(
-            {
-              _id: doctor._id,
-              $or: [
-                { starUpdatedAt: { $lt: targetTimestamp } },
-                { starUpdatedAt: { $exists: false } },
-                { starUpdatedAt: null },
-                { starUpdatedAt: 0 }
-              ]
-            },
-            {
-              $set: {
-                isStarDoctor: Boolean(incomingStar),
-                starUpdatedAt: targetTimestamp
-              }
-            },
-            { new: true }
-          );
+        const newStarVal = Boolean(incomingStar);
+        const targetTimestamp = Math.max(Date.now(), existingStarTimestamp + 1, Number(incomingStarTimestamp || 0));
 
-          if (atomicStarRes) {
-            doctor.isStarDoctor = atomicStarRes.isStarDoctor;
-            doctor.starUpdatedAt = atomicStarRes.starUpdatedAt;
-          } else {
-            // A newer mutation already committed in MongoDB; refresh local doctor instance
-            const latestDoc = await Doctor.findById(doctor._id);
-            doctor.isStarDoctor = latestDoc ? latestDoc.isStarDoctor : existingStar;
-            doctor.starUpdatedAt = latestDoc ? latestDoc.starUpdatedAt : existingStarTimestamp;
-          }
-          doctor.markModified('isStarDoctor');
-          doctor.markModified('starUpdatedAt');
+        doctor.isStarDoctor = newStarVal;
+        doctor.starUpdatedAt = targetTimestamp;
+        doctor.markModified('isStarDoctor');
+        doctor.markModified('starUpdatedAt');
 
-          // Bidirectional synchronization: keep Hospital.star_doctors strictly in sync with Doctor.isStarDoctor
-          try {
-            if (Boolean(doctor.isStarDoctor)) {
-              if (doctor.hospital) {
-                await Hospital.updateMany(
-                  { $or: [{ name: doctor.hospital }, { _id: mongoose.Types.ObjectId.isValid(doctor.hospital) ? doctor.hospital : null }] },
-                  { $addToSet: { star_doctors: doctor._id } }
-                );
-              }
-            } else {
-              await Hospital.updateMany(
-                { star_doctors: doctor._id },
-                { $pull: { star_doctors: doctor._id } }
-              );
-            }
-          } catch (hospSyncErr) {
-            console.warn('Hospital star_doctors sync warning in updateDoctor:', hospSyncErr.message);
-          }
-        }
+        // Direct database write ensures persistence in MongoDB Atlas immediately
+        await Doctor.updateOne(
+          { _id: doctor._id },
+          { $set: { isStarDoctor: newStarVal, starUpdatedAt: targetTimestamp } }
+        ).catch(err => console.warn('Doctor.updateOne isStarDoctor warning:', err.message));
       }
 
       if (req.body.awards !== undefined) {
@@ -629,24 +833,34 @@ export const updateDoctor = async (req, res) => {
         doctor.jobTitle = String(req.body.jobTitle || '').trim();
         doctor.markModified('jobTitle');
       }
+      if (req.body.helplineNumber !== undefined) {
+        doctor.helplineNumber = String(req.body.helplineNumber || '').trim();
+        doctor.markModified('helplineNumber');
+      }
+      if (req.body.helplineDays !== undefined) {
+        doctor.helplineDays = String(req.body.helplineDays || '').trim();
+        doctor.markModified('helplineDays');
+      }
+      if (req.body.helplineTime !== undefined) {
+        doctor.helplineTime = String(req.body.helplineTime || '').trim();
+        doctor.markModified('helplineTime');
+      }
       if (req.body.availableDays !== undefined) {
         doctor.availableDays = req.body.availableDays;
         doctor.markModified('availableDays');
 
         const parsedSched = parseAvailableDaysAndHours(req.body.availableDays, doctor.slotDuration || 30);
-        if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays) && req.body.scheduleDays.length > 0) {
+        if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays)) {
           doctor.scheduleDays = req.body.scheduleDays.filter(Boolean);
-        } else {
+        } else if (parsedSched.days && parsedSched.days.length > 0 && (!doctor.scheduleDays || doctor.scheduleDays.length === 0)) {
           doctor.scheduleDays = parsedSched.days;
         }
         doctor.markModified('scheduleDays');
 
-        if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) {
+        if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots)) {
           doctor.availableSlots = req.body.availableSlots.filter(Boolean);
-        } else if (parsedSched.slots.length > 0) {
-          doctor.availableSlots = parsedSched.slots;
+          doctor.markModified('availableSlots');
         }
-        doctor.markModified('availableSlots');
       } else {
         if (req.body.scheduleDays !== undefined) {
           doctor.scheduleDays = Array.isArray(req.body.scheduleDays) ? req.body.scheduleDays.filter(Boolean) : [];
@@ -694,7 +908,11 @@ export const updateDoctor = async (req, res) => {
       if (req.body.instagram !== undefined) doctor.instagram = req.body.instagram;
       if (req.body.facebook !== undefined) doctor.facebook = req.body.facebook;
       if (req.body.faqs !== undefined) {
-        doctor.faqs = Array.isArray(req.body.faqs) ? req.body.faqs : [];
+        let incomingFaqs = req.body.faqs;
+        if (typeof incomingFaqs === 'string') {
+          try { incomingFaqs = JSON.parse(incomingFaqs); } catch {}
+        }
+        doctor.faqs = Array.isArray(incomingFaqs) ? incomingFaqs : [];
         doctor.markModified('faqs');
       }
       
@@ -761,6 +979,11 @@ export const updateDoctor = async (req, res) => {
       }
 
       broadcastDbChange('doctors', 'update', updatedDoctor._id, updatedDoctor);
+
+      if (req.body.reels !== undefined && updatedDoctor.reels && updatedDoctor.reels.length > 0) {
+        processDoctorReelsInBackground(updatedDoctor._id, updatedDoctor.reels);
+      }
+
       res.json({
         success: true,
         message: emailChanged

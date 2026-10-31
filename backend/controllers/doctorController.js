@@ -10,6 +10,7 @@ import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
+import { processDoctorReelsInBackground } from '../utils/reelService.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -18,27 +19,46 @@ export const authDoctor = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Email and password are required' });
     }
 
-    const doctor = await Doctor.findOne({ email: (email || '').toLowerCase().trim() }).select('+password +failedLoginAttempts +lockUntil');
+    const cleanEmail = (email || '').toLowerCase().trim();
+    console.log(`[AuthDoctor] Authentication attempt for: ${cleanEmail}`);
+
+    const doctor = await Doctor.findOne({ email: cleanEmail }).select('+password +failedLoginAttempts +lockUntil');
     if (!doctor) {
+      console.warn(`[AuthDoctor] Failed: No registered doctor found for email ${cleanEmail}`);
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
+    console.log(`[AuthDoctor] Doctor found: ${doctor.name} (ID: ${doctor._id}, isFirstLogin: ${doctor.isFirstLogin}, passwordSet: ${doctor.passwordSet})`);
+
     // Account lockout check
-    if (doctor.lockUntil && doctor.lockUntil > Date.now()) {
-      const remainingMinutes = Math.ceil((doctor.lockUntil - Date.now()) / (60 * 1000));
-      return res.status(423).json({
-        success: false,
-        message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
-      });
+    if (doctor.lockUntil) {
+      if (doctor.lockUntil > Date.now()) {
+        const remainingMinutes = Math.ceil((doctor.lockUntil - Date.now()) / (60 * 1000));
+        console.warn(`[AuthDoctor] Account is temporarily locked until ${doctor.lockUntil} (${remainingMinutes} mins remaining)`);
+        return res.status(423).json({
+          success: false,
+          message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMinutes} minute(s).`
+        });
+      } else {
+        // Lockout period has passed; reset lockout state
+        console.log(`[AuthDoctor] Lockout period expired for ${cleanEmail}. Resetting lockout counters.`);
+        doctor.lockUntil = undefined;
+        doctor.failedLoginAttempts = 0;
+        await Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } });
+      }
     }
 
-    if (await doctor.matchPassword(password)) {
+    const isMatch = await doctor.matchPassword(password);
+    console.log(`[AuthDoctor] Password verification result for ${cleanEmail}: ${isMatch}`);
+
+    if (isMatch) {
       if (doctor.failedLoginAttempts > 0 || doctor.lockUntil) {
-        Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } }).catch(() => {});
+        await Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: 0 }, $unset: { lockUntil: 1 } });
       }
 
       // If doctor hasn't set their personal password yet, require them to set it
       if (doctor.isFirstLogin || !doctor.passwordSet) {
+        console.log(`[AuthDoctor] Doctor ${cleanEmail} verified temporary password. Redirecting to set permanent password.`);
         return res.json({
           success: true,
           requiresPasswordChange: true,
@@ -57,6 +77,7 @@ export const authDoctor = async (req, res) => {
       delete docObj.otpExpires;
       delete docObj.otpAttempts;
 
+      console.log(`[AuthDoctor] Doctor ${cleanEmail} authenticated successfully. JWT session created.`);
       return res.json({
         success: true,
         token: generateToken(doctor._id, 'doctor', doctor.tokenVersion || 0),
@@ -64,14 +85,20 @@ export const authDoctor = async (req, res) => {
       });
     } else {
       doctor.failedLoginAttempts = (doctor.failedLoginAttempts || 0) + 1;
+      console.warn(`[AuthDoctor] Invalid password for ${cleanEmail}. Failed attempt count: ${doctor.failedLoginAttempts}`);
+
       if (doctor.failedLoginAttempts >= 5) {
-        Doctor.updateOne({ _id: doctor._id }, { $set: { lockUntil: new Date(Date.now() + 15 * 60 * 1000), failedLoginAttempts: 0 } }).catch(() => {});
+        const lockDuration = 15 * 60 * 1000;
+        const lockUntilDate = new Date(Date.now() + lockDuration);
+        await Doctor.updateOne({ _id: doctor._id }, { $set: { lockUntil: lockUntilDate, failedLoginAttempts: 5 } });
+        console.warn(`[AuthDoctor] 5 failed attempts reached for ${cleanEmail}. Account locked for 15 minutes.`);
         return res.status(423).json({
           success: false,
           message: 'Account locked for 15 minutes due to 5 consecutive failed login attempts.'
         });
       }
-      Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: doctor.failedLoginAttempts } }).catch(() => {});
+
+      await Doctor.updateOne({ _id: doctor._id }, { $set: { failedLoginAttempts: doctor.failedLoginAttempts } });
       const remainingAttempts = Math.max(0, 5 - doctor.failedLoginAttempts);
       return res.status(401).json({
         success: false,
@@ -79,6 +106,7 @@ export const authDoctor = async (req, res) => {
       });
     }
   } catch (error) {
+    console.error(`[AuthDoctor] Authentication error:`, error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -470,12 +498,6 @@ export const addDoctorByHospital = async (req, res) => {
         if (!hospital.staff_doctors.some(d => d.email === cleanEmail)) {
           hospital.staff_doctors.push({ name: doctor.name, email: cleanEmail });
         }
-        if (isStarDoctor) {
-          if (!Array.isArray(hospital.star_doctors)) hospital.star_doctors = [];
-          if (!hospital.star_doctors.some(id => String(id) === String(doctor._id))) {
-            hospital.star_doctors.push(doctor._id);
-          }
-        }
         await hospital.save();
       }
     }
@@ -848,14 +870,23 @@ export const updateDoctorProfile = async (req, res) => {
       }
     }
 
+    // Explicitly delete any sensitive credentials from payload
+    delete req.body.password;
+    delete req.body.otp;
+    delete req.body.otpExpires;
+    delete req.body.otpAttempts;
+    delete req.body.failedLoginAttempts;
+    delete req.body.lockUntil;
+
     // STRICT WHITELIST: Prevent mass assignment of sensitive/credential fields
     const allowedFields = [
       'name', 'specialization', 'specialty', 'experience', 'jobTitle', 'about', 'fees', 'price',
       'address', 'hospital', 'qualifications', 'degree', 'contact_number', 'phone', 'instagram',
-      'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus',
+      'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus', 'statusUpdatedAt',
       'licenseNumber', 'awards', 'certifications', 'memberships',
-      'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews',
-      'availableDays', 'scheduleDays', 'availableSlots', 'slotDuration', 'slots_booked', 'dayWiseSlots', 'dateWiseSlots', 'image'
+      'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews', 'faqs',
+      'availableDays', 'scheduleDays', 'availableSlots', 'slotDuration', 'slots_booked', 'dayWiseSlots', 'dateWiseSlots', 'image',
+      'helplineNumber', 'helplineDays', 'helplineTime'
     ];
 
     allowedFields.forEach((field) => {
@@ -877,6 +908,15 @@ export const updateDoctorProfile = async (req, res) => {
           const feesNum = Number(req.body.fees ?? req.body.price);
           doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
           doctor.price = doctor.fees;
+        } else if (field === 'availabilityStatus') {
+          const incomingStatusTs = Number(req.body.statusUpdatedAt || 0);
+          const currentStatusTs = Number(doctor.statusUpdatedAt || 0);
+          if (!incomingStatusTs || incomingStatusTs >= currentStatusTs) {
+            doctor.availabilityStatus = req.body.availabilityStatus;
+            doctor.statusUpdatedAt = incomingStatusTs || Date.now();
+            doctor.markModified('availabilityStatus');
+            doctor.markModified('statusUpdatedAt');
+          }
         } else if (field === 'specialty' || field === 'specialization') {
           doctor.specialization = req.body.specialization || req.body.specialty;
           doctor.specialty = req.body.specialty || req.body.specialization;
@@ -889,6 +929,8 @@ export const updateDoctorProfile = async (req, res) => {
         } else if (field === 'slotDuration') {
           const durNum = Number(req.body.slotDuration);
           doctor.slotDuration = !isNaN(durNum) ? durNum : (doctor.slotDuration || 20);
+        } else if (field === 'statusUpdatedAt') {
+          // Handled alongside availabilityStatus under strict timestamp ordering
         } else if (
           field !== 'awards' &&
           field !== 'certifications' &&
@@ -899,7 +941,9 @@ export const updateDoctorProfile = async (req, res) => {
           field !== 'youtube_videos' &&
           field !== 'availableSlots' &&
           field !== 'scheduleDays' &&
-          field !== 'slots_booked'
+          field !== 'slots_booked' &&
+          field !== 'faqs' &&
+          field !== 'statusUpdatedAt'
         ) {
           doctor[field] = req.body[field];
         }
@@ -927,6 +971,14 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.tags = Array.isArray(req.body.tags) ? req.body.tags.filter(Boolean) : [];
       doctor.markModified('tags');
     }
+    if (req.body.faqs !== undefined) {
+      let incomingFaqs = req.body.faqs;
+      if (typeof incomingFaqs === 'string') {
+        try { incomingFaqs = JSON.parse(incomingFaqs); } catch {}
+      }
+      doctor.faqs = Array.isArray(incomingFaqs) ? incomingFaqs : [];
+      doctor.markModified('faqs');
+    }
     if (req.body.reels !== undefined) {
       doctor.reels = Array.isArray(req.body.reels)
         ? req.body.reels.map(r => {
@@ -945,20 +997,14 @@ export const updateDoctorProfile = async (req, res) => {
     }
     if (req.body.availableDays !== undefined) {
       const parsedSched = parseAvailableDaysAndHours(req.body.availableDays, doctor.slotDuration || 30);
-      if (req.body.availableSlots !== undefined) {
-        doctor.availableSlots = Array.isArray(req.body.availableSlots)
-          ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
-          : [];
-      } else if (parsedSched.slots.length > 0) {
-        doctor.availableSlots = parsedSched.slots;
+      if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots)) {
+        doctor.availableSlots = req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean);
+        doctor.markModified('availableSlots');
       }
-      doctor.markModified('availableSlots');
 
-      if (req.body.scheduleDays !== undefined) {
-        doctor.scheduleDays = Array.isArray(req.body.scheduleDays)
-          ? req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean)
-          : [];
-      } else {
+      if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays)) {
+        doctor.scheduleDays = req.body.scheduleDays.map(d => (typeof d === 'string' ? d.trim() : '')).filter(Boolean);
+      } else if (parsedSched.days && parsedSched.days.length > 0 && (!doctor.scheduleDays || doctor.scheduleDays.length === 0)) {
         doctor.scheduleDays = parsedSched.days;
       }
       doctor.markModified('scheduleDays');
@@ -1037,12 +1083,25 @@ export const updateDoctorProfile = async (req, res) => {
     doctor.markModified('profileCompletion');
     doctor.markModified('isProfileComplete');
 
-    // Doctor self-service profile updates must never alter or overwrite platform-wide star doctor status.
-    // Re-fetch the latest star values directly from MongoDB to guarantee integrity against concurrent admin updates.
-    const freshStarState = await Doctor.findById(doctor._id).select('isStarDoctor starUpdatedAt');
-    if (freshStarState) {
-      doctor.isStarDoctor = freshStarState.isStarDoctor;
-      doctor.starUpdatedAt = freshStarState.starUpdatedAt;
+    // Platform-wide star doctor status is managed strictly by authorized administrators.
+    // Only accept changes if explicitly provided by an authorized admin; otherwise preserve the authoritative state from MongoDB.
+    const isAuthorizedAdmin = Boolean(isAdmin);
+    if (req.body.isStarDoctor !== undefined && isAuthorizedAdmin) {
+      const nowTs = Math.max(Date.now(), Number(doctor.starUpdatedAt || 0) + 1, Number(req.body.starMutationTimestamp || 0));
+      doctor.isStarDoctor = Boolean(req.body.isStarDoctor);
+      doctor.starUpdatedAt = nowTs;
+      doctor.markModified('isStarDoctor');
+      doctor.markModified('starUpdatedAt');
+      await Doctor.updateOne(
+        { _id: doctor._id },
+        { $set: { isStarDoctor: doctor.isStarDoctor, starUpdatedAt: nowTs } }
+      ).catch(err => console.warn('Doctor.updateOne isStarDoctor warning in doctorController:', err.message));
+    } else {
+      const freshStarState = await Doctor.findById(doctor._id).select('isStarDoctor starUpdatedAt');
+      if (freshStarState) {
+        doctor.isStarDoctor = freshStarState.isStarDoctor;
+        doctor.starUpdatedAt = freshStarState.starUpdatedAt;
+      }
     }
 
     let updated;
@@ -1078,6 +1137,11 @@ export const updateDoctorProfile = async (req, res) => {
     }
 
     broadcastDbChange('doctors', 'update', docObj._id, docObj);
+
+    if (req.body.reels !== undefined && docObj.reels && docObj.reels.length > 0) {
+      processDoctorReelsInBackground(docObj._id, docObj.reels);
+    }
+
     return res.json({
       success: true,
       message: emailChanged
@@ -1101,9 +1165,12 @@ export const getMyDoctorProfile = async (req, res) => {
     if (!req.user) {
       return res.status(401).json({ success: false, message: 'Not authorized: No doctor session found' });
     }
+    if (req.user.role !== 'doctor') {
+      return res.status(401).json({ success: false, message: 'Session expired: Please log in to your doctor account' });
+    }
     const doctor = await Doctor.findById(req.user.id).select('-password -otp -otpExpires -otpAttempts');
     if (!doctor) {
-      return res.status(401).json({ success: false, message: 'Not authorized: Doctor account no longer exists in database' });
+      return res.status(404).json({ success: false, message: 'Doctor account no longer exists in database' });
     }
     return res.json({ success: true, doctor });
   } catch (err) {

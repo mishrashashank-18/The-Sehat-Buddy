@@ -461,7 +461,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Star doctors for THIS hospital
   const hospitalStarDoctors = useMemo(() => {
-    return hospitalDoctors.filter(doc => isDoctorInStarList(doc, formData?.star_doctors) || Boolean(doc.isStarDoctor));
+    return hospitalDoctors.filter(doc => isDoctorInStarList(doc, formData?.star_doctors));
   }, [hospitalDoctors, formData?.star_doctors]);
 
   // Doctors to display based on selected filter pill and search query
@@ -469,7 +469,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const sourceList = doctorFilter === 'all' ? (doctors || []) : hospitalDoctors;
 
     return sourceList.filter(doc => {
-      const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData?.star_doctors);
+      const isSelected = isDoctorInStarList(doc, formData?.star_doctors);
       if (doctorFilter === 'star' && !isSelected) return false;
 
       if (!doctorSearch.trim()) return true;
@@ -1180,7 +1180,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     if (!canonicalId) return;
 
     const targetVal = Boolean(shouldBeStar);
-    const isSelected = isDoctorInStarList(docObj, formData.star_doctors) || Boolean(docObj.isStarDoctor);
+    const isSelected = isDoctorInStarList(docObj, formData.star_doctors);
 
     // Idempotent: if already in requested state, no-op
     if (isSelected === targetVal) return;
@@ -1200,17 +1200,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }));
     setSaveSuccess(false);
 
-    const clientTimestamp = extraPayload?.starMutationTimestamp || Date.now();
     const targetHospId = hospital?._id || hospitalId || hospital?.id;
 
     try {
-      // 1. Authoritative update of doctor in DataContext & MongoDB Atlas
-      await updateDoctor(canonicalId, {
-        isStarDoctor: targetVal,
-        starMutationTimestamp: clientTimestamp
-      });
-
-      // 2. Persist hospital star_doctors list
+      // Persist hospital star_doctors list
       if (targetHospId) {
         await updateHospital(targetHospId, {
           star_doctors: nextList
@@ -3322,7 +3315,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
             <div className={styles.doctorSelectGrid}>
               {displayedDoctors.map((doc) => {
                 const docId = doc.id || doc._id;
-                const isSelected = Boolean(doc.isStarDoctor) || isDoctorInStarList(doc, formData.star_doctors);
+                const isSelected = isDoctorInStarList(doc, formData.star_doctors);
 
                 return (
                   <div

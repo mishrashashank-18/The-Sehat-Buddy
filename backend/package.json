@@ -11,7 +11,8 @@
     "dev": "node --watch server.js",
     "seed": "node scripts/seed.js",
     "seed:corporate": "node scripts/seed_corporate.js",
-    "add-items": "node scripts/add_items.js"
+    "add-items": "node scripts/add_items.js",
+    "test:popular": "node testPopularDoctorPersistence.mjs"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",

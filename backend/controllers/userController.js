@@ -291,6 +291,35 @@ export const bookAppointment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Doctor not found' });
     }
 
+    // Verify if doctor is off duty on the requested date
+    const dateObj = new Date(slotDate);
+    if (!isNaN(dateObj.getTime())) {
+      const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dayNameShort = daysOfWeek[dateObj.getDay()];
+
+      // 1. Date-wise check (highest priority override)
+      const dateCustom = doctor.dateWiseSlots?.[slotDate];
+      if (dateCustom !== undefined && dateCustom !== null) {
+        if (dateCustom === 'off' || dateCustom?.isOff === true || (Array.isArray(dateCustom) && dateCustom.length === 0)) {
+          return res.status(400).json({ success: false, message: 'Doctor is off duty on this day. Please choose another date.' });
+        }
+      } else {
+        // 2. Day-wise check (Mon, Tue, etc.)
+        const dayCustom = doctor.dayWiseSlots?.[dayNameShort];
+        if (dayCustom !== undefined && dayCustom !== null) {
+          if (dayCustom === 'off' || dayCustom?.isOff === true || (Array.isArray(dayCustom) && dayCustom.length === 0)) {
+            return res.status(400).json({ success: false, message: 'Doctor is off duty on this day. Please choose another date.' });
+          }
+        } else if (Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0) {
+          // 3. Fallback to scheduleDays
+          const isWorkingDay = doctor.scheduleDays.some(sd => String(sd).toLowerCase().startsWith(dayNameShort.toLowerCase()));
+          if (!isWorkingDay) {
+            return res.status(400).json({ success: false, message: 'Doctor is off duty on this day. Please choose another date.' });
+          }
+        }
+      }
+    }
+
     let user = null;
     if (req.user && req.user.id) {
       user = await User.findById(req.user.id).select('-password');

@@ -22,6 +22,7 @@ import DoctorProfile from './components/doctors/DoctorProfile';
 import FindHospitals from './components/hospitals/FindHospitals';
 import HospitalProfile from './components/hospitals/HospitalProfile';
 import ComingSoon from './components/common/ComingSoon';
+import PolicyViewerModal from './components/common/PolicyViewerModal';
 import { useData } from './context/useData';
 import { NEW_SEHAT_BUDDY_FAVICON } from './data/faviconDataUri';
 import './styles/global.css';
@@ -90,10 +91,12 @@ const resolveCurrentView = () => {
   }
   if (path.startsWith('/coming-soon/')) {
     const clean = path.replace(/^\/coming-soon\//, '').trim();
+    if (clean === 'contact') return 'site';
     if (clean) return 'coming-soon:' + clean;
   }
   if (hash.startsWith('#/coming-soon/') || hash.startsWith('#coming-soon/')) {
     const clean = hash.replace(/^#\/?coming-soon\//, '').trim();
+    if (clean === 'contact') return 'site';
     if (clean) return 'coming-soon:' + clean;
   }
   if (path === '/lab-tests' || path === '/services/lab-tests' || hash === '#lab-tests') return 'coming-soon:lab-tests';
@@ -104,7 +107,7 @@ const resolveCurrentView = () => {
   if (path === '/care-services' || hash === '#care-services') return 'coming-soon:care-services';
   if (path === '/services' || hash === '#services') return 'coming-soon:all-services';
   if (path === '/about' || hash === '#about') return 'coming-soon:about';
-  if (path === '/contact' || hash === '#contact') return 'coming-soon:contact';
+  if (path === '/contact' || hash === '#contact') return 'site';
   if (path === '/privacy' || hash === '#privacy') return 'coming-soon:privacy';
   if (path === '/terms' || hash === '#terms') return 'coming-soon:terms';
   if (path === '/support' || path === '/provider-support' || hash === '#support') return 'coming-soon:provider-support';
@@ -182,8 +185,9 @@ const parseJwtPayload = (token) => {
     if (parts.length === 3) {
       const base64Url = parts[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
       const jsonPayload = decodeURIComponent(
-        atob(base64)
+        atob(padded)
           .split('')
           .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
           .join('')
@@ -364,7 +368,16 @@ function AppContent() {
     }
 
     let targetPath = '/';
-    if (resolvedView === 'admin') targetPath = '/admin';
+    if (resolvedView === 'admin') {
+      if (resolvedParam) {
+        targetPath = `/admin?tab=${encodeURIComponent(resolvedParam)}`;
+        try {
+          localStorage.setItem('sehat_admin_active_tab', resolvedParam);
+        } catch {}
+      } else {
+        targetPath = '/admin';
+      }
+    }
     else if (resolvedView === 'admin-edit-hospital') targetPath = `/admin/hospitals/${resolvedParam}/edit`;
     else if (resolvedView === 'doctor') targetPath = '/doctor';
     else if (resolvedView === 'hospital') targetPath = '/hospital';
@@ -492,11 +505,19 @@ function AppContent() {
 
   if (currentView.startsWith('coming-soon:')) {
     const feature = currentView.split(':')[1];
+    const isPolicy = feature === 'privacy' || feature === 'terms';
     return (
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
         <ComingSoon featureKey={feature} onNavigate={navigateTo} />
         <Footer onNavigate={navigateTo} />
+        {isPolicy && (
+          <PolicyViewerModal
+            isOpen={true}
+            type={feature}
+            onClose={() => navigateTo('home')}
+          />
+        )}
       </div>
     );
   }

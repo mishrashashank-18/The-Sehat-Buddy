@@ -4,7 +4,8 @@ import {
   GraduationCap, Phone, X, Play, ChevronDown, HelpCircle, ShieldCheck,
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
-  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2, AlertTriangle
+  History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2, AlertTriangle,
+  VolumeX
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { matchesId } from '../../context/DataContext';
@@ -181,62 +182,35 @@ export const formatDoctorExperience = (exp) => {
 export const getBioSentences = (doc) => {
   if (!doc) return [];
 
-  // If doctor has custom about text from dashboard/database, split into sentences/paragraphs cleanly
+  // If doctor has custom about text from dashboard/database, preserve explicit paragraphs
   if (doc.about && typeof doc.about === 'string' && doc.about.trim().length > 0) {
     const rawAbout = doc.about.trim();
     
-    // Split first by line breaks so explicit paragraphs / lines are preserved as separate units
+    // Split first by line breaks so explicit paragraphs / lines entered in dashboard are preserved
     const rawParagraphs = rawAbout.split(/\r?\n+/).map(p => p.trim()).filter(Boolean);
 
-    const sentences = [];
+    // If doctor separated their bio into paragraphs using line breaks, treat each paragraph as a clean unit
+    if (rawParagraphs.length > 1) {
+      return rawParagraphs;
+    }
 
-    // Helper to split any unusually long run-on string (e.g. > 130 chars with no punctuation) into readable clause/line chunks
-    const chunkLongText = (text, maxLen = 130) => {
-      if (text.length <= maxLen) return [text];
-      const words = text.split(/\s+/);
-      const chunks = [];
-      let currentChunk = '';
-      for (const word of words) {
-        if (!currentChunk) {
-          currentChunk = word;
-        } else if ((currentChunk + ' ' + word).length <= maxLen) {
-          currentChunk += ' ' + word;
-        } else {
-          chunks.push(currentChunk);
-          currentChunk = word;
-        }
-      }
-      if (currentChunk) chunks.push(currentChunk);
-      return chunks.length > 0 ? chunks : [text];
-    };
+    // If only 1 paragraph was provided, check if it has multiple complete sentences
+    const singlePara = rawParagraphs[0] || rawAbout;
+    const protectedText = singlePara
+      .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Sr|Jr)\./gi, '$1___DOT___')
+      .replace(/\b(e\.g|i\.e)\./gi, '$1___DOT___');
 
-    for (const paragraph of rawParagraphs) {
-      // Protect common abbreviations (Dr., Prof., Mr., MD., etc.) so they do not trigger premature sentence splits
-      const protectedText = paragraph
-        .replace(/\b(Dr|Prof|Mr|Mrs|Ms|Sr|Jr)\./gi, '$1___DOT___')
-        .replace(/\b(e\.g|i\.e)\./gi, '$1___DOT___');
-
-      // Match sentences ending in ., !, ? or the end of the paragraph
-      const sentenceMatches = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
-      if (sentenceMatches && sentenceMatches.length > 0) {
-        for (const rawMatch of sentenceMatches) {
-          const cleaned = rawMatch.replace(/___DOT___/g, '.').trim();
-          if (cleaned) {
-            // If the sentence is excessively long without punctuation (e.g. run-on text or test strings > 130 chars), chunk it
-            const chunks = chunkLongText(cleaned, 130);
-            sentences.push(...chunks);
-          }
-        }
-      } else {
-        const chunks = chunkLongText(paragraph, 130);
-        sentences.push(...chunks);
+    const sentenceMatches = protectedText.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+    if (sentenceMatches && sentenceMatches.length > 1) {
+      const cleaned = sentenceMatches
+        .map(s => s.replace(/___DOT___/g, '.').trim())
+        .filter(Boolean);
+      if (cleaned.length > 0) {
+        return cleaned;
       }
     }
 
-    if (sentences.length > 0) {
-      return sentences;
-    }
-    return [rawAbout];
+    return [singlePara];
   }
 
   // If no about is written or about is blank in dashboard, do not invent or show placeholder about text
@@ -311,7 +285,7 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
   const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
   const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
-  const effectiveCover = coverPhoto || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
+  const effectiveCover = coverPhoto || (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '');
 
   const isDirect = rawUrl && (rawUrl.includes('cloudinary.com') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl));
 
@@ -393,7 +367,7 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
       onClick={() => onOpen(reelItem)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      title="Hover to preview, click to watch in full view"
+      title="Hover to preview, click to watch with sound"
       style={{
         background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
         position: 'relative'
@@ -404,11 +378,14 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
           src={effectiveCover}
           alt="Instagram Reel"
           className={styles.reelCoverImg}
-          loading="lazy"
+          loading="eager"
           style={{
             opacity: isPlaying ? 0 : 1,
             transition: 'opacity 0.25s ease',
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
           }}
           onError={(e) => {
             e.target.style.display = 'none';
@@ -420,17 +397,20 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
         <video
           ref={videoRef}
           src={videoSrc}
-          poster={coverPhoto}
+          poster={coverPhoto || effectiveCover}
           muted
           playsInline
           loop
-          preload="metadata"
+          preload="auto"
           className={styles.reelHoverVideo}
           style={{
             opacity: isPlaying ? 1 : 0,
             transition: 'opacity 0.25s ease',
             zIndex: 1,
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
           }}
           onPlaying={() => {
             if (isHoveredRef.current) {
@@ -478,15 +458,18 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
   );
 };
 
-// Robust Modal Video Player component for DoctorProfile with anti-pause handling
+// Robust Modal Video Player component for DoctorProfile with anti-pause and reliable audio handling
 const ReelModalPlayer = ({ activeReel, onClose }) => {
   const videoRef = useRef(null);
   const [videoError, setVideoError] = useState(false);
   const [directVideoUrl, setDirectVideoUrl] = useState('');
+  const [isMuted, setIsMuted] = useState(false);
 
   const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
   const isDirect = rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget));
-  const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+  const coverSrc = typeof activeReel === 'object' 
+    ? (activeReel.coverPhoto || activeReel.primaryCover || '') 
+    : (rawTarget ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : '');
 
   useEffect(() => {
     let active = true;
@@ -508,14 +491,56 @@ const ReelModalPlayer = ({ activeReel, onClose }) => {
 
   const modalVideoSrc = directVideoUrl || (isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`);
 
+  const toggleMute = useCallback((e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (videoRef.current) {
+      const nextMuted = !videoRef.current.muted;
+      videoRef.current.muted = nextMuted;
+      if (!nextMuted) {
+        videoRef.current.volume = 1;
+        videoRef.current.play().catch(() => {});
+      }
+      setIsMuted(nextMuted);
+    }
+  }, []);
+
+  const handleVideoClick = useCallback(() => {
+    if (isMuted && videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1;
+      setIsMuted(false);
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'm' || e.key === 'M') {
+        toggleMute();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, toggleMute]);
+
   useEffect(() => {
     setVideoError(false);
     if (videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1;
       const p = videoRef.current.play();
       if (p !== undefined) {
-        p.catch((err) => {
+        p.then(() => {
+          setIsMuted(false);
+        }).catch(() => {
+          // If browser autoplay policy blocks unmuted playback, fallback to muted with prompt
           if (videoRef.current) {
             videoRef.current.muted = true;
+            setIsMuted(true);
             videoRef.current.play().catch(() => {});
           }
         });
@@ -539,6 +564,7 @@ const ReelModalPlayer = ({ activeReel, onClose }) => {
           padding: 0
         }}
       >
+        {/* Close button */}
         <button 
           type="button" 
           onClick={onClose} 
@@ -566,25 +592,78 @@ const ReelModalPlayer = ({ activeReel, onClose }) => {
           <X size={20} />
         </button>
 
-        <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {!videoError ? (
-            <video
-              ref={videoRef}
-              key={modalVideoSrc}
-              src={modalVideoSrc}
-              poster={coverSrc}
-              playsInline
-              controls
-              controlsList="nodownload"
-              onError={() => setVideoError(true)}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-                background: '#000000',
-                display: 'block'
-              }}
-            />
+        <div 
+          onClick={handleVideoClick}
+          style={{ 
+            width: '100%', 
+            height: '76vh', 
+            maxHeight: '680px', 
+            minHeight: '480px', 
+            background: '#000000', 
+            position: 'relative', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center' 
+          }}
+        >
+          {(!videoError && modalVideoSrc && (modalVideoSrc.includes('.mp4') || modalVideoSrc.includes('cloudinary.com') || modalVideoSrc.startsWith('blob:'))) ? (
+            <>
+              <video
+                ref={videoRef}
+                key={modalVideoSrc}
+                src={modalVideoSrc}
+                poster={coverSrc}
+                playsInline
+                preload="auto"
+                controls
+                controlsList="nodownload"
+                onVolumeChange={() => {
+                  if (videoRef.current) {
+                    setIsMuted(videoRef.current.muted || videoRef.current.volume === 0);
+                  }
+                }}
+                onError={() => setVideoError(true)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  background: '#000000',
+                  display: 'block'
+                }}
+              />
+
+              {isMuted && (
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  style={{
+                    position: 'absolute',
+                    bottom: '68px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 25,
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    borderRadius: '9999px',
+                    padding: '8px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(8px)',
+                    letterSpacing: '0.02em',
+                    userSelect: 'none'
+                  }}
+                >
+                  <VolumeX size={18} color="#f43f5e" />
+                  <span>Tap to Unmute</span>
+                </button>
+              )}
+            </>
           ) : (
             <iframe
               src={(() => {
@@ -825,27 +904,23 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [bookingStatus, setBookingStatus] = useState(null); // 'loading', 'success', 'error'
   const [expandedFaq, setExpandedFaq] = useState(null);
 
-  // Doctor's available slots & schedule from database (dynamically synchronized with Available Hours / Days)
+  // Doctor's available slots & schedule from database (configured explicitly by doctor or admin)
   const configuredSlots = React.useMemo(() => {
-    if (doctor?.availableDays) {
-      const parsed = parseAvailableDaysAndHours(doctor.availableDays, doctor.slotDuration || 30);
-      if (parsed.slots.length > 0) return parsed.slots;
-    }
     if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
       return doctor.availableSlots;
     }
-    return ['10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM'];
-  }, [doctor?.availableSlots, doctor?.availableDays, doctor?.slotDuration]);
+    return [];
+  }, [doctor?.availableSlots]);
 
   const configuredDays = React.useMemo(() => {
-    if (doctor?.availableDays) {
-      const parsed = parseAvailableDaysAndHours(doctor.availableDays);
-      if (parsed.days.length > 0) return parsed.days;
-    }
     if (Array.isArray(doctor?.scheduleDays) && doctor.scheduleDays.length > 0) {
       return doctor.scheduleDays;
     }
-    return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    if (doctor?.availableDays) {
+      const parsed = parseAvailableDaysAndHours(doctor.availableDays);
+      if (parsed.days && parsed.days.length > 0) return parsed.days;
+    }
+    return [];
   }, [doctor?.scheduleDays, doctor?.availableDays]);
 
   // Helper to resolve specific slots for any date (Date-wise > Day-wise > Default Standard)
@@ -879,10 +954,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
     // 3. Fallback to standard scheduleDays and availableSlots
     const isWorkingDay = configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
+    const hasSlots = configuredSlots.length > 0;
     return {
-      isWorkingDay,
+      isWorkingDay: isWorkingDay && hasSlots,
       slots: isWorkingDay ? configuredSlots : [],
-      statusText: isWorkingDay ? `${configuredSlots.length} Slots` : 'Off',
+      statusText: isWorkingDay ? (hasSlots ? `${configuredSlots.length} Slots` : 'No Slots') : 'Off',
       isCustom: false
     };
   }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
@@ -991,6 +1067,13 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       setSelectedTimeSlot('');
     }
   }, [currentDaySlots, selectedDateIdx]);
+
+  // Derived booking status for currently selected date
+  const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
+  const isDayOff = Boolean(activeDateObj && activeDateObj.isWorkingDay === false);
+  const isAllBooked = !isDayOff && currentDaySlots.length > 0 && currentDaySlots.filter(s => !s.isBooked).length === 0;
+  const isNoSlotsConfigured = !isDayOff && currentDaySlots.length === 0;
+  const canBookAppointment = !isDayOff && !isAllBooked && !isNoSlotsConfigured && Boolean(selectedTimeSlot);
 
   // Stable bio sentence management with clean More/Less toggle (flicker-free)
   const [visibleSentenceCount, setVisibleSentenceCount] = useState(2);
@@ -1130,19 +1213,37 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       localStorage.removeItem('pendingBooking');
     }
 
-    // Auto-open booking modal if arriving from "Book Now"
+    // Auto-open booking modal if arriving from "Book Now" and doctor is available
     if (localStorage.getItem('autoOpenBooking') === 'true') {
-      setShowBookingModal(true);
       localStorage.removeItem('autoOpenBooking');
+      const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
+      if (activeObj && activeObj.isWorkingDay !== false && selectedTimeSlot) {
+        setShowBookingModal(true);
+      }
     }
-  }, [doctorId]);
+  }, [doctorId, dateOptions, selectedDateIdx, selectedTimeSlot]);
 
 
   const handleBookNow = () => {
+    const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    if (activeObj && activeObj.isWorkingDay === false) {
+      alert('Doctor is off duty on this day. Please choose another date.');
+      return;
+    }
+    if (!selectedTimeSlot) {
+      alert('Please select an available time slot before booking.');
+      return;
+    }
     setShowBookingModal(true);
   };
 
   const processBooking = async (slotDate, slotTime, type = consultationType) => {
+    const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    if (activeObj && activeObj.isWorkingDay === false) {
+      alert('Doctor is off duty on this day. Please choose another date.');
+      return;
+    }
+
     setBookingStatus('loading');
     const token = localStorage.getItem('token');
     
@@ -1194,11 +1295,15 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const submitBooking = async (e) => {
     e.preventDefault();
     const chosenDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    const chosenDate = chosenDateObj.dateStr;
+    if (chosenDateObj && chosenDateObj.isWorkingDay === false) {
+      alert('Doctor is off duty on this day. Please choose another date.');
+      return;
+    }
+    const chosenDate = chosenDateObj?.dateStr;
     const chosenTime = selectedTimeSlot;
 
     if (!chosenDate || !chosenTime) {
-      alert('Please select date and time');
+      alert('Please select date and an available time slot');
       return;
     }
 
@@ -1964,16 +2069,36 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
             <div className={styles.bookingCtaWrapper}>
               <button 
                 type="button" 
-                className={styles.bookAppointmentBtn}
+                disabled={!canBookAppointment}
+                className={`${styles.bookAppointmentBtn} ${!canBookAppointment ? styles.bookAppointmentBtnDisabled : ''}`}
                 onClick={handleBookNow}
+                title={
+                  isDayOff
+                    ? 'Doctor is off duty on this day. Please choose another date.'
+                    : isAllBooked
+                    ? 'All slots are fully booked for this day. Please choose another date.'
+                    : isNoSlotsConfigured
+                    ? 'No slots configured for this day.'
+                    : !selectedTimeSlot
+                    ? 'Please select an available time slot.'
+                    : 'Click to book your appointment'
+                }
               >
-                <span>Book Appointment</span>
-                <ArrowRight size={16} />
+                <span>
+                  {isDayOff 
+                    ? 'Doctor is Off Duty' 
+                    : isAllBooked 
+                    ? 'Fully Booked' 
+                    : isNoSlotsConfigured 
+                    ? 'No Slots Available' 
+                    : 'Book Appointment'}
+                </span>
+                {canBookAppointment && <ArrowRight size={16} />}
               </button>
               <div className={styles.bookingGuaranteesRow}>
                 <span className={styles.guaranteeItem}>
-                  <CheckCircle2 size={12} color="#059669" />
-                  <span>Instant Confirmation</span>
+                  <CheckCircle2 size={12} color={canBookAppointment ? "#059669" : "#94a3b8"} />
+                  <span>{isDayOff ? "Doctor is off duty on this day" : "Instant Confirmation"}</span>
                 </span>
               </div>
             </div>
@@ -2545,13 +2670,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                       </div>
                     </div>
                     <div className={styles.faqSupportActions}>
-                      <a href="tel:+919876543210" className={styles.faqSupportPhoneBtn}>
+                      <a 
+                        href={`tel:${String(doctor.helplineNumber || doctor.phone || doctor.contact_number || '+919876543210').replace(/[^0-9+]/g, '')}`} 
+                        className={styles.faqSupportPhoneBtn}
+                      >
                         <Phone size={14} />
-                        <span>Call Clinic Desk: +91 98765 43210</span>
+                        <span>Call Clinic Desk: {doctor.helplineNumber || doctor.phone || doctor.contact_number || '+91 98765 43210'}</span>
                       </a>
                       <div className={styles.faqSupportHours}>
                         <Clock size={12} color="#64748b" />
-                        <span>Mon – Sat • 8:00 AM – 8:00 PM</span>
+                        <span>{doctor.helplineDays || 'Mon – Sat'} • {doctor.helplineTime || '8:00 AM – 8:00 PM'}</span>
                       </div>
                     </div>
                   </div>
@@ -2609,26 +2737,15 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           icon: resolveFaqIcon(f, i),
                           category: f.category || defaultCategories[i % defaultCategories.length] || 'Doctor FAQ',
                           q: f.question,
-                          a: f.answer
+                          a: f.answer,
+                          steps: f.steps,
+                          note: f.note
                         }));
-
-                      const docHosp = (doctor.hospital || '').toLowerCase().trim();
-                      const hospitalTargetedFaqs = docHosp ? (faqs || [])
-                        .filter(f => f.isActive && f.targetType === 'hospital' && (
-                          (f.targetName && f.targetName.toLowerCase().trim() === docHosp) ||
-                          (doctor.hospitalId && f.targetId && String(f.targetId) === String(doctor.hospitalId))
-                        ))
-                        .map((f, i) => ({
-                          icon: resolveFaqIcon(f, specificDoctorFaqs.length + i),
-                          category: f.category || `${doctor.hospital} FAQ`,
-                          q: f.question,
-                          a: f.answer
-                        })) : [];
 
                       const embeddedDocFaqs = (Array.isArray(doctor?.faqs) && doctor.faqs.length > 0)
                         ? doctor.faqs.map((f, i) => ({
-                            icon: resolveFaqIcon(f, specificDoctorFaqs.length + hospitalTargetedFaqs.length + i),
-                            category: f.category || defaultCategories[(specificDoctorFaqs.length + hospitalTargetedFaqs.length + i) % defaultCategories.length] || 'General FAQ',
+                            icon: resolveFaqIcon(f, specificDoctorFaqs.length + i),
+                            category: f.category || defaultCategories[(specificDoctorFaqs.length + i) % defaultCategories.length] || 'Doctor FAQ',
                             q: f.q || f.question,
                             a: f.a || f.answer,
                             steps: f.steps,
@@ -2636,7 +2753,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           }))
                         : [];
 
-                      const faqsToRender = [...specificDoctorFaqs, ...hospitalTargetedFaqs, ...embeddedDocFaqs];
+                      // Only doctor FAQs are shown on doctor profile (deduplicated by question text)
+                      const seenQuestions = new Set();
+                      const faqsToRender = [];
+                      for (const faq of [...embeddedDocFaqs, ...specificDoctorFaqs]) {
+                        const qKey = (faq.q || '').trim().toLowerCase();
+                        if (qKey && !seenQuestions.has(qKey)) {
+                          seenQuestions.add(qKey);
+                          faqsToRender.push(faq);
+                        }
+                      }
 
                       if (faqsToRender.length === 0) {
                         return (

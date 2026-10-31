@@ -31,6 +31,7 @@ const PopularDoctorActionButtons = React.memo(({
 }) => {
   const docId = String(doctor?._id || doctor?.id || '');
   const serverPopular = isPopular !== undefined ? Boolean(isPopular) : Boolean(doctor?.isStarDoctor);
+  const serverStarTs = Number(doctor?.starUpdatedAt || 0);
 
   // Local optimistic state for instant UI response without flashing
   const [currentPopular, setCurrentPopular] = useState(serverPopular);
@@ -39,6 +40,7 @@ const PopularDoctorActionButtons = React.memo(({
   // Ref tracking latest user intended state across rapid clicks (prevents stale closures)
   const latestPopularRef = useRef(serverPopular);
   const lastUserActionTimestampRef = useRef(0);
+  const latestAppliedStarTsRef = useRef(serverStarTs);
   const activeSequenceRef = useRef(0);
   const inFlightCountRef = useRef(0);
   const isMountedRef = useRef(true);
@@ -51,17 +53,20 @@ const PopularDoctorActionButtons = React.memo(({
   }, []);
 
   // Synchronize with external prop updates only when there are no pending in-flight user mutations
-  // and protect against stale parent props / out-of-order broadcasts within a 3.5s grace window
+  // and protect against stale parent props / out-of-order broadcasts
   useEffect(() => {
     if (inFlightCountRef.current === 0) {
-      const timeSinceUserAction = Date.now() - (lastUserActionTimestampRef.current || 0);
-      if (timeSinceUserAction < 3500 && serverPopular !== latestPopularRef.current) {
-        return;
+      if (serverStarTs > latestAppliedStarTsRef.current) {
+        latestAppliedStarTsRef.current = serverStarTs;
+        latestPopularRef.current = serverPopular;
+        setCurrentPopular(serverPopular);
+      } else if (lastUserActionTimestampRef.current === 0) {
+        latestAppliedStarTsRef.current = Math.max(latestAppliedStarTsRef.current, serverStarTs);
+        latestPopularRef.current = serverPopular;
+        setCurrentPopular(serverPopular);
       }
-      latestPopularRef.current = serverPopular;
-      setCurrentPopular(serverPopular);
     }
-  }, [serverPopular]);
+  }, [serverPopular, serverStarTs]);
 
   const handleAction = useCallback(async (e, targetValue) => {
     e.preventDefault();
@@ -76,7 +81,9 @@ const PopularDoctorActionButtons = React.memo(({
 
     // Increment request sequence counter, record action timestamp, and increment in-flight count
     const currentSeq = ++activeSequenceRef.current;
-    lastUserActionTimestampRef.current = Date.now();
+    const now = Date.now();
+    lastUserActionTimestampRef.current = now;
+    latestAppliedStarTsRef.current = Math.max(now, latestAppliedStarTsRef.current + 1);
     inFlightCountRef.current += 1;
 
     // Explicit, non-toggle assignment
@@ -127,8 +134,10 @@ const PopularDoctorActionButtons = React.memo(({
       }
     } finally {
       inFlightCountRef.current = Math.max(0, inFlightCountRef.current - 1);
-      if (inFlightCountRef.current === 0) {
+      if (inFlightCountRef.current === 0 && isMountedRef.current) {
         setIsPending(false);
+        lastUserActionTimestampRef.current = 0;
+        latestAppliedStarTsRef.current = Math.max(latestAppliedStarTsRef.current, Number(doctor?.starUpdatedAt || 0));
         setCurrentPopular(latestPopularRef.current);
       }
     }

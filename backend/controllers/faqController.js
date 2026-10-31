@@ -70,11 +70,6 @@ const DEFAULT_FAQS = [
 
 export const getFaqs = async (req, res) => {
   try {
-    const count = await Faq.countDocuments();
-    if (count === 0) {
-      await Faq.insertMany(DEFAULT_FAQS);
-    }
-
     const { category, activeOnly } = req.query;
     const filter = {};
     if (category && category !== 'All') {

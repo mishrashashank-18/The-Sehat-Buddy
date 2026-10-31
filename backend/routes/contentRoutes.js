@@ -37,10 +37,143 @@ export const seedContentIfEmpty = async () => {
         console.log(`[Content] Auto-seeded "${type}" into database.`);
       }
     }
+
+    const existingContact = await Content.findOne({ type: 'contact' });
+    if (!existingContact) {
+      const defaultContact = {
+        phones: [
+          { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
+          { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
+        ],
+        emails: [
+          { id: 'email-1', label: 'Patient Support', email: 'support@thesehatbuddy.com', isPrimary: true },
+          { id: 'email-2', label: 'General Inquiries', email: 'contact@thesehatbuddy.com', isPrimary: false }
+        ],
+        workingHours: 'Mon – Sat: 8:00 AM – 8:00 PM'
+      };
+      await Content.create({ type: 'contact', data: defaultContact });
+      console.log('[Content] Auto-seeded "contact" info into database.');
+    }
+
+    const existingLegal = await Content.findOne({ type: 'legal_policies' });
+    if (!existingLegal) {
+      const defaultLegal = {
+        privacyPolicy: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
+        },
+        termsAndConditions: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
+        }
+      };
+      await Content.create({ type: 'legal_policies', data: defaultLegal });
+      console.log('[Content] Auto-seeded "legal_policies" into database.');
+    }
   } catch (err) {
     console.warn('[Content] Auto-seed check warning:', err.message);
   }
 };
+
+router.get('/contact', async (req, res) => {
+  try {
+    let doc = await Content.findOne({ type: 'contact' });
+    if (!doc) {
+      const defaultContact = {
+        phones: [
+          { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
+          { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
+        ],
+        emails: [
+          { id: 'email-1', label: 'Patient Support', email: 'support@thesehatbuddy.com', isPrimary: true },
+          { id: 'email-2', label: 'General Inquiries', email: 'contact@thesehatbuddy.com', isPrimary: false }
+        ],
+        workingHours: 'Mon – Sat: 8:00 AM – 8:00 PM'
+      };
+      doc = await Content.create({ type: 'contact', data: defaultContact });
+    }
+    return res.json({ success: true, data: doc.data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/legal-policies', async (req, res) => {
+  try {
+    let doc = await Content.findOne({ type: 'legal_policies' });
+    if (!doc) {
+      const defaultLegal = {
+        privacyPolicy: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
+        },
+        termsAndConditions: {
+          url: '',
+          fileName: '',
+          fileSize: 0,
+          fileSizeFormatted: '',
+          updatedAt: null
+        }
+      };
+      doc = await Content.create({ type: 'legal_policies', data: defaultLegal });
+    }
+    return res.json({ success: true, data: doc.data });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/**
+ * Stream/View policy PDF inline in browser with strict inline headers
+ * Prevents forced file download on client machines
+ */
+router.get('/view-document/:type', async (req, res) => {
+  try {
+    const rawType = (req.params.type || '').toLowerCase();
+    const isPrivacy = rawType === 'privacy' || rawType === 'privacypolicy';
+    const isTerms = rawType === 'terms' || rawType === 'termsandconditions';
+
+    if (!isPrivacy && !isTerms) {
+      return res.status(400).json({ success: false, message: 'Invalid document type. Must be "privacy" or "terms".' });
+    }
+
+    const doc = await Content.findOne({ type: 'legal_policies' });
+    const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
+    const policyData = doc?.data?.[policyKey];
+
+    if (!policyData || !policyData.url) {
+      return res.status(404).json({ success: false, message: 'No custom PDF has been uploaded for this document.' });
+    }
+
+    const docUrl = policyData.url;
+
+    // 1. If local file stored in uploads
+    if (docUrl.startsWith('/uploads/') || docUrl.startsWith('uploads/')) {
+      const cleanRel = docUrl.replace(/^\/?uploads\//, '');
+      const absPath = path.resolve(__dirname, '../uploads', cleanRel);
+      if (fs.existsSync(absPath)) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || 'policy.pdf') + '"');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        return res.sendFile(absPath);
+      }
+    }
+
+    // 2. If Cloudinary or external URL
+    return res.redirect(docUrl);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 router.get('/', async (req, res) => {
   try {

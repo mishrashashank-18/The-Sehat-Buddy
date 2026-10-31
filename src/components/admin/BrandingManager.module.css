@@ -340,7 +340,7 @@
 /* Action Buttons Bar */
 .actionBar {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   gap: 16px;
   padding-top: 16px;
@@ -650,6 +650,36 @@
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+}
+
+.socialSaveCardBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: #2563eb;
+  color: #ffffff;
+  border: 1px solid #1d4ed8;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.2);
+}
+
+.socialSaveCardBtn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.3);
+}
+
+.socialSaveCardBtnSuccess {
+  background: #16a34a !important;
+  border-color: #15803d !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.25) !important;
 }
 
 .socialToggleBtn {

@@ -44,6 +44,8 @@ import {
   CalendarDays,
   Check,
   AlertCircle,
+  PhoneCall,
+  KeyRound,
   X
 } from 'lucide-react';
 import { api } from '../../services/api';
@@ -56,8 +58,8 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 import FrontPageEditor from './FrontPageEditor';
 import FaqFormModal, { FAQ_ICON_OPTIONS } from './FaqFormModal';
 import ReviewFormModal from './ReviewFormModal';
-import SpecialityFormModal from './SpecialityFormModal';
 import BrandingManager from './BrandingManager';
+import LegalPoliciesManager from './LegalPoliciesManager';
 import DoctorHistoryModal from './DoctorHistoryModal';
 import PopularDoctorActionButtons from './PopularDoctorActionButtons';
 import HospitalHomeStatusControl from './HospitalHomeStatusControl';
@@ -107,19 +109,24 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     addReview,
     updateReview,
     deleteReview,
-    specialitiesProcedures,
-    addSpecialityProcedure,
-    updateSpecialityProcedure,
-    deleteSpecialityProcedure,
     refreshDoctors,
-    refreshHospitals
+    refreshHospitals,
+    contactInfo,
+    legalPolicies
   } = useData();
 
-  // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'content' | 'branding' | 'faqs' | 'reviews' | 'specialities'
+  // Navigation tab: 'overview' | 'doctors' | 'hospitals' | 'appointments' | 'content' | 'branding' | 'contact' | 'faqs' | 'reviews' | 'legal'
   const [activeTab, setActiveTabState] = useState(() => {
     try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam && ['overview', 'doctors', 'hospitals', 'appointments', 'content', 'branding', 'contact', 'faqs', 'reviews', 'legal'].includes(tabParam)) {
+        return tabParam;
+      }
       const saved = localStorage.getItem('sehat_admin_active_tab') || 'overview';
-      return saved === 'corporate' ? 'content' : saved;
+      if (saved === 'corporate') return 'content';
+      if (saved === 'specialities') return 'doctors';
+      return saved;
     } catch {}
     return 'overview';
   });
@@ -129,6 +136,65 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       localStorage.setItem('sehat_admin_active_tab', tab);
     } catch {}
     setActiveTabState(tab);
+  };
+
+  // Change Password Modal State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [passwordStatus, setPasswordStatus] = useState({ loading: false, error: '', success: '' });
+  const [showCurrentPass, setShowCurrentPass] = useState(false);
+  const [showNewPass, setShowNewPass] = useState(false);
+
+  const handleChangeAdminPassword = async (e) => {
+    e.preventDefault();
+    setPasswordStatus({ loading: false, error: '', success: '' });
+
+    if (!currentPassword) {
+      setPasswordStatus({ loading: false, error: 'Please enter your current password.', success: '' });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordStatus({ loading: false, error: 'New password must be at least 6 characters.', success: '' });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordStatus({ loading: false, error: 'New passwords do not match.', success: '' });
+      return;
+    }
+
+    setPasswordStatus({ loading: true, error: '', success: '' });
+    try {
+      const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
+      const res = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.token) {
+          localStorage.setItem('admin_token', data.token);
+          localStorage.setItem('token', data.token);
+        }
+        setPasswordStatus({ loading: false, error: '', success: 'Password changed successfully!' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setTimeout(() => {
+          setIsChangePasswordOpen(false);
+          setPasswordStatus({ loading: false, error: '', success: '' });
+        }, 1800);
+      } else {
+        setPasswordStatus({ loading: false, error: data.message || 'Failed to change password.', success: '' });
+      }
+    } catch (err) {
+      setPasswordStatus({ loading: false, error: 'Error connecting to server. Please try again.', success: '' });
+    }
   };
 
   // Search & Filters for Doctors
@@ -383,12 +449,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [preselectedReviewDoctor, setPreselectedReviewDoctor] = useState(null);
   const [forcedReviewType, setForcedReviewType] = useState(null);
 
-  // Search & Filters for Specialities & Procedures
-  const [specSearch, setSpecSearch] = useState('');
-  const [specTypeFilter, setSpecTypeFilter] = useState('all');
-  const [isSpecModalOpen, setIsSpecModalOpen] = useState(false);
-  const [specToEdit, setSpecToEdit] = useState(null);
-
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
     type: null, // 'doctor' | 'hospital' | 'faq' | 'review' | 'speciality' | 'reset'
@@ -627,7 +687,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
 
   // Unified system FAQs: Portal FAQs + Doctor-specific FAQs from database
   const allSystemFaqs = useMemo(() => {
-    const list = [...(faqs || [])];
+    const list = (faqs || []).filter(f => f.targetType === 'doctor' || f.targetType === 'hospital');
     (doctors || []).forEach(doc => {
       if (Array.isArray(doc.faqs) && doc.faqs.length > 0) {
         doc.faqs.forEach((df, idx) => {
@@ -744,18 +804,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const doctorReviewsCount = useMemo(() => (reviews || []).filter(r => r.targetType === 'doctor').length, [reviews]);
   const hospitalReviewsCount = useMemo(() => (reviews || []).filter(r => r.targetType === 'hospital').length, [reviews]);
 
-  // Filtered Specialities & Procedures
-  const filteredSpecialitiesProcedures = useMemo(() => {
-    const q = specSearch.toLowerCase().trim();
-    return (specialitiesProcedures || []).filter(sp => {
-      const matchType = specTypeFilter === 'all' || sp.type === specTypeFilter;
-      const matchSearch = !q ||
-        (sp.name || '').toLowerCase().includes(q) ||
-        (sp.description || '').toLowerCase().includes(q);
-      return matchType && matchSearch;
-    });
-  }, [specialitiesProcedures, specTypeFilter, specSearch]);
-
   // Handlers for Doctor actions
   const handleOpenAddDoctor = () => {
     setDoctorToEdit(null);
@@ -818,13 +866,29 @@ const AdminPanel = ({ onExit, onNavigate }) => {
       if (itemToDelete.isEmbeddedDoctorFaq && itemToDelete.doctorId) {
         const doc = doctors.find(d => matchesId(d, itemToDelete.doctorId));
         if (doc && Array.isArray(doc.faqs)) {
-          const updatedFaqs = doc.faqs.filter((_, idx) => idx !== itemToDelete.doctorFaqIndex);
+          const qToDelete = (itemToDelete.question || itemToDelete.q || '').trim().toLowerCase();
+          const updatedFaqs = doc.faqs.filter((f, idx) => {
+            if (itemToDelete.doctorFaqIndex !== undefined && idx === itemToDelete.doctorFaqIndex) return false;
+            const fQ = (f.question || f.q || '').trim().toLowerCase();
+            if (qToDelete && fQ === qToDelete) return false;
+            return true;
+          });
           await updateDoctor(doc._id || doc.id, { faqs: updatedFaqs });
-          showToast(`Doctor FAQ deleted successfully.`);
+          showToast(`Doctor FAQ deleted successfully from database.`);
         }
       } else {
-        deleteFaq(itemToDelete.id || itemToDelete._id);
-        showToast('FAQ deleted successfully.');
+        await deleteFaq(itemToDelete.id || itemToDelete._id);
+        if (itemToDelete.targetType === 'doctor' && itemToDelete.targetId) {
+          const doc = doctors.find(d => matchesId(d, itemToDelete.targetId));
+          if (doc && Array.isArray(doc.faqs)) {
+            const qToDelete = (itemToDelete.question || itemToDelete.q || '').trim().toLowerCase();
+            const updatedFaqs = doc.faqs.filter(f => (f.question || f.q || '').trim().toLowerCase() !== qToDelete);
+            if (updatedFaqs.length !== doc.faqs.length) {
+              await updateDoctor(doc._id || doc.id, { faqs: updatedFaqs });
+            }
+          }
+        }
+        showToast('FAQ deleted successfully from database.');
       }
     } else if (typeToDelete === 'review') {
       try {
@@ -920,6 +984,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             Hospital Dashboard
           </button>
 
+          <button 
+            className={styles.portalNavBtn}
+            onClick={() => {
+              setIsChangePasswordOpen(true);
+              setPasswordStatus({ loading: false, error: '', success: '' });
+              setCurrentPassword('');
+              setNewPassword('');
+              setConfirmNewPassword('');
+            }}
+            title="Change Admin Password"
+            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <KeyRound size={15} />
+            <span>Change Password</span>
+          </button>
+
           <button className={styles.viewSiteBtn} onClick={onExit}>
             <span>View Website</span>
             <ExternalLink size={16} />
@@ -1005,12 +1085,32 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             </button>
 
             <button
+              className={`${styles.navItem} ${activeTab === 'contact' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('contact')}
+            >
+              <PhoneCall size={20} />
+              <span>Contact Us Info</span>
+              <span className={styles.navCount}>{(contactInfo?.phones?.length || 0) + (contactInfo?.emails?.length || 0)}</span>
+            </button>
+
+            <button
+              className={`${styles.navItem} ${activeTab === 'legal' ? styles.navItemActive : ''}`}
+              onClick={() => setActiveTab('legal')}
+            >
+              <ShieldCheck size={20} />
+              <span>Legal Policies & Terms</span>
+              {(legalPolicies?.privacyPolicy?.url || legalPolicies?.termsAndConditions?.url) && (
+                <span className={styles.navCount} style={{ background: '#dcfce7', color: '#15803d' }}>PDF</span>
+              )}
+            </button>
+
+            <button
               className={`${styles.navItem} ${activeTab === 'faqs' ? styles.navItemActive : ''}`}
               onClick={() => setActiveTab('faqs')}
             >
               <HelpCircle size={20} />
               <span>FAQs Management</span>
-              <span className={styles.navCount}>{faqs.length}</span>
+              <span className={styles.navCount}>{allSystemFaqs.length}</span>
             </button>
 
             <button
@@ -1020,15 +1120,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               <MessageSquare size={20} />
               <span>Public Reviews</span>
               <span className={styles.navCount}>{reviews.length}</span>
-            </button>
-
-            <button
-              className={`${styles.navItem} ${activeTab === 'specialities' ? styles.navItemActive : ''}`}
-              onClick={() => setActiveTab('specialities')}
-            >
-              <Activity size={20} />
-              <span>Specialities & Surgeries</span>
-              <span className={styles.navCount}>{specialitiesProcedures.length}</span>
             </button>
           </div>
 
@@ -1049,16 +1140,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               }}
             >
               <Plus size={16} /> Add FAQ
-            </button>
-            <button
-              className={styles.quickDoctorBtn}
-              style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}
-              onClick={() => {
-                setSpecToEdit(null);
-                setIsSpecModalOpen(true);
-              }}
-            >
-              <Plus size={16} /> Add Speciality / Surgery
             </button>
             <button
               className={styles.quickDoctorBtn}
@@ -1827,6 +1908,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                               </button>
                               <PopularDoctorActionButtons
                                 doctor={doc}
+                                isPopular={Boolean(doc.isStarDoctor)}
                                 onToggle={(id, nextVal, extra) => updateDoctor(id, { isStarDoctor: nextVal, ...extra })}
                                 showToast={showToast}
                               />
@@ -3144,7 +3226,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                   <Search size={18} className={styles.searchIcon} />
                   <input
                     type="text"
-                    placeholder="Search by patient name, doctor, hospital, surgery, treatment..."
+                    placeholder="Search by patient name, doctor, hospital, treatment..."
                     value={reviewSearch}
                     onChange={(e) => setReviewSearch(e.target.value)}
                   />
@@ -3316,143 +3398,19 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               </div>
             </div>
 
-          {/* TAB 8: SPECIALITIES & SURGERIES */}
-          <div className={styles.viewSection} style={{ display: activeTab === 'specialities' ? 'block' : 'none' }}>
-              <div className={styles.viewHeader}>
-                <div>
-                  <h1 className={styles.pageTitle}>Specialities & Procedures (Surgeries)</h1>
-                  <p className={styles.pageSubtitle}>Manage clinical departments, surgical procedures, and cashless insurance coverage parameters.</p>
-                </div>
-                <div className={styles.headerBtnGroup}>
-                  <button
-                    className={styles.primaryActionBtn}
-                    onClick={() => {
-                      setSpecToEdit(null);
-                      setIsSpecModalOpen(true);
-                    }}
-                  >
-                    <Plus size={16} /> Add Speciality / Surgery
-                  </button>
-                </div>
-              </div>
-
-              {/* Filters */}
-              <div className={styles.filterBar}>
-                <div className={styles.searchBox}>
-                  <Search size={18} className={styles.searchIcon} />
-                  <input
-                    type="text"
-                    placeholder="Search specialities, procedures, surgeries..."
-                    value={specSearch}
-                    onChange={(e) => setSpecSearch(e.target.value)}
-                  />
-                  {specSearch && (
-                    <button className={styles.clearSearch} onClick={() => setSpecSearch('')}>×</button>
-                  )}
-                </div>
-                <div className={styles.filterGroup}>
-                  <Filter size={16} className={styles.filterIcon} />
-                  <select
-                    value={specTypeFilter}
-                    onChange={(e) => setSpecTypeFilter(e.target.value)}
-                    className={styles.filterSelect}
-                  >
-                    <option value="all">All Items ({specialitiesProcedures.length})</option>
-                    <option value="speciality">Specialities Only</option>
-                    <option value="procedure">Procedures / Surgeries Only</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Cards Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px', marginTop: '16px' }}>
-                {filteredSpecialitiesProcedures.map((sp) => (
-                    <div
-                      key={sp.id || sp._id}
-                      style={{
-                        background: '#ffffff',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '14px',
-                        padding: '18px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <span style={{
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            textTransform: 'uppercase',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: sp.type === 'procedure' ? '#eff6ff' : '#f0fdf4',
-                            color: sp.type === 'procedure' ? '#2563eb' : '#059669',
-                            display: 'inline-block',
-                            marginBottom: '4px'
-                          }}>
-                            {sp.type === 'procedure' ? 'Surgical Procedure' : 'Medical Speciality'}
-                          </span>
-                          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>
-                            {sp.name}
-                          </h4>
-                        </div>
-
-                        <span style={{ fontSize: '0.8rem', background: '#f8fafc', padding: '4px 8px', borderRadius: '6px', color: '#64748b' }}>
-                          Icon: {sp.icon || 'Bot'}
-                        </span>
-                      </div>
-
-                      <div style={{ background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        <span style={{ color: '#059669', fontWeight: 700 }}>
-                          🛡️ {sp.insuranceDetails?.coveragePercent || 'Cashless Available'}
-                        </span>
-                        <span style={{ color: '#475569' }}>
-                          Cost: <strong>{sp.insuranceDetails?.estimatedCostRange || '₹45,000 - ₹90,000'}</strong>
-                        </span>
-                        <span style={{ color: '#64748b' }}>
-                          Pre-Auth: {sp.insuranceDetails?.preAuthHours || '30 Mins'}
-                        </span>
-                      </div>
-
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', lineHeight: 1.45 }}>
-                        {sp.description}
-                      </p>
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSpecToEdit(sp);
-                            setIsSpecModalOpen(true);
-                          }}
-                          style={{ background: '#f1f5f9', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.8rem', fontWeight: 600, color: '#2563eb', cursor: 'pointer' }}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDeleteModalState({
-                              isOpen: true,
-                              type: 'speciality',
-                              item: sp
-                            });
-                          }}
-                          style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', padding: '5px 10px', fontSize: '0.8rem', color: '#ef4444', cursor: 'pointer' }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-          {/* TAB 9: SITE IDENTITY & LOGO */}
+          {/* TAB 8: SITE IDENTITY & LOGO */}
           <div className={styles.viewSection} style={{ display: activeTab === 'branding' ? 'block' : 'none' }}>
             <BrandingManager showToast={showToast} />
+          </div>
+
+          {/* TAB 9: CONTACT US INFO & HELPLINES */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'contact' ? 'block' : 'none' }}>
+            <FrontPageEditor showToast={showToast} initialSubTab="contact" hideSubTabs={true} />
+          </div>
+
+          {/* TAB 10: LEGAL POLICIES & TERMS (PDFs UP TO 25MB) */}
+          <div className={styles.viewSection} style={{ display: activeTab === 'legal' ? 'block' : 'none' }}>
+            <LegalPoliciesManager showToast={showToast} />
           </div>
         </main>
       </div>
@@ -3479,13 +3437,53 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         <FaqFormModal
           faqToEdit={faqToEdit}
           onClose={() => setIsFaqModalOpen(false)}
-          onSave={(data) => {
+          onSave={async (data) => {
             if (faqToEdit) {
-              updateFaq(faqToEdit.id || faqToEdit._id, data);
-              showToast('FAQ updated successfully!');
+              if (faqToEdit.isEmbeddedDoctorFaq && faqToEdit.doctorId) {
+                const doc = doctors.find(d => matchesId(d, faqToEdit.doctorId));
+                if (doc && Array.isArray(doc.faqs)) {
+                  const updatedFaqs = [...doc.faqs];
+                  const targetIdx = faqToEdit.doctorFaqIndex;
+                  const newFaqObj = {
+                    q: data.question,
+                    question: data.question,
+                    a: data.answer,
+                    answer: data.answer,
+                    category: data.category,
+                    icon: data.icon,
+                    image: data.image
+                  };
+                  if (targetIdx !== undefined && targetIdx >= 0 && targetIdx < updatedFaqs.length) {
+                    updatedFaqs[targetIdx] = newFaqObj;
+                  } else {
+                    updatedFaqs.push(newFaqObj);
+                  }
+                  await updateDoctor(doc._id || doc.id, { faqs: updatedFaqs });
+                  showToast('Doctor FAQ updated successfully in database!');
+                }
+              } else {
+                await updateFaq(faqToEdit.id || faqToEdit._id, data);
+                showToast('FAQ updated successfully in database!');
+              }
             } else {
-              addFaq(data);
-              showToast('New FAQ added successfully!');
+              await addFaq(data);
+              if (data.targetType === 'doctor' && data.targetId) {
+                const doc = doctors.find(d => matchesId(d, data.targetId));
+                if (doc) {
+                  const currentFaqs = Array.isArray(doc.faqs) ? [...doc.faqs] : [];
+                  currentFaqs.push({
+                    q: data.question,
+                    question: data.question,
+                    a: data.answer,
+                    answer: data.answer,
+                    category: data.category,
+                    icon: data.icon,
+                    image: data.image
+                  });
+                  await updateDoctor(doc._id || doc.id, { faqs: currentFaqs });
+                }
+              }
+              showToast('New FAQ added and saved to database successfully!');
             }
             setIsFaqModalOpen(false);
           }}
@@ -3521,23 +3519,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         />
       )}
 
-      {isSpecModalOpen && (
-        <SpecialityFormModal
-          itemToEdit={specToEdit}
-          onClose={() => setIsSpecModalOpen(false)}
-          onSave={(data) => {
-            if (specToEdit) {
-              updateSpecialityProcedure(specToEdit.id || specToEdit._id, data);
-              showToast('Speciality / Procedure updated successfully!');
-            } else {
-              addSpecialityProcedure(data);
-              showToast('New Speciality / Procedure created successfully!');
-            }
-            setIsSpecModalOpen(false);
-          }}
-        />
-      )}
-
       {selectedDoctorForHistory && (
         <DoctorHistoryModal
           doctor={selectedDoctorForHistory}
@@ -3553,7 +3534,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         title={
           deleteModalState.type === 'reset'
             ? 'Reset to Default Seeds?'
-            : `Delete ${deleteModalState.type === 'doctor' ? 'Doctor' : deleteModalState.type === 'hospital' ? 'Hospital' : deleteModalState.type === 'faq' ? 'FAQ' : deleteModalState.type === 'review' ? 'Review' : 'Speciality'}?`
+            : `Delete ${deleteModalState.type === 'doctor' ? 'Doctor' : deleteModalState.type === 'hospital' ? 'Hospital' : deleteModalState.type === 'faq' ? 'FAQ' : 'Review'}?`
         }
         message={
           deleteModalState.type === 'reset'
@@ -3562,6 +3543,286 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         }
         itemName={deleteModalState.item?.name || deleteModalState.item?.question || deleteModalState.item?.patientName}
       />
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !passwordStatus.loading) {
+              setIsChangePasswordOpen(false);
+            }
+          }}
+        >
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            maxWidth: '460px',
+            width: '100%',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '18px 24px',
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  backgroundColor: '#eff6ff',
+                  color: '#2563eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  <KeyRound size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>Change Password</h3>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Update your administrator account password</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsChangePasswordOpen(false)}
+                disabled={passwordStatus.loading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  padding: '4px',
+                  borderRadius: '6px'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleChangeAdminPassword} style={{ padding: '24px' }}>
+              {passwordStatus.error && (
+                <div style={{
+                  background: '#fef2f2',
+                  color: '#b91c1c',
+                  border: '1px solid #fecaca',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px'
+                }}>
+                  {passwordStatus.error}
+                </div>
+              )}
+
+              {passwordStatus.success && (
+                <div style={{
+                  background: '#ecfdf5',
+                  color: '#065f46',
+                  border: '1px solid #a7f3d0',
+                  padding: '10px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <CheckCircle2 size={16} />
+                  <span>{passwordStatus.success}</span>
+                </div>
+              )}
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  Current Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showCurrentPass ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    required
+                    placeholder="Enter current password"
+                    style={{
+                      width: '100%',
+                      padding: '10px 40px 10px 12px',
+                      border: '1.5px solid #cbd5e1',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPass(!showCurrentPass)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#94a3b8'
+                    }}
+                  >
+                    {showCurrentPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <div style={{ marginTop: '4px', textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsChangePasswordOpen(false);
+                      localStorage.removeItem('admin_token');
+                      localStorage.removeItem('admin_user');
+                      localStorage.removeItem('admin_logged_in');
+                      window.location.href = '/admin';
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#2563eb',
+                      cursor: 'pointer',
+                      fontSize: '0.78rem',
+                      textDecoration: 'underline',
+                      padding: 0
+                    }}
+                  >
+                    Forgot current password? Reset via OTP
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  New Password
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type={showNewPass ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    placeholder="At least 6 characters"
+                    style={{
+                      width: '100%',
+                      padding: '10px 40px 10px 12px',
+                      border: '1.5px solid #cbd5e1',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPass(!showNewPass)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#94a3b8'
+                    }}
+                  >
+                    {showNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '22px' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                  Confirm New Password
+                </label>
+                <input
+                  type={showNewPass ? 'text' : 'password'}
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  placeholder="Re-enter new password"
+                  style={{
+                    width: '100%',
+                    padding: '10px 12px',
+                    border: '1.5px solid #cbd5e1',
+                    borderRadius: '8px',
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsChangePasswordOpen(false)}
+                  disabled={passwordStatus.loading}
+                  style={{
+                    padding: '9px 18px',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#475569',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordStatus.loading}
+                  style={{
+                    padding: '9px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: '0.88rem',
+                    fontWeight: 600,
+                    cursor: passwordStatus.loading ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  {passwordStatus.loading ? (
+                    <>
+                      <Loader2 size={16} className={styles.spin} />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <span>Save Password</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

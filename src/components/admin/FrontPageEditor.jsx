@@ -18,7 +18,11 @@ import {
   Users,
   ExternalLink,
   Save,
-  Check
+  Check,
+  Phone,
+  Mail,
+  Clock,
+  Edit2
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { api } from '../../services/api';
@@ -404,7 +408,7 @@ const CorporatePartnerRow = React.memo(({
   );
 });
 
-const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
+const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   const {
     heroContent,
     updateHeroContent,
@@ -426,17 +430,203 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     deleteCorporateTieup,
     deleteAllCorporateTieups,
     saveCorporateTieupsNow,
-    resetFrontPageDefaults
+    resetFrontPageDefaults,
+    contactInfo,
+    updateContactInfo
   } = useData();
 
-  // Active sub-tab: 'hero' | 'services' | 'why' | 'articles' | 'corporate'
+  // Active sub-tab: 'hero' | 'services' | 'why' | 'articles' | 'corporate' | 'contact'
   const [subTab, setSubTabState] = useState(() => {
+    if (initialSubTab) return initialSubTab;
     try {
       const saved = localStorage.getItem('sehat_admin_frontpage_subtab');
       if (saved) return saved;
     } catch {}
     return 'hero';
   });
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setSubTabState(initialSubTab);
+    }
+  }, [initialSubTab]);
+
+  // Contact Helplines & Support Editor State
+  const [isAddingPhone, setIsAddingPhone] = useState(false);
+  const [newPhoneLabel, setNewPhoneLabel] = useState('');
+  const [newPhoneNumber, setNewPhoneNumber] = useState('');
+  const [newPhonePrimary, setNewPhonePrimary] = useState(false);
+  const [editingPhoneId, setEditingPhoneId] = useState(null);
+  const [editPhoneLabel, setEditPhoneLabel] = useState('');
+  const [editPhoneNumber, setEditPhoneNumber] = useState('');
+  const [editPhonePrimary, setEditPhonePrimary] = useState(false);
+
+  const [isAddingEmail, setIsAddingEmail] = useState(false);
+  const [newEmailLabel, setNewEmailLabel] = useState('');
+  const [newEmailAddress, setNewEmailAddress] = useState('');
+  const [newEmailPrimary, setNewEmailPrimary] = useState(false);
+  const [editingEmailId, setEditingEmailId] = useState(null);
+  const [editEmailLabel, setEditEmailLabel] = useState('');
+  const [editEmailAddress, setEditEmailAddress] = useState('');
+  const [editEmailPrimary, setEditEmailPrimary] = useState(false);
+
+  const [workingHoursInput, setWorkingHoursInput] = useState(contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM');
+
+  useEffect(() => {
+    if (contactInfo?.workingHours) {
+      setWorkingHoursInput(contactInfo.workingHours);
+    }
+  }, [contactInfo?.workingHours]);
+
+  const phonesList = Array.isArray(contactInfo?.phones) ? contactInfo.phones : [];
+  const emailsList = Array.isArray(contactInfo?.emails) ? contactInfo.emails : [];
+
+  const handleAdminAddPhone = async (e) => {
+    e.preventDefault();
+    if (!newPhoneNumber.trim()) return;
+    const item = {
+      id: 'phone_' + Date.now(),
+      label: newPhoneLabel.trim() || 'Helpline',
+      number: newPhoneNumber.trim(),
+      isPrimary: Boolean(newPhonePrimary)
+    };
+    const updatedPhones = newPhonePrimary
+      ? [...phonesList.map((p) => ({ ...p, isPrimary: false })), item]
+      : [...phonesList, item];
+
+    try {
+      await updateContactInfo({
+        ...contactInfo,
+        phones: updatedPhones
+      });
+      if (showToast) showToast('Contact number added successfully!', 'success');
+      setNewPhoneLabel('');
+      setNewPhoneNumber('');
+      setNewPhonePrimary(false);
+      setIsAddingPhone(false);
+    } catch {
+      if (showToast) showToast('Failed to add contact number', 'error');
+    }
+  };
+
+  const handleAdminDeletePhone = async (id) => {
+    if (!window.confirm('Delete this contact number?')) return;
+    try {
+      const updatedPhones = phonesList.filter((p) => p.id !== id);
+      await updateContactInfo({
+        ...contactInfo,
+        phones: updatedPhones
+      });
+      if (showToast) showToast('Contact number removed', 'info');
+    } catch {
+      if (showToast) showToast('Failed to delete number', 'error');
+    }
+  };
+
+  const handleAdminSaveEditPhone = async (id) => {
+    if (!editPhoneNumber.trim()) return;
+    try {
+      const updatedPhones = phonesList.map((p) => {
+        if (p.id === id) {
+          return {
+            ...p,
+            label: editPhoneLabel.trim() || 'Helpline',
+            number: editPhoneNumber.trim(),
+            isPrimary: Boolean(editPhonePrimary)
+          };
+        }
+        return editPhonePrimary ? { ...p, isPrimary: false } : p;
+      });
+      await updateContactInfo({
+        ...contactInfo,
+        phones: updatedPhones
+      });
+      setEditingPhoneId(null);
+      if (showToast) showToast('Contact number updated', 'success');
+    } catch {
+      if (showToast) showToast('Failed to update number', 'error');
+    }
+  };
+
+  const handleAdminAddEmail = async (e) => {
+    e.preventDefault();
+    if (!newEmailAddress.trim()) return;
+    const item = {
+      id: 'email_' + Date.now(),
+      label: newEmailLabel.trim() || 'Support Desk',
+      email: newEmailAddress.trim(),
+      isPrimary: Boolean(newEmailPrimary)
+    };
+    const updatedEmails = newEmailPrimary
+      ? [...emailsList.map((em) => ({ ...em, isPrimary: false })), item]
+      : [...emailsList, item];
+
+    try {
+      await updateContactInfo({
+        ...contactInfo,
+        emails: updatedEmails
+      });
+      if (showToast) showToast('Email address added successfully!', 'success');
+      setNewEmailLabel('');
+      setNewEmailAddress('');
+      setNewEmailPrimary(false);
+      setIsAddingEmail(false);
+    } catch {
+      if (showToast) showToast('Failed to add email address', 'error');
+    }
+  };
+
+  const handleAdminDeleteEmail = async (id) => {
+    if (!window.confirm('Delete this email address?')) return;
+    try {
+      const updatedEmails = emailsList.filter((em) => em.id !== id);
+      await updateContactInfo({
+        ...contactInfo,
+        emails: updatedEmails
+      });
+      if (showToast) showToast('Email address removed', 'info');
+    } catch {
+      if (showToast) showToast('Failed to delete email', 'error');
+    }
+  };
+
+  const handleAdminSaveEditEmail = async (id) => {
+    if (!editEmailAddress.trim()) return;
+    try {
+      const updatedEmails = emailsList.map((em) => {
+        if (em.id === id) {
+          return {
+            ...em,
+            label: editEmailLabel.trim() || 'Support Desk',
+            email: editEmailAddress.trim(),
+            isPrimary: Boolean(editEmailPrimary)
+          };
+        }
+        return editEmailPrimary ? { ...em, isPrimary: false } : em;
+      });
+      await updateContactInfo({
+        ...contactInfo,
+        emails: updatedEmails
+      });
+      setEditingEmailId(null);
+      if (showToast) showToast('Email address updated', 'success');
+    } catch {
+      if (showToast) showToast('Failed to update email', 'error');
+    }
+  };
+
+  const handleAdminSaveHours = async (e) => {
+    e.preventDefault();
+    try {
+      await updateContactInfo({
+        ...contactInfo,
+        workingHours: workingHoursInput.trim()
+      });
+      if (showToast) showToast('Operating hours updated', 'success');
+    } catch {
+      if (showToast) showToast('Failed to save hours', 'error');
+    }
+  };
 
   const setSubTab = (newTab) => {
     try {
@@ -1258,51 +1448,66 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
     <div className={styles.editorContainer}>
       <div className={styles.editorHeader}>
         <div>
-          <h2 className={styles.editorTitle}>Front Page Content & Mock Data Editor</h2>
+          <h2 className={styles.editorTitle}>
+            {hideSubTabs && subTab === 'contact' 
+              ? 'Contact Us & Platform Helplines' 
+              : 'Front Page Content & Mock Data Editor'}
+          </h2>
           <p className={styles.editorSubtitle}>
-            Customize hero banners, trust metrics, service cards, features, and health articles shown to website visitors.
+            {hideSubTabs && subTab === 'contact'
+              ? 'Manage platform customer helplines, support numbers, official email desks, and working hours displayed in the website footer.'
+              : 'Customize hero banners, trust metrics, service cards, features, and health articles shown to website visitors.'}
           </p>
         </div>
       </div>
 
       {/* Sub Tabs */}
-      <div className={styles.subTabs}>
-        <button
-          className={`${styles.subTabBtn} ${subTab === 'hero' ? styles.subTabActive : ''}`}
-          onClick={() => handleSwitchSubTab('hero')}
-        >
-          <Sparkles size={16} />
-          <span>Hero & Trust Metrics</span>
-        </button>
-        <button
-          className={`${styles.subTabBtn} ${subTab === 'services' ? styles.subTabActive : ''}`}
-          onClick={() => handleSwitchSubTab('services')}
-        >
-          <Layers size={16} />
-          <span>Explore Services ({services?.length || 0})</span>
-        </button>
-        <button
-          className={`${styles.subTabBtn} ${subTab === 'why' ? styles.subTabActive : ''}`}
-          onClick={() => handleSwitchSubTab('why')}
-        >
-          <HelpCircle size={16} />
-          <span>Why Choose Us ({features?.length || 0})</span>
-        </button>
-        <button
-          className={`${styles.subTabBtn} ${subTab === 'articles' ? styles.subTabActive : ''}`}
-          onClick={() => handleSwitchSubTab('articles')}
-        >
-          <FileText size={16} />
-          <span>Articles & Newsletter ({articles?.length || 0})</span>
-        </button>
-        <button
-          className={`${styles.subTabBtn} ${subTab === 'corporate' ? styles.subTabActive : ''}`}
-          onClick={() => handleSwitchSubTab('corporate')}
-        >
-          <Building2 size={16} />
-          <span>Corporate Tie-ups ({corporateTieups?.length || 0})</span>
-        </button>
-      </div>
+      {!hideSubTabs && (
+        <div className={styles.subTabs}>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'hero' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('hero')}
+          >
+            <Sparkles size={16} />
+            <span>Hero & Trust Metrics</span>
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'services' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('services')}
+          >
+            <Layers size={16} />
+            <span>Explore Services ({services?.length || 0})</span>
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'why' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('why')}
+          >
+            <HelpCircle size={16} />
+            <span>Why Choose Us ({features?.length || 0})</span>
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'articles' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('articles')}
+          >
+            <FileText size={16} />
+            <span>Articles & Newsletter ({articles?.length || 0})</span>
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'corporate' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('corporate')}
+          >
+            <Building2 size={16} />
+            <span>Corporate Tie-ups ({corporateTieups?.length || 0})</span>
+          </button>
+          <button
+            className={`${styles.subTabBtn} ${subTab === 'contact' ? styles.subTabActive : ''}`}
+            onClick={() => handleSwitchSubTab('contact')}
+          >
+            <Phone size={16} />
+            <span>Helplines & Contact ({contactInfo?.phones?.length || 0})</span>
+          </button>
+        </div>
+      )}
 
       {/* SUB-TAB 1: HERO & STATS */}
       {subTab === 'hero' && (
@@ -2463,6 +2668,486 @@ const FrontPageEditor = ({ showToast, initialSubTab = 'hero' }) => {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* SUB-TAB 6: PLATFORM HELPLINES & CONTACT */}
+      {subTab === 'contact' && (
+        <div className={styles.tabPane}>
+          {/* Section Header */}
+          <div className={styles.paneHeader}>
+            <div>
+              <h3 className={styles.paneTitle}>Platform Contact & Helpline Desks</h3>
+              <p className={styles.paneSubtitle}>
+                Add, edit, or remove emergency helplines, support phone numbers, email desks, and working hours in real time. Changes are stored directly in MongoDB Atlas and immediately reflected across all tabs and the Contact Us dropdown.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
+            {/* CARD 1: PHONE NUMBERS */}
+            <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Phone size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Direct Helpline Numbers</h4>
+                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>({phonesList.length} numbers active)</span>
+                  </div>
+                </div>
+                {!isAddingPhone && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingPhone(true);
+                      setNewPhoneLabel('');
+                      setNewPhoneNumber('');
+                      setNewPhonePrimary(false);
+                    }}
+                    style={{
+                      background: '#eff6ff',
+                      color: '#2563eb',
+                      border: '1px dashed #93c5fd',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Plus size={14} /> Add Phone
+                  </button>
+                )}
+              </div>
+
+              {/* Add Phone Form */}
+              {isAddingPhone && (
+                <form onSubmit={handleAdminAddPhone} style={{ background: '#f8fafc', border: '1px solid #93c5fd', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Label / Department *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. 24/7 Helpline, WhatsApp Booking"
+                      value={newPhoneLabel}
+                      onChange={(e) => setNewPhoneLabel(e.target.value)}
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                      autoFocus
+                    />
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Phone Number *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. +91 98765 43210"
+                      value={newPhoneNumber}
+                      onChange={(e) => setNewPhoneNumber(e.target.value)}
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={newPhonePrimary}
+                      onChange={(e) => setNewPhonePrimary(e.target.checked)}
+                    />
+                    <span>Set as primary helpline (prominently badge)</span>
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingPhone(false)}
+                      style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      style={{ background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Check size={14} /> Save Phone
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Phone List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                {phonesList.length === 0 ? (
+                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No helpline numbers configured yet.</p>
+                ) : (
+                  phonesList.map((phone) => {
+                    const isEditing = editingPhoneId === phone.id;
+                    if (isEditing) {
+                      return (
+                        <div key={phone.id} style={{ background: '#eff6ff', border: '1.5px solid #60a5fa', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ marginBottom: '8px' }}>
+                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Label</label>
+                            <input
+                              type="text"
+                              value={editPhoneLabel}
+                              onChange={(e) => setEditPhoneLabel(e.target.value)}
+                              className={styles.input}
+                              style={{ width: '100%', marginTop: '2px' }}
+                            />
+                          </div>
+                          <div style={{ marginBottom: '8px' }}>
+                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Phone Number</label>
+                            <input
+                              type="text"
+                              value={editPhoneNumber}
+                              onChange={(e) => setEditPhoneNumber(e.target.value)}
+                              className={styles.input}
+                              style={{ width: '100%', marginTop: '2px' }}
+                            />
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
+                            <input
+                              type="checkbox"
+                              checked={editPhonePrimary}
+                              onChange={(e) => setEditPhonePrimary(e.target.checked)}
+                            />
+                            <span>Set as primary helpline</span>
+                          </label>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setEditingPhoneId(null)}
+                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '5px 10px', fontSize: '0.76rem', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdminSaveEditPhone(phone.id)}
+                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={phone.id}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{phone.label}</strong>
+                            {phone.isPrimary && (
+                              <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px' }}>
+                                Primary
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.92rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
+                            {phone.number}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPhoneId(phone.id);
+                              setEditPhoneLabel(phone.label || '');
+                              setEditPhoneNumber(phone.number || '');
+                              setEditPhonePrimary(Boolean(phone.isPrimary));
+                            }}
+                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px', color: '#475569', cursor: 'pointer' }}
+                            title="Edit"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdminDeletePhone(phone.id)}
+                            style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '6px', color: '#dc2626', cursor: 'pointer' }}
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* CARD 2: EMAILS */}
+            <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Mail size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Support & Inquiry Emails</h4>
+                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>({emailsList.length} emails active)</span>
+                  </div>
+                </div>
+                {!isAddingEmail && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingEmail(true);
+                      setNewEmailLabel('');
+                      setNewEmailAddress('');
+                      setNewEmailPrimary(false);
+                    }}
+                    style={{
+                      background: '#eff6ff',
+                      color: '#2563eb',
+                      border: '1px dashed #93c5fd',
+                      borderRadius: '8px',
+                      padding: '6px 12px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Plus size={14} /> Add Email
+                  </button>
+                )}
+              </div>
+
+              {/* Add Email Form */}
+              {isAddingEmail && (
+                <form onSubmit={handleAdminAddEmail} style={{ background: '#f8fafc', border: '1px solid #93c5fd', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Label / Department *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Patient Support, Appointments"
+                      value={newEmailLabel}
+                      onChange={(e) => setNewEmailLabel(e.target.value)}
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                      autoFocus
+                    />
+                  </div>
+                  <div style={{ marginBottom: '8px' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. support@thesehatbuddy.com"
+                      value={newEmailAddress}
+                      onChange={(e) => setNewEmailAddress(e.target.value)}
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={newEmailPrimary}
+                      onChange={(e) => setNewEmailPrimary(e.target.checked)}
+                    />
+                    <span>Set as primary contact email</span>
+                  </label>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingEmail(false)}
+                      style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      style={{ background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                    >
+                      <Check size={14} /> Save Email
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Email List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                {emailsList.length === 0 ? (
+                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No emails configured yet.</p>
+                ) : (
+                  emailsList.map((em) => {
+                    const isEditing = editingEmailId === em.id;
+                    if (isEditing) {
+                      return (
+                        <div key={em.id} style={{ background: '#eff6ff', border: '1.5px solid #60a5fa', borderRadius: '10px', padding: '12px' }}>
+                          <div style={{ marginBottom: '8px' }}>
+                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Label</label>
+                            <input
+                              type="text"
+                              value={editEmailLabel}
+                              onChange={(e) => setEditEmailLabel(e.target.value)}
+                              className={styles.input}
+                              style={{ width: '100%', marginTop: '2px' }}
+                            />
+                          </div>
+                          <div style={{ marginBottom: '8px' }}>
+                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Email Address</label>
+                            <input
+                              type="email"
+                              value={editEmailAddress}
+                              onChange={(e) => setEditEmailAddress(e.target.value)}
+                              className={styles.input}
+                              style={{ width: '100%', marginTop: '2px' }}
+                            />
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
+                            <input
+                              type="checkbox"
+                              checked={editEmailPrimary}
+                              onChange={(e) => setEditEmailPrimary(e.target.checked)}
+                            />
+                            <span>Set as primary email</span>
+                          </label>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setEditingEmailId(null)}
+                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '5px 10px', fontSize: '0.76rem', cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdminSaveEditEmail(em.id)}
+                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={em.id}
+                        style={{
+                          background: '#ffffff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '10px',
+                          padding: '10px 14px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{em.label}</strong>
+                            {em.isPrimary && (
+                              <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px' }}>
+                                Primary
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '0.92rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
+                            {em.email}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingEmailId(em.id);
+                              setEditEmailLabel(em.label || '');
+                              setEditEmailAddress(em.email || '');
+                              setEditEmailPrimary(Boolean(em.isPrimary));
+                            }}
+                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px', color: '#475569', cursor: 'pointer' }}
+                            title="Edit"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAdminDeleteEmail(em.id)}
+                            style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '6px', color: '#dc2626', cursor: 'pointer' }}
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* CARD 3: WORKING HOURS */}
+          <form onSubmit={handleAdminSaveHours} className={styles.formCard} style={{ marginTop: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Clock size={18} color="#2563eb" />
+                <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Platform Support & Operating Hours</h4>
+              </div>
+              <button
+                type="submit"
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '7px 16px',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <Save size={14} /> Save Hours
+              </button>
+            </div>
+            <div>
+              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '6px' }}>
+                Operating Hours Display Text
+              </label>
+              <input
+                type="text"
+                value={workingHoursInput}
+                onChange={(e) => setWorkingHoursInput(e.target.value)}
+                placeholder="e.g. Mon – Sat: 8:00 AM – 8:00 PM"
+                className={styles.input}
+                style={{ width: '100%', maxWidth: '400px' }}
+                required
+              />
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginTop: '4px' }}>
+                Displayed across patient consultation FAQ sections and the Contact Us navigation dropdown.
+              </span>
+            </div>
+          </form>
         </div>
       )}
 

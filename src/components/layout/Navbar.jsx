@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ChevronDown, MapPin, Check, Menu, X } from 'lucide-react';
+import {
+  ChevronDown,
+  MapPin,
+  Menu,
+  X
+} from 'lucide-react';
 import { useData } from '../../context/useData';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import logoImg from '../../assets/images/logo.png';
@@ -26,6 +31,17 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
   });
 
   const careDropdownRef = useRef(null);
+
+  // Click outside listener for care dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (careDropdownRef.current && !careDropdownRef.current.contains(e.target)) {
+        setIsCareOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Dynamically compute Care Services from database services in real-time
   const careServicesList = useMemo(() => {
@@ -94,17 +110,6 @@ const Navbar = ({ onNavigate, currentView = 'site' }) => {
       setUser(null);
     }
   }, [currentView]);
-
-  // Click outside listener for care dropdown
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (careDropdownRef.current && !careDropdownRef.current.contains(e.target)) {
-        setIsCareOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
   const handleGoHome = (e) => {
     if (e) e.preventDefault();

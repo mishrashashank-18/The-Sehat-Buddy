@@ -11,6 +11,7 @@ import {
   Calendar,
   Play,
   X,
+  VolumeX,
   Stethoscope,
   Briefcase,
   GraduationCap,
@@ -293,7 +294,7 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
   const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
   const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
-  const effectiveCover = coverPhoto || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
+  const effectiveCover = coverPhoto || (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '');
 
   const isDirect = isDirectVideoUrl(rawUrl);
 
@@ -375,9 +376,10 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       onClick={() => onOpen(reelItem)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      title="Hover to preview, click to watch in full view"
+      title="Hover to preview, click to watch with sound"
       style={{
-        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)'
+        background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
+        position: 'relative'
       }}
     >
       {/* Background/Cover Image (visible when paused) */}
@@ -386,11 +388,14 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
           src={effectiveCover}
           alt="Instagram Reel"
           className={styles.reelCoverImg}
-          loading="lazy"
+          loading="eager"
           style={{
             opacity: isPlaying ? 0 : 1,
             transition: 'opacity 0.25s ease',
-            pointerEvents: 'none'
+            pointerEvents: 'none',
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover'
           }}
           onError={(e) => {
             e.target.style.display = 'none';
@@ -403,7 +408,7 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
         <video
           ref={videoRef}
           src={videoSrc}
-          poster={coverPhoto}
+          poster={coverPhoto || effectiveCover}
           muted
           playsInline
           loop
@@ -431,21 +436,24 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       {/* Top Badge: Instagram Tag / Playing Status */}
       <div className={styles.reelTopBadge} style={{ zIndex: 3, pointerEvents: 'none' }}>
         <SocialInstagramIcon size={14} />
-        <span>{isPlaying ? '▶ Playing' : 'Reel'}</span>
+        <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
     </div>
   );
 };
 
-// Robust Modal Video Player component for HospitalProfile with anti-pause handling
+// Robust Modal Video Player component for HospitalProfile with reliable sound handling
 const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
   const videoRef = useRef(null);
   const [videoError, setVideoError] = useState(false);
   const [directVideoUrl, setDirectVideoUrl] = useState('');
+  const [isMuted, setIsMuted] = useState(false);
 
   const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
   const isDirect = isDirectVideoUrl(rawTarget);
-  const coverSrc = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+  const coverSrc = typeof activeReel === 'object' 
+    ? (activeReel.coverPhoto || activeReel.primaryCover || '') 
+    : (rawTarget ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : '');
 
   useEffect(() => {
     let active = true;
@@ -467,14 +475,55 @@ const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
 
   const modalVideoSrc = directVideoUrl || (isDirect ? rawTarget : `${API_BASE}/reel-video?url=${encodeURIComponent(rawTarget)}`);
 
+  const toggleMute = useCallback((e) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    if (videoRef.current) {
+      const nextMuted = !videoRef.current.muted;
+      videoRef.current.muted = nextMuted;
+      if (!nextMuted) {
+        videoRef.current.volume = 1;
+        videoRef.current.play().catch(() => {});
+      }
+      setIsMuted(nextMuted);
+    }
+  }, []);
+
+  const handleVideoClick = useCallback(() => {
+    if (isMuted && videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1;
+      setIsMuted(false);
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'm' || e.key === 'M') {
+        toggleMute();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, toggleMute]);
+
   useEffect(() => {
     setVideoError(false);
     if (videoRef.current) {
+      videoRef.current.muted = false;
+      videoRef.current.volume = 1;
       const p = videoRef.current.play();
       if (p !== undefined) {
-        p.catch((err) => {
+        p.then(() => {
+          setIsMuted(false);
+        }).catch(() => {
           if (videoRef.current) {
             videoRef.current.muted = true;
+            setIsMuted(true);
             videoRef.current.play().catch(() => {});
           }
         });
@@ -498,6 +547,7 @@ const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
           padding: 0
         }}
       >
+        {/* Close button */}
         <button 
           type="button" 
           onClick={onClose} 
@@ -525,25 +575,68 @@ const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
           <X size={20} />
         </button>
 
-        <div style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {!videoError ? (
-            <video
-              ref={videoRef}
-              key={modalVideoSrc}
-              src={modalVideoSrc}
-              poster={coverSrc}
-              playsInline
-              controls
-              controlsList="nodownload"
-              onError={() => setVideoError(true)}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'contain',
-                background: '#000000',
-                display: 'block'
-              }}
-            />
+        <div 
+          onClick={handleVideoClick}
+          style={{ width: '100%', height: '76vh', maxHeight: '680px', minHeight: '480px', background: '#000000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          {(!videoError && modalVideoSrc && (modalVideoSrc.includes('.mp4') || modalVideoSrc.includes('cloudinary.com') || modalVideoSrc.startsWith('blob:'))) ? (
+            <>
+              <video
+                ref={videoRef}
+                key={modalVideoSrc}
+                src={modalVideoSrc}
+                poster={coverSrc}
+                playsInline
+                preload="auto"
+                controls
+                controlsList="nodownload"
+                onVolumeChange={() => {
+                  if (videoRef.current) {
+                    setIsMuted(videoRef.current.muted || videoRef.current.volume === 0);
+                  }
+                }}
+                onError={() => setVideoError(true)}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  background: '#000000',
+                  display: 'block'
+                }}
+              />
+
+              {isMuted && (
+                <button
+                  type="button"
+                  onClick={toggleMute}
+                  style={{
+                    position: 'absolute',
+                    bottom: '68px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 25,
+                    background: 'rgba(15, 23, 42, 0.9)',
+                    color: '#ffffff',
+                    border: '1px solid rgba(255, 255, 255, 0.25)',
+                    borderRadius: '9999px',
+                    padding: '8px 18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.85rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+                    backdropFilter: 'blur(8px)',
+                    letterSpacing: '0.02em',
+                    userSelect: 'none'
+                  }}
+                >
+                  <VolumeX size={18} color="#f43f5e" />
+                  <span>Tap to Unmute</span>
+                </button>
+              )}
+            </>
           ) : (
             <iframe
               src={(() => {

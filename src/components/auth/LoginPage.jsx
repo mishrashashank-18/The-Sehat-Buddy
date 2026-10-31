@@ -13,12 +13,19 @@ export const saveAuthSession = (sessionRole, token, rawUser) => {
   if (sessionRole === 'doctor') {
     localStorage.setItem('doctor_token', token);
     localStorage.setItem('doctor_user', JSON.stringify({ ...normalizedUser, role: 'doctor' }));
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify({ ...normalizedUser, role: 'doctor' }));
   } else if (sessionRole === 'admin') {
     localStorage.setItem('admin_token', token);
     localStorage.setItem('admin_user', JSON.stringify({ ...normalizedUser, role: 'admin' }));
+    localStorage.setItem('admin_logged_in', 'true');
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify({ ...normalizedUser, role: 'admin' }));
   } else if (sessionRole === 'hospital') {
     localStorage.setItem('hospital_token', token);
     localStorage.setItem('hospital_user', JSON.stringify({ ...normalizedUser, role: 'hospital' }));
+    localStorage.setItem('token', token);
+    localStorage.setItem('user', JSON.stringify({ ...normalizedUser, role: 'hospital' }));
   } else if (sessionRole === 'user') {
     localStorage.setItem('patient_token', token);
     localStorage.setItem('patient_user', JSON.stringify({ ...normalizedUser, role: 'user' }));
@@ -75,10 +82,19 @@ const LoginPage = ({ role, setView }) => {
   const [hospStep, setHospStep] = useState('email');
   const [hospInfo, setHospInfo] = useState(null);
 
+  // Admin specialized reset step: 'login' | 'reset-email' | 'reset-otp' | 'reset-new-password'
+  const [adminStep, setAdminStep] = useState('login');
+
   const roleInfo = {
     admin: {
       title: 'Admin Portal',
-      subtitle: 'Manage the Sehat Buddy platform',
+      subtitle: adminStep === 'reset-email'
+        ? 'Enter your registered administrator email to receive a password reset OTP.'
+        : (adminStep === 'reset-otp'
+          ? 'Enter the 6-digit OTP sent to your administrator email.'
+          : (adminStep === 'reset-new-password'
+            ? 'Set a new password for your administrator account.'
+            : 'Manage the Sehat Buddy platform')),
       icon: <ShieldCheck size={48} className={styles.roleIcon} />,
       image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1000'
     },
@@ -642,6 +658,122 @@ const LoginPage = ({ role, setView }) => {
     }
   };
 
+  // ADMIN PASSWORD RESET STEP 1: Request OTP to Email
+  const handleAdminRequestResetOtp = async (customEmail) => {
+    const targetEmail = (customEmail || email).trim().toLowerCase();
+    if (!targetEmail) {
+      setError('Please enter your administrator email address.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: targetEmail }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setEmail(targetEmail);
+        setOtp('');
+        setAdminStep('reset-otp');
+        setSuccessMessage(data.message || `A 6-digit OTP has been sent to ${targetEmail}`);
+      } else {
+        setError(data.message || 'Could not send reset OTP. Please check your email.');
+      }
+    } catch (err) {
+      setError('Failed to connect to authentication server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ADMIN PASSWORD RESET STEP 2: Verify OTP
+  const handleAdminVerifyResetOtp = async (e) => {
+    e.preventDefault();
+    if (!otp.trim()) {
+      setError('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setError('');
+    setSuccessMessage('');
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/verify-reset-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp: otp.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setPassword('');
+        setConfirmPassword('');
+        setAdminStep('reset-new-password');
+        setSuccessMessage('OTP verified! Please create your new administrator password.');
+      } else {
+        setError(data.message || 'Invalid or expired OTP. Please try again.');
+      }
+    } catch (err) {
+      setError('Error verifying OTP. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ADMIN PASSWORD RESET STEP 3: Submit New Password
+  const handleAdminResetPasswordSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API_BASE}/admin/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          otp: otp.trim(),
+          password
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        saveAuthSession('admin', data.token, data.admin);
+        window.location.href = '/admin';
+      } else {
+        setError(data.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (err) {
+      setError('An error occurred while resetting your password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setError('');
@@ -770,11 +902,18 @@ const LoginPage = ({ role, setView }) => {
                 setPassword('');
                 setConfirmPassword('');
               }
+              else if (role === 'admin' && adminStep !== 'login') {
+                setAdminStep('login');
+                setError('');
+                setPassword('');
+                setConfirmPassword('');
+                setOtp('');
+              }
               else setView ? setView('home') : window.location.pathname = '/';
             }}
           >
             <ArrowLeft size={20} />
-            {showOtp ? 'Back to Login' : ((role === 'doctor' && docStep !== 'email') || (role === 'hospital' && hospStep !== 'email') ? 'Back to Email' : 'Back to Home')}
+            {showOtp ? 'Back to Login' : ((role === 'doctor' && docStep !== 'email') || (role === 'hospital' && hospStep !== 'email') || (role === 'admin' && adminStep !== 'login') ? 'Back to Sign In' : 'Back to Home')}
           </button>
           
           <div className={styles.formHeader}>
@@ -798,7 +937,15 @@ const LoginPage = ({ role, setView }) => {
                         : (hospStep === 'reset-new-password'
                           ? 'Create New Password'
                           : title)))
-                    : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`)))}
+                    : (role === 'admin'
+                      ? (adminStep === 'reset-email'
+                        ? 'Reset Admin Password'
+                        : (adminStep === 'reset-otp'
+                          ? 'Verify Reset OTP'
+                          : (adminStep === 'reset-new-password'
+                            ? 'Create New Password'
+                            : title)))
+                      : (isLogin ? title : `Join ${role === 'user' ? 'Sehat Buddy' : title}`))))}
             </h2>
             <p>
               {showOtp
@@ -1617,6 +1764,292 @@ const LoginPage = ({ role, setView }) => {
                       onClick={(e) => {
                         e.preventDefault();
                         setHospStep('email');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
+                </form>
+              )}
+            </div>
+          ) : role === 'admin' ? (
+            <div>
+              {/* STEP 1: STANDARD ADMIN LOGIN */}
+              {adminStep === 'login' && (
+                <form className={styles.authForm} onSubmit={handleAuth}>
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminEmail">Administrator Email Address</label>
+                    <div className={styles.inputWrapper}>
+                      <Mail size={20} className={styles.inputIcon} />
+                      <input
+                        type="email"
+                        id="adminEmail"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="admin@sehatbuddy.com"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminPassword">Password</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="adminPassword"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        style={{ paddingRight: '40px' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{
+                          position: 'absolute',
+                          right: '12px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: '#6B7280',
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 0
+                        }}
+                      >
+                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px', marginBottom: '14px' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setError('');
+                        setSuccessMessage('');
+                        setAdminStep('reset-email');
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#2563eb',
+                        cursor: 'pointer',
+                        padding: 0,
+                        fontSize: '0.86rem',
+                        fontWeight: 600,
+                        textDecoration: 'none'
+                      }}
+                    >
+                      Forgot password? Reset via OTP
+                    </button>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Authenticating...' : 'Sign In as Administrator'}
+                  </button>
+                </form>
+              )}
+
+              {/* STEP 2: REQUEST RESET OTP */}
+              {adminStep === 'reset-email' && (
+                <form className={styles.authForm} onSubmit={(e) => { e.preventDefault(); handleAdminRequestResetOtp(); }}>
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminResetEmail">Administrator Email Address</label>
+                    <div className={styles.inputWrapper}>
+                      <Mail size={20} className={styles.inputIcon} />
+                      <input
+                        type="email"
+                        id="adminResetEmail"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        placeholder="admin@sehatbuddy.com"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '4px 0 16px 0' }}>
+                    💡 Enter your registered administrator email. A 6-digit OTP will be sent to your inbox to reset your password.
+                  </p>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Sending OTP...' : 'Send Verification OTP'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setAdminStep('login');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Back to Sign In
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 3: VERIFY OTP */}
+              {adminStep === 'reset-otp' && (
+                <form className={styles.authForm} onSubmit={handleAdminVerifyResetOtp}>
+                  <div style={{
+                    background: '#f8fafc',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 600, display: 'block', textTransform: 'uppercase' }}>Administrator</span>
+                      <span style={{ fontSize: '0.92rem', color: '#0f172a', fontWeight: 600 }}>{email}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setAdminStep('reset-email'); setError(''); setSuccessMessage(''); }}
+                      style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}
+                    >
+                      Change
+                    </button>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminResetOtp">6-Digit Verification OTP</label>
+                    <div className={styles.inputWrapper}>
+                      <Lock size={20} className={styles.inputIcon} />
+                      <input
+                        type="text"
+                        id="adminResetOtp"
+                        value={otp}
+                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        maxLength={6}
+                        placeholder="123456"
+                        autoFocus
+                        style={{ letterSpacing: '4px', fontSize: '1.1rem', fontWeight: 600 }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 16px 0' }}>
+                    <span style={{ fontSize: '0.82rem', color: '#64748b' }}>OTP expires in 10 minutes</span>
+                    <button
+                      type="button"
+                      disabled={loading || resendCooldown > 0}
+                      onClick={() => {
+                        setResendCooldown(60);
+                        handleAdminRequestResetOtp(email);
+                      }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: resendCooldown > 0 ? '#94a3b8' : '#2563eb',
+                        cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                        fontSize: '0.82rem',
+                        fontWeight: 600
+                      }}
+                    >
+                      {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend OTP'}
+                    </button>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading || otp.length !== 6}>
+                    {loading ? 'Verifying OTP...' : 'Verify OTP & Continue'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setAdminStep('login');
+                        setPassword('');
+                        setConfirmPassword('');
+                        setOtp('');
+                        setError('');
+                        setSuccessMessage('');
+                      }}
+                      style={{ fontSize: '0.85rem', color: '#64748b', textDecoration: 'none' }}
+                    >
+                      ← Cancel & Return to Login
+                    </a>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 4: CREATE NEW PASSWORD */}
+              {adminStep === 'reset-new-password' && (
+                <form className={styles.authForm} onSubmit={handleAdminResetPasswordSubmit}>
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminNewPassword">New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="adminNewPassword"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="At least 6 characters"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280' }}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={styles.inputGroup}>
+                    <label htmlFor="adminConfirmResetPassword">Confirm New Password</label>
+                    <div className={styles.inputWrapper}>
+                      <KeyRound size={20} className={styles.inputIcon} />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="adminConfirmResetPassword"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        minLength={6}
+                        placeholder="Re-enter your new password"
+                      />
+                    </div>
+                  </div>
+
+                  <button type="submit" className={styles.submitButton} disabled={loading}>
+                    {loading ? 'Updating Password...' : 'Save New Password & Sign In'}
+                  </button>
+
+                  <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                    <a
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setAdminStep('login');
                         setPassword('');
                         setConfirmPassword('');
                         setOtp('');
