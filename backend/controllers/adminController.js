@@ -501,6 +501,7 @@ export const addDoctor = async (req, res) => {
       degree: docDegree,
       contact_number: docPhone,
       phone: docPhone,
+      licenseNumber: (req.body.licenseNumber || '').trim(),
       helplineNumber: req.body.helplineNumber !== undefined ? String(req.body.helplineNumber).trim() : '+91 98765 43210',
       helplineDays: req.body.helplineDays !== undefined ? String(req.body.helplineDays).trim() : 'Mon – Sat',
       helplineTime: req.body.helplineTime !== undefined ? String(req.body.helplineTime).trim() : '8:00 AM – 8:00 PM',

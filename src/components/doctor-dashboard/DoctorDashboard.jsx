@@ -481,22 +481,30 @@ const DoctorDashboard = ({ onNavigate }) => {
         (myId && matchesId(d, myId)) || 
         (myEmail && (d.email || '').toLowerCase().trim() === myEmail)
       );
-      if (meUpdated && meUpdated.availableDays) {
+      if (meUpdated) {
         try {
           const currentDocUser = JSON.parse(localStorage.getItem('doctor_user') || '{}');
           localStorage.setItem('doctor_user', JSON.stringify({ ...currentDocUser, ...meUpdated }));
         } catch {}
-        if (!isEditingAvailableDaysRef.current && (Date.now() - isLocalSlotUpdateRef.current >= 2000)) {
-          const parsed = parseAvailableDaysAndHours(meUpdated.availableDays, meUpdated.slotDuration || 30);
-          setProfileForm(prev => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              availableDays: meUpdated.availableDays,
-              scheduleDays: parsed.days,
-              availableSlots: parsed.slots
-            };
-          });
+
+        if (meUpdated.licenseNumber !== undefined && isEditingFieldRef.current !== 'licenseNumber') {
+          setClinicalDraft(prev => ({ ...prev, licenseNumber: meUpdated.licenseNumber || '' }));
+          setProfileForm(prev => ({ ...prev, licenseNumber: meUpdated.licenseNumber || '' }));
+        }
+
+        if (meUpdated.availableDays) {
+          if (!isEditingAvailableDaysRef.current && (Date.now() - isLocalSlotUpdateRef.current >= 2000)) {
+            const parsed = parseAvailableDaysAndHours(meUpdated.availableDays, meUpdated.slotDuration || 30);
+            setProfileForm(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                availableDays: meUpdated.availableDays,
+                scheduleDays: parsed.days,
+                availableSlots: parsed.slots
+              };
+            });
+          }
         }
       }
     };
@@ -521,6 +529,12 @@ const DoctorDashboard = ({ onNavigate }) => {
           try {
             localStorage.setItem('doctor_user', JSON.stringify(fresh));
           } catch {}
+
+          if (fresh.licenseNumber !== undefined && isEditingFieldRef.current !== 'licenseNumber') {
+            setClinicalDraft(prev => ({ ...prev, licenseNumber: fresh.licenseNumber || '' }));
+            setProfileForm(prev => ({ ...prev, licenseNumber: fresh.licenseNumber || '' }));
+          }
+
           if (fresh.availableDays && !isEditingAvailableDaysRef.current) {
             setProfileForm(prev => {
               if (prev?.availableDays === fresh.availableDays) return prev;
@@ -869,26 +883,38 @@ const DoctorDashboard = ({ onNavigate }) => {
     availableDays: activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)'
   }));
 
-  // Synchronize clinicalDraft strictly when doctor identity changes
+  // Synchronize clinicalDraft when doctor identity changes or activeDoctor is populated/updated from admin/DB
   React.useEffect(() => {
     if (activeDoctor) {
-      setClinicalDraft({
-        name: activeDoctor.name || '',
-        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
-        jobTitle: activeDoctor.jobTitle || '',
-        experience: activeDoctor.experience !== undefined ? activeDoctor.experience : 5,
-        hospital: activeDoctor.hospital || '',
-        degree: activeDoctor.degree || activeDoctor.qualifications || '',
-        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
-        phone: (() => {
-          const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
-          return raw.length > 10 ? raw.slice(-10) : raw;
-        })(),
-        licenseNumber: activeDoctor.licenseNumber || '',
-        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
+      setClinicalDraft(prev => {
+        // If doctor identity changed, completely reinitialize
+        const prevId = initialDoctorIdRef.current;
+        const curId = String(activeDoctor._id || activeDoctor.id || '');
+        if (!prev || !prevId || prevId !== curId) {
+          return {
+            name: activeDoctor.name || '',
+            specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+            jobTitle: activeDoctor.jobTitle || '',
+            experience: activeDoctor.experience !== undefined ? activeDoctor.experience : 5,
+            hospital: activeDoctor.hospital || '',
+            degree: activeDoctor.degree || activeDoctor.qualifications || '',
+            price: activeDoctor.fees ?? activeDoctor.price ?? 500,
+            phone: (() => {
+              const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+              return raw.length > 10 ? raw.slice(-10) : raw;
+            })(),
+            licenseNumber: activeDoctor.licenseNumber || '',
+            availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
+          };
+        }
+        // If same doctor and licenseNumber arrived or changed, sync it if not being actively edited
+        if (activeDoctor.licenseNumber !== undefined && activeDoctor.licenseNumber !== prev.licenseNumber && isEditingFieldRef.current !== 'licenseNumber') {
+          return { ...prev, licenseNumber: activeDoctor.licenseNumber || '' };
+        }
+        return prev;
       });
     }
-  }, [activeDoctor?._id, activeDoctor?.id]);
+  }, [activeDoctor?._id, activeDoctor?.id, activeDoctor?.licenseNumber]);
 
   // Schedule & Time Slots Management state (persisted across refresh)
   const [slotConfigMode, setSlotConfigModeState] = useState(() => {
@@ -1452,6 +1478,21 @@ const DoctorDashboard = ({ onNavigate }) => {
         dayWiseSlots: (activeDoctor.dayWiseSlots && typeof activeDoctor.dayWiseSlots === 'object') ? activeDoctor.dayWiseSlots : {},
         dateWiseSlots: (activeDoctor.dateWiseSlots && typeof activeDoctor.dateWiseSlots === 'object') ? activeDoctor.dateWiseSlots : {}
       });
+      setClinicalDraft({
+        name: activeDoctor.name || '',
+        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+        jobTitle: activeDoctor.jobTitle || '',
+        experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : (activeDoctor.experience || 5),
+        hospital: activeDoctor.hospital || '',
+        degree: activeDoctor.degree || activeDoctor.qualifications || '',
+        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
+        phone: (() => {
+          const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+          return raw.length > 10 ? raw.slice(-10) : raw;
+        })(),
+        licenseNumber: activeDoctor.licenseNumber || '',
+        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
+      });
     }
   }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.email]);
 
@@ -1659,6 +1700,68 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
 
       return changed ? next : prev;
+    });
+
+    // Synchronize clinicalDraft with remote updates if user is not currently editing
+    setClinicalDraft(prev => {
+      if (!prev) return prev;
+      let draftChanged = false;
+      const nextDraft = { ...prev };
+
+      if (activeDoctor.licenseNumber !== undefined && activeDoctor.licenseNumber !== prevRemote.licenseNumber && isEditingFieldRef.current !== 'licenseNumber') {
+        nextDraft.licenseNumber = activeDoctor.licenseNumber || '';
+        draftChanged = true;
+      }
+      if (activeDoctor.name && activeDoctor.name !== prevRemote.name && isEditingFieldRef.current !== 'name') {
+        nextDraft.name = activeDoctor.name;
+        draftChanged = true;
+      }
+      const incomingSpec = activeDoctor.specialization || activeDoctor.specialty || '';
+      const prevRemoteSpec = prevRemote.specialization || prevRemote.specialty || '';
+      if (incomingSpec && incomingSpec !== prevRemoteSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
+        nextDraft.specialty = incomingSpec;
+        draftChanged = true;
+      }
+      if (activeDoctor.jobTitle !== undefined && activeDoctor.jobTitle !== prevRemote.jobTitle && isEditingFieldRef.current !== 'jobTitle') {
+        nextDraft.jobTitle = activeDoctor.jobTitle || '';
+        draftChanged = true;
+      }
+      const incomingExp = parseInt(activeDoctor.experience ?? activeDoctor.experienceYears, 10);
+      const prevRemoteExp = parseInt(prevRemote.experience ?? prevRemote.experienceYears, 10);
+      if (!isNaN(incomingExp) && incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
+        nextDraft.experience = incomingExp;
+        draftChanged = true;
+      }
+      if (activeDoctor.hospital !== undefined && activeDoctor.hospital !== prevRemote.hospital && isEditingFieldRef.current !== 'hospital') {
+        nextDraft.hospital = activeDoctor.hospital;
+        draftChanged = true;
+      }
+      const incomingDegree = activeDoctor.degree || activeDoctor.qualifications || '';
+      const prevRemoteDegree = prevRemote.degree || prevRemote.qualifications || '';
+      if (incomingDegree && incomingDegree !== prevRemoteDegree && isEditingFieldRef.current !== 'degree') {
+        nextDraft.degree = incomingDegree;
+        draftChanged = true;
+      }
+      const incomingPrice = Number(activeDoctor.fees ?? activeDoctor.price);
+      const prevRemotePrice = Number(prevRemote.fees ?? prevRemote.price);
+      if (!isNaN(incomingPrice) && incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
+        nextDraft.price = incomingPrice;
+        draftChanged = true;
+      }
+      const rawInPhone = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
+      const incomingPhone = rawInPhone.length > 10 ? rawInPhone.slice(-10) : rawInPhone;
+      const rawPrevRemotePhone = String(prevRemote.phone || prevRemote.contact_number || '').replace(/\D/g, '');
+      const prevRemotePhone = rawPrevRemotePhone.length > 10 ? rawPrevRemotePhone.slice(-10) : rawPrevRemotePhone;
+      if (incomingPhone && incomingPhone !== prevRemotePhone && isEditingFieldRef.current !== 'phone') {
+        nextDraft.phone = incomingPhone;
+        draftChanged = true;
+      }
+      if (activeDoctor.availableDays && activeDoctor.availableDays !== prevRemote.availableDays && !isEditingAvailableDaysRef.current) {
+        nextDraft.availableDays = activeDoctor.availableDays;
+        draftChanged = true;
+      }
+
+      return draftChanged ? nextDraft : prev;
     });
   }, [activeDoctor, isSavingAbout]);
 
@@ -5625,13 +5728,17 @@ const DoctorDashboard = ({ onNavigate }) => {
                     type="text"
                     placeholder="e.g. DMC-2009-44182 or MCI-48291"
                     value={clinicalDraft.licenseNumber ?? ''}
+                    onFocus={() => { isEditingFieldRef.current = 'licenseNumber'; }}
                     onChange={(e) => {
+                      isEditingFieldRef.current = 'licenseNumber';
                       const val = e.target.value;
                       setClinicalDraft(prev => ({ ...prev, licenseNumber: val }));
                     }}
+                    onBlur={() => { isEditingFieldRef.current = null; }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
+                        isEditingFieldRef.current = null;
                         handleSaveAllProfileSettings(e, { explicit: true });
                         e.target?.blur?.();
                       }
