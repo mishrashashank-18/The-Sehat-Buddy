@@ -47,7 +47,7 @@ export async function getRoute(origin, destination) {
           coordinates: data.coordinates,
           distance: data.distance,
           duration: data.duration,
-          provider: data.provider || 'openrouteservice'
+          provider: data.provider || 'google'
         };
       }
     }

@@ -197,7 +197,7 @@ export default function HospitalDirections({ hospital, userLocation, onClose }) 
           {loading && (
             <div className={styles.loadingOverlay}>
               <RefreshCw size={16} className={styles.spin} />
-              <span>Calculating road route via OpenRouteService...</span>
+              <span>Calculating road route via Google Maps...</span>
             </div>
           )}
 

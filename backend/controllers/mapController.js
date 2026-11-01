@@ -1,8 +1,47 @@
 // backend/controllers/mapController.js
 
 /**
+ * Decode Google Encoded Polyline string into Leaflet [[lat, lng], ...] coordinates.
+ * Reference: Google Polyline Encoding Algorithm format.
+ */
+function decodePolyline(encoded) {
+  if (!encoded) return [];
+  const points = [];
+  let index = 0;
+  const len = encoded.length;
+  let lat = 0;
+  let lng = 0;
+
+  while (index < len) {
+    let b;
+    let shift = 0;
+    let result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = (result & 1) ? ~(result >> 1) : (result >> 1);
+    lng += dlng;
+
+    points.push([lat / 1e5, lng / 1e5]);
+  }
+  return points;
+}
+
+/**
  * Controller to fetch driving route between user origin and hospital destination.
- * Uses OpenRouteService with public OpenStreetMap (OSRM) as a resilient fallback.
+ * Uses official Google Maps Routes API with live traffic awareness, with OpenStreetMap (OSRM) as resilient fallback.
  */
 export const getRoute = async (req, res) => {
   try {
@@ -18,53 +57,69 @@ export const getRoute = async (req, res) => {
       });
     }
 
-    const apiKey = process.env.OPENROUTESERVICE_API_KEY;
-    const provider = process.env.MAP_ROUTING_PROVIDER || 'openrouteservice';
-
+    const googleApiKey = (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAP_API_KEY || '').trim();
     let routeData = null;
 
-    // 1. Attempt OpenRouteService if API key is provided
-    if (apiKey && apiKey.trim().length > 0) {
+    // 1. Primary: Google Maps Routes API (live traffic aware driving directions)
+    if (googleApiKey.length > 0) {
       try {
-        const orsUrl = `https://api.openrouteservice.org/v2/directions/driving-car/geojson`;
-        const orsRes = await fetch(orsUrl, {
+        const routesUrl = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+        const googleRes = await fetch(routesUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': apiKey.trim()
+            'X-Goog-Api-Key': googleApiKey,
+            'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline'
           },
           body: JSON.stringify({
-            coordinates: [
-              [originLng, originLat],
-              [destLng, destLat]
-            ]
+            origin: {
+              location: {
+                latLng: {
+                  latitude: originLat,
+                  longitude: originLng
+                }
+              }
+            },
+            destination: {
+              location: {
+                latLng: {
+                  latitude: destLat,
+                  longitude: destLng
+                }
+              }
+            },
+            travelMode: 'DRIVE',
+            routingPreference: 'TRAFFIC_AWARE'
           })
         });
 
-        if (orsRes.ok) {
-          const orsJson = await orsRes.json();
-          if (orsJson.features && orsJson.features.length > 0) {
-            const feature = orsJson.features[0];
-            const coordinates = feature.geometry.coordinates.map(coord => [coord[1], coord[0]]); // [lat, lng]
-            const distanceMeters = feature.properties.summary.distance;
-            const durationSeconds = feature.properties.summary.duration;
+        if (googleRes.ok) {
+          const googleJson = await googleRes.json();
+          if (googleJson.routes && googleJson.routes.length > 0) {
+            const route = googleJson.routes[0];
+            const coordinates = decodePolyline(route.polyline?.encodedPolyline || '');
+            const distanceMeters = route.distanceMeters || 0;
+            const durationSeconds = parseInt(String(route.duration || '0').replace('s', ''), 10) || 0;
 
-            routeData = {
-              provider: 'openrouteservice',
-              coordinates,
-              distanceMeters,
-              durationSeconds
-            };
+            if (coordinates.length > 0) {
+              routeData = {
+                provider: 'google',
+                coordinates,
+                distanceMeters,
+                durationSeconds
+              };
+            }
           }
         } else {
-          console.warn(`[MapController] ORS returned status ${orsRes.status}. Falling back to OSRM.`);
+          const errText = await googleRes.text().catch(() => '');
+          console.warn(`[MapController] Google Routes API status ${googleRes.status}: ${errText}. Falling back to OSRM.`);
         }
-      } catch (orsErr) {
-        console.warn(`[MapController] ORS request failed: ${orsErr.message}. Falling back to OSRM.`);
+      } catch (googleErr) {
+        console.warn(`[MapController] Google Routes API request failed: ${googleErr.message}. Falling back to OSRM.`);
       }
     }
 
-    // 2. Fallback to OpenStreetMap OSRM routing if ORS was not used or failed
+    // 2. Resilient Fallback: OpenStreetMap OSRM routing
     if (!routeData) {
       try {
         const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson`;
@@ -74,7 +129,6 @@ export const getRoute = async (req, res) => {
           const osrmJson = await osrmRes.json();
           if (osrmJson.routes && osrmJson.routes.length > 0) {
             const route = osrmJson.routes[0];
-            // OSRM coordinates are [lng, lat] -> convert to Leaflet [lat, lng]
             const coordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
             const distanceMeters = route.distance;
             const durationSeconds = route.duration;
@@ -92,7 +146,6 @@ export const getRoute = async (req, res) => {
       }
     }
 
-    // If both failed, return an error
     if (!routeData) {
       return res.status(502).json({
         success: false,
