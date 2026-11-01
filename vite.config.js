@@ -16,7 +16,18 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: target,
           changeOrigin: true,
-          secure: false
+          secure: false,
+          ws: true,
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, res) => {
+              // Suppress harmless socket resets from client tab reloads / aborted SSE streams
+              if (err.code === 'ECONNRESET' || err.code === 'ECONNABORTED') return;
+              if (res && !res.headersSent && typeof res.writeHead === 'function') {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: 'Backend proxy error: server unreachable on port 5000' }));
+              }
+            });
+          }
         },
         '/uploads': {
           target: target,
