@@ -35,7 +35,7 @@ const INQUIRY_CATEGORIES = [
 
 const DEFAULT_IMAGE = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80';
 
-export default function ContactUs() {
+export default function ContactUs({ onNavigate }) {
   const { contactInfo } = useData();
 
   // Dynamic values from Admin Control
@@ -397,7 +397,10 @@ export default function ContactUs() {
             <button
               type="button"
               className={styles.policyLink}
-              onClick={() => setActivePolicyType('about')}
+              onClick={() => {
+                if (onNavigate) onNavigate('about');
+                else window.location.href = '/about';
+              }}
             >
               About Us
             </button>

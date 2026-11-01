@@ -516,11 +516,11 @@ const LegalPoliciesManager = ({ showToast }) => {
             <button
               type="button"
               className={styles.previewBtn}
-              onClick={() => setPreviewType('about')}
-              title="Preview how users view About Us in-app"
+              onClick={() => window.open('/about', '_blank')}
+              title="Preview the live About Us page"
             >
               <Eye size={16} />
-              <span>Preview User View</span>
+              <span>Preview Live Page</span>
             </button>
 
             {hasAboutDoc && (

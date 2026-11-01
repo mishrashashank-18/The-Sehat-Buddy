@@ -24,6 +24,7 @@ import HospitalProfile from './components/hospitals/HospitalProfile';
 import ComingSoon from './components/common/ComingSoon';
 import PolicyViewerModal from './components/common/PolicyViewerModal';
 import ContactUs from './components/contact/ContactUs';
+import AboutUs from './components/about/AboutUs';
 import { useData } from './context/useData';
 import { NEW_SEHAT_BUDDY_FAVICON } from './data/faviconDataUri';
 import './styles/global.css';
@@ -107,7 +108,7 @@ const resolveCurrentView = () => {
   if (path === '/kid-care' || path === '/services/kid-care') return 'coming-soon:kid-care';
   if (path === '/care-services' || hash === '#care-services') return 'coming-soon:care-services';
   if (path === '/services' || hash === '#services') return 'coming-soon:all-services';
-  if (path === '/about' || hash === '#about') return 'coming-soon:about';
+  if (path === '/about' || path === '/company/about' || path === '/about-us' || hash === '#about' || hash === '#about-us') return 'about';
   if (path === '/contact' || path === '/contact-us' || hash === '#contact' || hash === '#contact-us') return 'contact';
   if (path === '/privacy' || hash === '#privacy') return 'coming-soon:privacy';
   if (path === '/terms' || hash === '#terms') return 'coming-soon:terms';
@@ -399,6 +400,7 @@ function AppContent() {
     else if (resolvedView === 'hospital-profile') targetPath = `/hospitals/${resolvedParam}`;
     else if (resolvedView === 'coming-soon') targetPath = `/coming-soon/${resolvedParam || 'feature'}`;
     else if (resolvedView === 'contact') targetPath = '/contact';
+    else if (resolvedView === 'about') targetPath = '/about';
 
     if (resolvedView === 'user-login' && resolvedParam) {
       setRedirectAfterLogin(resolvedParam);
@@ -507,7 +509,7 @@ function AppContent() {
 
   if (currentView.startsWith('coming-soon:')) {
     const feature = currentView.split(':')[1];
-    const isPolicy = feature === 'privacy' || feature === 'terms' || feature === 'about' || feature === 'aboutus';
+    const isPolicy = feature === 'privacy' || feature === 'terms';
     return (
       <div className="app">
         <Navbar onNavigate={navigateTo} currentView={currentView} />
@@ -516,10 +518,20 @@ function AppContent() {
         {isPolicy && (
           <PolicyViewerModal
             isOpen={true}
-            type={feature === 'aboutus' ? 'about' : feature}
+            type={feature}
             onClose={() => navigateTo('home')}
           />
         )}
+      </div>
+    );
+  }
+
+  if (currentView === 'about') {
+    return (
+      <div className="app aboutViewApp">
+        <Navbar onNavigate={navigateTo} currentView={currentView} />
+        <AboutUs onNavigate={navigateTo} />
+        <Footer onNavigate={navigateTo} />
       </div>
     );
   }

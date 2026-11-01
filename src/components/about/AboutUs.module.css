@@ -1,0 +1,803 @@
+/* src/components/about/AboutUs.module.css */
+
+.aboutPage {
+  background-color: #ffffff;
+  color: #1e293b;
+  font-family: inherit;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* 1. Hero Section */
+.heroSection {
+  background: linear-gradient(135deg, #f0fdf4 0%, #eff6ff 40%, #f8fafc 100%);
+  padding: 80px 0 70px 0;
+  border-bottom: 1px solid #e2e8f0;
+  position: relative;
+  overflow: hidden;
+}
+
+.heroSection::before {
+  content: '';
+  position: absolute;
+  top: -100px;
+  right: -80px;
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.08) 0%, rgba(255, 255, 255, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.heroContent {
+  max-width: 860px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.heroBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  padding: 6px 16px;
+  border-radius: 30px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+  margin-bottom: 24px;
+}
+
+.badgeIcon {
+  color: #2563eb;
+}
+
+.heroTitle {
+  font-size: 3.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.2;
+  margin-bottom: 24px;
+  letter-spacing: -0.03em;
+}
+
+.gradientText {
+  background: linear-gradient(135deg, #2563eb 0%, #0d9488 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.heroSubtitle {
+  font-size: 1.2rem;
+  line-height: 1.7;
+  color: #475569;
+  margin: 0 auto 36px auto;
+  max-width: 760px;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.primaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #2563eb;
+  color: #ffffff;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.primaryCta:hover {
+  background: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45);
+}
+
+.secondaryCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  color: #1e293b;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.secondaryCta:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-2px);
+}
+
+/* 2. Stats Strip */
+.statsStrip {
+  background: #ffffff;
+  padding: 40px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.statCard {
+  text-align: center;
+  padding: 20px 16px;
+  border-right: 1px solid #f1f5f9;
+}
+
+.statCard:last-child {
+  border-right: none;
+}
+
+.statNumber {
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: #0284c7;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+
+.statLabel {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.statSub {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* 3. Section Headers & Utility Pills */
+.sectionPill {
+  display: inline-block;
+  background: #eff6ff;
+  color: #2563eb;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+.sectionTitle {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-bottom: 16px;
+}
+
+.sectionSubtitle {
+  font-size: 1.1rem;
+  color: #64748b;
+  max-width: 680px;
+  line-height: 1.6;
+  margin: 0 auto;
+}
+
+.sectionHeaderCenter {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.textHighlight {
+  color: #2563eb;
+}
+
+/* 4. Origin Story Section */
+.storySection {
+  padding: 90px 0;
+  background: #ffffff;
+}
+
+.storyGrid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 50px;
+  align-items: center;
+}
+
+.bodyParagraph {
+  font-size: 1.08rem;
+  line-height: 1.8;
+  color: #334155;
+  margin-bottom: 20px;
+}
+
+.storyVisualCol {
+  display: flex;
+  justify-content: center;
+}
+
+.storyQuoteCard {
+  background: linear-gradient(145deg, #f8fafc 0%, #eff6ff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: 24px;
+  padding: 40px 36px;
+  box-shadow: 0 10px 30px rgba(37, 99, 235, 0.08);
+  position: relative;
+}
+
+.quoteIconWrap {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  margin-bottom: 24px;
+}
+
+.quoteText {
+  font-size: 1.25rem;
+  font-style: italic;
+  line-height: 1.6;
+  color: #1e3a8a;
+  margin: 0 0 24px 0;
+  font-weight: 500;
+}
+
+.quoteAuthor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-top: 1px solid #bfdbfe;
+  padding-top: 18px;
+}
+
+.quoteAuthor strong {
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.quoteAuthor span {
+  font-size: 0.82rem;
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* 5. Mission & Vision Section */
+.missionVisionSection {
+  padding: 80px 0;
+  background: #f8fafc;
+}
+
+.missionVisionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+
+.mvCard {
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 38px 34px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.mvCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.07);
+}
+
+.missionCard {
+  border-top: 4px solid #2563eb;
+}
+
+.visionCard {
+  border-top: 4px solid #0d9488;
+}
+
+.mvIconHeader {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.mvIconWrap {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.missionCard .mvIconWrap {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.visionCard .mvIconWrap {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+.mvBadge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.missionCard .mvBadge {
+  color: #2563eb;
+}
+
+.visionCard .mvBadge {
+  color: #0d9488;
+}
+
+.mvTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.mvDesc {
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: #475569;
+  margin-bottom: 24px;
+}
+
+.mvFeatureList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 20px;
+}
+
+.mvFeatureItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.92rem;
+  color: #334155;
+  font-weight: 500;
+}
+
+.missionCard .mvFeatureItem svg {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.visionCard .mvFeatureItem svg {
+  color: #0d9488;
+  flex-shrink: 0;
+}
+
+/* 6. Core Values Section */
+.valuesSection {
+  padding: 90px 0;
+  background: #ffffff;
+}
+
+.valuesGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+}
+
+.valueCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.25s ease;
+  position: relative;
+}
+
+.valueCard:hover {
+  transform: translateY(-4px);
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+}
+
+.valueIcon {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+
+.valTrust {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.valTransparency {
+  background: #f0fdfa;
+  color: #0d9488;
+}
+
+.valCare {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.valSimplicity {
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.valueHeading {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.valueText {
+  font-size: 0.94rem;
+  line-height: 1.6;
+  color: #64748b;
+  margin-bottom: 20px;
+  flex-grow: 1;
+}
+
+.valueTag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 7. Ecosystem Section */
+.ecosystemSection {
+  padding: 90px 0;
+  background: #f8fafc;
+}
+
+.ecosystemGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.ecoCard {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 32px 28px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.03);
+  transition: all 0.25s ease;
+}
+
+.ecoCard:hover {
+  transform: translateY(-4px);
+  border-color: #bfdbfe;
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.08);
+}
+
+.ecoIconWrap {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.ecoCard h4 {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 10px;
+}
+
+.ecoCard p {
+  font-size: 0.93rem;
+  line-height: 1.6;
+  color: #64748b;
+  margin: 0;
+}
+
+/* 8. Differentiators Section */
+.differentiatorSection {
+  padding: 90px 0;
+  background: #ffffff;
+}
+
+.diffGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.diffCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 26px 30px;
+  transition: all 0.2s ease;
+}
+
+.diffCard:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  transform: translateX(4px);
+}
+
+.diffNumber {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #2563eb;
+  background: #eff6ff;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.diffContent h3 {
+  font-size: 1.18rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.diffContent p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #475569;
+  margin: 0;
+}
+
+/* 9. Promise Closing Banner */
+.promiseSection {
+  padding: 80px 0 100px 0;
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);
+}
+
+.promiseCard {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #0f172a 100%);
+  color: #ffffff;
+  border-radius: 28px;
+  padding: 60px 48px;
+  text-align: center;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.promiseBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 16px;
+  border-radius: 30px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.promiseHeading {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #ffffff;
+  max-width: 860px;
+  margin: 0 auto 20px auto;
+  letter-spacing: -0.02em;
+}
+
+.promiseText {
+  font-size: 1.12rem;
+  line-height: 1.7;
+  color: #cbd5e1;
+  max-width: 720px;
+  margin: 0 auto 28px auto;
+}
+
+.promiseTagline {
+  font-size: 1.15rem;
+  font-style: italic;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-bottom: 10px;
+}
+
+.promiseBrandName {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #94a3b8;
+  margin-bottom: 40px;
+  text-transform: uppercase;
+}
+
+.promiseCtas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.promisePrimaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #3b82f6;
+  color: #ffffff;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
+}
+
+.promisePrimaryBtn:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+}
+
+.promiseSecondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.promiseSecondaryBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.promiseContactBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 14px 28px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.promiseContactBtn:hover {
+  background: #f1f5f9;
+  transform: translateY(-2px);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1024px) {
+  .heroTitle {
+    font-size: 2.6rem;
+  }
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .statCard {
+    border-right: none;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .storyGrid {
+    grid-template-columns: 1fr;
+    gap: 36px;
+  }
+  .valuesGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .ecosystemGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .heroSection {
+    padding: 50px 0 40px 0;
+  }
+  .heroTitle {
+    font-size: 2.1rem;
+  }
+  .heroSubtitle {
+    font-size: 1.02rem;
+  }
+  .sectionTitle {
+    font-size: 1.9rem;
+  }
+  .missionVisionGrid {
+    grid-template-columns: 1fr;
+  }
+  .valuesGrid {
+    grid-template-columns: 1fr;
+  }
+  .ecosystemGrid {
+    grid-template-columns: 1fr;
+  }
+  .promiseCard {
+    padding: 40px 24px;
+  }
+  .promiseHeading {
+    font-size: 1.6rem;
+  }
+  .promiseText {
+    font-size: 1rem;
+  }
+  .diffCard {
+    flex-direction: column;
+    gap: 14px;
+  }
+}
