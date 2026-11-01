@@ -5,12 +5,15 @@ import https from 'https';
 import { fileURLToPath } from 'url';
 import Content from '../models/Content.js';
 import Corporate from '../models/Corporate.js';
+import Contact from '../models/Contact.js';
 import Inquiry from '../models/Inquiry.js';
+import { getOrSeedContact } from './contactRoutes.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { sendEmail } from '../utils/email.js';
 
 import { v2 as cloudinary } from 'cloudinary';
+import { extractCloudinaryPublicId, getCloudinary } from './uploadRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,28 +51,7 @@ export const seedContentIfEmpty = async () => {
       }
     }
 
-    const existingContact = await Content.findOne({ type: 'contact' });
-    if (!existingContact) {
-      const defaultContact = {
-        topBadge: 'Verified Healthcare Concierge',
-        statusBadge: '24/7 Live Patient Support Active',
-        title: "We're Here for You & Your Family",
-        subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
-        helplineLabel: 'Helpline & Emergency',
-        helplineStatus: '24x7 Active',
-        helplineNumber: '+91 98765 4321',
-        helphoneNumber: '+91 98765 4321',
-        helplineDesc: 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
-        image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80",
-        imagePublicId: null,
-        photoBadge: '40+ Network Hospitals • Bengaluru Care Hub',
-        phones: [
-          { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 4321', isPrimary: true }
-        ]
-      };
-      await Content.create({ type: 'contact', data: defaultContact });
-      console.log('[Content] Auto-seeded "contact" info into database.');
-    }
+    await getOrSeedContact();
 
     const existingLegal = await Content.findOne({ type: 'legal_policies' });
     if (!existingLegal) {
@@ -106,28 +88,9 @@ export const seedContentIfEmpty = async () => {
 
 router.get('/contact', async (req, res) => {
   try {
-    let doc = await Content.findOne({ type: 'contact' });
-    if (!doc) {
-      const defaultContact = {
-        topBadge: 'Verified Healthcare Concierge',
-        statusBadge: '24/7 Live Patient Support Active',
-        title: "We're Here for You & Your Family",
-        subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
-        helplineLabel: 'Helpline & Emergency',
-        helplineStatus: '24x7 Active',
-        helplineNumber: '+91 98765 4321',
-        helphoneNumber: '+91 98765 4321',
-        helplineDesc: 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
-        image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80",
-        imagePublicId: null,
-        photoBadge: '40+ Network Hospitals • Bengaluru Care Hub',
-        phones: [
-          { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 4321', isPrimary: true }
-        ]
-      };
-      doc = await Content.create({ type: 'contact', data: defaultContact });
-    }
-    return res.json({ success: true, data: doc.data });
+    const contact = await getOrSeedContact();
+    const data = contact.toObject ? contact.toObject() : contact;
+    return res.json({ success: true, data });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -508,6 +471,96 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
       }
     }
 
+    // Automatically clean up old Cloudinary hero photo if removed or replaced
+    if (type === 'hero' && bodyData) {
+      try {
+        const existingHero = await Content.findOne({ type: 'hero' });
+        const oldHeroImg = existingHero?.data?.heroImage;
+        const newHeroImg = bodyData?.heroImage;
+        if (oldHeroImg && (oldHeroImg.includes('cloudinary.com') || oldHeroImg.includes('res.cloudinary.com')) && (!newHeroImg || newHeroImg !== oldHeroImg)) {
+          const pubId = extractCloudinaryPublicId(oldHeroImg);
+          if (pubId) {
+            const cld = getCloudinary();
+            cld.uploader.destroy(pubId, { resource_type: 'image', invalidate: true })
+              .catch(err => console.warn('Failed to delete old hero photo from Cloudinary:', err.message));
+          }
+        }
+      } catch (err) {
+        console.warn('Hero photo cleanup check error:', err.message);
+      }
+    }
+
+    // Automatically clean up old Cloudinary explainer video if removed or replaced
+    if (type === 'hero' && bodyData) {
+      try {
+        const existingHero = await Content.findOne({ type: 'hero' });
+        const oldVid = existingHero?.data?.whyChooseVideoUrl;
+        const newVid = bodyData?.whyChooseVideoUrl;
+        if (oldVid && (oldVid.includes('cloudinary.com') || oldVid.includes('res.cloudinary.com')) && (!newVid || newVid !== oldVid)) {
+          const pubId = extractCloudinaryPublicId(oldVid);
+          if (pubId) {
+            const cld = getCloudinary();
+            cld.uploader.destroy(pubId, { resource_type: 'video', invalidate: true })
+              .catch(err => console.warn('Failed to delete old explainer video from Cloudinary:', err.message));
+          }
+        }
+      } catch (err) {
+        console.warn('Hero video cleanup check error:', err.message);
+      }
+    }
+
+    // Automatic Cloudinary asset cleanup when legal policy document is cleared or replaced
+    if (type === 'legal_policies' && bodyData) {
+      try {
+        const existingDoc = await Content.findOne({ type: 'legal_policies' });
+        if (existingDoc && existingDoc.data) {
+          const checkKeys = ['privacyPolicy', 'termsAndConditions'];
+          for (const k of checkKeys) {
+            const oldUrl = existingDoc.data[k]?.url;
+            const oldPublicId = existingDoc.data[k]?.publicId || existingDoc.data[k]?.public_id;
+            const newUrl = bodyData[k]?.url;
+            if (oldUrl && (oldUrl.includes('cloudinary.com') || oldUrl.includes('res.cloudinary.com')) && (!newUrl || newUrl !== oldUrl)) {
+              const pubId = oldPublicId || extractCloudinaryPublicId(oldUrl, oldUrl.includes('/raw/upload/'));
+              if (pubId) {
+                const cld = getCloudinary();
+                const primaryType = oldUrl.includes('/raw/upload/') ? 'raw' : 'image';
+                cld.uploader.destroy(pubId, { resource_type: primaryType, invalidate: true })
+                  .then(r => {
+                    if (r && r.result === 'not found') {
+                      const altType = primaryType === 'raw' ? 'image' : 'raw';
+                      const altId = altType === 'raw' ? (pubId.endsWith('.pdf') ? pubId : `${pubId}.pdf`) : pubId.replace(/\.[^/.]+$/, '');
+                      cld.uploader.destroy(altId, { resource_type: altType, invalidate: true }).catch(() => {});
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
+        }
+      } catch (cleanErr) {
+        console.warn('Failed to clean up old legal policy from Cloudinary:', cleanErr.message);
+      }
+    }
+
+    // Automatic Cloudinary asset cleanup when contact showcase photo is cleared or replaced
+    if (type === 'contact' && bodyData) {
+      try {
+        const existingContact = await Content.findOne({ type: 'contact' });
+        const oldContactImg = existingContact?.data?.image;
+        const newContactImg = bodyData?.image;
+        if (oldContactImg && (oldContactImg.includes('cloudinary.com') || oldContactImg.includes('res.cloudinary.com')) && (!newContactImg || newContactImg !== oldContactImg)) {
+          const pubId = extractCloudinaryPublicId(oldContactImg);
+          if (pubId) {
+            const cld = getCloudinary();
+            cld.uploader.destroy(pubId, { resource_type: 'image', invalidate: true })
+              .catch(err => console.warn('Failed to delete old contact photo from Cloudinary:', err.message));
+          }
+        }
+      } catch (err) {
+        console.warn('Contact photo cleanup check error:', err.message);
+      }
+    }
+
     let finalData = bodyData;
     const arrayTypes = ['corporate', 'services', 'features', 'articles'];
     if (arrayTypes.includes(type)) {
@@ -552,6 +605,14 @@ router.put('/:type', checkAdminAuth, async (req, res) => {
       } catch (cErr) {
         console.warn('Corporate sync warning in contentRoutes:', cErr.message);
       }
+    } else if (type === 'contact') {
+      try {
+        const contactDoc = await Contact.findOneAndUpdate({}, { $set: finalData }, { upsert: true, new: true });
+        broadcastDbChange('contacts', 'update', contactDoc._id, finalData);
+      } catch (cErr) {
+        console.warn('Contact sync warning in contentRoutes:', cErr.message);
+      }
+      broadcastDbChange('contents', 'update', content._id, { type, data: finalData });
     } else {
       broadcastDbChange('contents', 'update', content._id, { type, data: finalData });
     }

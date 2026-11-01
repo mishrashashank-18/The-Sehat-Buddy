@@ -652,12 +652,30 @@ export const api = {
   },
 
   async getContact() {
+    try {
+      const res = await fetch(`${API_BASE}/contact`);
+      if (res.ok) {
+        const data = await handleResponse(res);
+        return data.data;
+      }
+    } catch {}
     const res = await fetch(`${API_BASE}/content/contact`);
     const data = await handleResponse(res);
     return data.data;
   },
 
   async updateContact(contactData) {
+    try {
+      const res = await fetch(`${API_BASE}/contact`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify(contactData)
+      });
+      if (res.ok) {
+        const data = await handleResponse(res);
+        return data.data;
+      }
+    } catch {}
     const res = await fetch(`${API_BASE}/content/contact`, {
       method: 'PUT',
       headers: getAuthHeaders(),
@@ -862,29 +880,63 @@ export const api = {
   },
 
   // Image Upload (Cloudinary)
-  async uploadImage(fileOrBase64, folder = 'sehatbuddy') {
-    let body;
-    let headers = {};
+  async uploadImage(fileOrBase64, folder = 'sehatbuddy', onProgress = null) {
     const token = getActiveAuthToken();
+    const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     if (fileOrBase64 instanceof File || fileOrBase64 instanceof Blob) {
+      if (onProgress && typeof onProgress === 'function' && typeof XMLHttpRequest !== 'undefined') {
+        return new Promise((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${API_BASE}/upload/image`);
+          if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100);
+              onProgress(percent);
+            }
+          };
+          xhr.onload = () => {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              if (xhr.status >= 200 && xhr.status < 300 && data.success) {
+                resolve(data.url);
+              } else {
+                reject(new Error(data.message || 'Image upload failed'));
+              }
+            } catch (e) {
+              reject(new Error('Upload server error: ' + (xhr.statusText || xhr.status || 'Connection failed')));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Network error during image upload'));
+          const formData = new FormData();
+          formData.append('image', fileOrBase64);
+          formData.append('folder', folder);
+          xhr.send(formData);
+        });
+      }
+
       const formData = new FormData();
       formData.append('image', fileOrBase64);
       formData.append('folder', folder);
-      body = formData;
+      const res = await fetch(`${API_BASE}/upload/image`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      const data = await handleResponse(res);
+      return data.url;
     } else {
       headers['Content-Type'] = 'application/json';
-      body = JSON.stringify({ image: fileOrBase64, folder });
+      const res = await fetch(`${API_BASE}/upload/image`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ image: fileOrBase64, folder })
+      });
+      const data = await handleResponse(res);
+      return data.url;
     }
-
-    const res = await fetch(`${API_BASE}/upload/image`, {
-      method: 'POST',
-      headers,
-      body
-    });
-    const data = await handleResponse(res);
-    return data.url;
   },
 
   // PDF Document Upload (Cloudinary / Backend storage) - Max 1MB
@@ -988,6 +1040,10 @@ export const api = {
 
   async deleteImage(urlOrPublicId, resourceType = 'image') {
     return this.deleteMedia(urlOrPublicId, resourceType);
+  },
+
+  async deleteVideo(urlOrPublicId) {
+    return this.deleteMedia(urlOrPublicId, 'video');
   },
 
   // Video Upload (Cloudinary)

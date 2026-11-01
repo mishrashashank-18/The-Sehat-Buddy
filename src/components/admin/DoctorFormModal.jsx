@@ -875,6 +875,47 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   };
 
   const [isUploading, setIsUploading] = useState(false);
+  const [deletingPhoto, setDeletingPhoto] = useState(false);
+
+  const handleDeleteDoctorPhoto = async (skipConfirm = false) => {
+    const curImage = (formData.image || doctorToEdit?.image || '').trim();
+    if (!curImage) {
+      setFormData(prev => ({ ...prev, image: '' }));
+      setCustomImageUrl('');
+      return;
+    }
+
+    if (!skipConfirm) {
+      if (!window.confirm('Are you sure you want to permanently delete this doctor profile photo? It will be deleted from Cloudinary storage.')) {
+        return;
+      }
+    }
+
+    setDeletingPhoto(true);
+    try {
+      // 1. Delete from Cloudinary if hosted there
+      if (curImage.includes('cloudinary.com') || curImage.includes('res.cloudinary.com')) {
+        await api.deleteImage(curImage).catch((err) => {
+          console.warn('Failed to delete doctor photo from Cloudinary:', err);
+        });
+      }
+
+      // 2. Clear image from state
+      setFormData(prev => ({ ...prev, image: '' }));
+      setCustomImageUrl('');
+
+      // 3. Persist immediately if editing an existing doctor
+      const targetId = doctorToEdit?.id || doctorToEdit?._id;
+      if (targetId) {
+        await updateDoctor(targetId, { image: '' });
+      }
+    } catch (err) {
+      console.error('Failed to permanently delete doctor photo:', err);
+      alert('Error deleting photo: ' + (err.message || 'Please try again.'));
+    } finally {
+      setDeletingPhoto(false);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -882,8 +923,15 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
     setIsUploading(true);
     try {
+      // If previous photo was on Cloudinary, delete it to prevent orphaned files
+      const oldImg = formData.image || doctorToEdit?.image;
+      if (oldImg && (oldImg.includes('cloudinary.com') || oldImg.includes('res.cloudinary.com'))) {
+        api.deleteImage(oldImg).catch(err => console.warn('Failed to delete old photo from Cloudinary:', err));
+      }
+
       const url = await api.uploadImage(file, 'sehatbuddy/doctors');
       setFormData(prev => ({ ...prev, image: url }));
+      setCustomImageUrl(url);
     } catch (err) {
       console.error('Failed to upload to Cloudinary:', err);
       const reader = new FileReader();
@@ -893,24 +941,91 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       reader.readAsDataURL(file);
     } finally {
       setIsUploading(false);
+      e.target.value = '';
     }
   };
 
   const [uploadingReelIdx, setUploadingReelIdx] = useState(null);
   const [uploadingReelVideoIdx, setUploadingReelVideoIdx] = useState(null);
   const [deletingCoverIdx, setDeletingCoverIdx] = useState(null);
+  const [deletingReelIdx, setDeletingReelIdx] = useState(null);
+
+  const handleDeleteReel = async (index) => {
+    const newReels = [...formData.reels];
+    const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
+    const reelUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
+    const coverUrl = (cur.coverPhoto || '').trim();
+
+    if (!reelUrl && !coverUrl) return;
+
+    if (!window.confirm(`Are you sure you want to permanently delete Reel ${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from the doctor's profile.`)) {
+      return;
+    }
+
+    setDeletingReelIdx(index);
+    try {
+      // 1. Delete video from Cloudinary if hosted there
+      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
+        await api.deleteVideo(reelUrl).catch((err) => {
+          console.warn('Failed to delete reel video from Cloudinary:', err);
+        });
+      }
+
+      // 2. Delete cover photo from Cloudinary if hosted there
+      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
+        await api.deleteMedia(coverUrl, coverResType).catch((err) => {
+          console.warn('Failed to delete reel cover from Cloudinary:', err);
+        });
+      }
+
+      // 3. Clear reel slot in state
+      newReels[index] = { url: '', coverPhoto: '' };
+      setFormData(prev => ({ ...prev, reels: newReels }));
+
+      // 4. Immediately persist to MongoDB Atlas if editing an existing doctor
+      const targetId = doctorToEdit?.id || doctorToEdit?._id;
+      if (targetId) {
+        await updateDoctor(targetId, { reels: newReels });
+      }
+    } catch (err) {
+      console.error('Failed to permanently delete reel:', err);
+      alert('Failed to delete reel: ' + (err.message || 'Please try again.'));
+    } finally {
+      setDeletingReelIdx(null);
+    }
+  };
 
   const handleReelVideoUpload = async (index, file) => {
     if (!file) return;
     setUploadingReelVideoIdx(index);
     try {
+      const cur = (typeof formData.reels[index] === 'object' && formData.reels[index]) ? formData.reels[index] : {};
+      const oldReelUrl = (typeof formData.reels[index] === 'string' ? formData.reels[index] : (cur.url || cur.link || '')).trim();
+      const oldCoverUrl = (cur.coverPhoto || '').trim();
+
       const res = await api.uploadVideo(file, 'sehatbuddy/reels');
       const videoUrl = typeof res === 'string' ? res : (res?.url || '');
       if (videoUrl) {
+        // Automatically delete old Cloudinary video if it is being replaced
+        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
+          api.deleteVideo(oldReelUrl).catch((err) => {
+            console.warn('Failed to delete old reel video from Cloudinary:', err);
+          });
+        }
+
         const autoCover = videoUrl.replace(/\.[^/.]+$/, '.jpg');
+
+        // Automatically delete old Cloudinary cover if it is being replaced
+        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== autoCover) {
+          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCoverUrl, coverResType).catch((err) => {
+            console.warn('Failed to delete old reel cover from Cloudinary:', err);
+          });
+        }
+
         const newReels = [...formData.reels];
-        const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-        newReels[index] = { ...cur, url: videoUrl, coverPhoto: cur.coverPhoto || autoCover };
+        newReels[index] = { ...cur, url: videoUrl, coverPhoto: autoCover };
         setFormData(prev => ({ ...prev, reels: newReels }));
 
         const targetId = doctorToEdit?.id || doctorToEdit?._id;
@@ -967,17 +1082,29 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     if (!file) return;
     setUploadingReelIdx(index);
     try {
-      const url = await api.uploadImage(file, 'sehatbuddy/reels');
-      const newReels = [...formData.reels];
-      const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-      const currentUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
-      newReels[index] = { ...cur, url: currentUrl, coverPhoto: url };
-      setFormData(prev => ({ ...prev, reels: newReels }));
+      const cur = (typeof formData.reels[index] === 'object' && formData.reels[index]) ? formData.reels[index] : {};
+      const currentUrl = (typeof formData.reels[index] === 'string' ? formData.reels[index] : (cur.url || cur.link || '')).trim();
+      const oldCoverUrl = (cur.coverPhoto || '').trim();
 
-      // Automatically persist to MongoDB Atlas & DataContext in real-time
-      const targetId = doctorToEdit?.id || doctorToEdit?._id;
-      if (targetId) {
-        await updateDoctor(targetId, { reels: newReels });
+      const url = await api.uploadImage(file, 'sehatbuddy/reels');
+      if (url) {
+        // Automatically delete old Cloudinary cover if it is being replaced
+        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== url) {
+          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCoverUrl, coverResType).catch((err) => {
+            console.warn('Failed to delete old reel cover from Cloudinary:', err);
+          });
+        }
+
+        const newReels = [...formData.reels];
+        newReels[index] = { ...cur, url: currentUrl, coverPhoto: url };
+        setFormData(prev => ({ ...prev, reels: newReels }));
+
+        // Automatically persist to MongoDB Atlas & DataContext in real-time
+        const targetId = doctorToEdit?.id || doctorToEdit?._id;
+        if (targetId) {
+          await updateDoctor(targetId, { reels: newReels });
+        }
       }
     } catch (err) {
       console.error('Failed to upload reel cover to Cloudinary:', err);
@@ -1464,11 +1591,34 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               </div>
               <button 
                 type="button" 
-                onClick={() => setFormData({ ...formData, image: '' })}
-                style={{ fontSize: '0.75rem', background: '#fee2e2', color: '#ef4444', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                title="Remove photo & leave blank"
+                disabled={deletingPhoto}
+                onClick={() => handleDeleteDoctorPhoto()}
+                style={{
+                  fontSize: '0.75rem',
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  border: '1px solid #fecaca',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  cursor: deletingPhoto ? 'not-allowed' : 'pointer',
+                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title="Permanently delete photo from Cloudinary & leave blank"
               >
-                Clear to Blank
+                {deletingPhoto ? (
+                  <>
+                    <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={12} />
+                    <span>Delete Photo</span>
+                  </>
+                )}
               </button>
             </div>
           ) : (
@@ -1511,7 +1661,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             <div className={styles.presetGrid}>
               <div
                 className={`${styles.presetItem} ${!formData.image ? styles.presetSelected : ''}`}
-                onClick={() => setFormData({ ...formData, image: '' })}
+                onClick={() => handleDeleteDoctorPhoto(true)}
                 title="Leave profile photo blank"
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
               >
@@ -1528,7 +1678,18 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                   <div
                     key={idx}
                     className={`${styles.presetItem} ${isSelected ? styles.presetSelected : ''}`}
-                    onClick={() => setFormData({ ...formData, image: isSelected ? '' : preset.src })}
+                    onClick={() => {
+                      if (isSelected) {
+                        handleDeleteDoctorPhoto(true);
+                      } else {
+                        // If replacing custom Cloudinary image with a preset, clean up Cloudinary
+                        const oldImg = formData.image || doctorToEdit?.image;
+                        if (oldImg && (oldImg.includes('cloudinary.com') || oldImg.includes('res.cloudinary.com'))) {
+                          api.deleteImage(oldImg).catch(err => console.warn('Failed to delete old photo from Cloudinary:', err));
+                        }
+                        setFormData({ ...formData, image: preset.src });
+                      }
+                    }}
                     title={isSelected ? 'Click to unselect and leave blank' : `Select ${preset.label}`}
                     style={{ cursor: 'pointer' }}
                   >
@@ -1567,9 +1728,36 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 <span>Click to select an image from your device</span>
                 <input type="file" accept="image/*" onChange={handleFileUpload} className={styles.fileInput} />
               </label>
-              {formData.image && typeof formData.image === 'string' && formData.image.startsWith('data:') && (
-                <div className={styles.previewBox}>
-                  <img src={formData.image} alt="Uploaded preview" />
+              {formData.image && (
+                <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#ffffff', padding: '10px 14px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <img src={formData.image} alt="Uploaded preview" style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
+                      {formData.image.includes('cloudinary.com') ? 'Cloudinary Photo Active' : 'Uploaded Image Active'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={deletingPhoto}
+                    onClick={() => handleDeleteDoctorPhoto()}
+                    style={{
+                      fontSize: '0.75rem',
+                      background: '#fee2e2',
+                      color: '#dc2626',
+                      border: '1px solid #fecaca',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      cursor: deletingPhoto ? 'not-allowed' : 'pointer',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title="Permanently delete photo from Cloudinary"
+                  >
+                    {deletingPhoto ? <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={12} />}
+                    <span>Delete Photo</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1775,6 +1963,41 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                         }}
                       />
                     </label>
+
+                    {(reelUrl || customCover) && (
+                      <button
+                        type="button"
+                        disabled={deletingReelIdx === index}
+                        onClick={() => handleDeleteReel(index)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          color: '#dc2626',
+                          background: '#fee2e2',
+                          border: '1px solid #fecaca',
+                          padding: '3px 8px',
+                          borderRadius: '6px',
+                          cursor: deletingReelIdx === index ? 'not-allowed' : 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                        title="Permanently delete this reel and its cover photo from Cloudinary"
+                      >
+                        {deletingReelIdx === index ? (
+                          <>
+                            <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                            <span>Deleting Reel...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={12} />
+                            <span>Delete Reel</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <input

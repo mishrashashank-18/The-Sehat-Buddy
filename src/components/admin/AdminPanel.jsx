@@ -448,6 +448,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   const [reviewToEdit, setReviewToEdit] = useState(null);
   const [preselectedReviewDoctor, setPreselectedReviewDoctor] = useState(null);
   const [forcedReviewType, setForcedReviewType] = useState(null);
+  const [deletingReviewIds, setDeletingReviewIds] = useState(() => new Set());
 
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
@@ -780,7 +781,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
   // Filtered Reviews
   const filteredReviews = useMemo(() => {
     const q = reviewSearch.toLowerCase().trim();
-    return (reviews || []).filter(r => {
+    const list = (reviews || []).filter(r => {
       const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
       const matchType = reviewTypeFilter === 'all' || r.targetType === reviewTypeFilter;
       const matchDoctor = reviewDoctorFilter === 'all' ||
@@ -798,6 +799,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         (r.treatment || '').toLowerCase().includes(q) ||
         (r.comment || '').toLowerCase().includes(q);
       return matchStatus && matchType && matchDoctor && matchSearch;
+    });
+
+    // Deterministic sort: newest first, stable ID fallback
+    return list.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (!isNaN(timeA) && !isNaN(timeB) && timeA !== timeB) return timeB - timeA;
+      return String(b._id || b.id || '').localeCompare(String(a._id || a.id || ''));
     });
   }, [reviews, reviewStatusFilter, reviewTypeFilter, reviewDoctorFilter, reviewSearch]);
 
@@ -891,11 +900,22 @@ const AdminPanel = ({ onExit, onNavigate }) => {
         showToast('FAQ deleted successfully from database.');
       }
     } else if (typeToDelete === 'review') {
+      const targetId = String(itemToDelete._id || itemToDelete.id || itemToDelete);
       try {
-        await deleteReview(itemToDelete._id || itemToDelete.id || itemToDelete);
+        setDeletingReviewIds(prev => new Set(prev).add(targetId));
+        // Allow exit animation to start smoothly
+        await new Promise(r => setTimeout(r, 180));
+        await deleteReview(targetId);
         showToast(`Review by "${itemToDelete.patientName || 'Patient'}" deleted permanently.`);
       } catch (err) {
         showToast(err.message || 'Failed to delete review', 'error');
+      } finally {
+        setDeletingReviewIds(prev => {
+          if (!prev.has(targetId)) return prev;
+          const next = new Set(prev);
+          next.delete(targetId);
+          return next;
+        });
       }
     } else if (typeToDelete === 'speciality') {
       deleteSpecialityProcedure(itemToDelete.id || itemToDelete._id);
@@ -1090,7 +1110,6 @@ const AdminPanel = ({ onExit, onNavigate }) => {
             >
               <PhoneCall size={20} />
               <span>Contact Us Info</span>
-              <span className={styles.navCount}>{(contactInfo?.phones?.length || 0) + (contactInfo?.emails?.length || 0)}</span>
             </button>
 
             <button
@@ -3392,6 +3411,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                       onEdit={handleEditReview}
                       onDelete={handleDeleteReviewClick}
                       onApprove={handleApproveReview}
+                      isDeleting={deletingReviewIds.has(String(rev._id || rev.id))}
                     />
                   ))
                 )}

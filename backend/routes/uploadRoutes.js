@@ -673,7 +673,7 @@ router.post('/instagram-reel', protect, async (req, res) => {
 /**
  * Helper to extract Cloudinary public_id from URL
  */
-export const extractCloudinaryPublicId = (url) => {
+export const extractCloudinaryPublicId = (url, keepExtension = false) => {
   if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return null;
   try {
     const afterUpload = url.split('/upload/')[1];
@@ -697,6 +697,7 @@ export const extractCloudinaryPublicId = (url) => {
       filteredParts.push(part);
     }
     const fullPathWithExt = filteredParts.join('/');
+    if (keepExtension) return fullPathWithExt;
     const lastDot = fullPathWithExt.lastIndexOf('.');
     return lastDot !== -1 ? fullPathWithExt.substring(0, lastDot) : fullPathWithExt;
   } catch (e) {
@@ -712,13 +713,13 @@ const checkAuth = (req, res, next) => {
 };
 
 /**
- * Delete image or video completely from Cloudinary or local disk
+ * Delete image, video or document (raw/PDF) completely from Cloudinary or local disk
  * POST /api/upload/delete or DELETE /api/upload
- * Body: { url, public_id, resource_type: 'image' | 'video' }
+ * Body: { url, public_id, resource_type: 'image' | 'video' | 'raw' }
  */
 const handleDeleteMedia = async (req, res) => {
   try {
-    const { url, resource_type = 'image' } = req.body;
+    let { url, resource_type = 'image' } = req.body;
     let public_id = req.body.public_id;
 
     let localDeleted = false;
@@ -762,8 +763,17 @@ const handleDeleteMedia = async (req, res) => {
       });
     }
 
+    // Auto-detect resource_type from URL if not explicitly provided or if URL clearly indicates type
+    let detectedType = resource_type;
+    if (url && typeof url === 'string') {
+      if (url.includes('/raw/upload/')) detectedType = 'raw';
+      else if (url.includes('/video/upload/')) detectedType = 'video';
+      else if (url.includes('/image/upload/') && resource_type !== 'raw') detectedType = 'image';
+    }
+
+    const isRaw = detectedType === 'raw' || (typeof url === 'string' && url.includes('/raw/upload/'));
     if (!public_id && url) {
-      public_id = extractCloudinaryPublicId(url);
+      public_id = extractCloudinaryPublicId(url, isRaw);
     }
 
     if (!public_id) {
@@ -774,18 +784,41 @@ const handleDeleteMedia = async (req, res) => {
     }
 
     const cld = getCloudinary();
-    const result = await cld.uploader.destroy(public_id, {
-      resource_type,
+    let result = await cld.uploader.destroy(public_id, {
+      resource_type: detectedType,
       invalidate: true
     });
 
-    notifyStorageChanged(`cloudinary:${resource_type}`);
+    // Fallback attempt: If not found, try the alternate resource_type (image <-> raw)
+    if (result.result === 'not found' || result.result !== 'ok') {
+      const altType = detectedType === 'raw' ? 'image' : (detectedType === 'image' ? 'raw' : null);
+      if (altType) {
+        const altPublicId = altType === 'raw'
+          ? (url ? extractCloudinaryPublicId(url, true) : (public_id.endsWith('.pdf') ? public_id : `${public_id}.pdf`))
+          : (public_id.replace(/\.[^/.]+$/, ''));
+        try {
+          const altResult = await cld.uploader.destroy(altPublicId, {
+            resource_type: altType,
+            invalidate: true
+          });
+          if (altResult.result === 'ok') {
+            result = altResult;
+            detectedType = altType;
+            public_id = altPublicId;
+          }
+        } catch (altErr) {
+          console.warn('Fallback delete attempt failed:', altErr.message);
+        }
+      }
+    }
+
+    notifyStorageChanged(`cloudinary:${detectedType}`);
 
     return res.json({
       success: true,
       result: result.result || 'ok',
       public_id,
-      message: `Asset "${public_id}" deleted completely from Cloudinary.`
+      message: `Asset "${public_id}" deleted completely from Cloudinary (${detectedType}).`
     });
   } catch (error) {
     console.error('Cloudinary media deletion error:', error);

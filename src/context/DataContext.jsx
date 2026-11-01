@@ -1166,6 +1166,18 @@ export const DataProvider = ({ children }) => {
                   broadcastSync(STORAGE_KEY_CORPORATE, payload.data);
                 } catch {}
               }
+            } else if (collection === 'contacts') {
+              const contactData = payload.fullDocument || payload.data;
+              if (contactData && typeof contactData === 'object') {
+                setContactInfo(prev => {
+                  const safeContact = { ...prev, ...contactData };
+                  try {
+                    localStorage.setItem(STORAGE_KEY_CONTACT, JSON.stringify(safeContact));
+                    broadcastSync(STORAGE_KEY_CONTACT, safeContact);
+                  } catch {}
+                  return isSame(prev, safeContact) ? prev : safeContact;
+                });
+              }
             } else if (collection === 'faqs') {
               if (payload.operation === 'delete' || payload.action === 'delete') {
                 const targetDocId = payload.docId || payload.id;
@@ -2319,6 +2331,10 @@ export const DataProvider = ({ children }) => {
       clearTimeout(corporateSyncTimeoutRef.current);
     }
     const safePrev = Array.isArray(corporateTieups) ? corporateTieups : [];
+    const target = safePrev.find(c => matchesId(c, id));
+    if (target?.logo && (target.logo.includes('cloudinary.com') || target.logo.includes('res.cloudinary.com'))) {
+      api.deleteImage(target.logo).catch(err => console.warn('Failed to delete corporate logo from Cloudinary:', err));
+    }
     const next = safePrev.filter(c => !matchesId(c, id));
     setCorporateTieups(next);
     try {
@@ -2336,6 +2352,12 @@ export const DataProvider = ({ children }) => {
   const deleteAllCorporateTieups = async () => {
     if (corporateSyncTimeoutRef.current) {
       clearTimeout(corporateSyncTimeoutRef.current);
+    }
+    const safePrev = Array.isArray(corporateTieups) ? corporateTieups : [];
+    for (const c of safePrev) {
+      if (c?.logo && (c.logo.includes('cloudinary.com') || c.logo.includes('res.cloudinary.com'))) {
+        api.deleteImage(c.logo).catch(err => console.warn('Cloudinary delete error:', err));
+      }
     }
     const next = [];
     setCorporateTieups(next);
@@ -2484,7 +2506,7 @@ export const DataProvider = ({ children }) => {
   };
 
   // Reviews CRUD
-  const addReview = async (reviewData, tokenOverride = null) => {
+  const addReview = useCallback(async (reviewData, tokenOverride = null) => {
     try {
       const saved = await api.addReview(reviewData, tokenOverride);
       if (saved && (saved._id || saved.id)) {
@@ -2534,9 +2556,9 @@ export const DataProvider = ({ children }) => {
       }
       throw err;
     }
-  };
+  }, []);
 
-  const updateReview = async (id, updatedData) => {
+  const updateReview = useCallback(async (id, updatedData) => {
     try {
       const saved = await api.updateReview(id, updatedData);
       setReviews(prev => {
@@ -2557,9 +2579,9 @@ export const DataProvider = ({ children }) => {
       console.error('Failed to update review on server:', err);
       throw err;
     }
-  };
+  }, []);
 
-  const deleteReview = async (target) => {
+  const deleteReview = useCallback(async (target) => {
     const targetId = (target && typeof target === 'object') ? (target._id || target.id) : target;
     setReviews(prev => {
       const exists = prev.some(r => matchesId(r, targetId));
@@ -2580,7 +2602,7 @@ export const DataProvider = ({ children }) => {
       refreshReviews();
       throw err;
     }
-  };
+  }, [refreshReviews]);
 
   // Specialities & Procedures CRUD
   const addSpecialityProcedure = (itemData) => {
@@ -2643,9 +2665,30 @@ export const DataProvider = ({ children }) => {
   };
 
   // 11. Platform Contact Info CRUD
+  const refreshContactInfo = useCallback(async () => {
+    try {
+      const data = await api.getContact();
+      if (data && typeof data === 'object') {
+        setContactInfo(prev => {
+          const next = { ...prev, ...data };
+          try {
+            localStorage.setItem(STORAGE_KEY_CONTACT, JSON.stringify(next));
+            broadcastSync(STORAGE_KEY_CONTACT, next);
+          } catch {}
+          return isSame(prev, next) ? prev : next;
+        });
+        return data;
+      }
+    } catch (err) {
+      console.warn('Failed to refresh contact info from MongoDB Atlas:', err);
+    }
+  }, []);
+
   const updateContactInfo = useCallback(async (newContactData) => {
     try {
       const updated = {
+        ...(contactInfo || {}),
+        ...newContactData,
         phones: Array.isArray(newContactData.phones) ? newContactData.phones : (contactInfo?.phones || []),
         emails: Array.isArray(newContactData.emails) ? newContactData.emails : (contactInfo?.emails || []),
         workingHours: newContactData.workingHours || contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM'
@@ -2777,6 +2820,7 @@ export const DataProvider = ({ children }) => {
         // Platform Contact Info
         contactInfo,
         updateContactInfo,
+        refreshContactInfo,
         // Legal Policies & Compliance (25MB PDFs)
         legalPolicies,
         updateLegalPolicies,

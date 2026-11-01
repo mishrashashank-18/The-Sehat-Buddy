@@ -2,11 +2,12 @@ import React from 'react';
 import { Star, Trash2 } from 'lucide-react';
 import ExpandableReviewComment from '../common/ExpandableReviewComment';
 
-const AdminReviewCard = React.memo(({
+const AdminReviewCard = ({
   review,
   onEdit,
   onDelete,
-  onApprove
+  onApprove,
+  isDeleting = false
 }) => {
   const rev = review;
   const ratingNum = Number(rev.rating) || 5;
@@ -21,8 +22,12 @@ const AdminReviewCard = React.memo(({
         display: 'flex',
         flexDirection: 'column',
         gap: '10px',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.03)',
-        contain: 'content'
+        boxShadow: isDeleting ? 'none' : '0 2px 6px rgba(0,0,0,0.03)',
+        opacity: isDeleting ? 0 : 1,
+        transform: isDeleting ? 'scale(0.94)' : 'scale(1)',
+        transition: 'opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease',
+        pointerEvents: isDeleting ? 'none' : 'auto',
+        willChange: 'opacity, transform'
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -133,6 +138,29 @@ const AdminReviewCard = React.memo(({
       </div>
     </div>
   );
-});
+};
 
-export default AdminReviewCard;
+const areReviewsEqual = (prevProps, nextProps) => {
+  if (prevProps.isDeleting !== nextProps.isDeleting) return false;
+  const p = prevProps.review;
+  const n = nextProps.review;
+  if (p === n) return true;
+  if (!p || !n) return false;
+  return (
+    String(p._id || p.id) === String(n._id || n.id) &&
+    p.patientName === n.patientName &&
+    p.patientCity === n.patientCity &&
+    p.rating === n.rating &&
+    p.targetType === n.targetType &&
+    p.targetName === n.targetName &&
+    p.doctorName === n.doctorName &&
+    p.treatment === n.treatment &&
+    p.insuranceUsed === n.insuranceUsed &&
+    p.title === n.title &&
+    p.comment === n.comment &&
+    p.status === n.status &&
+    p.createdAt === n.createdAt
+  );
+};
+
+export default React.memo(AdminReviewCard, areReviewsEqual);

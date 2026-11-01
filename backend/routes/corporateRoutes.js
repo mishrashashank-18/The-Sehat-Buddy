@@ -127,9 +127,9 @@ router.put('/:id', checkAdminAuth, async (req, res) => {
       query = { id: Number(id) || id };
     }
 
-    const existing = await Corporate.findOne(query);
-    // If the logo changed, delete the old logo from Cloudinary
-    if (existing && existing.logo && req.body.logo && existing.logo !== req.body.logo && existing.logo.includes('cloudinary.com')) {
+    const existing = await Corporate.findOne(query) || await Corporate.findOne({ id: id }) || (id.match(/^[0-9a-fA-F]{24}$/) ? await Corporate.findById(id) : null);
+    // If the logo changed (or was removed), delete the old logo from Cloudinary
+    if (existing && existing.logo && req.body.logo !== undefined && existing.logo !== req.body.logo && existing.logo.includes('cloudinary.com')) {
       const oldPublicId = extractCloudinaryPublicId(existing.logo);
       if (oldPublicId) {
         try {
@@ -202,7 +202,7 @@ router.delete('/:id', checkAdminAuth, async (req, res) => {
       query = { id: Number(id) || id };
     }
 
-    const corp = await Corporate.findOne(query);
+    let corp = await Corporate.findOne(query) || await Corporate.findOne({ id: id }) || (id.match(/^[0-9a-fA-F]{24}$/) ? await Corporate.findById(id) : null);
     if (corp && corp.logo && corp.logo.includes('cloudinary.com')) {
       const publicId = extractCloudinaryPublicId(corp.logo);
       if (publicId) {
@@ -215,7 +215,11 @@ router.delete('/:id', checkAdminAuth, async (req, res) => {
       }
     }
 
-    await Corporate.findOneAndDelete(query);
+    if (corp) {
+      await Corporate.findByIdAndDelete(corp._id);
+    } else {
+      await Corporate.findOneAndDelete(query);
+    }
     const allFormatted = await syncContentFromCorporates();
 
     broadcastDbChange('corporates', 'delete', id, { id });

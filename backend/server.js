@@ -22,6 +22,7 @@ import specialityRoutes from './routes/specialityRoutes.js';
 import newsletterRoutes from './routes/newsletterRoutes.js';
 import avatarRoutes from './routes/avatarRoutes.js';
 import corporateRoutes from './routes/corporateRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 
 import mongoSanitize from './middleware/mongoSanitize.js';
 import { initMongoDBChangeStream, streamRealtimeDatabase } from './services/storageMonitor.js';
@@ -430,6 +431,7 @@ app.use('/api/specialities-procedures', specialityRoutes);
 app.use('/api/newsletter', newsletterRoutes);
 app.use('/api/avatars', avatarRoutes);
 app.use('/api/corporate', corporateRoutes);
+app.use('/api/contact', contactRoutes);
 
 // 404 Route Catch-all
 app.use((req, res, next) => {

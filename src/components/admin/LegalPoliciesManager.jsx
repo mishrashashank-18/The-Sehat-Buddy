@@ -96,12 +96,14 @@ const LegalPoliciesManager = ({ showToast }) => {
       });
 
       // Clean up previous replaced file from server storage and Cloudinary
+      if (oldUrl && oldUrl !== res.url) {
+        const isRaw = oldUrl.includes('/raw/upload/');
+        api.deleteMedia(oldUrl, isRaw ? 'raw' : 'image').catch(() => {});
+        api.deleteMedia(oldUrl, isRaw ? 'image' : 'raw').catch(() => {});
+      }
       if (oldPublicId) {
         api.deleteMedia(oldPublicId, 'image').catch(() => {});
         api.deleteMedia(oldPublicId, 'raw').catch(() => {});
-      }
-      if (oldUrl && oldUrl !== res.url) {
-        api.deleteMedia(oldUrl).catch(() => {});
       }
 
       showToast && showToast(`${label} (${updatedMeta.fileSizeFormatted}) uploaded successfully!`, 'success');
@@ -120,21 +122,24 @@ const LegalPoliciesManager = ({ showToast }) => {
     const isPrivacy = type === 'privacy';
     const label = isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
     const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
-    const existingUrl = legalPolicies?.[policyKey]?.url;
-    const existingPublicId = legalPolicies?.[policyKey]?.publicId;
+    const policyData = legalPolicies?.[policyKey];
+    const existingUrl = policyData?.url;
+    const existingPublicId = policyData?.publicId || policyData?.public_id;
 
-    if (!window.confirm(`Are you sure you want to remove the ${label}? Patients viewing this will see "${label} Not Added" until a new file is uploaded.`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete the ${label}? The file will be permanently deleted from Cloudinary storage and removed from the website.`)) {
       return;
     }
 
     try {
       // 1. Delete physical file from Cloudinary and server disk
+      if (existingUrl) {
+        const isRaw = existingUrl.includes('/raw/upload/');
+        await api.deleteMedia(existingUrl, isRaw ? 'raw' : 'image').catch(() => {});
+        await api.deleteMedia(existingUrl, isRaw ? 'image' : 'raw').catch(() => {});
+      }
       if (existingPublicId) {
         await api.deleteMedia(existingPublicId, 'image').catch(() => {});
         await api.deleteMedia(existingPublicId, 'raw').catch(() => {});
-      }
-      if (existingUrl) {
-        await api.deleteMedia(existingUrl).catch(() => {});
       }
 
       // 2. Clear from MongoDB database
@@ -142,6 +147,7 @@ const LegalPoliciesManager = ({ showToast }) => {
         [policyKey]: {
           url: '',
           publicId: null,
+          public_id: null,
           fileName: '',
           fileSize: 0,
           fileSizeFormatted: '',
@@ -149,9 +155,9 @@ const LegalPoliciesManager = ({ showToast }) => {
           updatedAt: new Date().toISOString()
         }
       });
-      showToast && showToast(`${label} removed. Status is now "Not Added".`, 'info');
+      showToast && showToast(`${label} permanently deleted from Cloudinary and database.`, 'success');
     } catch (err) {
-      showToast && showToast(err.message || `Failed to remove ${label}.`, 'error');
+      showToast && showToast(err.message || `Failed to delete ${label}.`, 'error');
     }
   };
 

@@ -14,6 +14,7 @@ import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doct
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
 import { processDoctorReelsInBackground } from '../utils/reelService.js';
+import { cleanupReplacedReels } from '../utils/reelCleanup.js';
 
 export const generateStandardDoctorFaqs = (docName) => {
   const cleanName = (docName || '').trim().startsWith('Dr.') ? (docName || '').trim() : `Dr. ${(docName || 'the doctor').trim()}`;
@@ -891,13 +892,16 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.reels !== undefined) {
-        doctor.reels = Array.isArray(req.body.reels)
+        const previousReels = Array.isArray(doctor.reels) ? [...doctor.reels] : [];
+        const nextReels = Array.isArray(req.body.reels)
           ? req.body.reels.map(r => {
               if (typeof r === 'string') return r.trim();
               if (r && typeof r === 'object') return r;
               return '';
             }).filter(Boolean)
           : [];
+        cleanupReplacedReels(previousReels, nextReels).catch(() => {});
+        doctor.reels = nextReels;
         doctor.markModified('reels');
       }
       if (req.body.youtube_videos !== undefined) {

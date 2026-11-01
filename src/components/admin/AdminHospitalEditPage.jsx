@@ -511,8 +511,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [phoneError, setPhoneError] = useState('');
   const [bedError, setBedError] = useState('');
   const [isUploadingHero, setIsUploadingHero] = useState(false);
+  const [isDeletingHero, setIsDeletingHero] = useState(false);
   const [heroUploadSuccess, setHeroUploadSuccess] = useState(false);
   const [isUploadingGallery, setIsUploadingGallery] = useState(false);
+  const [deletingPhotoIdx, setDeletingPhotoIdx] = useState(null);
   const [galleryUploadMode, setGalleryUploadMode] = useState('file'); // 'file' | 'url'
   const [galleryFile, setGalleryFile] = useState(null);
   const [galleryFilePreview, setGalleryFilePreview] = useState(null);
@@ -541,6 +543,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   // Direct Media Upload State
   const [uploadingMediaKey, setUploadingMediaKey] = useState(null);
+  const [deletingReelIdx, setDeletingReelIdx] = useState(null);
   const [reelUploadProgress, setReelUploadProgress] = useState({});
   const [togglingDoctorIds, setTogglingDoctorIds] = useState(new Set());
   const starTogglingRef = useRef(new Set());
@@ -1175,21 +1178,71 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   };
 
+  const handleRemoveHeroPhoto = async () => {
+    const curImage = formData.image;
+    if (!curImage) return;
+
+    if (!window.confirm('Are you sure you want to permanently delete this primary hero photo? It will be removed from Cloudinary storage and your hospital profile.')) {
+      return;
+    }
+
+    setIsDeletingHero(true);
+    try {
+      if (curImage.includes('cloudinary.com') || curImage.includes('res.cloudinary.com')) {
+        await api.deleteImage(curImage).catch(err => console.warn('Failed to delete hero photo from Cloudinary:', err));
+      }
+
+      handleChange('image', '');
+      isDirtyRef.current = true;
+
+      // Auto-persist immediately to MongoDB database
+      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      if (targetHospId) {
+        await updateHospital(targetHospId, { image: '' });
+        triggerSaveSuccess(3500);
+      }
+    } catch (err) {
+      console.error('Error deleting hero photo:', err);
+      alert('Failed to delete photo: ' + (err.message || 'Please try again.'));
+    } finally {
+      setIsDeletingHero(false);
+    }
+  };
+
   const handleRemovePhoto = async (index) => {
     const photoToRemove = formData.photos[index];
     const photoUrl = typeof photoToRemove === 'string' ? photoToRemove : photoToRemove?.url;
-    if (photoUrl && photoUrl.includes('cloudinary.com')) {
-      try {
-        await api.deleteImage(photoUrl);
-      } catch (e) {
-        console.warn('Cloudinary delete notice:', e.message);
-      }
+
+    if (!window.confirm(`Are you sure you want to permanently delete Photo #${index + 1}? This will remove it from Cloudinary storage and your showcase gallery.`)) {
+      return;
     }
-    setFormData(prev => ({
-      ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
-    }));
-    setSaveSuccess(false);
+
+    setDeletingPhotoIdx(index);
+    try {
+      if (photoUrl && (photoUrl.includes('cloudinary.com') || photoUrl.includes('res.cloudinary.com'))) {
+        await api.deleteImage(photoUrl).catch(e => console.warn('Cloudinary delete notice:', e.message));
+      }
+
+      const updatedPhotos = formData.photos.filter((_, i) => i !== index);
+      setFormData(prev => ({
+        ...prev,
+        photos: updatedPhotos
+      }));
+      isDirtyRef.current = true;
+      setSaveSuccess(false);
+
+      // Auto-persist immediately to MongoDB database
+      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      if (targetHospId) {
+        await updateHospital(targetHospId, { photos: updatedPhotos });
+        triggerSaveSuccess(3500);
+      }
+    } catch (err) {
+      console.error('Failed to remove photo:', err);
+      alert('Failed to delete photo: ' + (err.message || 'Please try again.'));
+    } finally {
+      setDeletingPhotoIdx(null);
+    }
   };
 
   // Popular / Star Doctors assignment: explicit and idempotent (with sequence tracking & rollback on error)
@@ -1430,26 +1483,63 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   const handleRemoveReel = async (index) => {
-    isDirtyRef.current = true;
-    const updatedReels = formData.reels.filter((_, i) => i !== index);
-    setFormData(prev => ({
-      ...prev,
-      reels: updatedReels
-    }));
-    setSaveSuccess(false);
+    const reel = formData.reels[index];
+    const reelUrl = (typeof reel === 'string' ? reel : (reel?.url || reel?.link || '')).trim();
+    const coverUrl = (reel?.coverPhoto || '').trim();
 
-    // Auto-persist immediately to MongoDB database
-    const targetHospId = hospital?._id || hospitalId || hospital?.id;
-    if (targetHospId && !isHospitalView) {
-      try {
-        await updateHospital(targetHospId, {
-          reels: updatedReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
-        });
-        triggerSaveSuccess(3500);
-      } catch (err) {
-        console.warn('Auto-save reel deletion error:', err);
-      }
+    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from this hospital profile.`)) {
+      return;
     }
+
+    setDeletingReelIdx(index);
+    try {
+      // 1. Permanently delete video from Cloudinary if hosted there
+      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
+        await api.deleteVideo(reelUrl).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
+      }
+
+      // 2. Permanently delete cover photo from Cloudinary if hosted there
+      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
+        await api.deleteMedia(coverUrl, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+      }
+
+      isDirtyRef.current = true;
+      const updatedReels = formData.reels.filter((_, i) => i !== index);
+      setFormData(prev => ({
+        ...prev,
+        reels: updatedReels
+      }));
+      setSaveSuccess(false);
+
+      // Auto-persist immediately to MongoDB database
+      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      if (targetHospId && !isHospitalView) {
+        try {
+          await updateHospital(targetHospId, {
+            reels: updatedReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
+          });
+          triggerSaveSuccess(3500);
+        } catch (err) {
+          console.warn('Auto-save reel deletion error:', err);
+        }
+      }
+    } catch (err) {
+      console.error('Error permanently deleting reel:', err);
+      alert('Failed to delete reel: ' + (err.message || 'Please try again.'));
+    } finally {
+      setDeletingReelIdx(null);
+    }
+  };
+
+  const handleRemoveReelCover = async (index) => {
+    const curCover = formData.reels[index]?.coverPhoto || '';
+    if (!curCover) return;
+    if (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com')) {
+      const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
+      api.deleteMedia(curCover, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+    }
+    handleUpdateReel(index, 'coverPhoto', '');
   };
 
   // YouTube Videos
@@ -1501,9 +1591,16 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const key = `${type}-${index}`;
     setUploadingMediaKey(key);
     try {
+      const curReel = type === 'reel' ? formData.reels[index] : null;
+      const oldCover = (curReel?.coverPhoto || '').trim();
+
       const rawRes = await api.uploadImage(file, 'sehatbuddy/covers');
       const url = typeof rawRes === 'string' ? rawRes : (rawRes?.url || '');
       if (type === 'reel') {
+        if (oldCover && (oldCover.includes('cloudinary.com') || oldCover.includes('res.cloudinary.com')) && oldCover !== url) {
+          const coverResType = oldCover.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCover, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
+        }
         handleUpdateReel(index, 'coverPhoto', url);
       } else {
         handleUpdateVideo(index, 'coverPhoto', url);
@@ -1535,16 +1632,32 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setReelUploadProgress(prev => ({ ...prev, [index]: 10 }));
 
     try {
+      const curReel = formData.reels[index];
+      const oldReelUrl = (typeof curReel === 'string' ? curReel : (curReel?.url || curReel?.link || '')).trim();
+      const oldCoverUrl = (curReel?.coverPhoto || '').trim();
+
       const data = await api.uploadVideo(file, 'sehatbuddy/reels', (percent) => {
         setReelUploadProgress(prev => ({ ...prev, [index]: Math.min(98, Math.max(10, percent)) }));
       });
 
       const videoUrl = typeof data === 'string' ? data : (data?.url || data?.secure_url || '');
       if (videoUrl) {
+        // Automatically delete old Cloudinary reel video if replaced
+        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
+          api.deleteVideo(oldReelUrl).catch(err => console.warn('Failed to delete old hospital reel video from Cloudinary:', err));
+        }
+
         // Auto-set the Cloudinary Video URL
         handleUpdateReel(index, 'url', videoUrl);
         // Auto-set the Cloudinary instant video thumbnail if coverPhoto is empty or generated
         const autoThumbnail = (data && data.coverPhoto) || videoUrl.replace(/\.[^/.]+$/, '.jpg');
+
+        // Automatically delete old Cloudinary cover photo if replaced
+        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== autoThumbnail) {
+          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCoverUrl, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
+        }
+
         handleUpdateReel(index, 'coverPhoto', autoThumbnail);
       } else {
         throw new Error('Upload succeeded but no video URL was returned by server');
@@ -1566,10 +1679,22 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const key = `convert-ig-${idx}`;
     setUploadingMediaKey(key);
     try {
+      const curReel = formData.reels[idx];
+      const oldReelUrl = (typeof curReel === 'string' ? curReel : (curReel?.url || curReel?.link || '')).trim();
+      const oldCoverUrl = (curReel?.coverPhoto || '').trim();
+
       const data = await api.uploadInstagramReel(raw, 'sehatbuddy/reels');
       const videoUrl = typeof data === 'string' ? data : (data?.url || '');
       const coverPhoto = (data && data.coverPhoto) || (videoUrl ? videoUrl.replace(/\.[^/.]+$/, '.jpg') : '');
       if (videoUrl) {
+        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
+          api.deleteVideo(oldReelUrl).catch(err => console.warn('Failed to delete old hospital reel video from Cloudinary:', err));
+        }
+        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== coverPhoto) {
+          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCoverUrl, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
+        }
+
         handleUpdateReel(idx, 'url', videoUrl);
         if (coverPhoto) {
           handleUpdateReel(idx, 'coverPhoto', coverPhoto);
@@ -1584,7 +1709,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       if (match && match[1] && !formData.reels[idx]?.coverPhoto) {
         handleUpdateReel(idx, 'coverPhoto', `https://www.instagram.com/p/${match[1]}/media/?size=l`);
       }
-      alert(err.message || 'Instagram video auto-extraction is unavailable. You can still save this Instagram Reel link directly, or click "Upload Video" to upload an MP4 file.');
     } finally {
       setUploadingMediaKey(null);
     }
@@ -2758,13 +2882,40 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 <div>
                   <div className={styles.formGroup}>
                     <label className={styles.formLabel}>Hero Image URL</label>
-                    <input
-                      type="text"
-                      className={styles.inputField}
-                      value={formData.image}
-                      onChange={(e) => handleChange('image', e.target.value)}
-                      placeholder="https://..."
-                    />
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <input
+                        type="text"
+                        className={styles.inputField}
+                        value={formData.image}
+                        onChange={(e) => handleChange('image', e.target.value)}
+                        placeholder="https://..."
+                      />
+                      {formData.image && (
+                        <button
+                          type="button"
+                          disabled={isDeletingHero}
+                          onClick={handleRemoveHeroPhoto}
+                          style={{
+                            background: '#fee2e2',
+                            border: '1px solid #fecaca',
+                            color: '#dc2626',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            padding: '0 14px',
+                            borderRadius: '8px',
+                            cursor: isDeletingHero ? 'not-allowed' : 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            whiteSpace: 'nowrap'
+                          }}
+                          title="Permanently delete hero photo from Cloudinary"
+                        >
+                          {isDeletingHero ? <Loader2 size={14} className={styles.spinAnimation} /> : <Trash2 size={14} />}
+                          <span>{isDeletingHero ? 'Deleting...' : 'Delete Photo'}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Device Photo Upload for Primary Campus Hero */}
@@ -2797,11 +2948,19 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                         }
                         try {
                           setIsUploadingHero(true);
+                          const oldImage = formData.image;
                           const url = await api.uploadImage(file, 'sehatbuddy/hospitals');
                           if (url) {
+                            if (oldImage && (oldImage.includes('cloudinary.com') || oldImage.includes('res.cloudinary.com')) && oldImage !== url) {
+                              api.deleteImage(oldImage).catch(err => console.warn('Failed to delete replaced hero photo from Cloudinary:', err));
+                            }
                             handleChange('image', url);
                             setHeroUploadSuccess(true);
                             setTimeout(() => setHeroUploadSuccess(false), 4000);
+                            const targetHospId = hospital?._id || hospitalId || hospital?.id;
+                            if (targetHospId) {
+                              updateHospital(targetHospId, { image: url }).catch(() => {});
+                            }
                           }
                         } catch (err) {
                           console.error('Failed to upload hero photo:', err);
@@ -2875,7 +3034,33 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 </div>
 
                 <div>
-                  <label className={styles.formLabel}>Hero Image Preview</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label className={styles.formLabel} style={{ marginBottom: 0 }}>Hero Image Preview</label>
+                    {formData.image && (
+                      <button
+                        type="button"
+                        disabled={isDeletingHero}
+                        onClick={handleRemoveHeroPhoto}
+                        style={{
+                          background: '#fee2e2',
+                          border: '1px solid #fecaca',
+                          color: '#dc2626',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          cursor: isDeletingHero ? 'not-allowed' : 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                        title="Permanently delete hero photo from Cloudinary"
+                      >
+                        {isDeletingHero ? <Loader2 size={12} className={styles.spinAnimation} /> : <Trash2 size={12} />}
+                        <span>{isDeletingHero ? 'Deleting...' : 'Delete Photo'}</span>
+                      </button>
+                    )}
+                  </div>
                   <div style={{ width: '100%', height: '240px', borderRadius: '10px', overflow: 'hidden', border: formData.image ? '1.5px solid #cbd5e1' : '1.5px dashed #cbd5e1', position: 'relative', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {formData.image ? (
                       <>
@@ -3153,10 +3338,15 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           type="button"
                           className={styles.photoDeleteBtn}
                           style={{ position: 'static' }}
+                          disabled={deletingPhotoIdx === idx}
                           onClick={() => handleRemovePhoto(idx)}
-                          title="Delete photo from gallery"
+                          title="Permanently delete photo from gallery and Cloudinary"
                         >
-                          <Trash2 size={15} />
+                          {deletingPhotoIdx === idx ? (
+                            <Loader2 size={15} className={styles.spinAnimation} />
+                          ) : (
+                            <Trash2 size={15} />
+                          )}
                         </button>
                       </div>
                     </div>
@@ -3979,10 +4169,34 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       <strong style={{ fontSize: '0.88rem', color: '#db2777' }}>Reel #{idx + 1}</strong>
                       <button
                         type="button"
+                        disabled={deletingReelIdx === idx}
                         onClick={() => handleRemoveReel(idx)}
-                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          background: '#fee2e2',
+                          border: '1px solid #fecaca',
+                          color: '#dc2626',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          cursor: deletingReelIdx === idx ? 'not-allowed' : 'pointer'
+                        }}
+                        title="Permanently delete this reel and its Cloudinary media"
                       >
-                        <Trash2 size={16} />
+                        {deletingReelIdx === idx ? (
+                          <>
+                            <Loader2 size={13} className={styles.spinAnimation} />
+                            <span>Deleting Reel...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={13} />
+                            <span>Delete Reel</span>
+                          </>
+                        )}
                       </button>
                     </div>
 
@@ -4155,8 +4369,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                                   <button
                                     type="button"
                                     className={styles.coverRemoveBtn}
-                                    onClick={() => handleUpdateReel(idx, 'coverPhoto', '')}
-                                    title="Remove cover photo"
+                                    onClick={() => handleRemoveReelCover(idx)}
+                                    title="Permanently remove cover photo"
                                   >
                                     <Trash2 size={12} />
                                     <span>Remove</span>

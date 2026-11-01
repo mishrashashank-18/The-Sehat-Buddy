@@ -312,8 +312,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
     setIsUploading(true);
     try {
+      const oldImage = formData.image;
       const url = await api.uploadImage(file, 'sehatbuddy/hospitals');
       if (url) {
+        if (oldImage && (oldImage.includes('cloudinary.com') || oldImage.includes('res.cloudinary.com')) && oldImage !== url) {
+          api.deleteImage(oldImage).catch(err => console.warn('Failed to delete replaced hospital photo from Cloudinary:', err));
+        }
         setFormData(prev => ({ ...prev, image: url }));
       }
     } catch (err) {
@@ -325,6 +329,66 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
   };
 
   const [uploadingMediaIdx, setUploadingMediaIdx] = useState(null);
+  const [deletingReelIdx, setDeletingReelIdx] = useState(null);
+
+  const handleDeleteReel = async (index) => {
+    const reel = formData.reels[index];
+    const reelUrl = (typeof reel === 'string' ? reel : (reel?.url || reel?.link || '')).trim();
+    const coverUrl = (typeof reel === 'object' ? (reel?.coverPhoto || '') : '').trim();
+
+    if (!reelUrl && !coverUrl) return;
+
+    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from the hospital profile.`)) {
+      return;
+    }
+
+    setDeletingReelIdx(index);
+    try {
+      // 1. Delete video from Cloudinary if hosted there
+      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
+        await api.deleteVideo(reelUrl).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
+      }
+
+      // 2. Delete cover photo from Cloudinary if hosted there
+      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
+        await api.deleteMedia(coverUrl, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+      }
+
+      const nextReels = [...formData.reels];
+      nextReels[index] = { url: '', coverPhoto: '' };
+      setFormData(prev => ({ ...prev, reels: nextReels }));
+
+      const targetId = hospitalToEdit?._id || hospitalToEdit?.id;
+      if (targetId) {
+        await updateHospital(targetId, {
+          reels: nextReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
+        });
+      }
+    } catch (err) {
+      console.error('Failed to permanently delete hospital reel:', err);
+      alert('Failed to delete reel: ' + (err.message || 'Please try again.'));
+    } finally {
+      setDeletingReelIdx(null);
+    }
+  };
+
+  const handleRemoveCoverPhoto = async (type, index) => {
+    if (type === 'reel') {
+      const curCover = formData.reels[index]?.coverPhoto || '';
+      if (curCover && (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com'))) {
+        const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
+        api.deleteMedia(curCover, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+      }
+      updateReelItem(index, 'coverPhoto', '');
+    } else {
+      const curCover = formData.youtube_videos[index]?.coverPhoto || '';
+      if (curCover && (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com'))) {
+        api.deleteMedia(curCover, 'image').catch(err => console.warn('Failed to delete video cover from Cloudinary:', err));
+      }
+      updateVideoItem(index, 'coverPhoto', '');
+    }
+  };
 
   const handleMediaCoverUpload = async (e, type, index) => {
     const file = e.target.files?.[0];
@@ -337,6 +401,11 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
       if (type === 'reel') {
         const nextReels = [...formData.reels];
         const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
+        const oldCover = (cur.coverPhoto || '').trim();
+        if (oldCover && (oldCover.includes('cloudinary.com') || oldCover.includes('res.cloudinary.com')) && oldCover !== url) {
+          const coverResType = oldCover.includes('/video/upload/') ? 'video' : 'image';
+          api.deleteMedia(oldCover, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
+        }
         nextReels[index] = { ...cur, coverPhoto: url };
         setFormData(prev => ({ ...prev, reels: nextReels }));
       } else {
@@ -1064,15 +1133,56 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           {imageType === 'url' && (
             <div className={styles.formGroup}>
               <label>Image URL</label>
-              <input
-                type="url"
-                placeholder="https://images.unsplash.com/..."
-                value={customImageUrl}
-                onChange={(e) => {
-                  setCustomImageUrl(e.target.value);
-                  setFormData(prev => ({ ...prev, image: e.target.value }));
-                }}
-              />
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={customImageUrl}
+                  onChange={(e) => {
+                    setCustomImageUrl(e.target.value);
+                    setFormData(prev => ({ ...prev, image: e.target.value }));
+                  }}
+                />
+                {(customImageUrl || formData.image) && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const cur = customImageUrl || formData.image;
+                      if (!window.confirm('Are you sure you want to permanently delete this photo? It will also be removed from Cloudinary storage if hosted there.')) return;
+                      if (cur && (cur.includes('cloudinary.com') || cur.includes('res.cloudinary.com'))) {
+                        api.deleteImage(cur).catch(err => console.warn('Cloudinary delete error:', err));
+                      }
+                      setCustomImageUrl('');
+                      setFormData(prev => ({ ...prev, image: '' }));
+                      if (isEdit && hospitalToEdit?._id) {
+                        try {
+                          await updateHospital(hospitalToEdit._id, { image: '' });
+                        } catch (err) {
+                          console.warn('Auto-save error:', err);
+                        }
+                      }
+                    }}
+                    style={{
+                      background: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      color: '#dc2626',
+                      padding: '0 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      whiteSpace: 'nowrap'
+                    }}
+                    title="Delete photo and remove from Cloudinary"
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete Photo</span>
+                  </button>
+                )}
+              </div>
               {customImageUrl && (
                 <div className={styles.previewBox}>
                   <img src={customImageUrl} alt="Preview" onError={(e) => { e.target.style.display = 'none'; }} />
@@ -1095,8 +1205,44 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                 />
               </label>
               {formData.image && (
-                <div className={styles.previewBox} style={{ marginTop: '12px' }}>
+                <div className={styles.previewBox} style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
                   <img src={formData.image} alt="Hospital preview" style={{ maxHeight: '160px', borderRadius: '8px', objectFit: 'cover' }} />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!window.confirm('Are you sure you want to permanently delete this photo? It will also be removed from Cloudinary storage.')) return;
+                      const cur = formData.image;
+                      if (cur && (cur.includes('cloudinary.com') || cur.includes('res.cloudinary.com'))) {
+                        api.deleteImage(cur).catch(err => console.warn('Cloudinary delete error:', err));
+                      }
+                      setFormData(prev => ({ ...prev, image: '' }));
+                      setCustomImageUrl('');
+                      if (isEdit && hospitalToEdit?._id) {
+                        try {
+                          await updateHospital(hospitalToEdit._id, { image: '' });
+                        } catch (err) {
+                          console.warn('Auto-save error:', err);
+                        }
+                      }
+                    }}
+                    style={{
+                      background: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      color: '#dc2626',
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    title="Permanently delete photo from Cloudinary"
+                  >
+                    <Trash2 size={13} />
+                    <span>Delete Photo</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -1138,6 +1284,40 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                       value={reelUrl}
                       onChange={(e) => updateReelItem(index, 'url', e.target.value)}
                     />
+                    {(hasUrl || reelCover) && (
+                      <button
+                        type="button"
+                        disabled={deletingReelIdx === index}
+                        onClick={() => handleDeleteReel(index)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: '#fee2e2',
+                          border: '1px solid #fecaca',
+                          color: '#dc2626',
+                          borderRadius: '6px',
+                          padding: '6px 10px',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: deletingReelIdx === index ? 'not-allowed' : 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title="Permanently delete this reel from Cloudinary and hospital"
+                      >
+                        {deletingReelIdx === index ? (
+                          <>
+                            <Loader2 size={12} style={{ animation: 'spin 1s linear infinite' }} />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Trash2 size={12} />
+                            <span>Delete Reel</span>
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
 
                   {/* Cover Image option when reel URL is entered or cover exists */}
@@ -1164,8 +1344,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                           <button
                             type="button"
                             className={styles.removeCoverBtn}
-                            onClick={() => updateReelItem(index, 'coverPhoto', '')}
-                            title="Remove cover image"
+                            onClick={() => handleRemoveCoverPhoto('reel', index)}
+                            title="Permanently remove cover image"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -1255,8 +1435,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                           <button
                             type="button"
                             className={styles.removeCoverBtn}
-                            onClick={() => updateVideoItem(index, 'coverPhoto', '')}
-                            title="Remove cover image"
+                            onClick={() => handleRemoveCoverPhoto('video', index)}
+                            title="Permanently remove cover image"
                           >
                             <Trash2 size={13} />
                           </button>

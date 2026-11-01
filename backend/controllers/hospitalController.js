@@ -9,6 +9,7 @@ import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { calculateHospitalProfileCompletion, normalizeAndValidatePhone, validateBedCapacity, MIN_PROFILE_COMPLETION_THRESHOLD } from '../utils/hospitalProfileCompletion.js';
+import { cleanupReplacedReels } from '../utils/reelCleanup.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -984,6 +985,8 @@ export const updateHospital = async (req, res) => {
         } else {
           incomingReels = [];
         }
+        const previousReels = Array.isArray(hospital.reels) ? [...hospital.reels] : [];
+        cleanupReplacedReels(previousReels, incomingReels).catch(() => {});
         hospital.reels = incomingReels;
         hospital.markModified('reels');
 
@@ -1114,7 +1117,28 @@ export const updateHospital = async (req, res) => {
       hospital.markModified('star_doctors');
     }
     if (req.body.photos !== undefined) {
-      hospital.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+      const incomingPhotos = Array.isArray(req.body.photos) ? req.body.photos : [];
+      if (Array.isArray(hospital.photos)) {
+        const incomingUrls = new Set(
+          incomingPhotos.map(p => (typeof p === 'string' ? p : p?.url || '')).filter(Boolean)
+        );
+        for (const oldP of hospital.photos) {
+          const oldUrl = typeof oldP === 'string' ? oldP : oldP?.url || '';
+          if (oldUrl && (oldUrl.includes('cloudinary.com') || oldUrl.includes('res.cloudinary.com')) && !incomingUrls.has(oldUrl)) {
+            const pubId = extractCloudinaryPublicId(oldUrl);
+            if (pubId) {
+              try {
+                const cld = getCloudinary();
+                cld.uploader.destroy(pubId, { resource_type: 'image', invalidate: true })
+                  .catch(cleanErr => console.warn('Failed to delete old showcase photo from Cloudinary:', cleanErr.message));
+              } catch (cleanErr) {
+                console.warn('Failed to delete old showcase photo from Cloudinary:', cleanErr.message);
+              }
+            }
+          }
+        }
+      }
+      hospital.photos = incomingPhotos;
       hospital.markModified('photos');
     }
     if (req.body.cashlessInsurance !== undefined) {
@@ -1134,8 +1158,8 @@ export const updateHospital = async (req, res) => {
       hospital.markModified('insuranceHelpline');
     }
     const incomingImage = req.file ? req.file.path : req.body.image;
-    if (incomingImage && incomingImage !== hospital.image) {
-      if (hospital.image && typeof hospital.image === 'string' && hospital.image.includes('cloudinary.com')) {
+    if (incomingImage !== undefined && incomingImage !== hospital.image) {
+      if (hospital.image && typeof hospital.image === 'string' && (hospital.image.includes('cloudinary.com') || hospital.image.includes('res.cloudinary.com'))) {
         const oldPublicId = extractCloudinaryPublicId(hospital.image);
         if (oldPublicId) {
           try {
@@ -1146,7 +1170,7 @@ export const updateHospital = async (req, res) => {
           }
         }
       }
-      hospital.image = incomingImage;
+      hospital.image = incomingImage || '';
       hospital.markModified('image');
     }
 
@@ -1199,7 +1223,7 @@ export const updateHospital = async (req, res) => {
           if (req.body.photos !== undefined) fresh.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
           if (req.body.specialities !== undefined) fresh.specialities = Array.isArray(req.body.specialities) ? req.body.specialities : [];
           else if (req.body.specialties !== undefined) fresh.specialities = Array.isArray(req.body.specialties) ? req.body.specialties : [];
-          if (incomingImage) fresh.image = incomingImage;
+          if (incomingImage !== undefined) fresh.image = incomingImage || '';
           fresh.profileCompletion = calculateHospitalProfileCompletion(fresh).percentage;
           updatedHospital = await fresh.save();
         } else {

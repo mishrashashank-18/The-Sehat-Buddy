@@ -125,6 +125,12 @@ const CorporatePartnerRow = React.memo(({
     setIsUploadingLogo(true);
 
     try {
+      // If there was an old Cloudinary logo, delete it to prevent orphaned files
+      const oldLogo = draft.logo || corp.logo;
+      if (oldLogo && (oldLogo.includes('cloudinary.com') || oldLogo.includes('res.cloudinary.com'))) {
+        api.deleteImage(oldLogo).catch(err => console.warn('Failed to delete old logo from Cloudinary:', err));
+      }
+
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
       if (uploadedUrl) {
         setDraft(prev => ({ ...prev, logo: uploadedUrl }));
@@ -139,9 +145,18 @@ const CorporatePartnerRow = React.memo(({
     }
   };
 
-  const handleLogoRemove = () => {
+  const handleLogoRemove = async () => {
+    const oldLogo = draft.logo || corp.logo;
+    if (oldLogo && (oldLogo.includes('cloudinary.com') || oldLogo.includes('res.cloudinary.com'))) {
+      await api.deleteImage(oldLogo).catch(err => console.warn('Failed to delete logo from Cloudinary:', err));
+    }
     setDraft(prev => ({ ...prev, logo: '' }));
-    showToast('Logo removed from card draft. Click "Save" to apply.');
+    try {
+      await onSave(corpId, { ...draft, logo: '' });
+      showToast('Corporate logo removed and deleted from Cloudinary.');
+    } catch {
+      showToast('Logo removed from card draft. Click "Save" to apply.');
+    }
   };
 
   const handleSave = async () => {
@@ -326,7 +341,8 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     saveCorporateTieupsNow,
     resetFrontPageDefaults,
     contactInfo,
-    updateContactInfo
+    updateContactInfo,
+    refreshContactInfo
   } = useData();
 
   // Active sub-tab: 'hero' | 'services' | 'why' | 'articles' | 'corporate' | 'contact'
@@ -344,6 +360,12 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
       setSubTabState(initialSubTab);
     }
   }, [initialSubTab]);
+
+  useEffect(() => {
+    if (subTab === 'contact' && typeof refreshContactInfo === 'function') {
+      refreshContactInfo();
+    }
+  }, [subTab, refreshContactInfo]);
 
   // Contact Helplines & Support Editor State
   const [isAddingPhone, setIsAddingPhone] = useState(false);
@@ -377,6 +399,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
 
   const [photoBadgeInput, setPhotoBadgeInput] = useState(contactInfo?.photoBadge || '40+ Network Hospitals • Bengaluru Care Hub');
   const [uploadingContactPhoto, setUploadingContactPhoto] = useState(false);
+  const [isDeletingContactPhoto, setIsDeletingContactPhoto] = useState(false);
   const [contactPhotoProgress, setContactPhotoProgress] = useState(0);
   const contactPhotoRef = useRef(null);
 
@@ -417,30 +440,26 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
 
     try {
       setUploadingContactPhoto(true);
-      setContactPhotoProgress(0);
-      const res = await api.uploadPolicyPdf(file, 'contact', (pct) => setContactPhotoProgress(pct));
-      if (!res?.url) throw new Error(res?.message || 'Upload failed');
+      setContactPhotoProgress(10);
 
-      const oldPublicId = contactInfo?.imagePublicId;
       const oldUrl = contactInfo?.image;
+      const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/contact', (pct) => setContactPhotoProgress(pct));
+      if (!uploadedUrl) throw new Error('Upload failed - no URL returned');
 
       const updated = {
-        ...contactInfo,
-        image: res.url,
-        imagePublicId: res.public_id || null
+        ...(contactInfo || {}),
+        image: uploadedUrl
       };
 
       await updateContactInfo(updated);
 
-      if (oldPublicId && oldPublicId !== res.public_id) {
-        api.deleteMedia(oldPublicId, 'image').catch(() => {});
-      }
-      if (oldUrl && oldUrl !== res.url && !oldUrl.includes('unsplash.com')) {
-        api.deleteMedia(oldUrl).catch(() => {});
+      if (oldUrl && (oldUrl.includes('cloudinary.com') || oldUrl.includes('res.cloudinary.com')) && oldUrl !== uploadedUrl) {
+        api.deleteImage(oldUrl).catch(err => console.warn('Failed to delete old contact photo:', err));
       }
 
-      if (showToast) showToast('Contact Us showcase photo uploaded successfully!', 'success');
+      if (showToast) showToast('Contact Us showcase photo uploaded to Cloudinary successfully!', 'success');
     } catch (err) {
+      console.error('Contact photo upload error:', err);
       if (showToast) showToast(err.message || 'Failed to upload photo', 'error');
     } finally {
       setUploadingContactPhoto(false);
@@ -449,30 +468,58 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     }
   };
 
-  const handleRemoveContactPhoto = async () => {
+  const handleDeleteContactPhoto = async () => {
+    const curPhoto = contactInfo?.image;
+    if (!curPhoto) {
+      if (showToast) showToast('No photo to delete.', 'info');
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to permanently delete this showcase photo? It will be removed from Cloudinary storage and the Contact Us page.')) {
+      return;
+    }
+
+    setIsDeletingContactPhoto(true);
+    try {
+      if (curPhoto && (curPhoto.includes('cloudinary.com') || curPhoto.includes('res.cloudinary.com'))) {
+        await api.deleteImage(curPhoto).catch(err => console.warn('Failed to delete contact photo from Cloudinary:', err));
+      }
+
+      const updated = {
+        ...(contactInfo || {}),
+        image: ''
+      };
+      await updateContactInfo(updated);
+
+      if (showToast) showToast('Showcase photo permanently deleted from Cloudinary & Contact Us page.', 'success');
+    } catch (err) {
+      console.error('Failed to delete contact photo:', err);
+      if (showToast) showToast(err.message || 'Failed to delete photo', 'error');
+    } finally {
+      setIsDeletingContactPhoto(false);
+    }
+  };
+
+  const handleResetContactPhoto = async () => {
     if (contactInfo?.image === DEFAULT_CONTACT_IMAGE) {
       if (showToast) showToast('Default showcase photo is already active.', 'info');
       return;
     }
-    if (!window.confirm('Reset the Contact Us showcase photo to default?')) return;
+
+    const curPhoto = contactInfo?.image;
+    if (curPhoto && (curPhoto.includes('cloudinary.com') || curPhoto.includes('res.cloudinary.com'))) {
+      if (!window.confirm('Resetting to default will delete your custom photo from Cloudinary storage. Proceed?')) {
+        return;
+      }
+      api.deleteImage(curPhoto).catch(err => console.warn('Failed to delete old contact photo from Cloudinary:', err));
+    }
 
     try {
-      const oldPublicId = contactInfo?.imagePublicId;
-      const oldUrl = contactInfo?.image;
-
       const updated = {
-        ...contactInfo,
-        image: DEFAULT_CONTACT_IMAGE,
-        imagePublicId: null
+        ...(contactInfo || {}),
+        image: DEFAULT_CONTACT_IMAGE
       };
       await updateContactInfo(updated);
-
-      if (oldPublicId) {
-        api.deleteMedia(oldPublicId, 'image').catch(() => {});
-      }
-      if (oldUrl && !oldUrl.includes('unsplash.com')) {
-        api.deleteMedia(oldUrl).catch(() => {});
-      }
       if (showToast) showToast('Contact Us showcase photo reset to default.', 'info');
     } catch (err) {
       if (showToast) showToast(err.message || 'Failed to reset photo', 'error');
@@ -813,8 +860,10 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
 
   const [isPreviewVideoOpen, setIsPreviewVideoOpen] = useState(false);
   const [isVideoUploading, setIsVideoUploading] = useState(false);
+  const [isDeletingWhyVideo, setIsDeletingWhyVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [isHeroPhotoUploading, setIsHeroPhotoUploading] = useState(false);
+  const [isDeletingHeroPhoto, setIsDeletingHeroPhoto] = useState(false);
   const [customPhotoUrlInput, setCustomPhotoUrlInput] = useState('');
   const sanitizePresets = (list) => {
     if (!Array.isArray(list)) return [];
@@ -883,9 +932,16 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
       setIsVideoUploading(true);
       setVideoUploadProgress(5);
 
+      const oldVid = heroForm.whyChooseVideoUrl || heroContent?.whyChooseVideoUrl;
+
       const uploadedUrl = await api.uploadVideo(file, 'sehatbuddy/videos', (percent) => {
         setVideoUploadProgress(percent);
       });
+
+      // If replacing an existing Cloudinary video, permanently delete the previous one
+      if (oldVid && (oldVid.includes('cloudinary.com') || oldVid.includes('res.cloudinary.com')) && oldVid !== uploadedUrl) {
+        api.deleteVideo(oldVid).catch(err => console.warn('Old explainer video delete warning:', err));
+      }
 
       setHeroForm(prev => ({
         ...prev,
@@ -957,11 +1013,19 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   };
 
   const handleSaveWhyVideo = (e) => {
-    if (e) e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     isHeroDirtyRef.current = false;
+
+    // If the video URL was cleared or changed from an existing Cloudinary video, delete old from Cloudinary
+    const oldVid = heroContent?.whyChooseVideoUrl;
+    const newVid = (heroForm.whyChooseVideoUrl || '').trim();
+    if (oldVid && (oldVid.includes('cloudinary.com') || oldVid.includes('res.cloudinary.com')) && (!newVid || newVid !== oldVid)) {
+      api.deleteVideo(oldVid).catch(err => console.warn('Failed to delete removed explainer video from Cloudinary:', err));
+    }
+
     updateHeroContent({
       whyChooseTitle: heroForm.whyChooseTitle,
-      whyChooseVideoUrl: heroForm.whyChooseVideoUrl,
+      whyChooseVideoUrl: newVid,
       whyChooseVideoText: heroForm.whyChooseVideoText,
       whyChooseVideoAutoplay: heroForm.whyChooseVideoAutoplay
     });
@@ -989,9 +1053,16 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
 
     try {
       setIsHeroPhotoUploading(true);
+      const oldHeroPhoto = heroForm.heroImage || customHeroImage;
+
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/hero');
       if (!uploadedUrl) {
         throw new Error('Upload succeeded but no image URL was returned.');
+      }
+
+      // If replacing an existing Cloudinary custom photo, delete the previous one
+      if (oldHeroPhoto && (oldHeroPhoto.includes('cloudinary.com') || oldHeroPhoto.includes('res.cloudinary.com')) && oldHeroPhoto !== uploadedUrl) {
+        api.deleteImage(oldHeroPhoto).catch(err => console.warn('Old hero photo delete notice:', err));
       }
 
       setCustomHeroImage(uploadedUrl);
@@ -1058,28 +1129,35 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
       e.preventDefault();
       e.stopPropagation();
     }
-    const photoToDelete = customHeroImage || (heroForm.heroImage && !heroPresets.some(p => isPresetActive(p.url, heroForm.heroImage)) ? heroForm.heroImage : null);
+    const photoToDelete = heroForm.heroImage || customHeroImage;
+    if (!photoToDelete) return;
 
-    const defaultImage = heroPresets[0]?.url || heroFamily || '';
-    setHeroForm(prev => ({ ...prev, heroImage: defaultImage }));
-    setCustomHeroImage('');
-    setCustomPhotoUrlInput('');
+    if (!window.confirm('Are you sure you want to permanently delete this hero photo? It will be removed from Cloudinary storage and the front page.')) {
+      return;
+    }
+
+    setIsDeletingHeroPhoto(true);
     try {
-      localStorage.removeItem('sehat_custom_hero_image');
-    } catch {}
-    updateHeroContent({ heroImage: defaultImage });
-
-    if (photoToDelete && photoToDelete.includes('cloudinary.com')) {
-      showToast('Deleting photo from Cloudinary...');
-      try {
-        await api.deleteImage(photoToDelete);
-        showToast('Photo permanently deleted from Cloudinary & reset to default preset.');
-      } catch (err) {
-        console.warn('Failed to delete photo from Cloudinary:', err);
-        showToast('Photo removed from homepage. (Cloudinary cleanup error: ' + (err.message || 'unknown') + ')');
+      if (photoToDelete && (photoToDelete.includes('cloudinary.com') || photoToDelete.includes('res.cloudinary.com'))) {
+        showToast('Deleting photo from Cloudinary...');
+        await api.deleteImage(photoToDelete).catch(err => console.warn('Failed to delete photo from Cloudinary:', err));
       }
-    } else {
-      showToast('Photo removed. Reset to default preset photo.');
+
+      const defaultImage = heroPresets[0]?.url || '';
+      setHeroForm(prev => ({ ...prev, heroImage: defaultImage }));
+      setCustomHeroImage('');
+      setCustomPhotoUrlInput('');
+      try {
+        localStorage.removeItem('sehat_custom_hero_image');
+      } catch {}
+      updateHeroContent({ heroImage: defaultImage });
+
+      showToast('Hero photo permanently deleted from Cloudinary.');
+    } catch (err) {
+      console.error('Error deleting hero photo:', err);
+      showToast('Failed to delete photo: ' + (err.message || 'Please try again.'));
+    } finally {
+      setIsDeletingHeroPhoto(false);
     }
   };
 
@@ -1087,6 +1165,9 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
+    }
+    if (!window.confirm(`Are you sure you want to permanently delete "${imgToDelete.name}"? It will be removed from Cloudinary storage if hosted there.`)) {
+      return;
     }
     const updated = heroPresets.filter(p => p.url !== imgToDelete.url && p.name !== imgToDelete.name);
     setHeroPresets(updated);
@@ -1097,13 +1178,13 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     // Persist deleted preset permanently to MongoDB Atlas
     const updates = { heroPresets: updated };
     if (isPresetActive(imgToDelete.url, heroForm.heroImage)) {
-      const nextPhoto = updated[0]?.url || heroFamily || '';
+      const nextPhoto = updated[0]?.url || '';
       setHeroForm(prev => ({ ...prev, heroImage: nextPhoto }));
       updates.heroImage = nextPhoto;
     }
     updateHeroContent(updates);
 
-    if (imgToDelete?.url && imgToDelete.url.includes('cloudinary.com')) {
+    if (imgToDelete?.url && (imgToDelete.url.includes('cloudinary.com') || imgToDelete.url.includes('res.cloudinary.com'))) {
       showToast(`Deleting "${imgToDelete.name}" from Cloudinary...`);
       try {
         await api.deleteImage(imgToDelete.url);
@@ -1296,6 +1377,10 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     setUploadingLogoCorpId(corpId);
 
     try {
+      if (newCorporate.logo && (newCorporate.logo.includes('cloudinary.com') || newCorporate.logo.includes('res.cloudinary.com'))) {
+        api.deleteImage(newCorporate.logo).catch(err => console.warn('Failed to delete replaced logo from Cloudinary:', err));
+      }
+
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
       if (uploadedUrl) {
         updateCorporateTieup(corpId, { logo: uploadedUrl });
@@ -1341,6 +1426,10 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     setIsNewCorporateUploading(true);
 
     try {
+      if (newCorporate.logo && (newCorporate.logo.includes('cloudinary.com') || newCorporate.logo.includes('res.cloudinary.com'))) {
+        api.deleteImage(newCorporate.logo).catch(err => console.warn('Failed to delete replaced logo from Cloudinary:', err));
+      }
+
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/corporate');
       if (uploadedUrl) {
         setNewCorporate(prev => ({ ...prev, logo: uploadedUrl }));
@@ -1694,11 +1783,12 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 >
                   <button
                     type="button"
+                    disabled={isDeletingHeroPhoto}
                     className={styles.deletePresetCornerBtn}
                     onClick={handleDeleteCustomHeroPhoto}
-                    title="Delete custom photo"
+                    title="Permanently delete custom photo from Cloudinary"
                   >
-                    <Trash2 size={12} />
+                    {isDeletingHeroPhoto ? <Loader2 size={12} className={styles.spinIcon} /> : <Trash2 size={12} />}
                   </button>
                   <img src={heroForm.heroImage} alt="Custom Hero" />
                   <span>✓ Custom Active</span>
@@ -1715,11 +1805,12 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 >
                   <button
                     type="button"
+                    disabled={isDeletingHeroPhoto}
                     className={styles.deletePresetCornerBtn}
                     onClick={handleDeleteCustomHeroPhoto}
-                    title="Delete custom photo"
+                    title="Permanently delete custom photo from Cloudinary"
                   >
-                    <Trash2 size={12} />
+                    {isDeletingHeroPhoto ? <Loader2 size={12} className={styles.spinIcon} /> : <Trash2 size={12} />}
                   </button>
                   <img src={customHeroImage} alt="Custom Hero" />
                   <span>Custom Photo</span>
@@ -1798,12 +1889,13 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                 </div>
                 <button
                   type="button"
+                  disabled={isDeletingHeroPhoto}
                   className={styles.deleteHeroPhotoBtn}
                   onClick={handleDeleteCustomHeroPhoto}
-                  title="Delete this photo"
+                  title="Permanently delete this photo from Cloudinary"
                 >
-                  <Trash2 size={14} />
-                  <span>Delete Photo</span>
+                  {isDeletingHeroPhoto ? <Loader2 size={14} className={styles.spinIcon} /> : <Trash2 size={14} />}
+                  <span>{isDeletingHeroPhoto ? 'Deleting...' : 'Delete Photo'}</span>
                 </button>
               </div>
             )}
@@ -2075,26 +2167,46 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   </div>
                   <button
                     type="button"
+                    disabled={isDeletingWhyVideo}
                     onClick={async () => {
-                      const vidToDelete = heroForm.whyChooseVideoUrl;
-                      setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: '' }));
-                      updateHeroContent({ whyChooseVideoUrl: '' });
-                      if (vidToDelete && vidToDelete.includes('cloudinary.com')) {
-                        try {
-                          await api.deleteImage(vidToDelete, 'video');
-                          showToast('Explainer video permanently deleted from Cloudinary.');
-                        } catch (err) {
-                          showToast('Explainer video removed from front page.');
+                      const vidToDelete = heroForm.whyChooseVideoUrl || heroContent?.whyChooseVideoUrl;
+                      if (!vidToDelete) return;
+                      if (!window.confirm('Are you sure you want to permanently delete this explainer video? It will be removed from Cloudinary storage and the website.')) {
+                        return;
+                      }
+
+                      setIsDeletingWhyVideo(true);
+                      try {
+                        if (vidToDelete && (vidToDelete.includes('cloudinary.com') || vidToDelete.includes('res.cloudinary.com'))) {
+                          await api.deleteVideo(vidToDelete).catch(err => console.warn('Failed to delete explainer video from Cloudinary:', err));
                         }
-                      } else {
-                        showToast('Explainer video removed from front page.');
+                        setHeroForm(prev => ({ ...prev, whyChooseVideoUrl: '' }));
+                        updateHeroContent({ whyChooseVideoUrl: '' });
+                        showToast('Explainer video permanently deleted from Cloudinary and front page.');
+                      } catch (err) {
+                        console.error('Error removing explainer video:', err);
+                        showToast('Failed to delete video: ' + (err.message || 'Please try again.'));
+                      } finally {
+                        setIsDeletingWhyVideo(false);
                       }
                     }}
-                    style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '0.75rem', fontWeight: 600, padding: '5px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                    title="Remove this video and delete from Cloudinary"
+                    style={{
+                      background: '#fee2e2',
+                      border: '1px solid #fecaca',
+                      color: '#dc2626',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      padding: '5px 12px',
+                      borderRadius: '6px',
+                      cursor: isDeletingWhyVideo ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                    title="Remove this video and delete permanently from Cloudinary"
                   >
-                    <Trash2 size={13} />
-                    <span>Remove Video</span>
+                    {isDeletingWhyVideo ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Trash2 size={13} />}
+                    <span>{isDeletingWhyVideo ? 'Deleting...' : 'Remove Video'}</span>
                   </button>
                 </div>
               )}
@@ -2642,8 +2754,12 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   onSave={handleSaveCorporatePartner}
                   onDelete={async (id, name) => {
                     try {
+                      const target = (corporateTieups || []).find(c => (c.id !== undefined && c.id !== null ? c.id : c._id) === id);
+                      if (target?.logo && (target.logo.includes('cloudinary.com') || target.logo.includes('res.cloudinary.com'))) {
+                        await api.deleteImage(target.logo).catch(err => console.warn('Cloudinary delete error:', err));
+                      }
                       await deleteCorporateTieup(id);
-                      showToast(`Partner "${name}" removed from database.`);
+                      showToast(`Partner "${name}" and logo removed from database and Cloudinary.`);
                     } catch (err) {
                       showToast(`Failed to delete partner: ${err.message || 'Server error'}`);
                     }
@@ -2859,16 +2975,27 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   </div>
                 </div>
 
-                <div style={{ position: 'relative', width: '100%', height: '170px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#0f172a' }}>
-                  <img
-                    src={contactInfo?.image || DEFAULT_CONTACT_IMAGE}
-                    alt="Contact Page Showcase"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  />
-                  <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', color: '#ffffff', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Building2 size={13} />
-                    <span>{photoBadgeInput || '40+ Network Hospitals • Bengaluru Care Hub'}</span>
-                  </div>
+                <div style={{ position: 'relative', width: '100%', height: '170px', borderRadius: '12px', overflow: 'hidden', border: contactInfo?.image ? '1px solid #e2e8f0' : '1.5px dashed #cbd5e1', background: contactInfo?.image ? '#0f172a' : '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {contactInfo?.image ? (
+                    <>
+                      <img
+                        src={contactInfo.image}
+                        alt="Contact Page Showcase"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        onError={(e) => { e.target.src = DEFAULT_CONTACT_IMAGE; }}
+                      />
+                      <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', color: '#ffffff', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Building2 size={13} />
+                        <span>{photoBadgeInput || '40+ Network Hospitals • Bengaluru Care Hub'}</span>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '20px' }}>
+                      <ImageIcon size={36} color="#cbd5e1" style={{ marginBottom: '6px' }} />
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: '0.86rem', color: '#64748b' }}>No Showcase Photo Selected</p>
+                      <p style={{ margin: '3px 0 0', fontSize: '0.74rem', color: '#94a3b8' }}>Upload a photo or click "Reset Default" to display facility</p>
+                    </div>
+                  )}
                 </div>
 
                 {uploadingContactPhoto && (
@@ -2883,13 +3010,14 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                   <button
                     type="button"
-                    disabled={uploadingContactPhoto}
+                    disabled={uploadingContactPhoto || isDeletingContactPhoto}
                     onClick={() => contactPhotoRef.current?.click()}
                     style={{
                       flex: 1,
+                      minWidth: '130px',
                       background: '#2563eb',
                       color: '#ffffff',
                       border: 'none',
@@ -2897,20 +3025,46 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                       padding: '8px 14px',
                       fontSize: '0.82rem',
                       fontWeight: 600,
-                      cursor: 'pointer',
+                      cursor: (uploadingContactPhoto || isDeletingContactPhoto) ? 'wait' : 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '6px'
                     }}
                   >
-                    <Upload size={14} />
-                    <span>{contactInfo?.image ? 'Replace Photo' : 'Upload Photo'}</span>
+                    {uploadingContactPhoto ? <Loader2 size={14} className={styles.spinIcon} /> : <Upload size={14} />}
+                    <span>{uploadingContactPhoto ? 'Uploading to Cloudinary...' : (contactInfo?.image ? 'Replace Photo' : 'Upload Photo')}</span>
                   </button>
+
+                  {Boolean(contactInfo?.image) && (
+                    <button
+                      type="button"
+                      disabled={uploadingContactPhoto || isDeletingContactPhoto}
+                      onClick={handleDeleteContactPhoto}
+                      title="Permanently delete photo from Cloudinary"
+                      style={{
+                        background: '#fee2e2',
+                        color: '#dc2626',
+                        border: '1px solid #fecaca',
+                        borderRadius: '8px',
+                        padding: '8px 14px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: isDeletingContactPhoto ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px'
+                      }}
+                    >
+                      {isDeletingContactPhoto ? <Loader2 size={13} className={styles.spinIcon} /> : <Trash2 size={13} />}
+                      <span>{isDeletingContactPhoto ? 'Deleting...' : 'Delete Photo'}</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"
-                    onClick={handleRemoveContactPhoto}
+                    disabled={uploadingContactPhoto || isDeletingContactPhoto}
+                    onClick={handleResetContactPhoto}
                     title="Reset to default hospital operating room showcase photo"
                     style={{
                       background: '#ffffff',
@@ -3267,8 +3421,14 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                       type="button"
                       className={styles.corpRemoveIconBtn}
                       style={{ width: '32px', height: '32px' }}
-                      onClick={() => setNewCorporate(prev => ({ ...prev, logo: '' }))}
-                      title="Remove Logo"
+                      onClick={async () => {
+                        const cur = newCorporate.logo;
+                        if (cur && (cur.includes('cloudinary.com') || cur.includes('res.cloudinary.com'))) {
+                          api.deleteImage(cur).catch(err => console.warn('Failed to delete corporate logo from Cloudinary:', err));
+                        }
+                        setNewCorporate(prev => ({ ...prev, logo: '' }));
+                      }}
+                      title="Remove Logo from Cloudinary"
                       disabled={isNewCorporateUploading}
                     >
                       <Trash2 size={14} />

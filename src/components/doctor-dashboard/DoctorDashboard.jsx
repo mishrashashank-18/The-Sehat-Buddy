@@ -2845,6 +2845,12 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (!file) return;
     setIsUploadingImage(true);
     try {
+      // 1. Delete previous custom Cloudinary photo if present to avoid storage clutter
+      const oldImg = profileForm.image || activeDoctor?.image;
+      if (oldImg && (oldImg.includes('cloudinary.com') || oldImg.includes('res.cloudinary.com'))) {
+        api.deleteImage(oldImg).catch(err => console.warn('Failed to delete old photo from Cloudinary:', err));
+      }
+
       const uploadedUrl = await api.uploadImage(file, 'sehatbuddy/doctors');
       setProfileForm(prev => ({ ...prev, image: uploadedUrl }));
       const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: uploadedUrl });
@@ -2874,20 +2880,41 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
   };
 
-  // Remove / Delete profile photo
+  // Remove / Delete profile photo permanently from Cloudinary & DB
   const handleRemovePhoto = async () => {
-    const defaultPlaceholder = '';
-    setProfileForm(prev => ({ ...prev, image: defaultPlaceholder }));
-    if (activeDoctor) {
-      activeDoctor.image = defaultPlaceholder;
+    const curImage = profileForm.image || activeDoctor?.image || '';
+    if (!window.confirm('Are you sure you want to permanently delete your profile photo? It will be deleted from Cloudinary storage and removed from your doctor profile.')) {
+      return;
     }
-    const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: defaultPlaceholder });
-    await updateDoctor(activeDoctor._id || activeDoctor.id, {
-      image: defaultPlaceholder,
-      profileCompletion: comp,
-      isProfileComplete: comp >= 80
-    });
-    showToast('Profile photo removed!');
+
+    setIsUploadingImage(true);
+    try {
+      // 1. Delete from Cloudinary if hosted there
+      if (curImage && (curImage.includes('cloudinary.com') || curImage.includes('res.cloudinary.com'))) {
+        await api.deleteImage(curImage).catch((err) => {
+          console.warn('Failed to delete doctor photo from Cloudinary:', err);
+        });
+      }
+
+      // 2. Clear photo in state and database
+      const defaultPlaceholder = '';
+      setProfileForm(prev => ({ ...prev, image: defaultPlaceholder }));
+      if (activeDoctor) {
+        activeDoctor.image = defaultPlaceholder;
+      }
+      const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: defaultPlaceholder });
+      await updateDoctor(activeDoctor._id || activeDoctor.id, {
+        image: defaultPlaceholder,
+        profileCompletion: comp,
+        isProfileComplete: comp >= 80
+      });
+      showToast('Profile photo permanently deleted from Cloudinary and profile set to blank.');
+    } catch (err) {
+      console.error('Failed to remove doctor photo:', err);
+      showToast('Failed to remove photo');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   // Select default avatar (Male or Female) or Blank when doctor does not want to upload a photo
@@ -2897,6 +2924,13 @@ const DoctorDashboard = ({ onNavigate }) => {
       ? (profileForm.image === avatarUrl || (profileForm.image && typeof profileForm.image === 'string' && profileForm.image.includes(avatarUrl)))
       : !profileForm.image;
     const targetUrl = isCurrentlySelected ? '' : (avatarUrl || '');
+
+    // If doctor had a custom Cloudinary image and is now switching to Blank or a preset avatar, delete from Cloudinary
+    const oldImg = profileForm.image || activeDoctor.image;
+    if (oldImg && (oldImg.includes('cloudinary.com') || oldImg.includes('res.cloudinary.com')) && oldImg !== targetUrl) {
+      api.deleteImage(oldImg).catch(err => console.warn('Failed to delete previous doctor photo from Cloudinary:', err));
+    }
+
     setIsUploadingImage(true);
     try {
       setProfileForm(prev => ({ ...prev, image: targetUrl }));
@@ -2907,7 +2941,7 @@ const DoctorDashboard = ({ onNavigate }) => {
         profileCompletion: comp,
         isProfileComplete: comp >= 80
       });
-      showToast(targetUrl ? 'Avatar selected and saved to your profile!' : 'Profile photo set to blank (none)!');
+      showToast(targetUrl ? 'Avatar selected and saved to your profile!' : 'Profile photo permanently cleared (blank)!');
     } catch (err) {
       console.error('Failed to select default avatar:', err);
       showToast('Failed to save avatar');
@@ -9805,34 +9839,60 @@ const DoctorDashboard = ({ onNavigate }) => {
                   {activeDoctor.specialty} • {activeDoctor.hospital || 'Verified Practitioner'}
                 </span>
               </div>
-              <label
-                style={{
-                  background: '#2563eb',
-                  color: 'white',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '0.84rem',
-                  fontWeight: 600,
-                  cursor: isUploadingImage ? 'not-allowed' : 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                title="Replace with new photo"
-              >
-                {isUploadingImage ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={15} />}
-                <span>Update Photo</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  disabled={isUploadingImage}
-                  style={{ display: 'none' }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleDoctorPhotoUpload(file);
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {(profileForm.image || activeDoctor.image) && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    disabled={isUploadingImage}
+                    style={{
+                      background: '#ef4444',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      fontWeight: 600,
+                      cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      border: 'none'
+                    }}
+                    title="Permanently delete photo from Cloudinary"
+                  >
+                    <Trash2 size={15} />
+                    <span>Delete Photo</span>
+                  </button>
+                )}
+                <label
+                  style={{
+                    background: '#2563eb',
+                    color: 'white',
+                    padding: '8px 16px',
+                    borderRadius: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 600,
+                    cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
                   }}
-                />
-              </label>
+                  title="Replace with new photo"
+                >
+                  {isUploadingImage ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Camera size={15} />}
+                  <span>Update Photo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={isUploadingImage}
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleDoctorPhotoUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
             </div>
 
             <div style={{ padding: '12px 20px', background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>

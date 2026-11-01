@@ -50,7 +50,7 @@ export default function ContactUs({ onNavigate }) {
   const helphoneNumber = helplineNumber;
   const helplineDesc = contactInfo?.helplineDesc || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.';
 
-  const liveImage = contactInfo?.image || DEFAULT_IMAGE;
+  const liveImage = contactInfo?.image !== undefined ? contactInfo.image : DEFAULT_IMAGE;
   const photoBadge = contactInfo?.photoBadge || '40+ Network Hospitals • Bengaluru Care Hub';
 
   // Form State
@@ -176,20 +176,22 @@ export default function ContactUs({ onNavigate }) {
             </div>
 
             {/* Showcase Photo Card */}
-            <div className={styles.photoCard}>
-              <img
-                src={liveImage}
-                alt="Hospital Care Network"
-                className={styles.photoImg}
-                onError={(e) => {
-                  e.target.src = DEFAULT_IMAGE;
-                }}
-              />
-              <div className={styles.photoBadge}>
-                <Building2 size={13} />
-                <span>{photoBadge}</span>
+            {Boolean(liveImage) && (
+              <div className={styles.photoCard}>
+                <img
+                  src={liveImage}
+                  alt="Hospital Care Network"
+                  className={styles.photoImg}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                  }}
+                />
+                <div className={styles.photoBadge}>
+                  <Building2 size={13} />
+                  <span>{photoBadge}</span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* RIGHT COLUMN: Send Us a Message Card */}

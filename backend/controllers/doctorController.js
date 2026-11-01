@@ -11,6 +11,7 @@ import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doct
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
 import { processDoctorReelsInBackground } from '../utils/reelService.js';
+import { cleanupReplacedReels } from '../utils/reelCleanup.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -921,6 +922,20 @@ export const updateDoctorProfile = async (req, res) => {
           doctor.specialization = req.body.specialization || req.body.specialty;
           doctor.specialty = req.body.specialty || req.body.specialization;
         } else if (field === 'image') {
+          const oldImage = doctor.image;
+          const newImage = typeof req.body.image === 'string' ? req.body.image.trim() : '';
+          if (oldImage && typeof oldImage === 'string' && oldImage.includes('cloudinary.com') && oldImage !== newImage) {
+            const publicId = extractCloudinaryPublicId(oldImage);
+            if (publicId) {
+              try {
+                const cld = getCloudinary();
+                cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true })
+                  .catch(cldErr => console.warn('Failed to delete old doctor photo from Cloudinary:', cldErr.message));
+              } catch (cldErr) {
+                console.warn('Failed to init Cloudinary for photo delete:', cldErr.message);
+              }
+            }
+          }
           doctor.image = req.body.image;
         } else if (field === 'phone' || field === 'contact_number') {
           const ph = String(req.body.phone !== undefined ? req.body.phone : req.body.contact_number).trim();
@@ -980,13 +995,16 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('faqs');
     }
     if (req.body.reels !== undefined) {
-      doctor.reels = Array.isArray(req.body.reels)
+      const previousReels = Array.isArray(doctor.reels) ? [...doctor.reels] : [];
+      const nextReels = Array.isArray(req.body.reels)
         ? req.body.reels.map(r => {
             if (typeof r === 'string') return r.trim();
             if (r && typeof r === 'object') return r;
             return '';
           }).filter(Boolean)
         : [];
+      cleanupReplacedReels(previousReels, nextReels).catch(() => {});
+      doctor.reels = nextReels;
       doctor.markModified('reels');
     }
     if (req.body.youtube_videos !== undefined) {
