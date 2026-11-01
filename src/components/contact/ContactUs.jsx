@@ -155,7 +155,7 @@ export default function ContactUs() {
 
               <div className={styles.helplineActionRow}>
                 <a href={`tel:${helphoneNumber.replace(/\s+/g, '')}`} className={styles.phoneLink}>
-                  <PhoneCall size={18} className={styles.phoneLinkIcon} />
+                  <Phone size={18} className={styles.phoneLinkIcon} />
                   <span>{helphoneNumber}</span>
                 </a>
                 <span className={styles.vDivider} />
