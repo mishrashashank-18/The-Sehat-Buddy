@@ -1,6 +1,7 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
+import https from 'https';
 import { fileURLToPath } from 'url';
 import Content from '../models/Content.js';
 import Corporate from '../models/Corporate.js';
@@ -321,7 +322,7 @@ router.get('/legal-policies', async (req, res) => {
 
 /**
  * Stream/View policy PDF or photo inline in browser with strict inline headers
- * Prevents forced file download on client machines
+ * Prevents forced file download on client machines and avoids Cloudinary 401 ACL errors
  */
 router.get('/view-document/:type', async (req, res) => {
   try {
@@ -343,13 +344,40 @@ router.get('/view-document/:type', async (req, res) => {
     }
 
     const docUrl = policyData.url;
+    const isPdf = Boolean(
+      (policyData.fileName && policyData.fileName.toLowerCase().endsWith('.pdf')) ||
+      docUrl.toLowerCase().includes('.pdf') ||
+      policyData.fileType === 'pdf'
+    );
 
-    // 1. If local file stored in uploads
+    // 1. Check local file on disk in /uploads/documents
+    const uploadsDir = path.resolve(__dirname, '../uploads/documents');
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      const urlBase = path.basename(docUrl).replace(/\.[^/.]+$/, '').replace(/_[a-z0-9]+$/i, '');
+      const matchedFile = files.find(f => {
+        if (policyData.fileName && f === policyData.fileName) return true;
+        const fBase = f.replace(/\.[^/.]+$/, '');
+        return fBase.startsWith(urlBase) || urlBase.startsWith(fBase);
+      });
+
+      if (matchedFile) {
+        const absPath = path.join(uploadsDir, matchedFile);
+        if (fs.existsSync(absPath)) {
+          const isMatchedPdf = matchedFile.toLowerCase().endsWith('.pdf');
+          res.setHeader('Content-Type', isMatchedPdf ? 'application/pdf' : 'image/jpeg');
+          res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || matchedFile) + '"');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          return res.sendFile(absPath);
+        }
+      }
+    }
+
+    // 2. Direct local relative path check
     if (docUrl.startsWith('/uploads/') || docUrl.startsWith('uploads/')) {
       const cleanRel = docUrl.replace(/^\/?uploads\//, '');
       const absPath = path.resolve(__dirname, '../uploads', cleanRel);
       if (fs.existsSync(absPath)) {
-        const isPdf = absPath.toLowerCase().endsWith('.pdf');
         res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'image/jpeg');
         res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || (isPdf ? 'document.pdf' : 'document.jpg')) + '"');
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -357,7 +385,52 @@ router.get('/view-document/:type', async (req, res) => {
       }
     }
 
-    // 2. If Cloudinary or external URL
+    // 3. If Cloudinary URL
+    if (docUrl.includes('cloudinary.com')) {
+      if (isPdf) {
+        // Cloudinary rejects unsigned direct PDF delivery with 401 ACL failure.
+        // We generate a private download signed URL and stream binary data inline.
+        const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+        const apiKey = process.env.CLOUDINARY_API_KEY;
+        const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+        if (cloudName && apiKey && apiSecret) {
+          cloudinary.config({
+            cloud_name: cloudName,
+            api_key: apiKey,
+            api_secret: apiSecret
+          });
+
+          const match = docUrl.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.pdf)?$/i);
+          const publicId = policyData.public_id || policyData.publicId || (match ? match[1] : null);
+
+          if (publicId) {
+            const cleanPublicId = publicId.replace(/\.pdf$/i, '');
+            const signedUrl = cloudinary.utils.private_download_url(cleanPublicId, 'pdf', {
+              resource_type: 'image',
+              type: 'upload',
+              expires_at: Math.floor(Date.now() / 1000) + 3600
+            });
+
+            return https.get(signedUrl, (cldRes) => {
+              if (cldRes.statusCode === 200) {
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || 'document.pdf') + '"');
+                res.setHeader('X-Content-Type-Options', 'nosniff');
+                return cldRes.pipe(res);
+              }
+              // Fallback: high-res PNG conversion
+              const imgUrl = `https://res.cloudinary.com/${cloudName}/image/upload/${cleanPublicId}.png`;
+              return res.redirect(imgUrl);
+            }).on('error', () => {
+              res.redirect(signedUrl);
+            });
+          }
+        }
+      }
+      return res.redirect(docUrl);
+    }
+
     return res.redirect(docUrl);
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });

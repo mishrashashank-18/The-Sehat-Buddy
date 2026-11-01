@@ -11,6 +11,7 @@ import {
   FileX
 } from 'lucide-react';
 import { useData } from '../../context/useData';
+import { resolveApiBase } from '../../services/api';
 import styles from './PolicyViewerModal.module.css';
 
 const resolvePdfSrc = (url) => {
@@ -51,6 +52,9 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
       }
       setIsLoadingPdf(true);
       document.body.style.overflow = 'hidden';
+      // Gracefully clear loading spinner after timeout
+      const timer = setTimeout(() => setIsLoadingPdf(false), 2500);
+      return () => clearTimeout(timer);
     } else {
       document.body.style.overflow = '';
     }
@@ -73,9 +77,11 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
   if (!isOpen) return null;
 
   const title = isPrivacy ? 'Privacy Policy' : isAbout ? 'About Us' : 'Terms & Conditions';
-  const rawDocUrl = resolvePdfSrc(policyMeta?.url);
-  // Add parameters to suppress download/print toolbars in browser viewer
-  const securePdfUrl = rawDocUrl ? `${rawDocUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH` : '';
+  const docTypeParam = isPrivacy ? 'privacy' : isAbout ? 'about' : 'terms';
+  const apiBase = resolveApiBase();
+  const rawDocUrl = resolvePdfSrc(policyMeta?.url) || `${apiBase}/content/view-document/${docTypeParam}`;
+  // Stream PDF directly through backend endpoint to prevent Cloudinary 401 ACL deny errors
+  const securePdfUrl = `${apiBase}/content/view-document/${docTypeParam}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
 
   return (
     <div
