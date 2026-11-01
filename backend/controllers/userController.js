@@ -7,6 +7,7 @@ import generateToken from '../utils/generateToken.js';
 import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+import { OAuth2Client } from 'google-auth-library';
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -550,16 +551,25 @@ export const cancelAppointment = async (req, res) => {
   }
 };
 
-import { OAuth2Client } from 'google-auth-library';
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-
 export const googleLogin = async (req, res) => {
   const { idToken } = req.body;
   try {
+    if (!idToken) {
+      return res.status(400).json({ success: false, message: 'Google ID token is required' });
+    }
+
+    const googleClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+    if (!googleClientId) {
+      console.error('[GoogleLogin] GOOGLE_CLIENT_ID environment variable is missing on backend');
+      return res.status(500).json({ success: false, message: 'Google authentication is not properly configured on server' });
+    }
+
+    const client = new OAuth2Client(googleClientId);
+
     // Verify the Google ID token
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: googleClientId,
     });
     
     const { email, name, sub: googleId, picture } = ticket.getPayload();
@@ -576,7 +586,7 @@ export const googleLogin = async (req, res) => {
     } else {
       // Create new user if they don't exist
       user = await User.create({
-        name,
+        name: name || 'Google User',
         email,
         googleId,
         isVerified: true,
@@ -606,7 +616,7 @@ export const googleLogin = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Google login error:', error);
-    res.status(401).json({ success: false, message: 'Google authentication failed' });
+    console.error('Google login error:', error.message || error);
+    res.status(401).json({ success: false, message: error.message || 'Google authentication failed' });
   }
 };

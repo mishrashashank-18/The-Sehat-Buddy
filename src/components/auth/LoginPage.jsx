@@ -853,17 +853,23 @@ const LoginPage = ({ role, setView }) => {
         body: JSON.stringify({ idToken: credentialResponse.credential }),
       });
 
-      const data = await response.json();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch (parseErr) {
+        console.warn('[GoogleLogin] Non-JSON response received:', response.status);
+      }
 
-      if (response.ok) {
+      if (response.ok && data.success) {
         const userData = data.user || data.data || data.admin;
         saveAuthSession('user', data.token, userData);
         completeLoginRedirect('user');
       } else {
-        setError(data.message || 'Google login failed.');
+        setError(data.message || (response.status === 502 || response.status === 504 ? 'Backend server unreachable. Please verify backend is running.' : 'Google login failed.'));
       }
     } catch (err) {
-      setError('An error occurred during Google login.');
+      console.error('[GoogleLogin] Request error:', err);
+      setError(err.message || 'An error occurred during Google login.');
     } finally {
       setLoading(false);
     }
