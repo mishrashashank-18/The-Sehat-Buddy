@@ -1098,8 +1098,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
               onClick={() => setActiveTab('legal')}
             >
               <ShieldCheck size={20} />
-              <span>Legal Policies &amp; About Us</span>
-              {(legalPolicies?.privacyPolicy?.url || legalPolicies?.termsAndConditions?.url || legalPolicies?.aboutUs?.url) && (
+              <span>Legal Policies</span>
+              {(legalPolicies?.privacyPolicy?.url || legalPolicies?.termsAndConditions?.url) && (
                 <span className={styles.navCount} style={{ background: '#dcfce7', color: '#15803d' }}>Active</span>
               )}
             </button>

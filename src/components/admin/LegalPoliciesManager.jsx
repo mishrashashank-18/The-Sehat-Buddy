@@ -2,7 +2,6 @@ import React, { useState, useRef } from 'react';
 import {
   ShieldCheck,
   FileText,
-  Building2,
   Upload,
   Eye,
   Trash2,
@@ -24,7 +23,7 @@ const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 Megabytes
 const LegalPoliciesManager = ({ showToast }) => {
   const { legalPolicies, updateLegalPolicies } = useData();
 
-  const [previewType, setPreviewType] = useState(null); // 'privacy' | 'terms' | 'about' | null
+  const [previewType, setPreviewType] = useState(null); // 'privacy' | 'terms' | null
 
   // Uploading states
   const [uploadingPrivacy, setUploadingPrivacy] = useState(false);
@@ -33,17 +32,12 @@ const LegalPoliciesManager = ({ showToast }) => {
   const [uploadingTerms, setUploadingTerms] = useState(false);
   const [termsProgress, setTermsProgress] = useState(0);
 
-  const [uploadingAbout, setUploadingAbout] = useState(false);
-  const [aboutProgress, setAboutProgress] = useState(0);
-
   // Drag states
   const [dragOverPrivacy, setDragOverPrivacy] = useState(false);
   const [dragOverTerms, setDragOverTerms] = useState(false);
-  const [dragOverAbout, setDragOverAbout] = useState(false);
 
   const privacyInputRef = useRef(null);
   const termsInputRef = useRef(null);
-  const aboutInputRef = useRef(null);
 
   const handleFileSelected = async (file, type) => {
     if (!file) return;
@@ -65,12 +59,11 @@ const LegalPoliciesManager = ({ showToast }) => {
     }
 
     const isPrivacy = type === 'privacy';
-    const isAbout = type === 'about';
-    const label = isAbout ? 'About Us' : isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
-    const policyKey = isAbout ? 'aboutUs' : isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
+    const label = isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
+    const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
 
-    const setUploading = isAbout ? setUploadingAbout : isPrivacy ? setUploadingPrivacy : setUploadingTerms;
-    const setProgress = isAbout ? setAboutProgress : isPrivacy ? setPrivacyProgress : setTermsProgress;
+    const setUploading = isPrivacy ? setUploadingPrivacy : setUploadingTerms;
+    const setProgress = isPrivacy ? setPrivacyProgress : setTermsProgress;
 
     try {
       setUploading(true);
@@ -120,15 +113,13 @@ const LegalPoliciesManager = ({ showToast }) => {
       setProgress(0);
       if (privacyInputRef.current) privacyInputRef.current.value = '';
       if (termsInputRef.current) termsInputRef.current.value = '';
-      if (aboutInputRef.current) aboutInputRef.current.value = '';
     }
   };
 
   const handleRemovePolicy = async (type) => {
     const isPrivacy = type === 'privacy';
-    const isAbout = type === 'about';
-    const label = isAbout ? 'About Us' : isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
-    const policyKey = isAbout ? 'aboutUs' : isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
+    const label = isPrivacy ? 'Privacy Policy' : 'Terms & Conditions';
+    const policyKey = isPrivacy ? 'privacyPolicy' : 'termsAndConditions';
     const existingUrl = legalPolicies?.[policyKey]?.url;
     const existingPublicId = legalPolicies?.[policyKey]?.publicId;
 
@@ -166,11 +157,9 @@ const LegalPoliciesManager = ({ showToast }) => {
 
   const privacyMeta = legalPolicies?.privacyPolicy;
   const termsMeta = legalPolicies?.termsAndConditions;
-  const aboutMeta = legalPolicies?.aboutUs;
 
   const hasPrivacyDoc = Boolean(privacyMeta?.url && privacyMeta.url.trim());
   const hasTermsDoc = Boolean(termsMeta?.url && termsMeta.url.trim());
-  const hasAboutDoc = Boolean(aboutMeta?.url && aboutMeta.url.trim());
 
   return (
     <div className={styles.managerWrapper}>
@@ -178,7 +167,7 @@ const LegalPoliciesManager = ({ showToast }) => {
       <div className={styles.headerSection}>
         <h1 className={styles.pageTitle}>Legal Policies &amp; Company Documents</h1>
         <p className={styles.pageSubtitle}>
-          Upload official PDF documents or photos (up to 25MB each) for your Privacy Policy, Terms &amp; Conditions, and About Us.
+          Upload official PDF documents or photos (up to 25MB each) for your Privacy Policy and Terms &amp; Conditions.
           Visitors view them in an interactive in-app protected viewer with download prevention to safeguard your documentation.
         </p>
       </div>
@@ -191,7 +180,7 @@ const LegalPoliciesManager = ({ showToast }) => {
         <div className={styles.securityBannerContent}>
           <h4>Download Prevention &amp; In-App Protected Viewing</h4>
           <p>
-            When users click &ldquo;Privacy Policy&rdquo;, &ldquo;Terms &amp; Conditions&rdquo;, or &ldquo;About Us&rdquo; across the website,
+            When users click &ldquo;Privacy Policy&rdquo; or &ldquo;Terms &amp; Conditions&rdquo; across the website,
             the content is displayed directly inside a dedicated, read-only modal viewer with toolbar suppression (<code>#toolbar=0</code>)
             and sandboxed iframe/image restrictions so documents are viewed cleanly online without being downloaded to user machines.
           </p>
@@ -423,122 +412,6 @@ const LegalPoliciesManager = ({ showToast }) => {
                   type="button"
                   className={styles.deleteBtn}
                   onClick={() => handleRemovePolicy('terms')}
-                  title="Remove file and revert to Not Added"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Card 3: About Us */}
-        <div className={styles.policyCard}>
-          <div className={styles.cardHeader}>
-            <div className={styles.cardHeaderLeft}>
-              <div className={styles.cardIconBadge} style={{ background: '#ecfdf5', borderColor: '#a7f3d0', color: '#059669' }}>
-                <Building2 size={22} />
-              </div>
-              <div>
-                <h3 className={styles.cardTitle}>About Us</h3>
-                <p className={styles.cardSub}>Company Mission, Story &amp; Overview</p>
-              </div>
-            </div>
-            <span className={`${styles.statusBadge} ${hasAboutDoc ? styles.statusActive : styles.statusDefault}`}>
-              {hasAboutDoc ? (aboutMeta?.fileType === 'image' ? 'Photo Active' : 'PDF Active') : 'Not Added'}
-            </span>
-          </div>
-
-          {hasAboutDoc && (
-            <div className={styles.fileMetaBox}>
-              <div className={styles.fileNameRow} title={aboutMeta.fileName || 'About Us Overview'}>
-                {aboutMeta?.fileType === 'image' ? <ImageIcon size={16} color="#059669" style={{ flexShrink: 0 }} /> : <FileText size={16} color="#059669" style={{ flexShrink: 0 }} />}
-                <span>{aboutMeta.fileName || 'About_Us_Overview'}</span>
-              </div>
-              <div className={styles.fileDetailsRow}>
-                <span className={styles.sizeBadge}>{aboutMeta.fileSizeFormatted || 'Doc'}</span>
-                <span>
-                  <Calendar size={12} style={{ display: 'inline', verticalAlign: '-1px', marginRight: '4px' }} />
-                  {aboutMeta.updatedAt ? new Date(aboutMeta.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Recent'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {uploadingAbout ? (
-            <div className={styles.progressWrapper}>
-              <div className={styles.progressLabel}>
-                <span>Uploading About Us Photo or Document...</span>
-                <span>{aboutProgress}%</span>
-              </div>
-              <div className={styles.progressBarContainer}>
-                <div className={styles.progressBarFill} style={{ width: `${aboutProgress}%`, background: '#059669' }} />
-              </div>
-            </div>
-          ) : (
-            <div
-              className={`${styles.dropZone} ${dragOverAbout ? styles.dropZoneDragOver : ''}`}
-              onClick={() => aboutInputRef.current?.click()}
-              onDragOver={(e) => { e.preventDefault(); setDragOverAbout(true); }}
-              onDragLeave={() => setDragOverAbout(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOverAbout(false);
-                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                  handleFileSelected(e.dataTransfer.files[0], 'about');
-                }
-              }}
-            >
-              <div className={styles.dropIcon} style={{ color: '#059669' }}>
-                <FileUp size={22} />
-              </div>
-              <span className={styles.dropTextPrimary}>
-                {hasAboutDoc ? 'Click or drop to replace photo or PDF' : 'Upload About Us Photo or PDF'}
-              </span>
-              <span className={styles.dropTextSecondary}>
-                Photo (PNG, JPG, WEBP) or PDF &bull; Up to 25 MB max
-              </span>
-              <input
-                ref={aboutInputRef}
-                type="file"
-                accept=".pdf,application/pdf,image/*"
-                style={{ display: 'none' }}
-                onChange={(e) => {
-                  if (e.target.files && e.target.files[0]) {
-                    handleFileSelected(e.target.files[0], 'about');
-                  }
-                }}
-              />
-            </div>
-          )}
-
-          <div className={styles.cardActions}>
-            <button
-              type="button"
-              className={styles.previewBtn}
-              onClick={() => window.open('/about', '_blank')}
-              title="Preview the live About Us page"
-            >
-              <Eye size={16} />
-              <span>Preview Live Page</span>
-            </button>
-
-            {hasAboutDoc && (
-              <>
-                <button
-                  type="button"
-                  className={styles.replaceBtn}
-                  onClick={() => aboutInputRef.current?.click()}
-                  title="Upload a new version to replace current file"
-                >
-                  <RefreshCw size={15} />
-                  <span>Replace</span>
-                </button>
-
-                <button
-                  type="button"
-                  className={styles.deleteBtn}
-                  onClick={() => handleRemovePolicy('about')}
                   title="Remove file and revert to Not Added"
                 >
                   <Trash2 size={16} />
