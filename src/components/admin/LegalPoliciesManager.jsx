@@ -85,11 +85,12 @@ const LegalPoliciesManager = ({ showToast }) => {
       }
 
       const oldUrl = legalPolicies?.[policyKey]?.url;
-      const oldPublicId = legalPolicies?.[policyKey]?.publicId;
+      const oldPublicId = legalPolicies?.[policyKey]?.publicId || legalPolicies?.[policyKey]?.public_id;
 
       const updatedMeta = {
         url: res.url,
         publicId: res.public_id || null,
+        public_id: res.public_id || null,
         fileName: res.name || file.name,
         fileSize: res.size || file.size,
         fileSizeFormatted: res.sizeFormatted || `${(file.size / (1024 * 1024)).toFixed(2)} MB`,

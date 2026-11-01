@@ -28,6 +28,8 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(true);
   const [pdfBlobUrl, setPdfBlobUrl] = useState('');
+  const [docFound, setDocFound] = useState(true);
+  const [isDocImage, setIsDocImage] = useState(false);
 
   const normalizedType = (type || '').toLowerCase();
   const isPrivacy = normalizedType === 'privacy' || normalizedType === 'privacypolicy';
@@ -61,28 +63,44 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
       }
       setIsLoadingPdf(true);
       setPdfBlobUrl('');
+      setDocFound(true);
+      setIsDocImage(isImageDoc);
       document.body.style.overflow = 'hidden';
 
-      if (hasUploadedDoc && !isImageDoc) {
-        const streamEndpoint = `${apiBase}/content/view-document/${docTypeParam}?t=${Date.now()}`;
-        fetch(streamEndpoint)
-          .then(async (res) => {
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const blob = await res.blob();
-            if (!active) return;
-            localBlob = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-            setPdfBlobUrl(localBlob);
+      const streamEndpoint = `${apiBase}/content/view-document/${docTypeParam}?t=${Date.now()}`;
+      fetch(streamEndpoint)
+        .then(async (res) => {
+          if (!active) return;
+          if (res.status === 404) {
+            setDocFound(false);
             setIsLoadingPdf(false);
-          })
-          .catch((err) => {
-            if (!active) return;
-            console.warn('[PolicyViewerModal] Falling back to direct URL:', err.message);
+            return;
+          }
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const cType = res.headers.get('content-type') || '';
+          const isImg = cType.startsWith('image/');
+          setIsDocImage(isImg || isImageDoc);
+
+          const blob = await res.blob();
+          if (!active) return;
+          localBlob = URL.createObjectURL(blob);
+          setPdfBlobUrl(localBlob);
+          setDocFound(true);
+          setIsLoadingPdf(false);
+        })
+        .catch((err) => {
+          if (!active) return;
+          console.warn('[PolicyViewerModal] Document fetch fallback:', err.message);
+          if (hasUploadedDoc) {
             setPdfBlobUrl(streamEndpoint);
-            setIsLoadingPdf(false);
-          });
-      } else {
-        setIsLoadingPdf(false);
-      }
+            setDocFound(true);
+          } else {
+            setDocFound(false);
+          }
+          setIsLoadingPdf(false);
+        });
     } else {
       document.body.style.overflow = '';
       if (pdfBlobUrl && pdfBlobUrl.startsWith('blob:')) {
@@ -98,7 +116,7 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
         URL.revokeObjectURL(localBlob);
       }
     };
-  }, [isOpen, type, hasUploadedDoc, isImageDoc, docTypeParam, apiBase, refreshLegalPolicies]);
+  }, [isOpen, type, docTypeParam, apiBase, refreshLegalPolicies, isImageDoc, hasUploadedDoc]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -192,11 +210,11 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
 
         {/* Body Content */}
         <div className={styles.modalBody}>
-          {hasUploadedDoc ? (
-            isImageDoc ? (
+          {docFound ? (
+            isDocImage ? (
               <div className={styles.imageViewerWrapper}>
                 <img
-                  src={rawDocUrl}
+                  src={pdfBlobUrl || rawDocUrl}
                   alt={title}
                   className={styles.protectedImage}
                   onContextMenu={(e) => e.preventDefault()}
@@ -214,12 +232,14 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
                   </div>
                 )}
                 {/* Embed PDF inline with toolbar suppressed to prevent download/print tools */}
-                <iframe
-                  src={securePdfUrl}
-                  title={title}
-                  className={styles.pdfFrame}
-                  onLoad={() => setIsLoadingPdf(false)}
-                />
+                {pdfBlobUrl ? (
+                  <iframe
+                    src={`${pdfBlobUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`}
+                    title={title}
+                    className={styles.pdfFrame}
+                    onLoad={() => setIsLoadingPdf(false)}
+                  />
+                ) : null}
               </div>
             )
           ) : (

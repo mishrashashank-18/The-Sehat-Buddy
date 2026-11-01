@@ -355,46 +355,9 @@ router.get('/view-document/:type', async (req, res) => {
       policyData.fileType === 'pdf'
     );
 
-    // 1. Check local file on disk in /uploads/documents
-    const uploadsDir = path.resolve(__dirname, '../uploads/documents');
-    if (fs.existsSync(uploadsDir)) {
-      const files = fs.readdirSync(uploadsDir);
-      const urlBase = path.basename(docUrl).replace(/\.[^/.]+$/, '').replace(/_[a-z0-9]+$/i, '');
-      const matchedFile = files.find(f => {
-        if (policyData.fileName && f === policyData.fileName) return true;
-        const fBase = f.replace(/\.[^/.]+$/, '');
-        return fBase.startsWith(urlBase) || urlBase.startsWith(fBase);
-      });
-
-      if (matchedFile) {
-        const absPath = path.join(uploadsDir, matchedFile);
-        if (fs.existsSync(absPath)) {
-          const isMatchedPdf = matchedFile.toLowerCase().endsWith('.pdf');
-          res.setHeader('Content-Type', isMatchedPdf ? 'application/pdf' : 'image/jpeg');
-          res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || matchedFile) + '"');
-          res.setHeader('X-Content-Type-Options', 'nosniff');
-          return res.sendFile(absPath);
-        }
-      }
-    }
-
-    // 2. Direct local relative path check
-    if (docUrl.startsWith('/uploads/') || docUrl.startsWith('uploads/')) {
-      const cleanRel = docUrl.replace(/^\/?uploads\//, '');
-      const absPath = path.resolve(__dirname, '../uploads', cleanRel);
-      if (fs.existsSync(absPath)) {
-        res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'image/jpeg');
-        res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || (isPdf ? 'document.pdf' : 'document.jpg')) + '"');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        return res.sendFile(absPath);
-      }
-    }
-
-    // 3. If Cloudinary URL
+    // 1. Direct Cloudinary check (Always stream Cloudinary URLs to ensure latest uploaded file is served)
     if (docUrl.includes('cloudinary.com')) {
       if (isPdf) {
-        // Cloudinary rejects unsigned direct PDF delivery with 401 ACL failure.
-        // We generate a private download signed URL and stream binary data inline.
         const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
         const apiKey = process.env.CLOUDINARY_API_KEY;
         const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -406,8 +369,22 @@ router.get('/view-document/:type', async (req, res) => {
             api_secret: apiSecret
           });
 
-          const match = docUrl.match(/\/upload\/(?:v\d+\/)?(.+?)(?:\.pdf)?$/i);
-          const publicId = policyData.public_id || policyData.publicId || (match ? match[1] : null);
+          // Always extract the public ID directly from docUrl to ensure latest uploaded file is used
+          let publicId = null;
+          const cleanUrl = docUrl.split('?')[0];
+          const uploadIdx = cleanUrl.indexOf('/upload/');
+          if (uploadIdx !== -1) {
+            let after = cleanUrl.substring(uploadIdx + '/upload/'.length);
+            // Strip transformation flags if present
+            after = after.replace(/^(?:[a-z]{1,2}_[a-z0-9_-]+,)*[a-z]{1,2}_[a-z0-9_-]+\//i, '');
+            // Strip version if present like v1793500066/
+            after = after.replace(/^v\d+\//, '');
+            publicId = after.replace(/\.[a-zA-Z0-9]+$/, '');
+          }
+
+          if (!publicId) {
+            publicId = policyData.publicId || policyData.public_id;
+          }
 
           if (publicId) {
             const cleanPublicId = publicId.replace(/\.pdf$/i, '');
@@ -434,6 +411,41 @@ router.get('/view-document/:type', async (req, res) => {
         }
       }
       return res.redirect(docUrl);
+    }
+
+    // 2. Check local file on disk in /uploads/documents (for offline dev or local uploads)
+    const uploadsDir = path.resolve(__dirname, '../uploads/documents');
+    if (fs.existsSync(uploadsDir)) {
+      const files = fs.readdirSync(uploadsDir);
+      const urlBase = path.basename(docUrl).replace(/\.[^/.]+$/, '').replace(/_[a-z0-9]+$/i, '');
+      const matchedFile = files.find(f => {
+        if (policyData.fileName && f === policyData.fileName) return true;
+        const fBase = f.replace(/\.[^/.]+$/, '');
+        return fBase.startsWith(urlBase) || urlBase.startsWith(fBase);
+      });
+
+      if (matchedFile) {
+        const absPath = path.join(uploadsDir, matchedFile);
+        if (fs.existsSync(absPath)) {
+          const isMatchedPdf = matchedFile.toLowerCase().endsWith('.pdf');
+          res.setHeader('Content-Type', isMatchedPdf ? 'application/pdf' : 'image/jpeg');
+          res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || matchedFile) + '"');
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          return res.sendFile(absPath);
+        }
+      }
+    }
+
+    // 3. Direct local relative path check
+    if (docUrl.startsWith('/uploads/') || docUrl.startsWith('uploads/')) {
+      const cleanRel = docUrl.replace(/^\/?uploads\//, '');
+      const absPath = path.resolve(__dirname, '../uploads', cleanRel);
+      if (fs.existsSync(absPath)) {
+        res.setHeader('Content-Type', isPdf ? 'application/pdf' : 'image/jpeg');
+        res.setHeader('Content-Disposition', 'inline; filename="' + (policyData.fileName || (isPdf ? 'document.pdf' : 'document.jpg')) + '"');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        return res.sendFile(absPath);
+      }
     }
 
     return res.redirect(docUrl);
