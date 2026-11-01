@@ -343,6 +343,11 @@ router.get('/view-document/:type', async (req, res) => {
       return res.status(404).json({ success: false, message: 'No custom document or photo has been uploaded for this item.' });
     }
 
+    // Permit inline embedding in protected iframe across all frontends (localhost, production, Firebase, custom domain)
+    res.removeHeader('X-Frame-Options');
+    res.setHeader('Content-Security-Policy', "frame-ancestors 'self' *");
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
     const docUrl = policyData.url;
     const isPdf = Boolean(
       (policyData.fileName && policyData.fileName.toLowerCase().endsWith('.pdf')) ||

@@ -490,12 +490,12 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
         subtitle: contactSubtitleInput.trim() || 'Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.',
         helplineLabel: helplineLabelInput.trim() || 'Helpline & Emergency',
         helplineStatus: helplineStatusInput.trim() || '24x7 Active',
-        helphoneNumber: helplineNumberInput.trim() || '+91 98765 4321',
-        helplineNumber: helplineNumberInput.trim() || '+91 98765 4321',
+        helphoneNumber: helphoneNumberInput.trim() || '+91 98765 4321',
+        helplineNumber: helphoneNumberInput.trim() || '+91 98765 4321',
         helplineDesc: helplineDescInput.trim() || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
         photoBadge: photoBadgeInput.trim() || '40+ Network Hospitals • Bengaluru Care Hub',
         phones: [
-          { id: 'phone-1', label: helplineLabelInput.trim() || 'Helpline & Emergency', number: helplineNumberInput.trim() || '+91 98765 4321', isPrimary: true }
+          { id: 'phone-1', label: helplineLabelInput.trim() || 'Helpline & Emergency', number: helphoneNumberInput.trim() || '+91 98765 4321', isPrimary: true }
         ]
       };
       await updateContactInfo(updated);

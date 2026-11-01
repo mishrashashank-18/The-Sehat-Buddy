@@ -67,7 +67,8 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
 // 1. Security Headers via Helmet
 app.use(helmet({
   crossOriginResourcePolicy: false,
-  contentSecurityPolicy: false
+  contentSecurityPolicy: false,
+  frameguard: false
 }));
 
 // 2. Strict CORS Configuration

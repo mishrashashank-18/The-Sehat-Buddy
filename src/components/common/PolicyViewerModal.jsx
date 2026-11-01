@@ -27,6 +27,7 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
   const { legalPolicies, refreshLegalPolicies } = useData();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoadingPdf, setIsLoadingPdf] = useState(true);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState('');
 
   const normalizedType = (type || '').toLowerCase();
   const isPrivacy = normalizedType === 'privacy' || normalizedType === 'privacypolicy';
@@ -44,24 +45,60 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
     Boolean(policyMeta?.url && policyMeta.url.match(/\.(jpg|jpeg|png|webp|svg|gif)(\?.*)?$/i)) ||
     Boolean(policyMeta?.fileName && policyMeta.fileName.match(/\.(jpg|jpeg|png|webp|svg|gif)$/i));
 
-  // Real-time refresh when modal opens or document type changes
+  const title = isPrivacy ? 'Privacy Policy' : isAbout ? 'About Us' : 'Terms & Conditions';
+  const docTypeParam = isPrivacy ? 'privacy' : isAbout ? 'about' : 'terms';
+  const apiBase = resolveApiBase();
+  const rawDocUrl = resolvePdfSrc(policyMeta?.url) || `${apiBase}/content/view-document/${docTypeParam}`;
+
+  // Real-time refresh and blob fetch when modal opens
   useEffect(() => {
+    let active = true;
+    let localBlob = null;
+
     if (isOpen) {
       if (typeof refreshLegalPolicies === 'function') {
         refreshLegalPolicies();
       }
       setIsLoadingPdf(true);
+      setPdfBlobUrl('');
       document.body.style.overflow = 'hidden';
-      // Gracefully clear loading spinner after timeout
-      const timer = setTimeout(() => setIsLoadingPdf(false), 2500);
-      return () => clearTimeout(timer);
+
+      if (hasUploadedDoc && !isImageDoc) {
+        const streamEndpoint = `${apiBase}/content/view-document/${docTypeParam}?t=${Date.now()}`;
+        fetch(streamEndpoint)
+          .then(async (res) => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const blob = await res.blob();
+            if (!active) return;
+            localBlob = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+            setPdfBlobUrl(localBlob);
+            setIsLoadingPdf(false);
+          })
+          .catch((err) => {
+            if (!active) return;
+            console.warn('[PolicyViewerModal] Falling back to direct URL:', err.message);
+            setPdfBlobUrl(streamEndpoint);
+            setIsLoadingPdf(false);
+          });
+      } else {
+        setIsLoadingPdf(false);
+      }
     } else {
       document.body.style.overflow = '';
+      if (pdfBlobUrl && pdfBlobUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(pdfBlobUrl);
+      }
+      setPdfBlobUrl('');
     }
+
     return () => {
+      active = false;
       document.body.style.overflow = '';
+      if (localBlob && localBlob.startsWith('blob:')) {
+        URL.revokeObjectURL(localBlob);
+      }
     };
-  }, [isOpen, type, refreshLegalPolicies]);
+  }, [isOpen, type, hasUploadedDoc, isImageDoc, docTypeParam, apiBase, refreshLegalPolicies]);
 
   // Handle ESC key to close modal
   useEffect(() => {
@@ -76,12 +113,9 @@ const PolicyViewerModal = ({ isOpen, onClose, type = 'privacy' }) => {
 
   if (!isOpen) return null;
 
-  const title = isPrivacy ? 'Privacy Policy' : isAbout ? 'About Us' : 'Terms & Conditions';
-  const docTypeParam = isPrivacy ? 'privacy' : isAbout ? 'about' : 'terms';
-  const apiBase = resolveApiBase();
-  const rawDocUrl = resolvePdfSrc(policyMeta?.url) || `${apiBase}/content/view-document/${docTypeParam}`;
-  // Stream PDF directly through backend endpoint to prevent Cloudinary 401 ACL deny errors
-  const securePdfUrl = `${apiBase}/content/view-document/${docTypeParam}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
+  const securePdfUrl = pdfBlobUrl
+    ? `${pdfBlobUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`
+    : `${apiBase}/content/view-document/${docTypeParam}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
 
   return (
     <div
