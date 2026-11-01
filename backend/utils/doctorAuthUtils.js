@@ -32,8 +32,7 @@ export const generateTemporaryPassword = () => {
  * Send branded welcome email with temporary password to doctor
  */
 export const sendDoctorWelcomeEmail = async ({ doctor, temporaryPassword, hospitalName }) => {
-  const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-  const portalLoginUrl = `${clientUrl}/doctor`;
+  const portalLoginUrl = 'https://thesehatbuddy.com/doctor';
   const affiliatedHospital = hospitalName || doctor.hospital || 'The Sehat Buddy Network';
 
   try {

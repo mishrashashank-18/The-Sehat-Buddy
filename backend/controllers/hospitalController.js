@@ -562,9 +562,8 @@ export const registerHospital = async (req, res) => {
     if (hospital) {
       broadcastDbChange('hospitals', 'insert', hospital._id, hospital);
 
-      // Determine Hospital Portal URL
-      const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-      const portalLoginUrl = `${clientUrl}/hospital`;
+      // Determine Hospital Portal URL (Canonical deployed route)
+      const portalLoginUrl = 'https://thesehatbuddy.com/hospital';
 
       // Dispatch welcome credentials email via Brevo in background
       sendEmail({
