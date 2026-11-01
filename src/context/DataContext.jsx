@@ -26,19 +26,20 @@ const STORAGE_KEY_CONTACT = 'sehat_buddy_contact_v1';
 const STORAGE_KEY_LEGAL = 'sehat_buddy_legal_policies_v1';
 
 export const DEFAULT_CONTACT_INFO = {
+  topBadge: 'Verified Healthcare Concierge',
+  statusBadge: '24/7 Live Patient Support Active',
   title: "We're Here for You & Your Family",
   subtitle: "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.",
-  image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80",
+  helplineLabel: 'Helpline & Emergency',
+  helplineStatus: '24x7 Active',
+  helplineNumber: '+91 98765 4321',
+  helplineDesc: 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
+  image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80",
   imagePublicId: null,
+  photoBadge: '40+ Network Hospitals • Bengaluru Care Hub',
   phones: [
-    { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 43210', isPrimary: true },
-    { id: 'phone-2', label: 'Appointments Desk', number: '+91 80000 12345', isPrimary: false }
-  ],
-  emails: [
-    { id: 'email-1', label: 'Patient Support', email: 'support@thesehatbuddy.com', isPrimary: true },
-    { id: 'email-2', label: 'General Inquiries', email: 'contact@thesehatbuddy.com', isPrimary: false }
-  ],
-  workingHours: 'Mon – Sat: 8:00 AM – 8:00 PM'
+    { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 4321', isPrimary: true }
+  ]
 };
 
 export const DEFAULT_LEGAL_POLICIES = {

@@ -364,24 +364,48 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   const [editEmailAddress, setEditEmailAddress] = useState('');
   const [editEmailPrimary, setEditEmailPrimary] = useState(false);
 
-  const [workingHoursInput, setWorkingHoursInput] = useState(contactInfo?.workingHours || 'Mon – Sat: 8:00 AM – 8:00 PM');
+  // Contact Us Page Full Management State
+  const [contactTopBadgeInput, setContactTopBadgeInput] = useState(contactInfo?.topBadge || 'Verified Healthcare Concierge');
+  const [contactStatusBadgeInput, setContactStatusBadgeInput] = useState(contactInfo?.statusBadge || '24/7 Live Patient Support Active');
   const [contactTitleInput, setContactTitleInput] = useState(contactInfo?.title || "We're Here for You & Your Family");
   const [contactSubtitleInput, setContactSubtitleInput] = useState(contactInfo?.subtitle || "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.");
+
+  const [helplineLabelInput, setHelplineLabelInput] = useState(contactInfo?.helplineLabel || 'Helpline & Emergency');
+  const [helplineStatusInput, setHelplineStatusInput] = useState(contactInfo?.helplineStatus || '24x7 Active');
+  const [helphoneNumberInput, setHelphoneNumberInput] = useState(contactInfo?.helphoneNumber || (contactInfo?.phones?.[0]?.number) || '+91 98765 4321');
+  const [helplineDescInput, setHelplineDescInput] = useState(contactInfo?.helplineDesc || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.');
+
+  const [photoBadgeInput, setPhotoBadgeInput] = useState(contactInfo?.photoBadge || '40+ Network Hospitals • Bengaluru Care Hub');
   const [uploadingContactPhoto, setUploadingContactPhoto] = useState(false);
   const [contactPhotoProgress, setContactPhotoProgress] = useState(0);
   const contactPhotoRef = useRef(null);
 
+  const DEFAULT_CONTACT_IMAGE = 'https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80';
+
   useEffect(() => {
-    if (contactInfo?.workingHours) {
-      setWorkingHoursInput(contactInfo.workingHours);
+    if (contactInfo?.topBadge) setContactTopBadgeInput(contactInfo.topBadge);
+    if (contactInfo?.statusBadge) setContactStatusBadgeInput(contactInfo.statusBadge);
+    if (contactInfo?.title) setContactTitleInput(contactInfo.title);
+    if (contactInfo?.subtitle) setContactSubtitleInput(contactInfo.subtitle);
+    if (contactInfo?.helplineLabel) setHelplineLabelInput(contactInfo.helplineLabel);
+    if (contactInfo?.helplineStatus) setHelplineStatusInput(contactInfo.helplineStatus);
+    if (contactInfo?.helphoneNumber || contactInfo?.phones?.[0]?.number) {
+      setHelphoneNumberInput(contactInfo.helphoneNumber || contactInfo.phones[0].number);
     }
-    if (contactInfo?.title) {
-      setContactTitleInput(contactInfo.title);
-    }
-    if (contactInfo?.subtitle) {
-      setContactSubtitleInput(contactInfo.subtitle);
-    }
-  }, [contactInfo?.workingHours, contactInfo?.title, contactInfo?.subtitle]);
+    if (contactInfo?.helplineDesc) setHelplineDescInput(contactInfo.helplineDesc);
+    if (contactInfo?.photoBadge) setPhotoBadgeInput(contactInfo.photoBadge);
+  }, [
+    contactInfo?.topBadge,
+    contactInfo?.statusBadge,
+    contactInfo?.title,
+    contactInfo?.subtitle,
+    contactInfo?.helplineLabel,
+    contactInfo?.helplineStatus,
+    contactInfo?.helphoneNumber,
+    contactInfo?.phones,
+    contactInfo?.helplineDesc,
+    contactInfo?.photoBadge
+  ]);
 
   const handleUploadContactPhoto = async (file) => {
     if (!file) return;
@@ -415,7 +439,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
         api.deleteMedia(oldUrl).catch(() => {});
       }
 
-      if (showToast) showToast('Contact Us page photo uploaded successfully!', 'success');
+      if (showToast) showToast('Contact Us showcase photo uploaded successfully!', 'success');
     } catch (err) {
       if (showToast) showToast(err.message || 'Failed to upload photo', 'error');
     } finally {
@@ -426,8 +450,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
   };
 
   const handleRemoveContactPhoto = async () => {
-    const defaultImg = "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80";
-    if (contactInfo?.image === defaultImg) {
+    if (contactInfo?.image === DEFAULT_CONTACT_IMAGE) {
       if (showToast) showToast('Default showcase photo is already active.', 'info');
       return;
     }
@@ -439,7 +462,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
 
       const updated = {
         ...contactInfo,
-        image: defaultImg,
+        image: DEFAULT_CONTACT_IMAGE,
         imagePublicId: null
       };
       await updateContactInfo(updated);
@@ -456,18 +479,28 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
     }
   };
 
-  const handleSaveContactHeader = async (e) => {
-    e.preventDefault();
+  const handleSaveContactUsSettings = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
     try {
       const updated = {
         ...contactInfo,
+        topBadge: contactTopBadgeInput.trim() || 'Verified Healthcare Concierge',
+        statusBadge: contactStatusBadgeInput.trim() || '24/7 Live Patient Support Active',
         title: contactTitleInput.trim() || "We're Here for You & Your Family",
-        subtitle: contactSubtitleInput.trim() || "Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries."
+        subtitle: contactSubtitleInput.trim() || 'Reach our care coordinators directly for emergency hospital beds, specialist consults, or cashless insurance queries.',
+        helplineLabel: helplineLabelInput.trim() || 'Helpline & Emergency',
+        helplineStatus: helplineStatusInput.trim() || '24x7 Active',
+        helphoneNumber: helplineNumberInput.trim() || '+91 98765 4321',
+        helplineDesc: helplineDescInput.trim() || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
+        photoBadge: photoBadgeInput.trim() || '40+ Network Hospitals • Bengaluru Care Hub',
+        phones: [
+          { id: 'phone-1', label: helplineLabelInput.trim() || 'Helpline & Emergency', number: helplineNumberInput.trim() || '+91 98765 4321', isPrimary: true }
+        ]
       };
       await updateContactInfo(updated);
-      if (showToast) showToast('Contact page header updated successfully!', 'success');
+      if (showToast) showToast('Contact Us page settings saved successfully!', 'success');
     } catch {
-      if (showToast) showToast('Failed to update contact header', 'error');
+      if (showToast) showToast('Failed to save settings', 'error');
     }
   };
 
@@ -2622,44 +2655,218 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
         </div>
       )}
 
-      {/* SUB-TAB 6: PLATFORM HELPLINES & CONTACT */}
+      {/* SUB-TAB 6: CONTACT US PAGE MANAGEMENT */}
       {subTab === 'contact' && (
         <div className={styles.tabPane}>
           {/* Section Header */}
-          <div className={styles.paneHeader}>
+          <div className={styles.paneHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
             <div>
-              <h3 className={styles.paneTitle}>Platform Contact & Helpline Desks</h3>
+              <h3 className={styles.paneTitle}>Contact Us Page Controls &amp; Settings</h3>
               <p className={styles.paneSubtitle}>
-                Add, edit, or remove emergency helplines, support phone numbers, email desks, and working hours in real time. Changes are stored directly in MongoDB Atlas and immediately reflected across all tabs and the Contact Us dropdown.
+                Manage all live elements of the Contact Us console: top badges, headlines, the emergency helpline card, and showcase hospital imagery.
               </p>
             </div>
+            <button
+              type="button"
+              onClick={handleSaveContactUsSettings}
+              style={{
+                background: '#2563eb',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '9px 18px',
+                fontSize: '0.86rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '7px',
+                boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+              }}
+            >
+              <Save size={16} /> Save All Contact Us Settings
+            </button>
           </div>
 
-          {/* TOP CARD: CONTACT PAGE SHOWCASE PHOTO & HEADER */}
-          <div className={styles.formCard} style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <ImageIcon size={18} />
+          <form onSubmit={handleSaveContactUsSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '16px' }}>
+            {/* CARD 1: TOP BADGES & PAGE HEADLINES */}
+            <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sparkles size={18} />
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Contact Us Page Showcase Photo &amp; Headlines</h4>
-                  <span style={{ fontSize: '0.76rem', color: '#64748b' }}>Upload custom photos and edit the primary welcoming headlines on the live contact console.</span>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>Top Badges &amp; Welcoming Headlines</h4>
+                  <span style={{ fontSize: '0.78rem', color: '#64748b' }}>Configure the badges above the heading, the main greeting, and the descriptive text.</span>
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Top Left Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={contactTopBadgeInput}
+                    onChange={(e) => setContactTopBadgeInput(e.target.value)}
+                    placeholder="e.g. Verified Healthcare Concierge"
+                    className={styles.input}
+                    style={{ width: '100%' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                    Appears with star icon at the top left of the page.
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                    Top Right Status Badge Text
+                  </label>
+                  <input
+                    type="text"
+                    value={contactStatusBadgeInput}
+                    onChange={(e) => setContactStatusBadgeInput(e.target.value)}
+                    placeholder="e.g. 24/7 Live Patient Support Active"
+                    className={styles.input}
+                    style={{ width: '100%' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                    Appears with live green pulse indicator on the top right.
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Main Page Heading *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={contactTitleInput}
+                  onChange={(e) => setContactTitleInput(e.target.value)}
+                  placeholder="e.g. We're Here for You & Your Family"
+                  className={styles.input}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '6px' }}>
+                  Subtitle / Supporting Description *
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={contactSubtitleInput}
+                  onChange={(e) => setContactSubtitleInput(e.target.value)}
+                  placeholder="e.g. Reach our care coordinators directly for emergency hospital beds..."
+                  className={styles.input}
+                  style={{ width: '100%', resize: 'vertical', lineHeight: '1.45' }}
+                />
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 340px) 1fr', gap: '22px', alignItems: 'start' }}>
-              {/* Photo Preview & Controls */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ position: 'relative', width: '100%', height: '190px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#0f172a' }}>
+            {/* TWO-COLUMN GRID FOR LEFT-COLUMN PAGE CARDS */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+              {/* CARD 2: HELPLINE & EMERGENCY DESK */}
+              <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Phone size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Helpline &amp; Emergency Card</h4>
+                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>Top green card on the left column with one-click call &amp; copy actions.</span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                      Card Label / Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={helplineLabelInput}
+                      onChange={(e) => setHelplineLabelInput(e.target.value)}
+                      placeholder="e.g. Helpline & Emergency"
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                      Status Pill Tag
+                    </label>
+                    <input
+                      type="text"
+                      value={helplineStatusInput}
+                      onChange={(e) => setHelplineStatusInput(e.target.value)}
+                      placeholder="e.g. 24x7 Active"
+                      className={styles.input}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                    Direct Helpline Phone Number *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={helphoneNumberInput}
+                    onChange={(e) => setHelphoneNumberInput(e.target.value)}
+                    placeholder="e.g. +91 98765 4321"
+                    className={styles.input}
+                    style={{ width: '100%', fontWeight: 600, color: '#0f172a' }}
+                  />
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                    Triggers direct tel: link and copies to clipboard on button clicks.
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                    Helpline Card Description
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={helplineDescInput}
+                    onChange={(e) => setHelplineDescInput(e.target.value)}
+                    placeholder="e.g. Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations..."
+                    className={styles.input}
+                    style={{ width: '100%', resize: 'none', lineHeight: '1.4' }}
+                  />
+                </div>
+              </div>
+
+              {/* CARD 3: SHOWCASE HOSPITAL PHOTO & OVERLAY BADGE */}
+              <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+                  <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <ImageIcon size={18} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Showcase Hospital Photo &amp; Caption</h4>
+                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>Bottom card on the left column displaying high-res medical facility.</span>
+                  </div>
+                </div>
+
+                <div style={{ position: 'relative', width: '100%', height: '170px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#0f172a' }}>
                   <img
-                    src={contactInfo?.image || "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1000&q=80"}
+                    src={contactInfo?.image || DEFAULT_CONTACT_IMAGE}
                     alt="Contact Page Showcase"
                     style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                   />
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px 12px', background: 'linear-gradient(to top, rgba(15, 23, 42, 0.8) 0%, transparent 100%)', color: '#ffffff', fontSize: '0.74rem', fontWeight: 600 }}>
-                    Live Contact Page Photo
+                  <div style={{ position: 'absolute', bottom: 10, left: 10, background: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(4px)', color: '#ffffff', padding: '4px 10px', borderRadius: '6px', fontSize: '0.74rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Building2 size={13} />
+                    <span>{photoBadgeInput || '40+ Network Hospitals • Bengaluru Care Hub'}</span>
                   </div>
                 </div>
 
@@ -2675,7 +2882,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                   </div>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <button
                     type="button"
                     disabled={uploadingContactPhoto}
@@ -2686,8 +2893,8 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '8px',
-                      padding: '7px 12px',
-                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -2697,20 +2904,20 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                     }}
                   >
                     <Upload size={14} />
-                    <span>{contactInfo?.image ? 'Change Photo' : 'Upload Photo'}</span>
+                    <span>{contactInfo?.image ? 'Replace Photo' : 'Upload Photo'}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={handleRemoveContactPhoto}
-                    title="Reset to default medical concierge photo"
+                    title="Reset to default hospital operating room showcase photo"
                     style={{
                       background: '#ffffff',
                       color: '#64748b',
                       border: '1px solid #cbd5e1',
                       borderRadius: '8px',
-                      padding: '7px 12px',
-                      fontSize: '0.8rem',
+                      padding: '8px 14px',
+                      fontSize: '0.82rem',
                       fontWeight: 600,
                       cursor: 'pointer',
                       display: 'inline-flex',
@@ -2734,526 +2941,47 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
                     }}
                   />
                 </div>
-              </div>
 
-              {/* Headlines Form */}
-              <form onSubmit={handleSaveContactHeader} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                    Contact Page Primary Heading
+                  <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
+                    Photo Overlay Badge Caption
                   </label>
                   <input
                     type="text"
-                    value={contactTitleInput}
-                    onChange={(e) => setContactTitleInput(e.target.value)}
-                    placeholder="e.g. We're Here for You & Your Family"
+                    value={photoBadgeInput}
+                    onChange={(e) => setPhotoBadgeInput(e.target.value)}
+                    placeholder="e.g. 40+ Network Hospitals • Bengaluru Care Hub"
                     className={styles.input}
                     style={{ width: '100%' }}
-                    required
                   />
+                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                    Displayed directly on top of the showcase photo.
+                  </span>
                 </div>
-
-                <div>
-                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '4px' }}>
-                    Contact Page Subtitle / Description
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={contactSubtitleInput}
-                    onChange={(e) => setContactSubtitleInput(e.target.value)}
-                    placeholder="e.g. Reach our care coordinators directly for emergency hospital beds..."
-                    className={styles.input}
-                    style={{ width: '100%', resize: 'none', lineHeight: '1.4' }}
-                    required
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                  <button
-                    type="submit"
-                    style={{
-                      background: '#059669',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '7px 16px',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}
-                  >
-                    <Save size={14} /> Save Headlines
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px', marginTop: '16px' }}>
-            {/* CARD 1: PHONE NUMBERS */}
-            <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#ecfdf5', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Phone size={18} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Direct Helpline Numbers</h4>
-                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>({phonesList.length} numbers active)</span>
-                  </div>
-                </div>
-                {!isAddingPhone && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingPhone(true);
-                      setNewPhoneLabel('');
-                      setNewPhoneNumber('');
-                      setNewPhonePrimary(false);
-                    }}
-                    style={{
-                      background: '#eff6ff',
-                      color: '#2563eb',
-                      border: '1px dashed #93c5fd',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    <Plus size={14} /> Add Phone
-                  </button>
-                )}
-              </div>
-
-              {/* Add Phone Form */}
-              {isAddingPhone && (
-                <form onSubmit={handleAdminAddPhone} style={{ background: '#f8fafc', border: '1px solid #93c5fd', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Label / Department *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. 24/7 Helpline, WhatsApp Booking"
-                      value={newPhoneLabel}
-                      onChange={(e) => setNewPhoneLabel(e.target.value)}
-                      className={styles.input}
-                      style={{ width: '100%' }}
-                      autoFocus
-                    />
-                  </div>
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Phone Number *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. +91 98765 43210"
-                      value={newPhoneNumber}
-                      onChange={(e) => setNewPhoneNumber(e.target.value)}
-                      className={styles.input}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
-                    <input
-                      type="checkbox"
-                      checked={newPhonePrimary}
-                      onChange={(e) => setNewPhonePrimary(e.target.checked)}
-                    />
-                    <span>Set as primary helpline (prominently badge)</span>
-                  </label>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingPhone(false)}
-                      style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer' }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      style={{ background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <Check size={14} /> Save Phone
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Phone List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                {phonesList.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No helpline numbers configured yet.</p>
-                ) : (
-                  phonesList.map((phone) => {
-                    const isEditing = editingPhoneId === phone.id;
-                    if (isEditing) {
-                      return (
-                        <div key={phone.id} style={{ background: '#eff6ff', border: '1.5px solid #60a5fa', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ marginBottom: '8px' }}>
-                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Label</label>
-                            <input
-                              type="text"
-                              value={editPhoneLabel}
-                              onChange={(e) => setEditPhoneLabel(e.target.value)}
-                              className={styles.input}
-                              style={{ width: '100%', marginTop: '2px' }}
-                            />
-                          </div>
-                          <div style={{ marginBottom: '8px' }}>
-                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Phone Number</label>
-                            <input
-                              type="text"
-                              value={editPhoneNumber}
-                              onChange={(e) => setEditPhoneNumber(e.target.value)}
-                              className={styles.input}
-                              style={{ width: '100%', marginTop: '2px' }}
-                            />
-                          </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
-                            <input
-                              type="checkbox"
-                              checked={editPhonePrimary}
-                              onChange={(e) => setEditPhonePrimary(e.target.checked)}
-                            />
-                            <span>Set as primary helpline</span>
-                          </label>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setEditingPhoneId(null)}
-                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '5px 10px', fontSize: '0.76rem', cursor: 'pointer' }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAdminSaveEditPhone(phone.id)}
-                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={phone.id}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '10px',
-                          padding: '10px 14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px'
-                        }}
-                      >
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{phone.label}</strong>
-                            {phone.isPrimary && (
-                              <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px' }}>
-                                Primary
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '0.92rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
-                            {phone.number}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingPhoneId(phone.id);
-                              setEditPhoneLabel(phone.label || '');
-                              setEditPhoneNumber(phone.number || '');
-                              setEditPhonePrimary(Boolean(phone.isPrimary));
-                            }}
-                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px', color: '#475569', cursor: 'pointer' }}
-                            title="Edit"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAdminDeletePhone(phone.id)}
-                            style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '6px', color: '#dc2626', cursor: 'pointer' }}
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
               </div>
             </div>
 
-            {/* CARD 2: EMAILS */}
-            <div className={styles.formCard} style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Mail size={18} />
-                  </div>
-                  <div>
-                    <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Support & Inquiry Emails</h4>
-                    <span style={{ fontSize: '0.76rem', color: '#64748b' }}>({emailsList.length} emails active)</span>
-                  </div>
-                </div>
-                {!isAddingEmail && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddingEmail(true);
-                      setNewEmailLabel('');
-                      setNewEmailAddress('');
-                      setNewEmailPrimary(false);
-                    }}
-                    style={{
-                      background: '#eff6ff',
-                      color: '#2563eb',
-                      border: '1px dashed #93c5fd',
-                      borderRadius: '8px',
-                      padding: '6px 12px',
-                      fontSize: '0.82rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    <Plus size={14} /> Add Email
-                  </button>
-                )}
-              </div>
-
-              {/* Add Email Form */}
-              {isAddingEmail && (
-                <form onSubmit={handleAdminAddEmail} style={{ background: '#f8fafc', border: '1px solid #93c5fd', borderRadius: '10px', padding: '12px', marginBottom: '14px' }}>
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Label / Department *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Patient Support, Appointments"
-                      value={newEmailLabel}
-                      onChange={(e) => setNewEmailLabel(e.target.value)}
-                      className={styles.input}
-                      style={{ width: '100%' }}
-                      autoFocus
-                    />
-                  </div>
-                  <div style={{ marginBottom: '8px' }}>
-                    <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '4px' }}>Email Address *</label>
-                    <input
-                      type="email"
-                      required
-                      placeholder="e.g. support@thesehatbuddy.com"
-                      value={newEmailAddress}
-                      onChange={(e) => setNewEmailAddress(e.target.value)}
-                      className={styles.input}
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
-                    <input
-                      type="checkbox"
-                      checked={newEmailPrimary}
-                      onChange={(e) => setNewEmailPrimary(e.target.checked)}
-                    />
-                    <span>Set as primary contact email</span>
-                  </label>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setIsAddingEmail(false)}
-                      style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 12px', fontSize: '0.8rem', cursor: 'pointer' }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      style={{ background: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <Check size={14} /> Save Email
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {/* Email List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                {emailsList.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: 0 }}>No emails configured yet.</p>
-                ) : (
-                  emailsList.map((em) => {
-                    const isEditing = editingEmailId === em.id;
-                    if (isEditing) {
-                      return (
-                        <div key={em.id} style={{ background: '#eff6ff', border: '1.5px solid #60a5fa', borderRadius: '10px', padding: '12px' }}>
-                          <div style={{ marginBottom: '8px' }}>
-                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Label</label>
-                            <input
-                              type="text"
-                              value={editEmailLabel}
-                              onChange={(e) => setEditEmailLabel(e.target.value)}
-                              className={styles.input}
-                              style={{ width: '100%', marginTop: '2px' }}
-                            />
-                          </div>
-                          <div style={{ marginBottom: '8px' }}>
-                            <label style={{ fontSize: '0.74rem', fontWeight: 600, color: '#334155' }}>Email Address</label>
-                            <input
-                              type="email"
-                              value={editEmailAddress}
-                              onChange={(e) => setEditEmailAddress(e.target.value)}
-                              className={styles.input}
-                              style={{ width: '100%', marginTop: '2px' }}
-                            />
-                          </div>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', color: '#475569', cursor: 'pointer', marginBottom: '10px' }}>
-                            <input
-                              type="checkbox"
-                              checked={editEmailPrimary}
-                              onChange={(e) => setEditEmailPrimary(e.target.checked)}
-                            />
-                            <span>Set as primary email</span>
-                          </label>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-                            <button
-                              type="button"
-                              onClick={() => setEditingEmailId(null)}
-                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '5px 10px', fontSize: '0.76rem', cursor: 'pointer' }}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAdminSaveEditEmail(em.id)}
-                              style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', padding: '5px 12px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              Save
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={em.id}
-                        style={{
-                          background: '#ffffff',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '10px',
-                          padding: '10px 14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '10px'
-                        }}
-                      >
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>{em.label}</strong>
-                            {em.isPrimary && (
-                              <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px' }}>
-                                Primary
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '0.92rem', color: '#2563eb', fontWeight: 600, marginTop: '2px' }}>
-                            {em.email}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingEmailId(em.id);
-                              setEditEmailLabel(em.label || '');
-                              setEditEmailAddress(em.email || '');
-                              setEditEmailPrimary(Boolean(em.isPrimary));
-                            }}
-                            style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '6px', color: '#475569', cursor: 'pointer' }}
-                            title="Edit"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAdminDeleteEmail(em.id)}
-                            style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '6px', color: '#dc2626', cursor: 'pointer' }}
-                            title="Delete"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* CARD 3: WORKING HOURS */}
-          <form onSubmit={handleAdminSaveHours} className={styles.formCard} style={{ marginTop: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Clock size={18} color="#2563eb" />
-                <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 700, color: '#0f172a' }}>Platform Support &amp; Operating Hours</h4>
-              </div>
+            {/* BOTTOM SAVE ACTIONS */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
               <button
                 type="submit"
                 style={{
-                  background: '#2563eb',
+                  background: '#059669',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '8px',
-                  padding: '7px 16px',
-                  fontSize: '0.82rem',
+                  padding: '10px 24px',
+                  fontSize: '0.9rem',
                   fontWeight: 600,
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '6px'
+                  gap: '8px',
+                  boxShadow: '0 2px 6px rgba(5,150,105,0.25)'
                 }}
               >
-                <Save size={14} /> Save Hours
+                <Save size={16} /> Save All Contact Us Settings
               </button>
-            </div>
-            <div>
-              <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '6px' }}>
-                Operating Hours Display Text
-              </label>
-              <input
-                type="text"
-                value={workingHoursInput}
-                onChange={(e) => setWorkingHoursInput(e.target.value)}
-                placeholder="e.g. Mon – Sat: 8:00 AM – 8:00 PM"
-                className={styles.input}
-                style={{ width: '100%', maxWidth: '600px' }}
-                required
-              />
-              <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginTop: '6px' }}>
-                Displayed across patient consultation FAQ sections, footer cards, and the Contact Us navigation dropdown.
-              </span>
             </div>
           </form>
         </div>
