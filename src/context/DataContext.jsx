@@ -578,9 +578,15 @@ export const DataProvider = ({ children }) => {
         tags: Array.isArray(d.tags) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
         reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
         youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
-        availableDays: formatDoctorAvailability(d) || formatDoctorAvailability(existing) || 'Mon - Sat (10:00 AM - 04:00 PM)',
-        scheduleDays: (Array.isArray(d.scheduleDays) && d.scheduleDays.length > 0) ? d.scheduleDays : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
-        availableSlots: (Array.isArray(d.availableSlots) && d.availableSlots.length > 0) ? d.availableSlots : (Array.isArray(existing?.availableSlots) ? existing.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM']),
+        availableDays: (d.availableDays && typeof d.availableDays === 'string' && d.availableDays.trim())
+          ? d.availableDays.trim()
+          : (formatDoctorAvailability(d) || (existing?.availableDays || '')),
+        scheduleDays: Array.isArray(d.scheduleDays)
+          ? d.scheduleDays
+          : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : []),
+        availableSlots: Array.isArray(d.availableSlots)
+          ? d.availableSlots
+          : (Array.isArray(existing?.availableSlots) ? existing.availableSlots : []),
         slotDuration: d.slotDuration || existing?.slotDuration || 20,
         dayWiseSlots: (d.dayWiseSlots && typeof d.dayWiseSlots === 'object') ? d.dayWiseSlots : (existing?.dayWiseSlots || {}),
         dateWiseSlots: (d.dateWiseSlots && typeof d.dateWiseSlots === 'object') ? d.dateWiseSlots : (existing?.dateWiseSlots || {}),
@@ -972,7 +978,11 @@ export const DataProvider = ({ children }) => {
                       fees: pr || 500,
                       rating: rtg !== undefined ? rtg : 0,
                       reviews: revs !== undefined ? revs : '0',
-                      availableDays: formatDoctorAvailability(docData) || 'Mon - Sat (10:00 AM - 04:00 PM)',
+                      availableDays: (docData.availableDays && typeof docData.availableDays === 'string' && docData.availableDays.trim())
+                        ? docData.availableDays.trim()
+                        : (formatDoctorAvailability(docData) || ''),
+                      scheduleDays: Array.isArray(docData.scheduleDays) ? docData.scheduleDays : [],
+                      availableSlots: Array.isArray(docData.availableSlots) ? docData.availableSlots : [],
                       availabilityStatus: avStatus || 'Available',
                       available: avBool !== undefined ? avBool : true,
                       faqs: Array.isArray(docData.faqs) ? docData.faqs : [],
@@ -1275,7 +1285,7 @@ export const DataProvider = ({ children }) => {
             } else if (collection === 'specialityprocedures') {
               refreshSpecialities();
             } else if (collection === 'appointments') {
-              // Notification event already dispatched
+              refreshDoctors();
             } else {
               refreshAll();
             }

@@ -142,7 +142,7 @@ export const parseAvailableDaysAndHours = (str, slotDuration = 30) => {
  * preventing 'None', raw nulls, or broken placeholders.
  */
 export const formatDoctorAvailability = (doctor) => {
-  if (!doctor) return 'Mon - Sat (10:00 AM - 04:00 PM)';
+  if (!doctor) return 'Schedule Not Configured';
 
   const raw = typeof doctor === 'string' 
     ? doctor.trim() 
@@ -177,9 +177,9 @@ export const formatDoctorAvailability = (doctor) => {
     }
 
     if (days.length > 0) {
-      return `${days.join(', ')} (Scheduled Slots)`;
+      return `${days.join(', ')} (Slots Not Configured)`;
     }
   }
 
-  return 'Mon - Sat (10:00 AM - 04:00 PM)';
+  return 'Schedule Not Configured';
 };

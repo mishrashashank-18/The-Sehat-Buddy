@@ -740,6 +740,33 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     });
   }, [doctorId, syncDoctorLocally]);
 
+  // Real-time synchronization: update doctor schedule & slots immediately on SSE broadcast or DB change
+  React.useEffect(() => {
+    if (!doctorId) return;
+
+    const handleRealtimeDoctorUpdate = (e) => {
+      const payload = e.detail;
+      // Refresh doctor data immediately if doctors or appointments collection changed
+      if (!payload || payload.collection === 'doctors' || payload.collection === 'appointments') {
+        api.getDoctorById(doctorId).then(freshDoc => {
+          if (freshDoc && (freshDoc._id || freshDoc.id) && syncDoctorLocally) {
+            syncDoctorLocally(freshDoc);
+          }
+        }).catch(() => {});
+      }
+    };
+
+    window.addEventListener('sehat_db_change', handleRealtimeDoctorUpdate);
+    window.addEventListener('sehat_doctors_updated', handleRealtimeDoctorUpdate);
+    window.addEventListener('sehat_appointments_changed', handleRealtimeDoctorUpdate);
+
+    return () => {
+      window.removeEventListener('sehat_db_change', handleRealtimeDoctorUpdate);
+      window.removeEventListener('sehat_doctors_updated', handleRealtimeDoctorUpdate);
+      window.removeEventListener('sehat_appointments_changed', handleRealtimeDoctorUpdate);
+    };
+  }, [doctorId, syncDoctorLocally]);
+
   // Restore scroll position on refresh
   const isRestoringScrollRef = React.useRef(false);
 
@@ -883,7 +910,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const [consultationType, setConsultationType] = useState('In-Clinic Visit');
   const [selectedDateIdx, setSelectedDateIdx] = useState(0);
   const [dateWindowStart, setDateWindowStart] = useState(0);
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState('04:00 PM');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
 
 
 
@@ -932,11 +959,11 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     const dateCustom = doctor?.dateWiseSlots?.[dateStr];
     if (dateCustom !== undefined && dateCustom !== null) {
       if (dateCustom === 'off' || dateCustom?.isOff === true || (Array.isArray(dateCustom) && dateCustom.length === 0)) {
-        return { isWorkingDay: false, slots: [], statusText: 'Off / Leave', isCustom: true };
+        return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: true };
       }
       const customList = Array.isArray(dateCustom) ? dateCustom : (Array.isArray(dateCustom?.slots) ? dateCustom.slots : []);
       if (customList.length > 0) {
-        return { isWorkingDay: true, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
+        return { isWorkingDay: true, isDayOff: false, hasNoSlots: false, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
       }
     }
 
@@ -944,21 +971,31 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     const dayCustom = doctor?.dayWiseSlots?.[dayNameShort];
     if (dayCustom !== undefined && dayCustom !== null) {
       if (dayCustom === 'off' || dayCustom?.isOff === true || (Array.isArray(dayCustom) && dayCustom.length === 0)) {
-        return { isWorkingDay: false, slots: [], statusText: 'Off', isCustom: true };
+        return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: true };
       }
       const customList = Array.isArray(dayCustom) ? dayCustom : (Array.isArray(dayCustom?.slots) ? dayCustom.slots : []);
       if (customList.length > 0) {
-        return { isWorkingDay: true, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
+        return { isWorkingDay: true, isDayOff: false, hasNoSlots: false, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
       }
     }
 
     // 3. Fallback to standard scheduleDays and availableSlots
-    const isWorkingDay = configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
+    const isExplicitDayOff = configuredDays.length > 0 && !configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
+    if (isExplicitDayOff || (configuredDays.length === 0 && dayNameShort === 'Sun')) {
+      return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: false };
+    }
+
     const hasSlots = configuredSlots.length > 0;
+    if (!hasSlots) {
+      return { isWorkingDay: false, isDayOff: false, hasNoSlots: true, slots: [], statusText: 'No Slots', isCustom: false };
+    }
+
     return {
-      isWorkingDay: isWorkingDay && hasSlots,
-      slots: isWorkingDay ? configuredSlots : [],
-      statusText: isWorkingDay ? (hasSlots ? `${configuredSlots.length} Slots` : 'No Slots') : 'Off',
+      isWorkingDay: true,
+      isDayOff: false,
+      hasNoSlots: false,
+      slots: configuredSlots,
+      statusText: `${configuredSlots.length} Slots`,
       isCustom: false
     };
   }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
@@ -992,8 +1029,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       const freeSlots = resolved.isWorkingDay ? resolved.slots.filter(s => !booked.includes(s)) : [];
 
       let slotsLabel = 'No Slots';
-      if (!resolved.isWorkingDay) {
-        slotsLabel = resolved.statusText || 'Off';
+      if (resolved.isDayOff) {
+        slotsLabel = 'Off';
+      } else if (resolved.hasNoSlots) {
+        slotsLabel = 'No Slots';
       } else if (freeSlots.length > 0) {
         slotsLabel = `${freeSlots.length} Slots`;
       } else {
@@ -1007,10 +1046,12 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         dateStr,
         fullDate: d,
         isWorkingDay: resolved.isWorkingDay,
+        isDayOff: resolved.isDayOff,
+        hasNoSlots: resolved.hasNoSlots,
         freeSlots,
         allSlots: resolved.slots,
         slots: slotsLabel,
-        slotsCount: `${freeSlots.length} slots available`
+        slotsCount: resolved.isDayOff ? 'Doctor is off duty' : (resolved.hasNoSlots ? 'No slots configured' : `${freeSlots.length} slots available`)
       };
     });
   }, [resolveSlotsForDate, doctor?.slots_booked]);
@@ -1052,7 +1093,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     return dayConfiguredSlots.map(slot => ({
       time: slot,
       isBooked: booked.includes(slot),
-      isOff: !activeDateObj.isWorkingDay
+      isOff: activeDateObj.isDayOff
     }));
   }, [dateOptions, selectedDateIdx, configuredSlots, doctor?.slots_booked]);
 
@@ -1070,9 +1111,9 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
   // Derived booking status for currently selected date
   const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
-  const isDayOff = Boolean(activeDateObj && activeDateObj.isWorkingDay === false);
-  const isAllBooked = !isDayOff && currentDaySlots.length > 0 && currentDaySlots.filter(s => !s.isBooked).length === 0;
-  const isNoSlotsConfigured = !isDayOff && currentDaySlots.length === 0;
+  const isDayOff = Boolean(activeDateObj && activeDateObj.isDayOff);
+  const isNoSlotsConfigured = !isDayOff && (activeDateObj?.hasNoSlots || currentDaySlots.length === 0);
+  const isAllBooked = !isDayOff && !isNoSlotsConfigured && currentDaySlots.length > 0 && currentDaySlots.filter(s => !s.isBooked).length === 0;
   const canBookAppointment = !isDayOff && !isAllBooked && !isNoSlotsConfigured && Boolean(selectedTimeSlot);
 
   // Stable bio sentence management with clean More/Less toggle (flicker-free)
@@ -2010,7 +2051,18 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                       >
                         <span className={styles.dateSlotDayName}>{opt.day}</span>
                         <span className={styles.dateSlotDateNum}>{opt.date}</span>
-                        <span className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}>
+                        <span 
+                          className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}
+                          style={
+                            opt.slots === 'No Slots' 
+                              ? { color: '#64748b', background: '#f1f5f9', borderColor: '#cbd5e1' }
+                              : (opt.slots === 'Off' 
+                                ? { color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }
+                                : (opt.slots === 'Booked' 
+                                  ? { color: '#d97706', background: '#fffbeb', borderColor: '#fde68a' }
+                                  : {}))
+                          }
+                        >
                           {opt.slots}
                         </span>
                       </button>
@@ -2035,16 +2087,16 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 <span>Available Slots for {dateOptions[selectedDateIdx]?.day || 'Today'}</span>
               </div>
               <div className={styles.timeSlotsGrid}>
-                {dateOptions[selectedDateIdx]?.isWorkingDay === false ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.82rem', textAlign: 'center' }}>
+                {isDayOff ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.84rem', textAlign: 'center' }}>
                     Doctor is off duty on this day. Please choose another date.
                   </div>
-                ) : currentDaySlots.length === 0 ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.82rem', textAlign: 'center' }}>
-                    No slots configured for this day.
+                ) : isNoSlotsConfigured ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.84rem', textAlign: 'center' }}>
+                    No appointment slots configured for this day. Doctor has not added slots yet.
                   </div>
-                ) : currentDaySlots.filter(s => !s.isBooked).length === 0 ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '12px 14px', background: '#fff1f2', borderRadius: '8px', border: '1px dashed #fecdd3', color: '#e11d48', fontSize: '0.82rem', textAlign: 'center' }}>
+                ) : isAllBooked ? (
+                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fff1f2', borderRadius: '8px', border: '1px dashed #fecdd3', color: '#e11d48', fontSize: '0.84rem', textAlign: 'center' }}>
                     All slots are fully booked for this day. Please select another date.
                   </div>
                 ) : (
@@ -2075,10 +2127,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 title={
                   isDayOff
                     ? 'Doctor is off duty on this day. Please choose another date.'
+                    : isNoSlotsConfigured
+                    ? 'No appointment slots configured for this day.'
                     : isAllBooked
                     ? 'All slots are fully booked for this day. Please choose another date.'
-                    : isNoSlotsConfigured
-                    ? 'No slots configured for this day.'
                     : !selectedTimeSlot
                     ? 'Please select an available time slot.'
                     : 'Click to book your appointment'
@@ -2087,10 +2139,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 <span>
                   {isDayOff 
                     ? 'Doctor is Off Duty' 
-                    : isAllBooked 
-                    ? 'Fully Booked' 
                     : isNoSlotsConfigured 
                     ? 'No Slots Available' 
+                    : isAllBooked 
+                    ? 'Fully Booked' 
                     : 'Book Appointment'}
                 </span>
                 {canBookAppointment && <ArrowRight size={16} />}
@@ -2098,7 +2150,15 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               <div className={styles.bookingGuaranteesRow}>
                 <span className={styles.guaranteeItem}>
                   <CheckCircle2 size={12} color={canBookAppointment ? "#059669" : "#94a3b8"} />
-                  <span>{isDayOff ? "Doctor is off duty on this day" : "Instant Confirmation"}</span>
+                  <span>
+                    {isDayOff 
+                      ? "Doctor is off duty on this day" 
+                      : isNoSlotsConfigured 
+                      ? "Doctor has not added appointment slots yet" 
+                      : isAllBooked 
+                      ? "All slots booked for this date" 
+                      : "Instant Confirmation"}
+                  </span>
                 </span>
               </div>
             </div>

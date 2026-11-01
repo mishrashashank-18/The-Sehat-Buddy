@@ -1438,16 +1438,16 @@ const DoctorDashboard = ({ onNavigate }) => {
         careerExperience: Array.isArray(activeDoctor.careerExperience) ? activeDoctor.careerExperience : [],
         reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : [],
         youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : [],
-        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
+        availableDays: activeDoctor.availableDays || '',
         helplineNumber: activeDoctor.helplineNumber || '+91 98765 43210',
         helplineDays: activeDoctor.helplineDays || 'Mon – Sat',
         helplineTime: activeDoctor.helplineTime || '8:00 AM – 8:00 PM',
-        scheduleDays: Array.isArray(activeDoctor.scheduleDays) && activeDoctor.scheduleDays.length > 0 
+        scheduleDays: Array.isArray(activeDoctor.scheduleDays) 
           ? activeDoctor.scheduleDays 
-          : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        availableSlots: Array.isArray(activeDoctor.availableSlots) && activeDoctor.availableSlots.length > 0 
+          : [],
+        availableSlots: Array.isArray(activeDoctor.availableSlots) 
           ? activeDoctor.availableSlots 
-          : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'],
+          : [],
         slotDuration: activeDoctor.slotDuration || 20,
         dayWiseSlots: (activeDoctor.dayWiseSlots && typeof activeDoctor.dayWiseSlots === 'object') ? activeDoctor.dayWiseSlots : {},
         dateWiseSlots: (activeDoctor.dateWiseSlots && typeof activeDoctor.dateWiseSlots === 'object') ? activeDoctor.dateWiseSlots : {}
@@ -2543,7 +2543,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       if (!existing || existing.length === 0) {
         const baselineSlots = Array.isArray(profileForm.availableSlots) && profileForm.availableSlots.length > 0
           ? [...profileForm.availableSlots]
-          : ['09:00 AM', '10:00 AM', '11:00 AM', '04:00 PM', '05:00 PM', '06:00 PM'];
+          : [];
         newDayWise[dayKey] = baselineSlots;
       }
       showToast(`${DAY_NAME_MAP[dayKey] || dayKey} marked Open & Active!`);
@@ -2716,9 +2716,9 @@ const DoctorDashboard = ({ onNavigate }) => {
       const docId = activeDoctor?._id || activeDoctor?.id;
       if (!docId) return;
       await updateDoctor(docId, {
-        availableDays: profileForm.availableDays || 'Mon - Sat (10am - 4pm)',
-        scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-        availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : ['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'],
+        availableDays: profileForm.availableDays || '',
+        scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : [],
+        availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [],
         slotDuration: Number(profileForm.slotDuration) || 20,
         dayWiseSlots: profileForm.dayWiseSlots || {},
         dateWiseSlots: profileForm.dateWiseSlots || {}
