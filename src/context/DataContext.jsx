@@ -550,7 +550,9 @@ export const DataProvider = ({ children }) => {
         ...d,
         id: d._id || d.id || existing?._id || existing?.id,
         _id: d._id || existing?._id || d.id,
-        image: resolveMediaUrl(d.image || existing?.image || initialDoctors[0].image),
+        image: (d.image !== undefined && d.image !== null)
+          ? (d.image ? resolveMediaUrl(d.image) : '')
+          : (existing?.image ? resolveMediaUrl(existing.image) : ''),
         phone: resolvedPhone,
         contact_number: resolvedPhone,
         degree: resolvedDegree,

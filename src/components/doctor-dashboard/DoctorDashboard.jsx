@@ -3901,24 +3901,24 @@ const DoctorDashboard = ({ onNavigate }) => {
                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
                   onError={(e) => {
                     e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
                   }}
                 />
-              ) : (
-                <div
-                  className={styles.doctorAvatar}
-                  style={{
-                    background: '#f1f5f9',
-                    border: '2px dashed #94a3b8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#94a3b8'
-                  }}
-                  title="No photo uploaded (Blank)"
-                >
-                  <User size={34} color="#94a3b8" />
-                </div>
-              )}
+              ) : null}
+              <div
+                className={styles.doctorAvatar}
+                style={{
+                  display: (profileForm.image || activeDoctor.image) ? 'none' : 'flex',
+                  background: '#f1f5f9',
+                  border: '2px dashed #94a3b8',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#94a3b8'
+                }}
+                title="No photo uploaded (Blank)"
+              >
+                <User size={34} color="#94a3b8" />
+              </div>
               <label
                 style={{
                   position: 'absolute',

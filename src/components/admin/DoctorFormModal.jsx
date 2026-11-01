@@ -97,10 +97,10 @@ const DOC1_URL = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190466/s
 const DOC2_URL = 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793190467/sehatbuddy/doctors/doctor-2.jpg';
 
 const PRESET_AVATARS = [
-  { label: 'Male Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[0].url, preview: DEFAULT_DOCTOR_AVATARS[0].url, key: 'male_doctor' },
-  { label: 'Female Doctor (Default)', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].url, key: 'female_doctor' },
-  { label: 'Male Doctor 1', src: DOC1_URL, preview: DOC1_URL, key: 'doc1' },
-  { label: 'Female Doctor 1', src: DOC2_URL, preview: DOC2_URL, key: 'doc2' },
+  { label: 'Male Doctor Avatar 1', src: DEFAULT_DOCTOR_AVATARS[0].url, preview: DEFAULT_DOCTOR_AVATARS[0].url, key: 'male_doctor' },
+  { label: 'Female Doctor Avatar 1', src: DEFAULT_DOCTOR_AVATARS[1].url, preview: DEFAULT_DOCTOR_AVATARS[1].url, key: 'female_doctor' },
+  { label: 'Male Doctor Photo 2', src: DOC1_URL, preview: DOC1_URL, key: 'doc1' },
+  { label: 'Female Doctor Photo 2', src: DOC2_URL, preview: DOC2_URL, key: 'doc2' },
 ];
 
 const SPECIALTY_OPTIONS = [
@@ -1397,26 +1397,36 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           {/* Profile Avatar / Photo */}
           <div className={styles.sectionHeader}>Doctor Photo / Avatar</div>
           
-          {formData.image && (
+          {formData.image ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
               <img 
                 src={formData.image} 
                 alt="Current doctor photo" 
                 style={{ width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #00a896', flexShrink: 0 }}
-                onError={(e) => { e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc; }}
+                onError={(e) => { e.target.style.display = 'none'; }}
               />
               <div style={{ fontSize: '0.82rem', color: '#334155', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 <span style={{ fontWeight: 600, color: '#0f172a' }}>Active Photo: </span>
-                {DEFAULT_DOCTOR_AVATARS.find(a => a.url === formData.image)?.label || (formData.image.startsWith('data:') ? 'Custom Uploaded Image' : 'Selected Avatar')}
+                {DEFAULT_DOCTOR_AVATARS.find(a => a.url === formData.image)?.label || (formData.image.startsWith('data:') ? 'Custom Uploaded Image' : (PRESET_AVATARS.find(p => p.src === formData.image)?.label || 'Selected Photo'))}
               </div>
               <button 
                 type="button" 
                 onClick={() => setFormData({ ...formData, image: '' })}
                 style={{ fontSize: '0.75rem', background: '#fee2e2', color: '#ef4444', border: 'none', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
-                title="Remove photo"
+                title="Remove photo & leave blank"
               >
-                Clear
+                Clear to Blank
               </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', background: '#f8fafc', padding: '8px 12px', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', flexShrink: 0 }}>
+                <User size={20} />
+              </div>
+              <div style={{ fontSize: '0.82rem', color: '#64748b', flex: 1 }}>
+                <span style={{ fontWeight: 600, color: '#334155' }}>No Photo Selected (Blank): </span>
+                Doctor profile will remain blank without any avatar photo.
+              </div>
             </div>
           )}
 
@@ -1446,6 +1456,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
           {imageType === 'preset' && (
             <div className={styles.presetGrid}>
+              <div
+                className={`${styles.presetItem} ${!formData.image ? styles.presetSelected : ''}`}
+                onClick={() => setFormData({ ...formData, image: '' })}
+                title="Leave profile photo blank"
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f1f5f9', border: '2px dashed #94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', marginBottom: '4px' }}>
+                  <User size={24} />
+                </div>
+                <span>Blank (None)</span>
+              </div>
               {PRESET_AVATARS.map((preset, idx) => {
                 const isSelected = formData.image === preset.src || 
                   formData.image === preset.preview ||
@@ -1454,8 +1475,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                   <div
                     key={idx}
                     className={`${styles.presetItem} ${isSelected ? styles.presetSelected : ''}`}
-                    onClick={() => setFormData({ ...formData, image: preset.src })}
-                    title={`Select ${preset.label}`}
+                    onClick={() => setFormData({ ...formData, image: isSelected ? '' : preset.src })}
+                    title={isSelected ? 'Click to unselect and leave blank' : `Select ${preset.label}`}
+                    style={{ cursor: 'pointer' }}
                   >
                     <img src={preset.preview || preset.src} alt={preset.label} />
                     <span>{preset.label}</span>

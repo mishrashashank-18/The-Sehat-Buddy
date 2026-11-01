@@ -22,7 +22,8 @@ import {
   MessageSquare,
   Plus,
   Edit3,
-  Trash2
+  Trash2,
+  User
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useData } from '../../context/useData';
@@ -541,14 +542,29 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
         {/* Header */}
         <div className={styles.modalHeader}>
           <div className={styles.docProfileGroup}>
-            <img
-              src={liveDoc.image || doctor.image}
-              alt={liveDoc.name || doctor.name}
+            {(liveDoc.image || doctor.image) ? (
+              <img
+                src={liveDoc.image || doctor.image}
+                alt={liveDoc.name || doctor.name}
+                className={styles.docAvatar}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                }}
+              />
+            ) : null}
+            <div
               className={styles.docAvatar}
-              onError={(e) => {
-                e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+              style={{
+                display: (liveDoc.image || doctor.image) ? 'none' : 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#f1f5f9',
+                color: '#94a3b8'
               }}
-            />
+            >
+              <User size={24} color="#94a3b8" />
+            </div>
             <div className={styles.docMeta}>
               <div className={styles.docNameRow}>
                 <h2 className={styles.docName}>{liveDoc.name || doctor.name}</h2>

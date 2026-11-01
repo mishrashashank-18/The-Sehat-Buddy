@@ -1,8 +1,7 @@
 import React from 'react';
-import { Star } from 'lucide-react';
+import { Star, User } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { getDoctorVerifiedReviews, formatDoctorExperience } from './DoctorProfile';
-import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
 import styles from './DoctorCard.module.css';
 
 const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
@@ -41,14 +40,31 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
   return (
     <div className={styles.card} onClick={handleClick} style={{ cursor: 'pointer' }}>
       <div className={styles.imageWrapper}>
-        <img
-          src={doctor.image || DEFAULT_DOCTOR_AVATARS[0].localSrc}
-          alt={doctor.name}
+        {doctor.image ? (
+          <img
+            src={doctor.image}
+            alt={doctor.name}
+            className={styles.image}
+            onError={(e) => {
+              e.target.style.display = 'none';
+              if (e.target.nextElementSibling) {
+                e.target.nextElementSibling.style.display = 'flex';
+              }
+            }}
+          />
+        ) : null}
+        <div
           className={styles.image}
-          onError={(e) => {
-            e.target.src = DEFAULT_DOCTOR_AVATARS[0].localSrc;
+          style={{
+            display: doctor.image ? 'none' : 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: '#f1f5f9',
+            color: '#94a3b8'
           }}
-        />
+        >
+          <User size={48} color="#94a3b8" />
+        </div>
       </div>
       <div className={styles.info}>
         <h3 className={styles.name}>{doctor.name}</h3>
