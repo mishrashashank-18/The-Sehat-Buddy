@@ -65,8 +65,16 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 30px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 370px), 1fr));
+  gap: 28px;
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 20px;
+  }
 }
 
 .emptyState {

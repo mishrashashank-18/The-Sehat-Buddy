@@ -1131,7 +1131,7 @@ export const updateDoctorProfile = async (req, res) => {
         delete updateData._id;
         delete updateData.__v;
         delete updateData.password;
-        updated = await Doctor.findByIdAndUpdate(doctor._id, { $set: updateData }, { new: true, runValidators: false });
+        updated = await Doctor.findByIdAndUpdate(doctor._id, { $set: updateData }, { returnDocument: 'after', runValidators: false });
       } else {
         throw saveErr;
       }

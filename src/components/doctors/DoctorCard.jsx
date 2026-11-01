@@ -85,7 +85,7 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
           {showBookNow ? (
             <button className={styles.bookLink} onClick={handleBookNowClick}>Book Now</button>
           ) : (
-            <button className={styles.bookLink} onClick={handleClick}>View Profile</button>
+            <button className={styles.viewLink} onClick={handleClick}>View Profile</button>
           )}
         </div>
       </div>
