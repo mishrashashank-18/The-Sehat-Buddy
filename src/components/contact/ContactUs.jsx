@@ -46,7 +46,8 @@ export default function ContactUs() {
 
   const helplineLabel = contactInfo?.helplineLabel || 'Helpline & Emergency';
   const helplineStatus = contactInfo?.helplineStatus || '24x7 Active';
-  const helplineNumber = contactInfo?.helplineNumber || (contactInfo?.phones?.[0]?.number) || '+91 98765 4321';
+  const helplineNumber = contactInfo?.helphoneNumber || contactInfo?.helplineNumber || (contactInfo?.phones?.[0]?.number) || '+91 98765 4321';
+  const helphoneNumber = helplineNumber;
   const helplineDesc = contactInfo?.helplineDesc || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.';
 
   const liveImage = contactInfo?.image || DEFAULT_IMAGE;

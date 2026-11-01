@@ -33,6 +33,7 @@ export const DEFAULT_CONTACT_INFO = {
   helplineLabel: 'Helpline & Emergency',
   helplineStatus: '24x7 Active',
   helplineNumber: '+91 98765 4321',
+  helphoneNumber: '+91 98765 4321',
   helplineDesc: 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
   image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=1200&q=80",
   imagePublicId: null,

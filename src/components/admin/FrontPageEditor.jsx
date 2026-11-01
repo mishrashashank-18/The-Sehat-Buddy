@@ -491,6 +491,7 @@ const FrontPageEditor = ({ showToast, initialSubTab, hideSubTabs = false }) => {
         helplineLabel: helplineLabelInput.trim() || 'Helpline & Emergency',
         helplineStatus: helplineStatusInput.trim() || '24x7 Active',
         helphoneNumber: helplineNumberInput.trim() || '+91 98765 4321',
+        helplineNumber: helplineNumberInput.trim() || '+91 98765 4321',
         helplineDesc: helplineDescInput.trim() || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.',
         photoBadge: photoBadgeInput.trim() || '40+ Network Hospitals • Bengaluru Care Hub',
         phones: [
