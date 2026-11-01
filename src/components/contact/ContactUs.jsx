@@ -328,7 +328,7 @@ export default function ContactUs() {
                 <div className={styles.textareaWrap}>
                   <MessageSquare size={15} className={styles.textareaIcon} />
                   <textarea
-                    rows={3}
+                    rows={5}
                     className={styles.textareaField}
                     placeholder="Describe how our care desk can assist you with beds, doctors, or treatments..."
                     value={formData.message}
