@@ -30,6 +30,7 @@ import {
   CheckSquare,
   ExternalLink,
   MessageSquare,
+  User,
   Plus,
   ChevronLeft,
   ChevronRight,
@@ -1087,7 +1088,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             specialty: 'Hospital Staff Physician',
             specialization: 'Hospital Staff Physician',
             hospital: hospital.name,
-            image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80',
+            image: '',
             price: 700,
             experience: '8+ Years Experience',
             rating: 4.8
@@ -1512,14 +1513,29 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               {starDoctorsList.map((doc, idx) => (
                 <div key={doc.id || doc._id || idx} className={styles.doctorCard}>
                   <div className={styles.docImageWrapper}>
-                    <img
-                      src={doc.image}
-                      alt={doc.name}
+                    {doc.image ? (
+                      <img
+                        src={doc.image}
+                        alt={doc.name}
+                        className={styles.docImage}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
                       className={styles.docImage}
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                      style={{
+                        display: doc.image ? 'none' : 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#f1f5f9',
+                        color: '#94a3b8'
                       }}
-                    />
+                    >
+                      <User size={48} color="#94a3b8" />
+                    </div>
                     <div className={styles.starBadge}>
                       <Star size={12} fill="white" color="white" /> Star Doctor
                     </div>

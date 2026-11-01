@@ -2890,19 +2890,24 @@ const DoctorDashboard = ({ onNavigate }) => {
     showToast('Profile photo removed!');
   };
 
-  // Select default avatar (Male or Female) when doctor does not want to upload a photo
-  const handleSelectDefaultAvatar = async (avatarUrl) => {
-    if (!avatarUrl || !activeDoctor) return;
+  // Select default avatar (Male or Female) or Blank when doctor does not want to upload a photo
+  const handleSelectDefaultAvatar = async (avatarUrl = '') => {
+    if (!activeDoctor) return;
+    const isCurrentlySelected = avatarUrl
+      ? (profileForm.image === avatarUrl || (profileForm.image && typeof profileForm.image === 'string' && profileForm.image.includes(avatarUrl)))
+      : !profileForm.image;
+    const targetUrl = isCurrentlySelected ? '' : (avatarUrl || '');
     setIsUploadingImage(true);
     try {
-      setProfileForm(prev => ({ ...prev, image: avatarUrl }));
-      const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: avatarUrl });
+      setProfileForm(prev => ({ ...prev, image: targetUrl }));
+      activeDoctor.image = targetUrl;
+      const comp = calculateDoctorProfileCompletion({ ...activeDoctor, ...profileForm, image: targetUrl });
       await updateDoctor(activeDoctor._id || activeDoctor.id, {
-        image: avatarUrl,
+        image: targetUrl,
         profileCompletion: comp,
         isProfileComplete: comp >= 80
       });
-      showToast('Avatar selected and saved to your profile!');
+      showToast(targetUrl ? 'Avatar selected and saved to your profile!' : 'Profile photo set to blank (none)!');
     } catch (err) {
       console.error('Failed to select default avatar:', err);
       showToast('Failed to save avatar');
@@ -5422,16 +5427,65 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </div>
                 </div>
 
-                {/* Default Avatar Selection for Doctors who don't want to upload personal photo */}
+                {/* Default Avatar Selection or Leave Blank */}
                 <div style={{ marginTop: '18px', paddingTop: '16px', borderTop: '1px dashed #cbd5e1' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                     <User size={15} style={{ color: '#2563eb' }} />
                     <span style={{ fontSize: '0.86rem', fontWeight: 600, color: '#1e293b' }}>
-                      Don't want to upload your photo? Choose between these two default avatars:
+                      Don't want to upload your photo? Choose an avatar or leave it completely blank:
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                    {/* Option: Blank (No Photo) */}
+                    <div
+                      onClick={() => handleSelectDefaultAvatar('')}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '14px',
+                        padding: '12px 16px',
+                        borderRadius: '12px',
+                        background: !profileForm.image ? '#f0fdf4' : '#ffffff',
+                        border: !profileForm.image ? '2px solid #16a34a' : '1px solid #e2e8f0',
+                        cursor: isUploadingImage ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: !profileForm.image ? '0 4px 12px rgba(22,163,74,0.12)' : '0 1px 3px rgba(0,0,0,0.04)',
+                        transform: !profileForm.image ? 'translateY(-1px)' : 'none'
+                      }}
+                      title="Keep profile photo blank (no photo or avatar)"
+                    >
+                      <div
+                        style={{
+                          width: '52px',
+                          height: '52px',
+                          borderRadius: '50%',
+                          background: '#f1f5f9',
+                          border: !profileForm.image ? '2.5px solid #16a34a' : '2px dashed #94a3b8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#94a3b8',
+                          flexShrink: 0
+                        }}
+                      >
+                        <User size={26} color="#94a3b8" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: !profileForm.image ? '#15803d' : '#0f172a' }}>
+                          Blank (No Photo)
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: !profileForm.image ? '#16a34a' : '#64748b', marginTop: '3px' }}>
+                          {!profileForm.image ? '✓ Active (Blank Photo)' : 'No avatar or image'}
+                        </div>
+                      </div>
+                      {!profileForm.image && (
+                        <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', flexShrink: 0 }}>
+                          <Check size={13} strokeWidth={3} />
+                        </div>
+                      )}
+                    </div>
+
                     {DEFAULT_DOCTOR_AVATARS.map((avatar) => {
                       const isSelected = profileForm.image === avatar.url || 
                         profileForm.image === avatar.localSrc || 
@@ -9784,6 +9838,26 @@ const DoctorDashboard = ({ onNavigate }) => {
             <div style={{ padding: '12px 20px', background: '#020617', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
               <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Or choose default avatar:</span>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  onClick={() => handleSelectDefaultAvatar('')}
+                  style={{
+                    background: !profileForm.image ? '#16a34a' : 'rgba(255,255,255,0.08)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    color: 'white',
+                    padding: '5px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.78rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    cursor: 'pointer'
+                  }}
+                  title="Remove photo & keep blank"
+                >
+                  <User size={14} />
+                  <span>Blank (None)</span>
+                </button>
                 {DEFAULT_DOCTOR_AVATARS.map(av => (
                   <button
                     key={av.key}

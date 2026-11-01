@@ -22,7 +22,6 @@ import { DEFAULT_FAVICON, DEFAULT_FAVICON_CIRCULAR, DEFAULT_SOCIAL_LINKS } from 
 import { SocialIcon, SUPPORTED_PLATFORMS } from '../common/SocialIcon';
 import { NEW_SEHAT_BUDDY_FAVICON } from '../../data/faviconDataUri';
 import logoImg from '../../assets/images/logo.png';
-import LegalPoliciesManager from './LegalPoliciesManager';
 import styles from './BrandingManager.module.css';
 
 // Client-side helper to crop any image into a high-res circular favicon
@@ -1003,7 +1002,7 @@ const BrandingManager = ({ showToast }) => {
                         {isEnabled ? 'Active' : 'Hidden'}
                       </button>
 
-                      {hasUrl && (
+                      {hasUrl ? (
                         <a
                           href={link.url}
                           target="_blank"
@@ -1013,6 +1012,14 @@ const BrandingManager = ({ showToast }) => {
                         >
                           <ExternalLink size={16} />
                         </a>
+                      ) : (
+                        <span
+                          className={styles.socialTestBtnDisabled}
+                          title="Enter a valid URL to preview"
+                          aria-disabled="true"
+                        >
+                          <ExternalLink size={16} />
+                        </span>
                       )}
 
                       <button
@@ -1052,11 +1059,6 @@ const BrandingManager = ({ showToast }) => {
           </button>
         </div>
       </form>
-
-      {/* Legal Policies & Compliance Documents (25MB PDFs) */}
-      <div style={{ marginTop: '36px', paddingTop: '28px', borderTop: '2px dashed #e2e8f0' }}>
-        <LegalPoliciesManager showToast={showToast} />
-      </div>
     </div>
   );
 };

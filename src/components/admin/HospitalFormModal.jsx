@@ -16,6 +16,7 @@ import {
   Image as ImageIcon,
   Mail,
   Copy,
+  User,
   ExternalLink
 } from 'lucide-react';
 import { useData } from '../../context/useData';
@@ -612,7 +613,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           specialty: 'Hospital Staff Physician',
           specialization: 'Hospital Staff Physician',
           hospital: formData.name || 'This Hospital',
-          image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80'
+          image: ''
         });
       }
     });
@@ -1340,14 +1341,29 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                     }}
                     title={isSelected ? "Click to remove Star status" : "Click to select as Star Doctor"}
                   >
-                    <img
-                      src={doc.image}
-                      alt={doc.name}
+                    {doc.image ? (
+                      <img
+                        src={doc.image}
+                        alt={doc.name}
+                        className={styles.starDocThumb}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div
                       className={styles.starDocThumb}
-                      onError={(e) => {
-                        e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=150&q=80';
+                      style={{
+                        display: doc.image ? 'none' : 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#f1f5f9',
+                        color: '#94a3b8'
                       }}
-                    />
+                    >
+                      <User size={20} color="#94a3b8" />
+                    </div>
                     <div className={styles.starDocInfo}>
                       <h5>{doc.name}</h5>
                       <p>

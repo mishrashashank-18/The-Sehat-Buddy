@@ -3,6 +3,7 @@ import os from 'os';
 import fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import mongoose from 'mongoose';
 import Doctor from '../models/Doctor.js';
 import Hospital from '../models/Hospital.js';
 import { getCloudinary } from '../routes/uploadRoutes.js';
@@ -21,10 +22,10 @@ export async function downloadReelToTemp(rawUrl) {
   );
 
   const commands = [
-    `yt-dlp --no-warnings --no-check-certificates -f "1/best" -o "${tempFilePath}" "${cleanUrl}"`,
-    `python3 -m yt_dlp --no-warnings --no-check-certificates -f "1/best" -o "${tempFilePath}" "${cleanUrl}"`,
-    `python -m yt_dlp --no-warnings --no-check-certificates -f "1/best" -o "${tempFilePath}" "${cleanUrl}"`,
-    `py -m yt_dlp --no-warnings --no-check-certificates -f "1/best" -o "${tempFilePath}" "${cleanUrl}"`
+    `yt-dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+    `python3 -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+    `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
+    `py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`
   ];
 
   for (const cmd of commands) {
@@ -71,19 +72,135 @@ export async function uploadVideoFileToCloudinary(filePath, folder = 'sehatbuddy
 }
 
 /**
- * Cloudinary reel conversion has been completely turned off per user request.
- * All Instagram reels are streamed directly from Instagram's official embed player.
- * Result: 0 MB Cloudinary storage used, 0 MB Cloudinary bandwidth used.
+ * Automatically converts doctor Instagram reels to Cloudinary direct video in the background.
  */
 export async function processDoctorReelsInBackground(doctorId, reels) {
-  // Disabled: 0 MB Cloudinary storage & bandwidth mode
-  return;
+  if (!doctorId || !Array.isArray(reels) || reels.length === 0) return;
+
+  (async () => {
+    try {
+      let changed = false;
+      const updatedReels = reels.map(r => (typeof r === 'object' && r !== null ? { ...r } : r));
+
+      for (let i = 0; i < updatedReels.length; i++) {
+        const r = updatedReels[i];
+        const rUrl = typeof r === 'string' ? r : r?.url;
+
+        if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
+          const tempFile = await downloadReelToTemp(rUrl);
+          if (tempFile && fs.existsSync(tempFile)) {
+            try {
+              const cldRes = await uploadVideoFileToCloudinary(tempFile, 'sehatbuddy/reels');
+              if (cldRes && cldRes.url) {
+                const existingCover = typeof r === 'object' && r?.coverPhoto ? r.coverPhoto : '';
+                updatedReels[i] = {
+                  url: cldRes.url,
+                  coverPhoto: existingCover && !existingCover.includes('instagram.com')
+                    ? existingCover
+                    : cldRes.coverPhoto
+                };
+                changed = true;
+              }
+            } catch (upErr) {
+              console.warn(`[ReelService] Cloudinary upload error for doctor reel ${rUrl}:`, upErr.message);
+            } finally {
+              try {
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+              } catch {}
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        let updatedDoctor = null;
+        if (mongoose.isValidObjectId(doctorId)) {
+          updatedDoctor = await Doctor.findByIdAndUpdate(
+            doctorId,
+            { $set: { reels: updatedReels } },
+            { new: true }
+          );
+        }
+        if (!updatedDoctor) {
+          updatedDoctor = await Doctor.findOneAndUpdate(
+            { id: doctorId },
+            { $set: { reels: updatedReels } },
+            { new: true }
+          );
+        }
+        if (updatedDoctor) {
+          broadcastDbChange('doctors', 'update', updatedDoctor._id, updatedDoctor);
+        }
+      }
+    } catch (err) {
+      console.warn('[ReelService] processDoctorReelsInBackground warning:', err.message);
+    }
+  })().catch(() => {});
 }
 
 /**
- * Automatically converts hospital reels in the background (Disabled).
+ * Automatically converts hospital reels in the background.
  */
 export async function processHospitalReelsInBackground(hospitalId, reels) {
-  // Disabled: 0 MB Cloudinary storage & bandwidth mode
-  return;
+  if (!hospitalId || !Array.isArray(reels) || reels.length === 0) return;
+
+  (async () => {
+    try {
+      let changed = false;
+      const updatedReels = reels.map(r => (typeof r === 'object' && r !== null ? { ...r } : r));
+
+      for (let i = 0; i < updatedReels.length; i++) {
+        const r = updatedReels[i];
+        const rUrl = typeof r === 'string' ? r : r?.url;
+
+        if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
+          const tempFile = await downloadReelToTemp(rUrl);
+          if (tempFile && fs.existsSync(tempFile)) {
+            try {
+              const cldRes = await uploadVideoFileToCloudinary(tempFile, 'sehatbuddy/reels');
+              if (cldRes && cldRes.url) {
+                const existingCover = typeof r === 'object' && r?.coverPhoto ? r.coverPhoto : '';
+                updatedReels[i] = {
+                  url: cldRes.url,
+                  coverPhoto: existingCover && !existingCover.includes('instagram.com')
+                    ? existingCover
+                    : cldRes.coverPhoto
+                };
+                changed = true;
+              }
+            } catch (upErr) {
+              console.warn(`[ReelService] Cloudinary upload error for hospital reel ${rUrl}:`, upErr.message);
+            } finally {
+              try {
+                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+              } catch {}
+            }
+          }
+        }
+      }
+
+      if (changed) {
+        let updatedHospital = null;
+        if (mongoose.isValidObjectId(hospitalId)) {
+          updatedHospital = await Hospital.findByIdAndUpdate(
+            hospitalId,
+            { $set: { reels: updatedReels } },
+            { new: true }
+          );
+        }
+        if (!updatedHospital) {
+          updatedHospital = await Hospital.findOneAndUpdate(
+            { id: hospitalId },
+            { $set: { reels: updatedReels } },
+            { new: true }
+          );
+        }
+        if (updatedHospital) {
+          broadcastDbChange('hospitals', 'update', updatedHospital._id, updatedHospital);
+        }
+      }
+    } catch (err) {
+      console.warn('[ReelService] processHospitalReelsInBackground warning:', err.message);
+    }
+  })().catch(() => {});
 }

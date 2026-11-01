@@ -5,6 +5,7 @@ import {
   Award, CheckCircle2, MessageSquare, Trophy, Calendar, HeartPulse, Stethoscope, FileText,
   Clock, Globe, Printer, Check, Sparkles, Video, CreditCard, ArrowRight,
   History, Milestone, CalendarClock, ExternalLink, ChevronLeft, ChevronRight, Trash2, Edit2, AlertTriangle,
+  User,
   VolumeX
 } from 'lucide-react';
 import { useData } from '../../context/useData';
@@ -3108,7 +3109,13 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               <div>
                 <h2 style={{ fontSize: '1.75rem', color: 'var(--color-heading)', marginBottom: '8px' }}>Confirm Appointment</h2>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <img src={doctor.image} alt={doctor.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
+                  {doctor.image ? (
+                    <img src={doctor.image} alt={doctor.name} style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #2563eb' }} />
+                  ) : (
+                    <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', border: '2px solid #e2e8f0', flexShrink: 0 }}>
+                      <User size={24} color="#94a3b8" />
+                    </div>
+                  )}
                   <div>
                     <h4 style={{ margin: 0, color: 'var(--color-heading)' }}>{doctor.name}</h4>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>

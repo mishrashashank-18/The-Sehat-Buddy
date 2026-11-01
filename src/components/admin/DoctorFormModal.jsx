@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, 
   Plus, Trash2, Edit2, Star, Loader2, Award, GraduationCap, 
-  Users, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag,
+  Users, User, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag,
   Phone, Clock 
 } from 'lucide-react';
 import { useData } from '../../context/useData';

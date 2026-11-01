@@ -36,6 +36,7 @@ import {
   Clock,
   Heart,
   Users,
+  User,
   UserCheck,
   CalendarDays,
   Filter,
@@ -3346,14 +3347,29 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     className={`${styles.doctorCard} ${isSelected ? styles.doctorCardSelected : ''}`}
                   >
                     <div className={styles.docCardTop}>
-                      <img
-                        src={doc.image || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80'}
-                        alt={doc.name}
+                      {doc.image ? (
+                        <img
+                          src={doc.image}
+                          alt={doc.name}
+                          className={styles.docAvatar}
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div
                         className={styles.docAvatar}
-                        onError={(e) => {
-                          e.target.src = 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=400&q=80';
+                        style={{
+                          display: doc.image ? 'none' : 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: '#f1f5f9',
+                          color: '#94a3b8'
                         }}
-                      />
+                      >
+                        <User size={22} color="#94a3b8" />
+                      </div>
                       <div className={styles.docInfo}>
                         <h4 className={styles.docName}>{doc.name}</h4>
                         <p className={styles.docSpecialty}>{doc.specialty || doc.specialization || 'Consultant'}</p>
