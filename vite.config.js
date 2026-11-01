@@ -1,5 +1,19 @@
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
+import { createLogger, defineConfig, loadEnv } from 'vite';
+
+const customLogger = createLogger();
+const originalLoggerError = customLogger.error;
+customLogger.error = (msg, options) => {
+  // Suppress harmless proxy socket disconnects (SSE stream aborts on tab reload/close) and temporary connection attempts
+  if (
+    typeof msg === 'string' &&
+    msg.includes('http proxy error') &&
+    (msg.includes('ECONNRESET') || msg.includes('ECONNREFUSED') || msg.includes('ECONNABORTED') || msg.includes('AggregateError'))
+  ) {
+    return;
+  }
+  originalLoggerError(msg, options);
+};
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -9,6 +23,7 @@ export default defineConfig(({ mode }) => {
   const target = rawTarget.replace(/\/api\/?$/, '').replace(/\/+$/, '');
 
   return {
+    customLogger,
     base: '/',
     plugins: [react()],
     server: {
