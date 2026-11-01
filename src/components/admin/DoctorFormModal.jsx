@@ -245,8 +245,30 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     const remoteMemsChanged = doctorToEdit.memberships && JSON.stringify(doctorToEdit.memberships) !== JSON.stringify(prevDoc.memberships) && !dirtyFieldsRef.current.has('memberships');
     const remoteExpChanged = doctorToEdit.careerExperience && JSON.stringify(doctorToEdit.careerExperience) !== JSON.stringify(prevDoc.careerExperience) && !dirtyFieldsRef.current.has('careerExperience');
     const remoteTagsChanged = doctorToEdit.tags && JSON.stringify(doctorToEdit.tags) !== JSON.stringify(prevDoc.tags) && !dirtyFieldsRef.current.has('tags');
+    const remoteHelplineNumberChanged = doctorToEdit.helplineNumber !== prevDoc.helplineNumber && doctorToEdit.helplineNumber !== undefined && !dirtyFieldsRef.current.has('helplineNumber');
+    const remoteHelplineDaysChanged = doctorToEdit.helplineDays !== prevDoc.helplineDays && doctorToEdit.helplineDays !== undefined && !dirtyFieldsRef.current.has('helplineDays');
+    const remoteHelplineTimeChanged = doctorToEdit.helplineTime !== prevDoc.helplineTime && doctorToEdit.helplineTime !== undefined && !dirtyFieldsRef.current.has('helplineTime');
+    const remoteJobTitleChanged = doctorToEdit.jobTitle !== prevDoc.jobTitle && doctorToEdit.jobTitle !== undefined && !dirtyFieldsRef.current.has('jobTitle');
+    const remoteLicenseChanged = doctorToEdit.licenseNumber !== prevDoc.licenseNumber && doctorToEdit.licenseNumber !== undefined && !dirtyFieldsRef.current.has('licenseNumber');
 
-    if (!remotePhoneChanged && !remoteEmailChanged && !remoteHospitalChanged && !remoteSpecChanged && !remoteNameChanged && !remoteStarChanged && !remoteAwardsChanged && !remoteCertsChanged && !remoteMemsChanged && !remoteExpChanged && !remoteTagsChanged) {
+    if (
+      !remotePhoneChanged &&
+      !remoteEmailChanged &&
+      !remoteHospitalChanged &&
+      !remoteSpecChanged &&
+      !remoteNameChanged &&
+      !remoteStarChanged &&
+      !remoteAwardsChanged &&
+      !remoteCertsChanged &&
+      !remoteMemsChanged &&
+      !remoteExpChanged &&
+      !remoteTagsChanged &&
+      !remoteHelplineNumberChanged &&
+      !remoteHelplineDaysChanged &&
+      !remoteHelplineTimeChanged &&
+      !remoteJobTitleChanged &&
+      !remoteLicenseChanged
+    ) {
       return;
     }
 
@@ -294,12 +316,43 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     doctorToEdit?.jobTitle,
     doctorToEdit?.licenseNumber,
     doctorToEdit?.isStarDoctor,
+    doctorToEdit?.helplineNumber,
+    doctorToEdit?.helplineDays,
+    doctorToEdit?.helplineTime,
     JSON.stringify(doctorToEdit?.awards || []),
     JSON.stringify(doctorToEdit?.certifications || []),
     JSON.stringify(doctorToEdit?.memberships || []),
     JSON.stringify(doctorToEdit?.careerExperience || []),
     JSON.stringify(doctorToEdit?.tags || [])
   ]);
+
+  // Realtime instant listener: sync doctor phone & helpline details immediately when updated in Doctor Portal
+  useEffect(() => {
+    if (!doctorToEdit) return;
+    const targetId = doctorToEdit._id || doctorToEdit.id;
+
+    const handleRealtimeDocChange = (e) => {
+      const payload = e.detail;
+      if (!payload || payload.collection !== 'doctors') return;
+      if (payload.docId && String(payload.docId) === String(targetId)) {
+        const fresh = payload.fullDocument;
+        if (fresh) {
+          setFormData(prev => ({
+            ...prev,
+            helplineNumber: (!dirtyFieldsRef.current.has('helplineNumber') && fresh.helplineNumber !== undefined) ? fresh.helplineNumber : prev.helplineNumber,
+            helplineDays: (!dirtyFieldsRef.current.has('helplineDays') && fresh.helplineDays !== undefined) ? fresh.helplineDays : prev.helplineDays,
+            helplineTime: (!dirtyFieldsRef.current.has('helplineTime') && fresh.helplineTime !== undefined) ? fresh.helplineTime : prev.helplineTime,
+            phone: (!dirtyFieldsRef.current.has('phone') && (fresh.phone || fresh.contact_number)) ? String(fresh.phone || fresh.contact_number).replace(/\D/g, '').slice(-10) : prev.phone,
+            jobTitle: (!dirtyFieldsRef.current.has('jobTitle') && fresh.jobTitle !== undefined) ? fresh.jobTitle : prev.jobTitle,
+            licenseNumber: (!dirtyFieldsRef.current.has('licenseNumber') && fresh.licenseNumber !== undefined) ? fresh.licenseNumber : prev.licenseNumber
+          }));
+        }
+      }
+    };
+
+    window.addEventListener('sehat_db_change', handleRealtimeDocChange);
+    return () => window.removeEventListener('sehat_db_change', handleRealtimeDocChange);
+  }, [doctorToEdit?._id, doctorToEdit?.id]);
 
   // Credentials sub-tab navigation
   const [activeCredTab, setActiveCredTab] = useState('awards');
