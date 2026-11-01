@@ -189,6 +189,12 @@ export default function HospitalDirections({ hospital, userLocation, onClose }) 
             <span className={`${styles.pointBadge} ${styles.destBadge}`} title={hospital.name}>
               🏥 {hospital.name}
             </span>
+            {provider === 'google' && (
+              <span className={styles.providerBadge} title="Calculated using Google Maps Routes API">
+                <span className={styles.googleDot} />
+                Google Maps
+              </span>
+            )}
           </div>
         </div>
 

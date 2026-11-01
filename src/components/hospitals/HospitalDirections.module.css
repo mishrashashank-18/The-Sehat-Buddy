@@ -190,6 +190,29 @@
   border: 1px solid #e2e8f0;
   font-size: 0.82rem;
   color: #334155;
+  flex-wrap: wrap;
+}
+
+.providerBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.googleDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
 }
 
 .pointBadge {
