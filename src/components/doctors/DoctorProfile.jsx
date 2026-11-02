@@ -286,7 +286,10 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
   const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
   const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
-  const effectiveCover = coverPhoto || (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '');
+  const isBrokenInstagramDirectUrl = coverPhoto && coverPhoto.includes('instagram.com/p/') && coverPhoto.includes('/media/?size=');
+  const effectiveCover = (!coverPhoto || isBrokenInstagramDirectUrl)
+    ? (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '')
+    : coverPhoto;
 
   const isDirect = rawUrl && (rawUrl.includes('cloudinary.com') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl));
 
@@ -3006,53 +3009,6 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                           </span>
                         )}
                       </div>
-
-                      {isAdmin && (
-                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setAdminEditingReview(rev)}
-                            style={{
-                              background: '#eff6ff',
-                              border: '1px solid #bfdbfe',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              color: '#2563eb',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Edit / Modify this review as Administrator"
-                          >
-                            <Edit2 size={13} /> Edit (Admin)
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteReview(rev)}
-                            disabled={deletingReviewId === (rev._id || rev.id)}
-                            style={{
-                              background: '#fef2f2',
-                              border: '1px solid #fecaca',
-                              borderRadius: '6px',
-                              padding: '5px 10px',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              color: '#dc2626',
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                            title="Delete this review permanently as Administrator"
-                          >
-                            <Trash2 size={13} />
-                            {deletingReviewId === (rev._id || rev.id) ? 'Deleting...' : 'Delete Review (Admin)'}
-                          </button>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>

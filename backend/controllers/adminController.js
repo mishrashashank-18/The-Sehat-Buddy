@@ -237,7 +237,8 @@ export const verifyAdminResetOtp = async (req, res) => {
  */
 export const resetAdminPassword = async (req, res) => {
   try {
-    const { email, otp, password } = req.body;
+    const { email, otp } = req.body;
+    const password = req.body.password || req.body.newPassword;
     if (!email || !otp || !password) {
       return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required.' });
     }

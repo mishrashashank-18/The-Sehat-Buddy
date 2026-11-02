@@ -380,7 +380,8 @@ export const verifyDoctorResetOtp = async (req, res) => {
  */
 export const resetDoctorPassword = async (req, res) => {
   try {
-    const { email, otp, password } = req.body;
+    const { email, otp } = req.body;
+    const password = req.body.password || req.body.newPassword;
     if (!email || !otp || !password) {
       return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
     }
@@ -457,6 +458,13 @@ export const addDoctorByHospital = async (req, res) => {
     let doctor = await Doctor.findOne({ email: cleanEmail });
 
     if (doctor) {
+      const existingHosp = String(doctor.hospital || '').trim();
+      if (existingHosp && hospitalName && existingHosp.toLowerCase() !== hospitalName.toLowerCase() && !existingHosp.toLowerCase().includes(hospitalName.toLowerCase()) && !hospitalName.toLowerCase().includes(existingHosp.toLowerCase())) {
+        return res.status(400).json({
+          success: false,
+          message: `Doctor ${doctor.name} is already registered under "${existingHosp}". To reassign this doctor to "${hospitalName}", please update their profile directly.`
+        });
+      }
       if (hospitalName) doctor.hospital = hospitalName;
       // Do NOT mutate doctor.isStarDoctor or starUpdatedAt here: platform-wide star doctor status is managed solely by administrators
       await doctor.save();

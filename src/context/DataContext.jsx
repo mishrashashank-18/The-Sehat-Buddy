@@ -246,18 +246,44 @@ export const isDoctorAffiliatedWithHospital = (doctor, hospital) => {
 
   const currentHospitalName = String(hospital.name || '').toLowerCase().trim();
   const hospId = String(hospital._id || hospital.id || '').trim();
+  const docHosp = String(doctor.hospital || '').toLowerCase().trim();
+  const docHospId = String(doctor.hospitalId || doctor.hospital_id || '').trim();
+
+  // Helper: check if the doctor's registered hospital name matches current hospital
+  const doesHospitalNameMatch = () => {
+    if (!docHosp || !currentHospitalName) return false;
+    if (docHosp === currentHospitalName) return true;
+    if (docHosp.length > 5 && currentHospitalName.length > 5) {
+      if (docHosp.includes(currentHospitalName) || currentHospitalName.includes(docHosp)) return true;
+    }
+    const genericWords = new Set(['hospital', 'hospitals', 'super', 'speciality', 'specialty', 'center', 'centre', 'city', 'clinic', 'medical', 'care', 'healthcare', 'research', 'institute']);
+    const clean = (s) => s.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+    const docWords = clean(docHosp).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
+    const hospWords = clean(currentHospitalName).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
+    if (docWords.length > 0 && hospWords.length > 0) {
+      return docWords[0] === hospWords[0];
+    }
+    return false;
+  };
+
+  const nameMatches = doesHospitalNameMatch();
+  const idMatches = Boolean(hospId && (docHospId === hospId || String(doctor.hospital).trim() === hospId));
+
+  // STRICT HOSPITAL ISOLATION GUARD:
+  // If the doctor is explicitly assigned to a DIFFERENT hospital by ID or by Name,
+  // they CANNOT be affiliated with this hospital under any circumstances.
+  if (docHospId && hospId && docHospId !== hospId) {
+    return false;
+  }
+  if (docHosp && currentHospitalName && !nameMatches && !idMatches) {
+    return false;
+  }
 
   // 1. Direct MongoDB ID / ObjectId match
-  if (hospId) {
-    if (doctor.hospitalId && String(doctor.hospitalId).trim() === hospId) return true;
-    if (doctor.hospital_id && String(doctor.hospital_id).trim() === hospId) return true;
-    if (doctor.hospital && String(doctor.hospital).trim() === hospId) return true;
-  }
+  if (idMatches) return true;
 
-  // 2. Doctor is designated in hospital's star_doctors list
-  if (Array.isArray(hospital.star_doctors) && isDoctorInStarList(doctor, hospital.star_doctors)) {
-    return true;
-  }
+  // 2. Doctor's registered hospital name matches
+  if (nameMatches) return true;
 
   // 3. Doctor's email is in hospital staff_emails or staff_doctors
   const docEmail = (doctor.email || '').toLowerCase().trim();
@@ -270,26 +296,9 @@ export const isDoctorAffiliatedWithHospital = (doctor, hospital) => {
     }
   }
 
-  // 4. Doctor's hospital property name match
-  const docHosp = String(doctor.hospital || '').toLowerCase().trim();
-  if (!docHosp || !currentHospitalName) return false;
-
-  // Exact match
-  if (docHosp === currentHospitalName) return true;
-
-  // Substring containment if both are non-trivial length
-  if (docHosp.length > 5 && currentHospitalName.length > 5) {
-    if (docHosp.includes(currentHospitalName) || currentHospitalName.includes(docHosp)) return true;
-  }
-
-  // Primary brand / root word comparison (e.g. "Manipal", "Fortis", "Apollo", "Aster", "S2 Health")
-  const genericWords = new Set(['hospital', 'hospitals', 'super', 'speciality', 'specialty', 'center', 'centre', 'city', 'clinic', 'medical', 'care', 'healthcare', 'research', 'institute']);
-  const clean = (s) => s.replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-  const docWords = clean(docHosp).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
-  const hospWords = clean(currentHospitalName).split(' ').filter(w => w.length > 2 && !genericWords.has(w));
-
-  if (docWords.length > 0 && hospWords.length > 0) {
-    if (docWords[0] === hospWords[0]) return true;
+  // 4. Doctor is designated in hospital's star_doctors list (ONLY if doctor has no conflicting hospital)
+  if (!docHosp && Array.isArray(hospital.star_doctors) && isDoctorInStarList(doctor, hospital.star_doctors)) {
+    return true;
   }
 
   return false;
@@ -639,8 +648,8 @@ export const DataProvider = ({ children }) => {
         totalBeds: h.totalBeds !== undefined && h.totalBeds !== null ? Number(h.totalBeds) : (existing?.totalBeds !== undefined ? Number(existing.totalBeds) : 100),
         availableBeds: h.availableBeds !== undefined && h.availableBeds !== null ? Number(h.availableBeds) : (h.emptyBeds !== undefined && h.emptyBeds !== null ? Number(h.emptyBeds) : (existing?.availableBeds !== undefined ? Number(existing.availableBeds) : 24)),
         emptyBeds: h.availableBeds !== undefined && h.availableBeds !== null ? Number(h.availableBeds) : (h.emptyBeds !== undefined && h.emptyBeds !== null ? Number(h.emptyBeds) : (existing?.emptyBeds !== undefined ? Number(existing.emptyBeds) : 24)),
-        cashlessInsurance: h.cashlessInsurance !== undefined ? Boolean(h.cashlessInsurance) : (existing?.cashlessInsurance ?? true),
-        acceptedInsurances: (Array.isArray(h.acceptedInsurances) && h.acceptedInsurances.length > 0) ? h.acceptedInsurances : (existing?.acceptedInsurances || []),
+        cashlessInsurance: h.cashlessInsurance !== undefined ? Boolean(h.cashlessInsurance) : (existing?.cashlessInsurance ?? false),
+        acceptedInsurances: Array.isArray(h.acceptedInsurances) ? h.acceptedInsurances : (Array.isArray(existing?.acceptedInsurances) ? existing.acceptedInsurances : []),
         tpaHelpdesk: h.tpaHelpdesk || existing?.tpaHelpdesk || {
           phone: h.phone || '080-45678900',
           email: 'tpa@' + (h.email ? h.email.split('@')[1] : 'sehatbuddy.com'),
@@ -1921,8 +1930,8 @@ export const DataProvider = ({ children }) => {
       star_doctors: hospitalData.star_doctors || [],
       staff_emails: hospitalData.staff_emails || [],
       staff_doctors: hospitalData.staff_doctors || [],
-      cashlessInsurance: hospitalData.cashlessInsurance !== undefined ? Boolean(hospitalData.cashlessInsurance) : true,
-      acceptedInsurances: Array.isArray(hospitalData.acceptedInsurances) && hospitalData.acceptedInsurances.length > 0 ? hospitalData.acceptedInsurances : defaultAcceptedInsurances,
+      cashlessInsurance: hospitalData.cashlessInsurance !== undefined ? Boolean(hospitalData.cashlessInsurance) : false,
+      acceptedInsurances: Array.isArray(hospitalData.acceptedInsurances) ? hospitalData.acceptedInsurances : [],
       tpaHelpdesk: hospitalData.tpaHelpdesk || {
         phone: hospitalData.phone || '080-45678900',
         email: 'tpa@' + (hospitalData.email ? hospitalData.email.split('@')[1] : 'sehatbuddy.com'),

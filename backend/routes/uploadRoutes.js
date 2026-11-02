@@ -572,6 +572,100 @@ router.post('/video', protect, (req, res, next) => {
 });
 
 /**
+ * Auto-extract Instagram Reel Cover Photo and Upload to Cloudinary
+ * Returns permanent Cloudinary image url for the reel cover
+ */
+router.post('/instagram-cover', protect, async (req, res) => {
+  try {
+    const { url, folder = 'sehatbuddy/covers' } = req.body;
+    if (!url || !url.includes('instagram.com')) {
+      return res.status(400).json({ success: false, message: 'Valid Instagram URL is required' });
+    }
+
+    const match = String(url).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    const shortcode = match && match[1] ? match[1].replace(/[^a-zA-Z0-9_-]/g, '') : '';
+    if (!shortcode) {
+      return res.status(400).json({ success: false, message: 'Could not extract Instagram shortcode' });
+    }
+
+    let imageBuffer = null;
+    let contentType = 'image/jpeg';
+
+    // 1. Fetch from Instagram /media/?size=l
+    try {
+      const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+
+      const location = igRes.headers.get('location');
+      if (location && (igRes.status === 301 || igRes.status === 302)) {
+        const imgRes = await fetch(location, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (imgRes.ok) {
+          imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+          contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+        }
+      } else if (igRes.ok && igRes.headers.get('content-type')?.includes('image')) {
+        imageBuffer = Buffer.from(await igRes.arrayBuffer());
+        contentType = igRes.headers.get('content-type') || 'image/jpeg';
+      }
+    } catch (fetchErr) {
+      console.warn('Direct Instagram media fetch failed, attempting yt-dlp thumbnail extraction:', fetchErr.message);
+    }
+
+    // 2. Fallback to yt-dlp thumbnail extraction if direct fetch failed
+    if (!imageBuffer) {
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execPromise = promisify(exec);
+        const { stdout } = await execPromise(`yt-dlp --no-warnings --get-thumbnail "${url}"`, { timeout: 15000 });
+        const thumbUrl = stdout.trim().split('\n')[0];
+        if (thumbUrl && thumbUrl.startsWith('http')) {
+          const imgRes = await fetch(thumbUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+          if (imgRes.ok) {
+            imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+            contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+          }
+        }
+      } catch (ytdlErr) {
+        console.warn('yt-dlp thumbnail extraction notice:', ytdlErr.message);
+      }
+    }
+
+    // 3. If we have the image buffer, upload permanently to Cloudinary
+    if (imageBuffer && imageBuffer.length > 500) {
+      const cld = getCloudinary();
+      const dataUri = `data:${contentType};base64,${imageBuffer.toString('base64')}`;
+      const uploadResult = await cld.uploader.upload(dataUri, {
+        folder,
+        resource_type: 'image'
+      });
+      const coverPhoto = uploadResult.secure_url || uploadResult.url;
+      notifyStorageChanged('cloudinary:image');
+      return res.json({
+        success: true,
+        coverPhoto,
+        public_id: uploadResult.public_id
+      });
+    }
+
+    // 4. Fallback: Return backend proxy URL so it streams without CORS issues
+    return res.json({
+      success: true,
+      coverPhoto: `/api/reel-cover?url=${encodeURIComponent(url)}`
+    });
+  } catch (err) {
+    console.error('Error generating reel cover:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to generate reel cover' });
+  }
+});
+
+/**
  * Auto-extract Instagram Reel and Upload to Cloudinary
  * Returns permanent Cloudinary video url and auto-generated thumbnail
  */
@@ -592,15 +686,16 @@ router.post('/instagram-reel', protect, async (req, res) => {
     const tempFilePath = path.join(os.tmpdir(), `sehat_reel_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.mp4`);
     const cleanUrl = String(url).trim().split('?')[0];
 
-    // Download reel locally using yt-dlp across available runtime environments
+    // High-speed multi-threaded download: -N 4 with single-stream MP4 avoiding ffmpeg remux latency
+    const ytdlFlags = `--no-warnings --no-check-certificates --no-playlist --socket-timeout 10 -N 4 -f "b[ext=mp4]/b" --prefer-free-formats -o "${tempFilePath}" "${cleanUrl}"`;
     const isWindows = process.platform === 'win32';
     const commands = [
-      `yt-dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
-      `python3 -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`,
-      `python -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`
+      `yt-dlp ${ytdlFlags}`,
+      `python3 -m yt_dlp ${ytdlFlags}`,
+      `python -m yt_dlp ${ytdlFlags}`
     ];
     if (isWindows) {
-      commands.push(`py -m yt_dlp --no-warnings --no-check-certificates -o "${tempFilePath}" "${cleanUrl}"`);
+      commands.push(`py -m yt_dlp ${ytdlFlags}`);
     }
 
     let downloaded = false;
@@ -608,7 +703,7 @@ router.post('/instagram-reel', protect, async (req, res) => {
     let meaningfulErr = null;
     for (const cmd of commands) {
       try {
-        await execPromise(cmd, { timeout: 40000 });
+        await execPromise(cmd, { timeout: 25000 });
         if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
           downloaded = true;
           break;

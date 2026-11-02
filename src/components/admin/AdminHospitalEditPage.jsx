@@ -1015,13 +1015,20 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         (hospital.homeUpdatedAt !== undefined && Number(hospital.homeUpdatedAt) !== Number(formData.homeUpdatedAt))
       );
 
-      if (shouldSyncProfile || shouldSyncPub || shouldSyncHome) {
+      const incomingPhotosStr = JSON.stringify(hospital.photos || []);
+      const curPhotosStr = JSON.stringify(formData.photos || []);
+      const shouldSyncPhotos = !isDirtyRef.current && incomingPhotosStr !== curPhotosStr;
+      const shouldSyncImage = !isDirtyRef.current && hospital.image !== undefined && hospital.image !== formData.image;
+
+      if (shouldSyncProfile || shouldSyncPub || shouldSyncHome || shouldSyncPhotos || shouldSyncImage) {
         setFormData(prev => ({
           ...prev,
           profileCompletion: hospital.profileCompletion !== undefined ? hospital.profileCompletion : prev.profileCompletion,
           publicationStatus: hospital.publicationStatus || prev.publicationStatus,
           showOnHome: shouldSyncHome ? Boolean(hospital.showOnHome) : prev.showOnHome,
-          homeUpdatedAt: shouldSyncHome && hospital.homeUpdatedAt !== undefined ? Number(hospital.homeUpdatedAt) : prev.homeUpdatedAt
+          homeUpdatedAt: shouldSyncHome && hospital.homeUpdatedAt !== undefined ? Number(hospital.homeUpdatedAt) : prev.homeUpdatedAt,
+          photos: shouldSyncPhotos ? (Array.isArray(hospital.photos) ? [...hospital.photos] : []) : prev.photos,
+          image: shouldSyncImage ? (hospital.image || '') : prev.image
         }));
       }
       return;
@@ -1094,20 +1101,32 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   // Photos Gallery
-  const handleAddPhoto = () => {
+  const handleAddPhoto = async () => {
     if (!newPhotoUrl.trim()) return;
     const newPhoto = {
       url: newPhotoUrl.trim(),
       title: newPhotoTitle.trim() || `${formData.name || 'Hospital'} Facility`,
       category: newPhotoCategory || 'Facility'
     };
+    const updatedPhotos = [...(formData.photos || []), newPhoto];
     setFormData(prev => ({
       ...prev,
-      photos: [...prev.photos, newPhoto]
+      photos: updatedPhotos
     }));
     setNewPhotoUrl('');
     setNewPhotoTitle('');
     setSaveSuccess(false);
+
+    // Auto-persist immediately to MongoDB database
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { photos: updatedPhotos });
+        triggerSaveSuccess(3500);
+      } catch (err) {
+        console.error('Failed to auto-save added photo URL:', err);
+      }
+    }
   };
 
   const handleAddGalleryFile = async () => {
@@ -1121,14 +1140,22 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           title: newPhotoTitle.trim() || `${formData.name || 'Hospital'} Facility`,
           category: newPhotoCategory || 'Facility'
         };
+        const updatedPhotos = [...(formData.photos || []), newPhoto];
         setFormData(prev => ({
           ...prev,
-          photos: [...prev.photos, newPhoto]
+          photos: updatedPhotos
         }));
         setGalleryFile(null);
         setGalleryFilePreview(null);
         setNewPhotoTitle('');
         setSaveSuccess(false);
+
+        // Auto-persist immediately to MongoDB database
+        const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+        if (targetHospId) {
+          await updateHospital(targetHospId, { photos: updatedPhotos });
+          triggerSaveSuccess(3500);
+        }
       }
     } catch (err) {
       console.error('Failed to upload gallery image:', err);
@@ -1160,17 +1187,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
             console.warn('Old photo cleanup note:', e.message);
           }
         }
-        setFormData(prev => {
-          const updated = [...prev.photos];
-          const curr = updated[index];
-          if (typeof curr === 'string') {
-            updated[index] = newUrl;
-          } else {
-            updated[index] = { ...curr, url: newUrl };
-          }
-          return { ...prev, photos: updated };
-        });
+        const updated = [...(formData.photos || [])];
+        const curr = updated[index];
+        const newPhotoItem = {
+          url: newUrl,
+          title: (typeof curr === 'object' && curr?.title) ? curr.title : `${formData.name || 'Hospital'} Facility`,
+          category: (typeof curr === 'object' && curr?.category) ? curr.category : 'Facility'
+        };
+        updated[index] = newPhotoItem;
+        setFormData(prev => ({ ...prev, photos: updated }));
         setSaveSuccess(false);
+
+        // Auto-persist immediately to MongoDB database
+        const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+        if (targetHospId) {
+          await updateHospital(targetHospId, { photos: updated });
+          triggerSaveSuccess(3500);
+        }
       }
     } catch (err) {
       console.error('Failed to replace photo:', err);
@@ -1196,7 +1229,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       isDirtyRef.current = true;
 
       // Auto-persist immediately to MongoDB database
-      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
       if (targetHospId) {
         await updateHospital(targetHospId, { image: '' });
         triggerSaveSuccess(3500);
@@ -1232,7 +1265,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       setSaveSuccess(false);
 
       // Auto-persist immediately to MongoDB database
-      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
       if (targetHospId) {
         await updateHospital(targetHospId, { photos: updatedPhotos });
         triggerSaveSuccess(3500);
@@ -1259,6 +1292,18 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
     // Idempotent: if already in requested state, no-op
     if (isSelected === targetVal) return;
+
+    // Strict Hospital Isolation Guard: Never allow starring a doctor belonging to a different hospital
+    if (targetVal) {
+      const isAffiliated = isDoctorAffiliatedWithHospital(docObj, currentHospitalTarget);
+      const docHospital = String(docObj.hospital || '').trim();
+      const currentHospName = String(formData?.name || hospital?.name || 'this hospital').trim();
+
+      if (docHospital && !isAffiliated) {
+        alert(`Cannot add ${docObj.name} to ${currentHospName}: This doctor is already registered under "${docHospital}". A doctor cannot be added to a different hospital.`);
+        return;
+      }
+    }
 
     const currentSeq = (starSeqRef.current[canonicalId] || 0) + 1;
     starSeqRef.current[canonicalId] = currentSeq;
@@ -1386,7 +1431,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   };
 
   // Insurance CRUD Handlers
-  const handleAddInsurance = (nameToAdd) => {
+  const handleAddInsurance = async (nameToAdd) => {
     const cleanName = (typeof nameToAdd === 'string' ? nameToAdd : newInsuranceInput).trim();
     if (!cleanName) return;
 
@@ -1399,12 +1444,24 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       return;
     }
 
+    const nextList = [...formData.acceptedInsurances, cleanName];
     setFormData(prev => ({
       ...prev,
-      acceptedInsurances: [...prev.acceptedInsurances, cleanName]
+      acceptedInsurances: nextList
     }));
     setNewInsuranceInput('');
+    isDirtyRef.current = true;
     setSaveSuccess(false);
+
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { acceptedInsurances: nextList });
+        triggerSaveSuccess(3500);
+      } catch (err) {
+        console.error('Failed to auto-save added insurance:', err);
+      }
+    }
   };
 
   const handleStartEditInsurance = (index, currentName) => {
@@ -1412,7 +1469,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setEditingInsuranceName(currentName);
   };
 
-  const handleSaveEditInsurance = (index) => {
+  const handleSaveEditInsurance = async (index) => {
     const cleanName = editingInsuranceName.trim();
     if (!cleanName) return;
 
@@ -1425,14 +1482,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       return;
     }
 
-    setFormData(prev => {
-      const next = [...prev.acceptedInsurances];
-      next[index] = cleanName;
-      return { ...prev, acceptedInsurances: next };
-    });
+    const nextList = [...formData.acceptedInsurances];
+    nextList[index] = cleanName;
+    setFormData(prev => ({ ...prev, acceptedInsurances: nextList }));
     setEditingInsuranceIndex(null);
     setEditingInsuranceName('');
+    isDirtyRef.current = true;
     setSaveSuccess(false);
+
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { acceptedInsurances: nextList });
+        triggerSaveSuccess(3500);
+      } catch (err) {
+        console.error('Failed to auto-save edited insurance:', err);
+      }
+    }
   };
 
   const handleCancelEditInsurance = () => {
@@ -1440,16 +1506,28 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setEditingInsuranceName('');
   };
 
-  const handleDeleteInsurance = (indexToDelete) => {
+  const handleDeleteInsurance = async (indexToDelete) => {
+    const nextList = formData.acceptedInsurances.filter((_, idx) => idx !== indexToDelete);
     setFormData(prev => ({
       ...prev,
-      acceptedInsurances: prev.acceptedInsurances.filter((_, idx) => idx !== indexToDelete)
+      acceptedInsurances: nextList
     }));
     if (editingInsuranceIndex === indexToDelete) {
       setEditingInsuranceIndex(null);
       setEditingInsuranceName('');
     }
+    isDirtyRef.current = true;
     setSaveSuccess(false);
+
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { acceptedInsurances: nextList });
+        triggerSaveSuccess(3500);
+      } catch (err) {
+        console.error('Failed to auto-save deleted insurance:', err);
+      }
+    }
   };
 
   const handleToggleInsurance = (partnerName) => {
@@ -1480,6 +1558,27 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       return { ...prev, reels: next };
     });
     setSaveSuccess(false);
+  };
+
+  // Auto-generate Cover Photo from Instagram Reel
+  const handleAutoGenerateReelCover = async (idx, reelUrl) => {
+    if (!reelUrl || !reelUrl.includes('instagram.com')) return;
+    const match = String(reelUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    if (!match || !match[1]) return;
+
+    // Set real-time proxy cover immediately so the browser loads the real reel cover
+    const proxyUrl = `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}`;
+    handleUpdateReel(idx, 'coverPhoto', proxyUrl);
+
+    try {
+      // Auto-extract and upload high-res cover permanently to Cloudinary
+      const res = await api.getInstagramReelCover(reelUrl);
+      if (res && res.coverPhoto) {
+        handleUpdateReel(idx, 'coverPhoto', res.coverPhoto);
+      }
+    } catch (err) {
+      console.warn('Auto Cloudinary cover generation note:', err);
+    }
   };
 
   const handleRemoveReel = async (index) => {
@@ -1704,10 +1803,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       }
     } catch (err) {
       console.warn('Failed to convert Instagram reel:', err);
-      // Auto-extract shortcode to populate cover photo thumbnail if not already present
-      const match = String(raw).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-      if (match && match[1] && !formData.reels[idx]?.coverPhoto) {
-        handleUpdateReel(idx, 'coverPhoto', `https://www.instagram.com/p/${match[1]}/media/?size=l`);
+      // Auto-extract and populate cover photo thumbnail from the reel if not already present
+      if (raw && !formData.reels[idx]?.coverPhoto) {
+        handleAutoGenerateReelCover(idx, raw);
       }
     } finally {
       setUploadingMediaKey(null);
@@ -3362,6 +3460,46 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   </div>
                 ))}
               </div>
+
+              {/* Bottom Action / Save Status Bar for Showcase Gallery */}
+              <div style={{
+                marginTop: '24px',
+                paddingTop: '16px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', color: '#16a34a', fontWeight: 500 }}>
+                  <Check size={16} />
+                  <span>Photos are automatically saved to your hospital profile upon upload.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveAll()}
+                  disabled={isSaving}
+                  style={{
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
+                  }}
+                  title="Explicitly save all media changes directly to database"
+                >
+                  {isSaving ? <Loader2 size={14} className={styles.spinAnimation} /> : <Save size={14} />}
+                  <span>{isSaving ? 'Saving...' : 'Save Media Changes'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -3577,12 +3715,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                             </>
                           )}
                         </div>
-                        {doc.hospital && (
-                          <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Building2 size={11} />
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.hospital}</span>
-                          </div>
-                        )}
+                        {doc.hospital && (() => {
+                          const isAnotherHospital = !isDoctorAffiliatedWithHospital(doc, currentHospitalTarget);
+                          return (
+                            <div style={{ fontSize: '0.72rem', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <Building2 size={11} color={isAnotherHospital ? '#dc2626' : '#64748b'} />
+                              <span style={{ 
+                                overflow: 'hidden', 
+                                textOverflow: 'ellipsis', 
+                                whiteSpace: 'nowrap',
+                                color: isAnotherHospital ? '#dc2626' : '#64748b',
+                                fontWeight: isAnotherHospital ? 600 : 400
+                              }}>
+                                {doc.hospital} {isAnotherHospital ? '(Other Hospital)' : ''}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -3590,11 +3739,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       {(() => {
                         const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
                         const isDocToggling = togglingDoctorIds.has(canonicalDocId);
+                        const isAnotherHospital = Boolean(doc.hospital && !isDoctorAffiliatedWithHospital(doc, currentHospitalTarget));
                         return (
                           <PopularDoctorActionButtons
                             doctor={doc}
                             isPopular={isSelected}
-                            disabled={isDocToggling}
+                            disabled={isDocToggling || (isAnotherHospital && !isSelected)}
                             onSetPopular={(targetVal, extra) => handleSetHospitalStarDoctor(doc, targetVal, extra)}
                           />
                         );
@@ -3912,6 +4062,46 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <p style={{ margin: '4px 0 12px 0', fontSize: '0.84rem' }}>Use the input above or click any quick-add button to add empaneled providers.</p>
                 </div>
               )}
+
+              {/* Bottom Action / Save Status Bar for Insurances */}
+              <div style={{
+                marginTop: '24px',
+                paddingTop: '16px',
+                borderTop: '1px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', color: '#16a34a', fontWeight: 500 }}>
+                  <Check size={16} />
+                  <span>Insurance changes are automatically synced and saved to your profile in real-time.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSaveAll()}
+                  disabled={isSaving}
+                  style={{
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    border: 'none',
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    fontSize: '0.84rem',
+                    fontWeight: 700,
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(22, 163, 74, 0.25)'
+                  }}
+                  title="Explicitly save all insurance changes directly to database"
+                >
+                  {isSaving ? <Loader2 size={14} className={styles.spinAnimation} /> : <Save size={14} />}
+                  <span>{isSaving ? 'Saving...' : 'Save Insurance Changes'}</span>
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -4098,7 +4288,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 ) : (
                   <div className={styles.previewCardGrid}>
                     {formData.reels.map((reel, idx) => {
-                      const cover = reel.coverPhoto || 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=400&q=80';
+                      const cover = reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/')
+                        ? reel.coverPhoto
+                        : (reel.url && reel.url.includes('instagram.com') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}` : (reel.coverPhoto || ''));
                       const isVideo = reel.url && (reel.url.includes('cloudinary.com') || reel.url.match(/\.(mp4|webm|mov)(\?.*)?$/i));
                       return (
                         <div
@@ -4221,11 +4413,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                             onChange={(e) => {
                               const val = e.target.value;
                               handleUpdateReel(idx, 'url', val);
-                              if (val && val.includes('instagram.com') && !reel.coverPhoto) {
-                                const match = String(val).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-                                if (match && match[1]) {
-                                  handleUpdateReel(idx, 'coverPhoto', `https://www.instagram.com/p/${match[1]}/media/?size=l`);
-                                }
+                              if (val && val.includes('instagram.com')) {
+                                handleAutoGenerateReelCover(idx, val);
                               }
                             }}
                             placeholder="Upload video file or paste Cloudinary / Instagram video URL"
@@ -4334,11 +4523,17 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           {reel.coverPhoto ? (
                             <div className={styles.coverPreviewWrap}>
                               <img
-                                src={reel.coverPhoto}
+                                src={reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/')
+                                  ? reel.coverPhoto
+                                  : (reel.url && reel.url.includes('instagram.com') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}` : reel.coverPhoto)}
                                 alt={`Reel #${idx + 1} Cover`}
                                 className={styles.coverPreviewThumb}
                                 onError={(e) => {
-                                  e.target.src = 'https://images.unsplash.com/photo-1587351021759-3e566b6af7cc?auto=format&fit=crop&w=400&q=80';
+                                  if (reel.url && reel.url.includes('instagram.com') && !e.target.src.includes('/api/reel-cover')) {
+                                    e.target.src = `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}`;
+                                  } else {
+                                    e.target.style.display = 'none';
+                                  }
                                 }}
                               />
                               <div className={styles.coverPreviewInfo}>

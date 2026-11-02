@@ -639,7 +639,8 @@ const LoginPage = ({ role, setView }) => {
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
           otp: otp.trim(),
-          password
+          password,
+          newPassword: password
         }),
       });
 

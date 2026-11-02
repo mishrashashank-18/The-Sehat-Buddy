@@ -1111,6 +1111,20 @@ export const api = {
     return await handleResponse(res);
   },
 
+  // Auto-extract Instagram Reel Cover Thumbnail and Upload to Cloudinary
+  async getInstagramReelCover(url, folder = 'sehatbuddy/covers') {
+    const token = getActiveAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(`${API_BASE}/upload/instagram-cover`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ url, folder })
+    });
+    return await handleResponse(res);
+  },
+
   // Avatars API
   async getAvatars() {
     try {

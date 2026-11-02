@@ -267,7 +267,8 @@ export const verifyHospitalResetOtp = async (req, res) => {
  */
 export const resetHospitalPassword = async (req, res) => {
   try {
-    const { email, otp, newPassword } = req.body;
+    const { email, otp } = req.body;
+    const newPassword = req.body.newPassword || req.body.password;
     if (!email || !otp || !newPassword) {
       return res.status(400).json({ success: false, message: 'Email, OTP, and new password are required' });
     }
@@ -1096,6 +1097,20 @@ export const updateHospital = async (req, res) => {
           foundDoctor = await Doctor.findOne({ $or: orConditions });
         }
         if (foundDoctor) {
+          // STRICT RULE: Doctor must NOT belong to a different hospital!
+          const docHosp = String(foundDoctor.hospital || '').trim();
+          const hospName = String(hospital.name || req.body.name || '').trim();
+          const docHospId = foundDoctor.hospitalId ? String(foundDoctor.hospitalId) : null;
+          const currentHospId = String(hospital._id);
+
+          const belongsToAnotherHosp = (docHospId && docHospId !== currentHospId) ||
+            (docHosp && hospName && docHosp.toLowerCase() !== hospName.toLowerCase() && !docHosp.toLowerCase().includes(hospName.toLowerCase()) && !hospName.toLowerCase().includes(docHosp.toLowerCase()));
+
+          if (belongsToAnotherHosp) {
+            console.warn(`[Security/Data Integrity] Blocked cross-hospital assignment: Doctor "${foundDoctor.name}" (Affiliated with "${docHosp}") cannot be added as star doctor of "${hospName}"`);
+            continue;
+          }
+
           resolvedStarDoctors.push(foundDoctor._id);
         } else if (rawId && typeof rawId === 'string' && /^[0-9a-fA-F]{24}$/.test(rawId)) {
           resolvedStarDoctors.push(rawId);
@@ -1117,10 +1132,24 @@ export const updateHospital = async (req, res) => {
       hospital.markModified('star_doctors');
     }
     if (req.body.photos !== undefined) {
-      const incomingPhotos = Array.isArray(req.body.photos) ? req.body.photos : [];
+      const rawPhotos = Array.isArray(req.body.photos) ? req.body.photos : [];
+      const sanitizedPhotos = rawPhotos.map(p => {
+        if (typeof p === 'string' && p.trim()) {
+          return { url: p.trim(), title: 'Hospital Facility', category: 'Facility' };
+        }
+        if (p && typeof p === 'object' && p.url) {
+          return {
+            url: String(p.url).trim(),
+            title: String(p.title || 'Hospital Facility').trim(),
+            category: String(p.category || 'Facility').trim()
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
       if (Array.isArray(hospital.photos)) {
         const incomingUrls = new Set(
-          incomingPhotos.map(p => (typeof p === 'string' ? p : p?.url || '')).filter(Boolean)
+          sanitizedPhotos.map(p => p.url).filter(Boolean)
         );
         for (const oldP of hospital.photos) {
           const oldUrl = typeof oldP === 'string' ? oldP : oldP?.url || '';
@@ -1138,7 +1167,7 @@ export const updateHospital = async (req, res) => {
           }
         }
       }
-      hospital.photos = incomingPhotos;
+      hospital.photos = sanitizedPhotos;
       hospital.markModified('photos');
     }
     if (req.body.cashlessInsurance !== undefined) {

@@ -1893,7 +1893,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             // Extract shortcode for live preview
             const match = reelUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
             const shortcode = match ? match[1] : '';
-            const previewCover = customCover || (shortcode ? `https://www.instagram.com/p/${shortcode}/media/?size=l` : '');
+            const previewCover = customCover && !customCover.includes('instagram.com/p/')
+              ? customCover
+              : (reelUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}` : '');
 
             return (
               <div 

@@ -57,7 +57,10 @@ const HospitalDashboard = ({ onNavigate }) => {
       if (found) {
         const foundStarStr = JSON.stringify(found.star_doctors || []);
         const curStarStr = JSON.stringify(currentHospitalData.star_doctors || []);
-        if (foundStarStr !== curStarStr) {
+        const foundPhotosStr = JSON.stringify(found.photos || []);
+        const curPhotosStr = JSON.stringify(currentHospitalData.photos || []);
+        const hasImageDiff = (found.image || '') !== (currentHospitalData.image || '');
+        if (foundStarStr !== curStarStr || foundPhotosStr !== curPhotosStr || hasImageDiff) {
           setCurrentHospitalData(prev => ({ ...prev, ...found }));
         }
       }

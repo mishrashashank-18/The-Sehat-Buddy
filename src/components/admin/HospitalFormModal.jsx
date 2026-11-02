@@ -168,8 +168,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         longitude: hospitalToEdit.longitude !== undefined && hospitalToEdit.longitude !== null ? hospitalToEdit.longitude : '',
         staff_emails: Array.from(seenStaffEmails),
         staff_doctors: initialStaffDocs,
-        cashlessInsurance: hospitalToEdit.cashlessInsurance !== undefined ? hospitalToEdit.cashlessInsurance : true,
-        acceptedInsurances: Array.isArray(hospitalToEdit.acceptedInsurances) && hospitalToEdit.acceptedInsurances.length > 0 ? hospitalToEdit.acceptedInsurances : defaultAcceptedInsurances,
+        cashlessInsurance: hospitalToEdit.cashlessInsurance !== undefined ? hospitalToEdit.cashlessInsurance : false,
+        acceptedInsurances: Array.isArray(hospitalToEdit.acceptedInsurances) ? hospitalToEdit.acceptedInsurances : [],
         tpaPhone: hospitalToEdit.tpaHelpdesk?.phone || '',
         tpaEmail: hospitalToEdit.tpaHelpdesk?.email || '',
         tpaPreAuthTime: hospitalToEdit.tpaHelpdesk?.preAuthTime || '30 Mins Cashless Pre-Approval',
@@ -440,10 +440,19 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
     const nextReels = [...formData.reels];
     const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
     nextReels[index] = { ...cur, [field]: value };
-    if (field === 'url' && value && value.includes('instagram.com') && !cur.coverPhoto) {
+    if (field === 'url' && value && value.includes('instagram.com')) {
       const match = String(value).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
       if (match && match[1]) {
-        nextReels[index].coverPhoto = `https://www.instagram.com/p/${match[1]}/media/?size=l`;
+        nextReels[index].coverPhoto = `${API_BASE}/reel-cover?url=${encodeURIComponent(value)}`;
+        api.getInstagramReelCover(value).then(res => {
+          if (res && res.coverPhoto) {
+            setFormData(prev => {
+              const updated = [...prev.reels];
+              if (updated[index]) updated[index] = { ...updated[index], coverPhoto: res.coverPhoto };
+              return { ...prev, reels: updated };
+            });
+          }
+        }).catch(() => {});
       }
     }
     setFormData(prev => ({ ...prev, reels: nextReels }));
