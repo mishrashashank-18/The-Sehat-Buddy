@@ -16,9 +16,11 @@ import {
   deleteDoctorAppointment,
   updateDoctorProfile,
   deleteDoctorProfile,
+  deleteDoctorReel,
+  deleteDoctorReelCover,
   getMyDoctorProfile
 } from '../controllers/doctorController.js';
-import { protect, optionalProtect } from '../middleware/authMiddleware.js';
+import { protect, optionalProtect, requireAdmin } from '../middleware/authMiddleware.js';
 import upload from '../config/cloudinary.js';
 
 const router = express.Router();
@@ -48,6 +50,9 @@ router.post('/reset-password', resetDoctorPassword);
 router.post('/add-by-hospital', protect, addDoctorByHospital);
 
 // Doctor profile update & delete (optionalProtect allows dashboard edits in local/dev sessions while protecting in strict prod)
+// Reel deletion is strictly restricted to platform administrators
+router.delete('/:id/reels/:index/cover', protect, requireAdmin, deleteDoctorReelCover);
+router.delete('/:id/reels/:index', protect, requireAdmin, deleteDoctorReel);
 router.put('/:id', optionalProtect, upload.single('image'), updateDoctorProfile);
 router.delete('/:id', optionalProtect, deleteDoctorProfile);
 

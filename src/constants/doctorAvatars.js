@@ -3,8 +3,8 @@ export const DEFAULT_DOCTOR_AVATARS = [
     key: 'male_doctor',
     label: 'Male Doctor Avatar',
     gender: 'male',
-    url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png',
-    localSrc: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png',
+    url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793724988/sehatbuddy/avatars/default_doctor_male.png',
+    localSrc: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793724988/sehatbuddy/avatars/default_doctor_male.png',
     publicPath: '/avatars/avatar-male.png',
     description: 'Male doctor avatar with stethoscope & blue circular backdrop'
   },

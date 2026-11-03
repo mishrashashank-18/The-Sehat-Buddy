@@ -10,8 +10,8 @@ import { initialDoctors } from '../data/doctors';
 import { initialCorporateTieups } from '../data/corporateTieups';
 import { initialHeroContent } from '../data/heroContent';
 
-const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v3';
-const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v4';
+const STORAGE_KEY_DOCTORS = 'sehat_buddy_doctors_v5';
+const STORAGE_KEY_HOSPITALS = 'sehat_buddy_hospitals_v5';
 const STORAGE_KEY_HERO = 'sehat_buddy_hero_v4';
 const STORAGE_KEY_SERVICES = 'sehat_buddy_services_v2';
 const STORAGE_KEY_FEATURES = 'sehat_buddy_features_v2';
@@ -205,7 +205,7 @@ export const resolveMediaUrl = (url) => {
 
   // 5. Avatars migration to Cloudinary CDN
   if (trimmed.includes('avatar-male') || trimmed.includes('default_doctor_male')) {
-    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png';
+    return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793724988/sehatbuddy/avatars/default_doctor_male.png';
   }
   if (trimmed.includes('avatar-female') || trimmed.includes('default_doctor_female')) {
     return 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893958/sehatbuddy/avatars/default_doctor_female.jpg';
@@ -304,10 +304,24 @@ export const isDoctorAffiliatedWithHospital = (doctor, hospital) => {
   return false;
 };
 
+const safeDispatchDoctorsUpdated = (detail) => {
+  if (typeof window !== 'undefined') {
+    setTimeout(() => {
+      try {
+        window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail }));
+      } catch {}
+    }, 0);
+  }
+};
+
 export const DataProvider = ({ children }) => {
   // 1. Doctors State (Fetched directly from DB / cached)
   const [doctors, setDoctors] = useState(() => {
     try {
+      localStorage.removeItem('sehat_buddy_doctors_v1');
+      localStorage.removeItem('sehat_buddy_doctors_v2');
+      localStorage.removeItem('sehat_buddy_doctors_v3');
+      localStorage.removeItem('sehat_buddy_doctors_v4');
       const saved = localStorage.getItem(STORAGE_KEY_DOCTORS);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -324,8 +338,10 @@ export const DataProvider = ({ children }) => {
   // 2. Hospitals State (Fetched directly from DB / cached)
   const [hospitals, setHospitals] = useState(() => {
     try {
+      localStorage.removeItem('sehat_buddy_hospitals_v1');
       localStorage.removeItem('sehat_buddy_hospitals_v2');
       localStorage.removeItem('sehat_buddy_hospitals_v3');
+      localStorage.removeItem('sehat_buddy_hospitals_v4');
       const saved = localStorage.getItem(STORAGE_KEY_HOSPITALS);
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -544,19 +560,21 @@ export const DataProvider = ({ children }) => {
     }
     const mapped = docList.map(d => {
       const existing = prevDoctors.find(p => matchesId(p, d));
-      const rawSpec = (d.specialization && d.specialization !== 'General Medicine')
+      const rawSpec = (d.specialization !== undefined)
         ? d.specialization
-        : ((d.specialty && d.specialty !== 'General Medicine') ? d.specialty : (d.specialization || d.specialty || existing?.specialization || existing?.specialty || 'General Physician'));
-      const resolvedSpecialty = rawSpec || 'General Physician';
+        : (d.specialty !== undefined ? d.specialty : (existing?.specialization !== undefined ? existing.specialization : (existing?.specialty || '')));
+      const resolvedSpecialty = rawSpec !== undefined ? rawSpec : '';
       const rawPrice = d.price !== undefined ? d.price : d.fees;
       const resolvedPrice = (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)))
         ? Number(rawPrice)
-        : (existing?.price ?? existing?.fees ?? 500);
-      const resolvedPhone = d.phone || d.contact_number || existing?.phone || existing?.contact_number || '';
-      const resolvedDegree = d.degree || d.qualifications || existing?.degree || existing?.qualifications || '';
+        : (existing?.price ?? existing?.fees ?? 0);
+      const resolvedPhone = d.phone !== undefined ? d.phone : (d.contact_number !== undefined ? d.contact_number : (existing?.phone || existing?.contact_number || ''));
+      const resolvedDegree = d.degree !== undefined ? d.degree : (d.qualifications !== undefined ? d.qualifications : (existing?.degree !== undefined ? existing.degree : (existing?.qualifications || '')));
+      const resolvedName = d.name !== undefined ? d.name : (existing?.name || '');
       return {
         ...existing,
         ...d,
+        name: resolvedName,
         id: d._id || d.id || existing?._id || existing?.id,
         _id: d._id || existing?._id || d.id,
         image: (d.image !== undefined && d.image !== null)
@@ -571,15 +589,15 @@ export const DataProvider = ({ children }) => {
         price: resolvedPrice,
         fees: resolvedPrice,
         rating: d.rating !== undefined ? d.rating : existing?.rating,
-        reviews: d.reviews !== undefined ? d.reviews : (existing?.reviews || '50+'),
+        reviews: d.reviews !== undefined ? d.reviews : (existing?.reviews || '0'),
         availabilityStatus: d.availabilityStatus || existing?.availabilityStatus || 'Available',
         statusUpdatedAt: Number(d.statusUpdatedAt || existing?.statusUpdatedAt || 0),
-        experience: typeof d.experience === 'number' ? d.experience : (parseInt(String(d.experience || '').replace(/\D/g, ''), 10) || 5),
+        experience: typeof d.experience === 'number' ? d.experience : (!isNaN(parseInt(String(d.experience || '').replace(/\D/g, ''), 10)) ? parseInt(String(d.experience || '').replace(/\D/g, ''), 10) : 0),
         jobTitle: d.jobTitle !== undefined ? d.jobTitle : (existing?.jobTitle || ''),
         licenseNumber: d.licenseNumber !== undefined ? d.licenseNumber : (existing?.licenseNumber || ''),
-        helplineNumber: d.helplineNumber !== undefined ? d.helplineNumber : (existing?.helplineNumber || '+91 98765 43210'),
-        helplineDays: d.helplineDays !== undefined ? d.helplineDays : (existing?.helplineDays || 'Mon – Sat'),
-        helplineTime: d.helplineTime !== undefined ? d.helplineTime : (existing?.helplineTime || '8:00 AM – 8:00 PM'),
+        helplineNumber: d.helplineNumber !== undefined ? d.helplineNumber : (existing?.helplineNumber || ''),
+        helplineDays: d.helplineDays !== undefined ? d.helplineDays : (existing?.helplineDays || ''),
+        helplineTime: d.helplineTime !== undefined ? d.helplineTime : (existing?.helplineTime || ''),
         profileCompletion: d.profileCompletion !== undefined ? Number(d.profileCompletion) : (existing?.profileCompletion || 0),
         isProfileComplete: d.isProfileComplete !== undefined ? Boolean(d.isProfileComplete) : Boolean(existing?.isProfileComplete),
         awards: Array.isArray(d.awards) ? d.awards : (Array.isArray(existing?.awards) ? existing.awards : []),
@@ -588,11 +606,11 @@ export const DataProvider = ({ children }) => {
         careerExperience: Array.isArray(d.careerExperience) ? d.careerExperience : (Array.isArray(existing?.careerExperience) ? existing.careerExperience : []),
         faqs: (Array.isArray(d.faqs) && d.faqs.length > 0) ? d.faqs : (Array.isArray(existing?.faqs) ? existing.faqs : (Array.isArray(d.faqs) ? d.faqs : [])),
         tags: Array.isArray(d.tags) ? d.tags : (Array.isArray(existing?.tags) ? existing.tags : undefined),
-        reels: sanitizeReels((Array.isArray(d.reels) && d.reels.length > 0) ? d.reels : (Array.isArray(existing?.reels) ? existing.reels : [])),
-        youtube_videos: (Array.isArray(d.youtube_videos) && d.youtube_videos.length > 0) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
+        reels: Array.isArray(d.reels) ? sanitizeReels(d.reels) : sanitizeReels(existing?.reels || []),
+        youtube_videos: Array.isArray(d.youtube_videos) ? d.youtube_videos : (Array.isArray(existing?.youtube_videos) ? existing.youtube_videos : []),
         availableDays: (d.availableDays && typeof d.availableDays === 'string' && d.availableDays.trim())
           ? d.availableDays.trim()
-          : (formatDoctorAvailability(d) || (existing?.availableDays || '')),
+          : (existing?.availableDays || ''),
         scheduleDays: Array.isArray(d.scheduleDays)
           ? d.scheduleDays
           : (Array.isArray(existing?.scheduleDays) ? existing.scheduleDays : []),
@@ -864,9 +882,7 @@ export const DataProvider = ({ children }) => {
                   try {
                     localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_DOCTORS, updated);
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
-                    }
+                    safeDispatchDoctorsUpdated(updated);
                   } catch {}
                   return updated;
                 });
@@ -882,18 +898,18 @@ export const DataProvider = ({ children }) => {
                 }
               } else if (payload.docId && payload.fullDocument) {
                 const docData = payload.fullDocument;
-                const rawSpec = (docData.specialization && docData.specialization !== 'General Medicine')
-                  ? docData.specialization
-                  : ((docData.specialty && docData.specialty !== 'General Medicine') ? docData.specialty : (docData.specialization || docData.specialty));
-                const deg = docData.degree || docData.qualifications;
-                const pr = (docData.fees !== undefined && docData.fees !== 500)
-                  ? docData.fees
-                  : (docData.price !== undefined && docData.price !== 500
-                    ? docData.price
-                    : (docData.fees ?? docData.price));
+                const rawSpec = docData.specialization !== undefined 
+                  ? docData.specialization 
+                  : (docData.specialty !== undefined ? docData.specialty : undefined);
+                const deg = docData.degree !== undefined 
+                  ? docData.degree 
+                  : (docData.qualifications !== undefined ? docData.qualifications : undefined);
+                const pr = docData.fees !== undefined 
+                  ? docData.fees 
+                  : (docData.price !== undefined ? docData.price : undefined);
                 const exp = docData.experience !== undefined ? docData.experience : undefined;
-                const hosp = docData.hospital;
-                const nm = docData.name;
+                const hosp = docData.hospital !== undefined ? docData.hospital : undefined;
+                const nm = docData.name !== undefined ? docData.name : undefined;
                 const rtg = docData.rating !== undefined ? parseFloat(docData.rating) || docData.rating : undefined;
                 const revs = docData.reviews !== undefined ? docData.reviews : undefined;
                 const avDays = docData.availableDays !== undefined ? docData.availableDays : undefined;
@@ -923,20 +939,20 @@ export const DataProvider = ({ children }) => {
                         ...docData,
                         id: d.id || docData.id || docData._id,
                         _id: docData._id || d._id || docData.id,
-                        name: nm ? String(nm).trim() : d.name,
+                        name: nm !== undefined ? String(nm).trim() : d.name,
                         phone: resolvedPh,
                         contact_number: resolvedPh,
-                        specialty: rawSpec || d.specialization || d.specialty,
-                        specialization: rawSpec || d.specialization || d.specialty,
+                        specialty: rawSpec !== undefined ? rawSpec : (d.specialty || ''),
+                        specialization: rawSpec !== undefined ? rawSpec : (d.specialization || ''),
                         hospital: hosp !== undefined ? hosp : d.hospital,
                         experience: exp !== undefined ? exp : d.experience,
-                        degree: deg || d.degree || d.qualifications,
-                        qualifications: deg || d.qualifications || d.degree,
-                        price: pr !== undefined ? pr : (d.price ?? d.fees),
-                        fees: pr !== undefined ? pr : (d.fees ?? d.price),
+                        degree: deg !== undefined ? deg : (d.degree || ''),
+                        qualifications: deg !== undefined ? deg : (d.qualifications || ''),
+                        price: pr !== undefined ? pr : (d.price ?? d.fees ?? 0),
+                        fees: pr !== undefined ? pr : (d.fees ?? d.price ?? 0),
                         rating: rtg !== undefined ? rtg : d.rating,
                         reviews: revs !== undefined ? revs : d.reviews,
-                        availableDays: avDays !== undefined ? formatDoctorAvailability({ ...d, ...docData, availableDays: avDays }) : d.availableDays,
+                        availableDays: avDays !== undefined ? avDays : d.availableDays,
                         availabilityStatus: avStatus !== undefined ? avStatus : d.availabilityStatus,
                         available: avBool !== undefined ? avBool : d.available,
                         scheduleDays: docData.scheduleDays !== undefined ? docData.scheduleDays : d.scheduleDays,
@@ -955,9 +971,9 @@ export const DataProvider = ({ children }) => {
                         youtube_videos: Array.isArray(docData.youtube_videos) ? docData.youtube_videos : d.youtube_videos,
                         jobTitle: docData.jobTitle !== undefined ? docData.jobTitle : (d.jobTitle || ''),
                         licenseNumber: docData.licenseNumber !== undefined ? docData.licenseNumber : (d.licenseNumber || ''),
-                        helplineNumber: docData.helplineNumber !== undefined ? docData.helplineNumber : (d.helplineNumber || '+91 98765 43210'),
-                        helplineDays: docData.helplineDays !== undefined ? docData.helplineDays : (d.helplineDays || 'Mon – Sat'),
-                        helplineTime: docData.helplineTime !== undefined ? docData.helplineTime : (d.helplineTime || '8:00 AM – 8:00 PM'),
+                        helplineNumber: docData.helplineNumber !== undefined ? docData.helplineNumber : (d.helplineNumber || ''),
+                        helplineDays: docData.helplineDays !== undefined ? docData.helplineDays : (d.helplineDays || ''),
+                        helplineTime: docData.helplineTime !== undefined ? docData.helplineTime : (d.helplineTime || ''),
                         profileCompletion: docData.profileCompletion !== undefined ? Number(docData.profileCompletion) : d.profileCompletion,
                         isProfileComplete: docData.isProfileComplete !== undefined ? Boolean(docData.isProfileComplete) : d.isProfileComplete,
                         isStarDoctor: nextStar,
@@ -995,7 +1011,7 @@ export const DataProvider = ({ children }) => {
                       reviews: revs !== undefined ? revs : '0',
                       availableDays: (docData.availableDays && typeof docData.availableDays === 'string' && docData.availableDays.trim())
                         ? docData.availableDays.trim()
-                        : (formatDoctorAvailability(docData) || ''),
+                        : '',
                       scheduleDays: Array.isArray(docData.scheduleDays) ? docData.scheduleDays : [],
                       availableSlots: Array.isArray(docData.availableSlots) ? docData.availableSlots : [],
                       availabilityStatus: avStatus || 'Available',
@@ -1028,9 +1044,7 @@ export const DataProvider = ({ children }) => {
                       }
                     }
 
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
-                    }
+                    safeDispatchDoctorsUpdated(updated);
                   } catch {}
                   return updated;
                 });
@@ -1484,8 +1498,12 @@ export const DataProvider = ({ children }) => {
       email: cleanEmail,
       rating: doctorData.rating !== undefined && !isNaN(parseFloat(doctorData.rating)) ? parseFloat(doctorData.rating) : (serverResult?.rating || 0),
       reviews: doctorData.reviews !== undefined ? `${doctorData.reviews}` : (serverResult?.reviews || '0'),
-      price: parseInt(doctorData.price, 10) || serverResult?.price || serverResult?.fees || 500,
-      fees: parseInt(doctorData.price, 10) || serverResult?.fees || serverResult?.price || 500,
+      price: (doctorData.price !== undefined && doctorData.price !== null && doctorData.price !== '' && !isNaN(Number(doctorData.price)))
+        ? Number(doctorData.price)
+        : (serverResult?.price !== undefined && serverResult?.price !== null && !isNaN(Number(serverResult.price)) ? Number(serverResult.price) : (serverResult?.fees !== undefined && serverResult?.fees !== null && !isNaN(Number(serverResult.fees)) ? Number(serverResult.fees) : 500)),
+      fees: (doctorData.price !== undefined && doctorData.price !== null && doctorData.price !== '' && !isNaN(Number(doctorData.price)))
+        ? Number(doctorData.price)
+        : (serverResult?.fees !== undefined && serverResult?.fees !== null && !isNaN(Number(serverResult.fees)) ? Number(serverResult.fees) : (serverResult?.price !== undefined && serverResult?.price !== null && !isNaN(Number(serverResult.price)) ? Number(serverResult.price) : 500)),
       available: doctorData.available !== undefined ? doctorData.available : true
     };
 
@@ -1514,11 +1532,11 @@ export const DataProvider = ({ children }) => {
           const incomingSpec = (updatedData.specialty !== undefined) ? updatedData.specialty : updatedData.specialization;
           const resolvedSpecialty = incomingSpec !== undefined
             ? incomingSpec
-            : ((doc.specialization && doc.specialization !== 'General Medicine') ? doc.specialization : (doc.specialty || doc.specialization || 'General Physician'));
+            : ((doc.specialization && doc.specialization !== 'General Medicine') ? doc.specialization : (doc.specialty || doc.specialization || ''));
           const rawPrice = updatedData.price !== undefined ? updatedData.price : updatedData.fees;
           const resolvedPrice = (rawPrice !== undefined && rawPrice !== null && !isNaN(Number(rawPrice)))
             ? Number(rawPrice)
-            : (doc.price ?? doc.fees ?? 500);
+            : (doc.price ?? doc.fees ?? 0);
           const resolvedPhone = updatedData.phone !== undefined ? updatedData.phone : (updatedData.contact_number !== undefined ? updatedData.contact_number : (doc.phone || doc.contact_number || ''));
           const currentStatusTs = Number(doc.statusUpdatedAt || 0);
           const incomingStatusTs = Number(updatedData.statusUpdatedAt || 0);
@@ -1533,12 +1551,12 @@ export const DataProvider = ({ children }) => {
           mergedDoctor = {
             ...doc,
             ...updatedData,
-            name: updatedData.name ? String(updatedData.name).trim() : doc.name,
+            name: updatedData.name !== undefined ? String(updatedData.name).trim() : doc.name,
             phone: resolvedPhone,
             contact_number: resolvedPhone,
             hospital: updatedData.hospital !== undefined ? updatedData.hospital : doc.hospital,
-            degree: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
-            qualifications: updatedData.degree || updatedData.qualifications || doc.degree || doc.qualifications,
+            degree: (updatedData.degree !== undefined ? updatedData.degree : (updatedData.qualifications !== undefined ? updatedData.qualifications : doc.degree)) ?? '',
+            qualifications: (updatedData.qualifications !== undefined ? updatedData.qualifications : (updatedData.degree !== undefined ? updatedData.degree : doc.qualifications)) ?? '',
             available: updatedData.available !== undefined ? Boolean(updatedData.available) : doc.available,
             id: doc.id || updatedData.id || doc._id,
             _id: doc._id || updatedData._id || doc.id,
@@ -1546,7 +1564,7 @@ export const DataProvider = ({ children }) => {
             specialization: resolvedSpecialty,
             price: resolvedPrice,
             fees: resolvedPrice,
-            experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (!isNaN(parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10)) ? parseInt(String(updatedData.experience || '').replace(/\D/g, ''), 10) : (updatedData.experience === '' ? 0 : doc.experience))) : doc.experience,
+            experience: updatedData.experience !== undefined ? (typeof updatedData.experience === 'number' ? updatedData.experience : (!isNaN(parseFloat(updatedData.experience)) ? parseFloat(updatedData.experience) : 0)) : doc.experience,
             rating: updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating,
             reviews: updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews,
             availabilityStatus: nextStatus,
@@ -1560,7 +1578,7 @@ export const DataProvider = ({ children }) => {
             reels: updatedData.reels !== undefined ? updatedData.reels : doc.reels,
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : doc.youtube_videos,
             faqs: updatedData.faqs !== undefined ? updatedData.faqs : doc.faqs,
-            availableDays: formatDoctorAvailability({ ...doc, ...updatedData, availableDays: updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays }),
+            availableDays: updatedData.availableDays !== undefined ? updatedData.availableDays : (doc.availableDays || ''),
             scheduleDays: updatedData.scheduleDays !== undefined ? updatedData.scheduleDays : doc.scheduleDays,
             availableSlots: updatedData.availableSlots !== undefined ? updatedData.availableSlots : doc.availableSlots,
             slotDuration: updatedData.slotDuration !== undefined ? updatedData.slotDuration : doc.slotDuration,
@@ -1568,6 +1586,10 @@ export const DataProvider = ({ children }) => {
             dateWiseSlots: updatedData.dateWiseSlots !== undefined ? updatedData.dateWiseSlots : (doc.dateWiseSlots || {}),
             tags: updatedData.tags !== undefined ? updatedData.tags : doc.tags,
             slots_booked: updatedData.slots_booked !== undefined ? updatedData.slots_booked : doc.slots_booked,
+            instagram: updatedData.instagram !== undefined ? updatedData.instagram : (doc.instagram || ''),
+            facebook: updatedData.facebook !== undefined ? updatedData.facebook : (doc.facebook || ''),
+            linkedin: updatedData.linkedin !== undefined ? updatedData.linkedin : (doc.linkedin || ''),
+            twitter: updatedData.twitter !== undefined ? updatedData.twitter : (doc.twitter || ''),
             image: updatedData.image !== undefined ? updatedData.image : doc.image,
             about: updatedData.about !== undefined ? updatedData.about : doc.about,
             profileCompletion: updatedData.profileCompletion !== undefined ? Number(updatedData.profileCompletion) : doc.profileCompletion,
@@ -1584,9 +1606,7 @@ export const DataProvider = ({ children }) => {
       try {
         localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
         broadcastSync(STORAGE_KEY_DOCTORS, updated);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
-        }
+        safeDispatchDoctorsUpdated(updated);
         const docUserStr = localStorage.getItem('doctor_user');
         if (docUserStr) {
           const docUser = JSON.parse(docUserStr);
@@ -1622,15 +1642,19 @@ export const DataProvider = ({ children }) => {
               const rawResSpec = (res.specialization && res.specialization !== 'General Medicine')
                 ? res.specialization
                 : ((res.specialty && res.specialty !== 'General Medicine') ? res.specialty : (res.specialization || res.specialty));
-              const resSpecialty = rawResSpec || doc.specialization || doc.specialty || 'General Physician';
-              const resPrice = (res.fees !== undefined && res.fees !== 500)
+              const resSpecialty = res.specialization !== undefined 
+                ? res.specialization 
+                : (res.specialty !== undefined 
+                  ? res.specialty 
+                  : (updatedData.specialty !== undefined ? updatedData.specialty : (rawResSpec || doc.specialty || '')));
+              const resPrice = res.fees !== undefined
                 ? res.fees
-                : (res.price !== undefined && res.price !== 500
+                : (res.price !== undefined
                   ? res.price
-                  : (res.fees ?? res.price ?? doc.price));
-              const resDegree = res.degree || res.qualifications || doc.degree || doc.qualifications || '';
+                  : (updatedData.price !== undefined ? updatedData.price : (doc.price ?? 0)));
+              const resDegree = (res.degree !== undefined ? res.degree : (res.qualifications !== undefined ? res.qualifications : (updatedData.degree !== undefined ? updatedData.degree : doc.degree))) ?? '';
               const resHospital = res.hospital ?? doc.hospital;
-              const resName = res.name ?? doc.name;
+              const resName = res.name !== undefined ? res.name : (updatedData.name !== undefined ? updatedData.name : doc.name);
               const resEmail = res.email ? String(res.email).trim().toLowerCase() : (updatedData.email ? String(updatedData.email).trim().toLowerCase() : doc.email);
               const resPhone = res.phone !== undefined ? res.phone : (res.contact_number !== undefined ? res.contact_number : (updatedData.phone !== undefined ? updatedData.phone : (doc.phone || doc.contact_number || '')));
               const resStatusTs = Number(res.statusUpdatedAt || 0);
@@ -1660,12 +1684,7 @@ export const DataProvider = ({ children }) => {
                 fees: resPrice,
                 rating: res.rating !== undefined ? parseFloat(res.rating) || doc.rating : (updatedData.rating !== undefined ? parseFloat(updatedData.rating) || doc.rating : doc.rating),
                 reviews: res.reviews !== undefined ? res.reviews : (updatedData.reviews !== undefined ? updatedData.reviews : doc.reviews),
-                availableDays: formatDoctorAvailability({
-                  ...doc,
-                  ...updatedData,
-                  ...res,
-                  availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : doc.availableDays)
-                }),
+                availableDays: res.availableDays !== undefined ? res.availableDays : (updatedData.availableDays !== undefined ? updatedData.availableDays : (doc.availableDays || '')),
                 availabilityStatus: nextStatusFromRes,
                 statusUpdatedAt: nextStatusTsFromRes,
                 available: res.available !== undefined ? res.available : (updatedData.available !== undefined ? updatedData.available : doc.available),
@@ -1713,9 +1732,7 @@ export const DataProvider = ({ children }) => {
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(updated));
             broadcastSync(STORAGE_KEY_DOCTORS, updated);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: updated }));
-            }
+            safeDispatchDoctorsUpdated(updated);
             const docUserStr = localStorage.getItem('doctor_user');
             if (docUserStr) {
               const docUser = JSON.parse(docUserStr);
@@ -1736,9 +1753,7 @@ export const DataProvider = ({ children }) => {
           try {
             localStorage.setItem(STORAGE_KEY_DOCTORS, JSON.stringify(rolledBack));
             broadcastSync(STORAGE_KEY_DOCTORS, rolledBack);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: rolledBack }));
-            }
+            safeDispatchDoctorsUpdated(rolledBack);
           } catch {}
           return rolledBack;
         });

@@ -6,9 +6,10 @@ import Subscriber from '../models/Subscriber.js';
 import Hospital from '../models/Hospital.js';
 import Appointment from '../models/Appointment.js';
 import Review from '../models/Review.js';
-import { broadcastDbChange } from './storageMonitor.js';
+import { broadcastDbChange, notifyStorageChanged } from './storageMonitor.js';
 import { clearDoctorDashboardCache } from '../controllers/doctorController.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
+import { extractReelPublicIds, isReelAssetStillInUse } from '../utils/reelCleanup.js';
 
 /**
  * Permanently and atomically purges a doctor from all MongoDB collections,
@@ -27,7 +28,7 @@ export const purgeDoctorPermanently = async (identifier) => {
   ).toLowerCase().trim();
 
   // 1. Resolve Doctor Document
-  if (identifier && typeof identifier === 'object' && identifier._id && identifier.email) {
+  if (identifier && typeof identifier === 'object' && identifier._id && identifier.email && Array.isArray(identifier.reels)) {
     doctor = identifier;
   } else {
     if (mongoose.Types.ObjectId.isValid(raw)) {
@@ -45,6 +46,14 @@ export const purgeDoctorPermanently = async (identifier) => {
     }
   }
 
+  // Ensure full doctor document with reels and image is loaded if partial object was passed
+  if (doctor && doctor._id && (!doctor.reels || !doctor.image)) {
+    try {
+      const fullDoc = await Doctor.findById(doctor._id);
+      if (fullDoc) doctor = fullDoc;
+    } catch {}
+  }
+
   // 2. Resolve target Doctor IDs and Email
   const docId = doctor ? doctor._id : (mongoose.Types.ObjectId.isValid(raw) ? new mongoose.Types.ObjectId(raw) : null);
   const docCustomId = doctor?.id || (!mongoose.Types.ObjectId.isValid(raw) && !raw.includes('@') && raw ? raw : null);
@@ -55,17 +64,62 @@ export const purgeDoctorPermanently = async (identifier) => {
     return { success: false, notFound: true, message: 'Doctor not found in database' };
   }
 
-  // 3. Delete Doctor Cloudinary photo if present
-  if (doctor?.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
-    const publicId = extractCloudinaryPublicId(doctor.image);
-    if (publicId) {
-      try {
-        const cld = getCloudinary();
-        await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
-      } catch (cldErr) {
-        console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
+  // 3. Permanently destroy all Doctor Cloudinary assets (profile photo, reels videos, and cover photos)
+  try {
+    const cld = getCloudinary();
+    let hasCloudChanges = false;
+
+    // 3a. Delete Doctor profile photo from Cloudinary
+    if (doctor?.image && typeof doctor.image === 'string' && doctor.image.includes('cloudinary.com')) {
+      const publicId = extractCloudinaryPublicId(doctor.image);
+      if (publicId) {
+        try {
+          await cld.uploader.destroy(publicId, { resource_type: 'image', invalidate: true });
+          hasCloudChanges = true;
+        } catch (cldErr) {
+          console.warn('Failed to delete doctor photo from Cloudinary:', cldErr.message);
+        }
       }
     }
+
+    // 3b. Delete all Doctor reel videos and reel cover photos from Cloudinary
+    if (Array.isArray(doctor?.reels) && doctor.reels.length > 0) {
+      const { videoPublicIds, coverPublicIds } = extractReelPublicIds(doctor.reels);
+
+      for (const vPubId of videoPublicIds) {
+        try {
+          const inUse = await isReelAssetStillInUse(vPubId, doctor._id);
+          if (inUse) {
+            console.log(`[DoctorPurge] Reel video ${vPubId} is shared with another doctor/hospital, preserving cloud asset.`);
+            continue;
+          }
+          await cld.uploader.destroy(vPubId, { resource_type: 'video', invalidate: true });
+          hasCloudChanges = true;
+        } catch (err) {
+          console.warn(`Failed to delete reel video ${vPubId} from Cloudinary:`, err.message);
+        }
+      }
+
+      for (const cPubId of coverPublicIds) {
+        try {
+          const inUse = await isReelAssetStillInUse(cPubId, doctor._id);
+          if (inUse) {
+            console.log(`[DoctorPurge] Reel cover ${cPubId} is shared with another doctor/hospital, preserving cloud asset.`);
+            continue;
+          }
+          await cld.uploader.destroy(cPubId, { resource_type: 'image', invalidate: true });
+          hasCloudChanges = true;
+        } catch (err) {
+          console.warn(`Failed to delete reel cover ${cPubId} from Cloudinary:`, err.message);
+        }
+      }
+    }
+
+    if (hasCloudChanges) {
+      notifyStorageChanged('cloudinary:cleanup');
+    }
+  } catch (cloudErr) {
+    console.warn('Cloudinary asset cleanup error during doctor purge:', cloudErr.message);
   }
 
   // 4. Permanently delete from MongoDB Doctor collection

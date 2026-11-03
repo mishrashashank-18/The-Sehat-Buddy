@@ -48,7 +48,9 @@ export const getDoctorProfileCompletionDetails = (doctor) => {
   const hasSchedule = Boolean(
     (doctor.availableDays && String(doctor.availableDays).trim().length > 0) ||
     (Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0) ||
-    (Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0)
+    (Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0) ||
+    (doctor.dateWiseSlots && typeof doctor.dateWiseSlots === 'object' && Object.keys(doctor.dateWiseSlots).length > 0) ||
+    (doctor.dayWiseSlots && typeof doctor.dayWiseSlots === 'object' && Object.keys(doctor.dayWiseSlots).length > 0)
   );
 
   const breakdown = [

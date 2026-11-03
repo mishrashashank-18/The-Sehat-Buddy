@@ -48,9 +48,14 @@ const FindHospitals = ({ onNavigate }) => {
     )
   ).sort();
 
-  // Filter hospitals based on search criteria (public directory shows published hospitals)
+  // Filter hospitals based on search criteria (public directory shows published & active hospitals)
   const filteredHospitals = hospitals.filter(hospital => {
-    if (hospital.publicationStatus && hospital.publicationStatus !== 'published') {
+    if (hospital.status === 'suspended' || hospital.status === 'deactivated' || hospital.publicationStatus === 'suspended') {
+      return false;
+    }
+
+    // Hide draft only if explicitly marked draft and unverified
+    if (hospital.publicationStatus === 'draft' && !hospital.isVerified) {
       return false;
     }
 

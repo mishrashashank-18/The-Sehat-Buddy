@@ -1,3 +1,21 @@
+export const parseTimeToMinutes = (tStr) => {
+  if (!tStr || typeof tStr !== 'string') return 0;
+  const clean = tStr.trim().toLowerCase();
+  const match = clean.match(/(\d{1,2}):(\d{2})\s*(am|pm)/i);
+  if (!match) return 0;
+  let h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const period = match[3].toLowerCase();
+  if (period === 'pm' && h < 12) h += 12;
+  if (period === 'am' && h === 12) h = 0;
+  return h * 60 + m;
+};
+
+export const sortTimeSlots = (slots) => {
+  if (!Array.isArray(slots)) return [];
+  return [...slots].sort((a, b) => parseTimeToMinutes(a) - parseTimeToMinutes(b));
+};
+
 /**
  * Utility to parse doctor Available Hours / Days string into structured days array
  * and formatted time slots.
@@ -12,8 +30,8 @@
 export const parseAvailableDaysAndHours = (str, slotDuration = 30) => {
   if (!str || typeof str !== 'string' || !str.trim()) {
     return {
-      days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
-      slots: ['10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM']
+      days: [],
+      slots: []
     };
   }
 
@@ -131,7 +149,7 @@ export const parseAvailableDaysAndHours = (str, slotDuration = 30) => {
   }
 
   if (resolvedSlots.length === 0) {
-    resolvedSlots = ['10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '02:00 PM', '02:30 PM', '03:00 PM', '03:30 PM'];
+    resolvedSlots = [];
   }
 
   return { days: resolvedDays, slots: resolvedSlots };

@@ -48,7 +48,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { isDoctorInStarList, isDoctorAffiliatedWithHospital, getDoctorCanonicalId, matchesId } from '../../context/DataContext';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import DoctorFormModal from './DoctorFormModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -1552,6 +1552,14 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   const handleUpdateReel = (index, field, value) => {
     isDirtyRef.current = true;
+    const cur = formData.reels[index] || {};
+    const oldUrl = (typeof cur === 'string' ? cur : (cur.url || cur.link || '')).trim();
+    const oldCover = (cur.coverPhoto || '').trim();
+
+    if (field === 'url') {
+      const cleanVal = (value || '').trim();
+    }
+
     setFormData(prev => {
       const next = [...prev.reels];
       next[index] = { ...next[index], [field]: value };
@@ -1566,14 +1574,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const match = String(reelUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
     if (!match || !match[1]) return;
 
-    // Set real-time proxy cover immediately so the browser loads the real reel cover
-    const proxyUrl = `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}`;
-    handleUpdateReel(idx, 'coverPhoto', proxyUrl);
-
     try {
       // Auto-extract and upload high-res cover permanently to Cloudinary
       const res = await api.getInstagramReelCover(reelUrl);
-      if (res && res.coverPhoto) {
+      if (res && res.coverPhoto && res.coverPhoto.startsWith('http')) {
         handleUpdateReel(idx, 'coverPhoto', res.coverPhoto);
       }
     } catch (err) {
@@ -1586,23 +1590,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const reelUrl = (typeof reel === 'string' ? reel : (reel?.url || reel?.link || '')).trim();
     const coverUrl = (reel?.coverPhoto || '').trim();
 
-    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from this hospital profile.`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will remove it from this hospital profile and delete it from Cloudinary if no other profile is using it.`)) {
       return;
     }
 
     setDeletingReelIdx(index);
     try {
-      // 1. Permanently delete video from Cloudinary if hosted there
-      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
-        await api.deleteVideo(reelUrl).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
-      }
-
-      // 2. Permanently delete cover photo from Cloudinary if hosted there
-      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
-        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
-        await api.deleteMedia(coverUrl, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
-      }
-
       isDirtyRef.current = true;
       const updatedReels = formData.reels.filter((_, i) => i !== index);
       setFormData(prev => ({
@@ -1611,7 +1604,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       }));
       setSaveSuccess(false);
 
-      // Auto-persist immediately to MongoDB database
+      // Auto-persist immediately to MongoDB database FIRST
       const targetHospId = hospital?._id || hospitalId || hospital?.id;
       if (targetHospId && !isHospitalView) {
         try {
@@ -1621,6 +1614,31 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           triggerSaveSuccess(3500);
         } catch (err) {
           console.warn('Auto-save reel deletion error:', err);
+        }
+      }
+
+      // Delete video from Cloudinary if hosted there and not used by another profile
+      if (reelUrl) {
+        if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
+          await api.deleteVideo(reelUrl, { excludeHospId: targetHospId }).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
+        }
+        const igMatch = reelUrl.match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+        if (igMatch && igMatch[1]) {
+          await api.deleteVideo(`sehatbuddy/reels/ig_${igMatch[1]}`, { excludeHospId: targetHospId }).catch(() => {});
+          await api.deleteMedia(`sehatbuddy/reels/ig_${igMatch[1]}`, 'image', { excludeHospId: targetHospId }).catch(() => {});
+          await api.deleteMedia(`sehatbuddy/covers/ig_${igMatch[1]}`, 'image', { excludeHospId: targetHospId }).catch(() => {});
+        }
+      }
+
+      // Delete cover photo from Cloudinary if hosted there and not used by another profile
+      if (coverUrl) {
+        if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+          const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
+          await api.deleteMedia(coverUrl, coverResType, { excludeHospId: targetHospId }).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+        }
+        const coverIgMatch = coverUrl.match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+        if (coverIgMatch && coverIgMatch[1]) {
+          await api.deleteMedia(`sehatbuddy/covers/ig_${coverIgMatch[1]}`, 'image', { excludeHospId: targetHospId }).catch(() => {});
         }
       }
     } catch (err) {
@@ -1633,12 +1651,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
   const handleRemoveReelCover = async (index) => {
     const curCover = formData.reels[index]?.coverPhoto || '';
+    const reelUrl = (formData.reels[index]?.url || '').trim();
     if (!curCover) return;
-    if (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com')) {
-      const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
-      api.deleteMedia(curCover, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+
+    if (!window.confirm('Are you sure you want to permanently delete this cover photo? It will be removed from the hospital profile and deleted from Cloudinary if no other profile is using it.')) {
+      return;
     }
-    handleUpdateReel(index, 'coverPhoto', '');
+
+    try {
+      isDirtyRef.current = true;
+      const updatedReels = [...formData.reels];
+      updatedReels[index] = { ...updatedReels[index], coverPhoto: '' };
+      setFormData(prev => ({ ...prev, reels: updatedReels }));
+
+      const targetHospId = hospital?._id || hospitalId || hospital?.id;
+      if (targetHospId && !isHospitalView) {
+        try {
+          await updateHospital(targetHospId, {
+            reels: updatedReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
+          });
+          triggerSaveSuccess(3000);
+        } catch (err) {
+          console.warn('Auto-save reel cover deletion error:', err);
+        }
+      }
+
+      if (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com')) {
+        const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
+        await api.deleteMedia(curCover, coverResType, { excludeHospId: targetHospId }).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+      }
+      const igMatch = (curCover + ' ' + reelUrl).match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+      if (igMatch && igMatch[1]) {
+        await api.deleteMedia(`sehatbuddy/covers/ig_${igMatch[1]}`, 'image', { excludeHospId: targetHospId }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Error removing reel cover photo:', err);
+    }
   };
 
   // YouTube Videos
@@ -1696,10 +1744,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       const rawRes = await api.uploadImage(file, 'sehatbuddy/covers');
       const url = typeof rawRes === 'string' ? rawRes : (rawRes?.url || '');
       if (type === 'reel') {
-        if (oldCover && (oldCover.includes('cloudinary.com') || oldCover.includes('res.cloudinary.com')) && oldCover !== url) {
-          const coverResType = oldCover.includes('/video/upload/') ? 'video' : 'image';
-          api.deleteMedia(oldCover, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
-        }
         handleUpdateReel(index, 'coverPhoto', url);
       } else {
         handleUpdateVideo(index, 'coverPhoto', url);
@@ -1741,21 +1785,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
       const videoUrl = typeof data === 'string' ? data : (data?.url || data?.secure_url || '');
       if (videoUrl) {
-        // Automatically delete old Cloudinary reel video if replaced
-        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
-          api.deleteVideo(oldReelUrl).catch(err => console.warn('Failed to delete old hospital reel video from Cloudinary:', err));
-        }
-
         // Auto-set the Cloudinary Video URL
         handleUpdateReel(index, 'url', videoUrl);
         // Auto-set the Cloudinary instant video thumbnail if coverPhoto is empty or generated
         const autoThumbnail = (data && data.coverPhoto) || videoUrl.replace(/\.[^/.]+$/, '.jpg');
-
-        // Automatically delete old Cloudinary cover photo if replaced
-        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== autoThumbnail) {
-          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
-          api.deleteMedia(oldCoverUrl, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
-        }
 
         handleUpdateReel(index, 'coverPhoto', autoThumbnail);
       } else {
@@ -1778,22 +1811,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     const key = `convert-ig-${idx}`;
     setUploadingMediaKey(key);
     try {
-      const curReel = formData.reels[idx];
-      const oldReelUrl = (typeof curReel === 'string' ? curReel : (curReel?.url || curReel?.link || '')).trim();
-      const oldCoverUrl = (curReel?.coverPhoto || '').trim();
-
       const data = await api.uploadInstagramReel(raw, 'sehatbuddy/reels');
       const videoUrl = typeof data === 'string' ? data : (data?.url || '');
       const coverPhoto = (data && data.coverPhoto) || (videoUrl ? videoUrl.replace(/\.[^/.]+$/, '.jpg') : '');
       if (videoUrl) {
-        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
-          api.deleteVideo(oldReelUrl).catch(err => console.warn('Failed to delete old hospital reel video from Cloudinary:', err));
-        }
-        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== coverPhoto) {
-          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
-          api.deleteMedia(oldCoverUrl, coverResType).catch(err => console.warn('Failed to delete old hospital reel cover from Cloudinary:', err));
-        }
-
         handleUpdateReel(idx, 'url', videoUrl);
         if (coverPhoto) {
           handleUpdateReel(idx, 'coverPhoto', coverPhoto);
@@ -4523,18 +4544,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           {reel.coverPhoto ? (
                             <div className={styles.coverPreviewWrap}>
                               <img
-                                src={reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/')
-                                  ? reel.coverPhoto
-                                  : (reel.url && reel.url.includes('instagram.com') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}` : reel.coverPhoto)}
+                                src={reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/') ? reel.coverPhoto : ''}
                                 alt={`Reel #${idx + 1} Cover`}
                                 className={styles.coverPreviewThumb}
-                                onError={(e) => {
-                                  if (reel.url && reel.url.includes('instagram.com') && !e.target.src.includes('/api/reel-cover')) {
-                                    e.target.src = `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}`;
-                                  } else {
-                                    e.target.style.display = 'none';
-                                  }
-                                }}
+                                onError={(e) => { e.target.style.display = 'none'; }}
                               />
                               <div className={styles.coverPreviewInfo}>
                                 <p className={styles.coverPreviewUrl} title={reel.coverPhoto}>

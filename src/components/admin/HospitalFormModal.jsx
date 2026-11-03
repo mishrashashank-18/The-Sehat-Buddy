@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { isDoctorInStarList, isDoctorAffiliatedWithHospital, getDoctorCanonicalId } from '../../context/DataContext';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import { insurancePartners, defaultAcceptedInsurances } from '../../data/insurancePartners';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
 import styles from './HospitalFormModal.module.css';
@@ -330,6 +330,7 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
   const [uploadingMediaIdx, setUploadingMediaIdx] = useState(null);
   const [deletingReelIdx, setDeletingReelIdx] = useState(null);
+  const [fetchingCoverIdx, setFetchingCoverIdx] = useState(null);
 
   const handleDeleteReel = async (index) => {
     const reel = formData.reels[index];
@@ -338,23 +339,12 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
     if (!reelUrl && !coverUrl) return;
 
-    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from the hospital profile.`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete Reel #${index + 1}? This will remove it from the hospital profile and delete it from Cloudinary if no other profile is using it.`)) {
       return;
     }
 
     setDeletingReelIdx(index);
     try {
-      // 1. Delete video from Cloudinary if hosted there
-      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
-        await api.deleteVideo(reelUrl).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
-      }
-
-      // 2. Delete cover photo from Cloudinary if hosted there
-      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
-        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
-        await api.deleteMedia(coverUrl, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
-      }
-
       const nextReels = [...formData.reels];
       nextReels[index] = { url: '', coverPhoto: '' };
       setFormData(prev => ({ ...prev, reels: nextReels }));
@@ -364,6 +354,31 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         await updateHospital(targetId, {
           reels: nextReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
         });
+      }
+
+      // Delete video from Cloudinary if hosted there and not used by another profile
+      if (reelUrl) {
+        if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
+          await api.deleteVideo(reelUrl, { excludeHospId: targetId }).catch(err => console.warn('Failed to delete reel video from Cloudinary:', err));
+        }
+        const igMatch = reelUrl.match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+        if (igMatch && igMatch[1]) {
+          await api.deleteVideo(`sehatbuddy/reels/ig_${igMatch[1]}`, { excludeHospId: targetId }).catch(() => {});
+          await api.deleteMedia(`sehatbuddy/reels/ig_${igMatch[1]}`, 'image', { excludeHospId: targetId }).catch(() => {});
+          await api.deleteMedia(`sehatbuddy/covers/ig_${igMatch[1]}`, 'image', { excludeHospId: targetId }).catch(() => {});
+        }
+      }
+
+      // Delete cover photo from Cloudinary if hosted there and not used by another profile
+      if (coverUrl) {
+        if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
+          const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
+          await api.deleteMedia(coverUrl, coverResType, { excludeHospId: targetId }).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+        }
+        const coverIgMatch = coverUrl.match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+        if (coverIgMatch && coverIgMatch[1]) {
+          await api.deleteMedia(`sehatbuddy/covers/ig_${coverIgMatch[1]}`, 'image', { excludeHospId: targetId }).catch(() => {});
+        }
       }
     } catch (err) {
       console.error('Failed to permanently delete hospital reel:', err);
@@ -375,18 +390,53 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
 
   const handleRemoveCoverPhoto = async (type, index) => {
     if (type === 'reel') {
-      const curCover = formData.reels[index]?.coverPhoto || '';
-      if (curCover && (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com'))) {
-        const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
-        api.deleteMedia(curCover, coverResType).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+      const reel = formData.reels[index];
+      const curCover = (typeof reel === 'object' ? (reel?.coverPhoto || '') : '').trim();
+      const reelUrl = (typeof reel === 'string' ? reel : (reel?.url || reel?.link || '')).trim();
+      if (!curCover) return;
+
+      if (!window.confirm('Are you sure you want to permanently delete this cover photo? It will be removed from the hospital profile and deleted from Cloudinary if no other profile is using it.')) {
+        return;
       }
-      updateReelItem(index, 'coverPhoto', '');
+
+      try {
+        const nextReels = [...formData.reels];
+        const curObj = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : { url: reelUrl };
+        nextReels[index] = { ...curObj, coverPhoto: '' };
+        setFormData(prev => ({ ...prev, reels: nextReels }));
+
+        const targetId = hospitalToEdit?._id || hospitalToEdit?.id;
+        if (targetId) {
+          await updateHospital(targetId, {
+            reels: nextReels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim())))
+          });
+        }
+
+        if (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com')) {
+          const coverResType = curCover.includes('/video/upload/') ? 'video' : 'image';
+          await api.deleteMedia(curCover, coverResType, { excludeHospId: targetId }).catch(err => console.warn('Failed to delete reel cover from Cloudinary:', err));
+        }
+        const igMatch = (curCover + ' ' + reelUrl).match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+        if (igMatch && igMatch[1]) {
+          await api.deleteMedia(`sehatbuddy/covers/ig_${igMatch[1]}`, 'image', { excludeHospId: targetId }).catch(() => {});
+        }
+      } catch (err) {
+        console.error('Error removing reel cover photo:', err);
+      }
     } else {
       const curCover = formData.youtube_videos[index]?.coverPhoto || '';
       if (curCover && (curCover.includes('cloudinary.com') || curCover.includes('res.cloudinary.com'))) {
-        api.deleteMedia(curCover, 'image').catch(err => console.warn('Failed to delete video cover from Cloudinary:', err));
+        await api.deleteMedia(curCover, 'image').catch(err => console.warn('Failed to delete video cover from Cloudinary:', err));
       }
       updateVideoItem(index, 'coverPhoto', '');
+      const targetId = hospitalToEdit?._id || hospitalToEdit?.id;
+      if (targetId) {
+        const nextVideos = [...formData.youtube_videos];
+        if (nextVideos[index]) nextVideos[index] = { ...nextVideos[index], coverPhoto: '' };
+        await updateHospital(targetId, {
+          youtube_videos: nextVideos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim())))
+        }).catch(() => {});
+      }
     }
   };
 
@@ -439,21 +489,52 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
   const updateReelItem = (index, field, value) => {
     const nextReels = [...formData.reels];
     const cur = (typeof nextReels[index] === 'object' && nextReels[index]) ? nextReels[index] : {};
-    nextReels[index] = { ...cur, [field]: value };
-    if (field === 'url' && value && value.includes('instagram.com')) {
-      const match = String(value).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-      if (match && match[1]) {
-        nextReels[index].coverPhoto = `${API_BASE}/reel-cover?url=${encodeURIComponent(value)}`;
-        api.getInstagramReelCover(value).then(res => {
-          if (res && res.coverPhoto) {
-            setFormData(prev => {
-              const updated = [...prev.reels];
-              if (updated[index]) updated[index] = { ...updated[index], coverPhoto: res.coverPhoto };
-              return { ...prev, reels: updated };
-            });
+    const oldUrl = (typeof nextReels[index] === 'string' ? nextReels[index] : (cur.url || cur.link || '')).trim();
+    const oldCover = (cur.coverPhoto || '').trim();
+
+    if (field === 'url') {
+      const cleanVal = (value || '').trim();
+      const isUrlChanged = cleanVal !== oldUrl;
+
+      if (isUrlChanged) {
+        // Set new cover photo
+        let newCover = '';
+        if (cleanVal) {
+          if (cleanVal.includes('cloudinary.com') && /\.(mp4|webm|mov)(\?.*)?$/i.test(cleanVal)) {
+            newCover = cleanVal.replace(/\.[^/.]+$/, '.jpg');
           }
-        }).catch(() => {});
+        }
+        nextReels[index] = { ...cur, url: value, coverPhoto: newCover };
+
+        if (cleanVal && cleanVal.includes('instagram.com')) {
+          const match = cleanVal.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+          const shortcode = match && match[1] ? match[1] : '';
+          setFetchingCoverIdx(index);
+          api.getInstagramReelCover(cleanVal).then(res => {
+            if (res && res.coverPhoto && res.coverPhoto.startsWith('http')) {
+              setFormData(prev => {
+                const updated = [...prev.reels];
+                if (updated[index]) {
+                  const itemUrl = (updated[index].url || '').trim();
+                  const itemMatch = itemUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+                  const itemShortcode = itemMatch && itemMatch[1] ? itemMatch[1] : '';
+                  if (!shortcode || itemShortcode === shortcode || itemUrl === cleanVal) {
+                    updated[index] = { ...updated[index], coverPhoto: res.coverPhoto };
+                  }
+                }
+                return { ...prev, reels: updated };
+              });
+            }
+          }).catch(() => {})
+            .finally(() => {
+              setFetchingCoverIdx(prev => (prev === index ? null : prev));
+            });
+        }
+      } else {
+        nextReels[index] = { ...cur, url: value };
       }
+    } else {
+      nextReels[index] = { ...cur, [field]: value };
     }
     setFormData(prev => ({ ...prev, reels: nextReels }));
   };
@@ -518,7 +599,10 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
               if (r && typeof r === 'object') {
                 const url = (r.url || '').trim();
-                const coverPhoto = (r.coverPhoto || '').trim();
+                let coverPhoto = (r.coverPhoto || '').trim();
+                if (coverPhoto && (coverPhoto.includes('reel-cover') || coverPhoto.startsWith('api/'))) {
+                  coverPhoto = '';
+                }
                 if (!url && !coverPhoto) return null;
                 return { url, coverPhoto };
               }
@@ -588,8 +672,8 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
           insuranceHelpline: '',
           latitude: undefined,
           longitude: undefined,
-          isVerified: false,
-          publicationStatus: 'draft',
+          isVerified: true,
+          publicationStatus: 'published',
           showOnHome: true,
           erCases: [],
           ambulances: []
@@ -864,7 +948,18 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className={styles.form}>
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            if (e.ctrlKey || e.metaKey) return;
+            if (e.target && e.target.tagName === 'TEXTAREA') return;
+            if (e.target && e.target.type === 'submit') return;
+            e.preventDefault();
+          }
+        }}
+        className={styles.form}
+      >
         <div className={styles.body}>
           {/* General Info */}
           <div className={styles.sectionHeader}>Hospital Overview & Portal Credentials</div>
@@ -1282,16 +1377,24 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
               const reelUrl = typeof reel === 'string' ? reel : (reel?.url || reel?.link || '');
               const reelCover = typeof reel === 'object' ? (reel?.coverPhoto || '') : '';
               const hasUrl = Boolean(reelUrl.trim());
+              const reelMatch = reelUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+              const effectivePreview = reelCover || (reelMatch && reelMatch[1] ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}` : '');
 
               return (
                 <div key={index} className={styles.mediaItemCard}>
                   <div className={styles.mediaRow}>
                     <span className={styles.mediaIndex}>#{index + 1}</span>
                     <input
-                      type="url"
+                      type="text"
                       placeholder={`https://www.instagram.com/reel/... (Reel ${index + 1})`}
                       value={reelUrl}
                       onChange={(e) => updateReelItem(index, 'url', e.target.value)}
+                      onPaste={(e) => {
+                        const text = e.clipboardData ? e.clipboardData.getData('text') : '';
+                        if (text && text.trim()) {
+                          updateReelItem(index, 'url', text.trim());
+                        }
+                      }}
                     />
                     {(hasUrl || reelCover) && (
                       <button
@@ -1332,32 +1435,36 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                   {/* Cover Image option when reel URL is entered or cover exists */}
                   {(hasUrl || reelCover) && (
                     <div className={styles.coverImageRow}>
-                      {reelCover ? (
+                      {effectivePreview ? (
                         <div className={styles.coverPreviewGroup}>
                           <img
-                            src={reelCover}
+                            src={effectivePreview}
                             alt={`Reel ${index + 1} Cover`}
                             className={styles.coverThumbnail}
                             onError={(e) => { e.target.style.display = 'none'; }}
                           />
                           <div className={styles.coverInfo}>
-                            <span className={styles.coverBadge}>Reel Cover Active</span>
+                            <span className={styles.coverBadge}>
+                              {fetchingCoverIdx === index ? '⏳ Auto-fetching cover...' : (reelCover ? 'Reel Cover Active' : 'Live Preview')}
+                            </span>
                             <input
-                              type="url"
-                              placeholder="Cover image URL..."
-                              value={reelCover}
+                              type="text"
+                              placeholder={fetchingCoverIdx === index ? "⏳ Auto-fetching cover..." : "Cover image URL..."}
+                              value={reelCover && (reelCover.includes('reel-cover') || reelCover.startsWith('api/')) ? '' : reelCover}
                               onChange={(e) => updateReelItem(index, 'coverPhoto', e.target.value)}
                               className={styles.coverUrlInput}
                             />
                           </div>
-                          <button
-                            type="button"
-                            className={styles.removeCoverBtn}
-                            onClick={() => handleRemoveCoverPhoto('reel', index)}
-                            title="Permanently remove cover image"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {reelCover && (
+                            <button
+                              type="button"
+                              className={styles.removeCoverBtn}
+                              onClick={() => handleRemoveCoverPhoto('reel', index)}
+                              title="Permanently remove cover image"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className={styles.addCoverOptions}>
@@ -1378,9 +1485,9 @@ const HospitalFormContent = ({ hospitalToEdit, onClose, onSuccess }) => {
                           </label>
                           <span className={styles.coverDivider}>or</span>
                           <input
-                            type="url"
+                            type="text"
                             placeholder="Paste cover image URL..."
-                            value={reelCover}
+                            value={reelCover && (reelCover.includes('reel-cover') || reelCover.startsWith('api/')) ? '' : reelCover}
                             onChange={(e) => updateReelItem(index, 'coverPhoto', e.target.value)}
                             className={styles.coverUrlQuickInput}
                           />

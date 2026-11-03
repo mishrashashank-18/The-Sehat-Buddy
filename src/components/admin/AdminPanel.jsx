@@ -486,10 +486,10 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     storageDataRef.current = storageData;
   }, [storageData]);
 
-  const fetchStorageStats = useCallback(async (isSilent = false) => {
+  const fetchStorageStats = useCallback(async (isSilent = false, isForce = false) => {
     try {
       if (!isSilent) setLoadingStorage(true);
-      const res = await api.getStorageStats();
+      const res = await api.getStorageStats(isForce);
       if (res && res.success) {
         setStorageData(res);
         setStorageError(null);
@@ -517,7 +517,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     let eventSource = null;
     let isMounted = true;
 
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('admin_token') || localStorage.getItem('token');
     const apiBase = import.meta.env.VITE_API_URL || import.meta.env.VITE_BASE_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
     const streamBase = apiBase.replace(/\/+$/, '');
     const cleanBase = streamBase.endsWith('/api') ? streamBase : `${streamBase}/api`;
@@ -765,9 +765,9 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     return allSystemFaqs.filter(f => {
       const matchType = faqTypeFilter === 'all' || f.targetType === faqTypeFilter;
       const matchDoctor = faqDoctorFilter === 'all' || (
-        (f.targetName && f.targetName.toLowerCase().includes(faqDoctorFilter.toLowerCase())) ||
         String(f.targetId) === String(faqDoctorFilter) ||
-        String(f.doctorId) === String(faqDoctorFilter)
+        String(f.doctorId) === String(faqDoctorFilter) ||
+        (f.targetName && f.targetName.trim().toLowerCase() === faqDoctorFilter.trim().toLowerCase())
       );
       const matchCat = faqCategoryFilter === 'all' || f.category === faqCategoryFilter;
       const matchSearch = !q ||
@@ -784,13 +784,17 @@ const AdminPanel = ({ onExit, onNavigate }) => {
     const list = (reviews || []).filter(r => {
       const matchStatus = reviewStatusFilter === 'all' || r.status === reviewStatusFilter;
       const matchType = reviewTypeFilter === 'all' || r.targetType === reviewTypeFilter;
-      const matchDoctor = reviewDoctorFilter === 'all' ||
-        (r.targetType === 'doctor' && (
-          (r.targetName && r.targetName.toLowerCase().includes(reviewDoctorFilter.toLowerCase())) ||
-          (r.doctorName && r.doctorName.toLowerCase().includes(reviewDoctorFilter.toLowerCase())) ||
-          String(r.targetId) === String(reviewDoctorFilter) ||
-          String(r.doctorId) === String(reviewDoctorFilter)
-        ));
+      const selectedDoc = reviewDoctorFilter !== 'all' ? (doctors || []).find(d => d.name === reviewDoctorFilter || String(d.id || d._id) === String(reviewDoctorFilter)) : null;
+      const matchDoctor = reviewDoctorFilter === 'all' || (
+        selectedDoc
+          ? getDoctorVerifiedReviews(selectedDoc, [r]).length > 0
+          : (r.targetType === 'doctor' && (
+              String(r.targetId) === String(reviewDoctorFilter) ||
+              String(r.doctorId) === String(reviewDoctorFilter) ||
+              (r.targetName && r.targetName.trim().toLowerCase() === reviewDoctorFilter.trim().toLowerCase()) ||
+              (r.doctorName && r.doctorName.trim().toLowerCase() === reviewDoctorFilter.trim().toLowerCase())
+            ))
+      );
       const matchSearch = !q ||
         (r.patientName || '').toLowerCase().includes(q) ||
         (r.targetName || '').toLowerCase().includes(q) ||
@@ -1261,7 +1265,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     )}
                     <button
                       className={styles.storageRefreshBtn}
-                      onClick={() => fetchStorageStats(false)}
+                      onClick={() => fetchStorageStats(false, true)}
                       disabled={loadingStorage}
                       title="Refresh real-time storage metrics"
                     >
@@ -1295,7 +1299,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                         Sign In as Admin
                       </button>
                     ) : (
-                      <button onClick={fetchStorageStats} className={styles.storageRetryBtn}>Try Again</button>
+                      <button onClick={() => fetchStorageStats(false, true)} className={styles.storageRetryBtn}>Try Again</button>
                     )}
                   </div>
                 )}
@@ -2912,10 +2916,14 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     >
                       <option value="all">All Doctors ({doctorFaqsCount})</option>
                       {doctors.map(d => {
+                        const docId = String(d.id || d._id || '');
+                        const cleanDName = (d.name || '').toLowerCase().trim();
                         const dCount = allSystemFaqs.filter(f => f.targetType === 'doctor' && (
-                          (f.targetName && f.targetName.toLowerCase().includes(d.name.toLowerCase())) ||
-                          String(f.targetId) === String(d.id || d._id) ||
-                          String(f.doctorId) === String(d.id || d._id)
+                          (docId && (String(f.targetId) === docId || String(f.doctorId) === docId)) ||
+                          (cleanDName && (
+                            (f.targetName && f.targetName.trim().toLowerCase() === cleanDName) ||
+                            (f.doctorName && f.doctorName.trim().toLowerCase() === cleanDName)
+                          ))
                         )).length;
                         return (
                           <option key={d.id || d._id} value={d.name}>
@@ -3271,12 +3279,8 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                     >
                       <option value="all">All Doctors ({doctorReviewsCount})</option>
                       {doctors.map(d => {
-                        const dCount = (reviews || []).filter(r => r.targetType === 'doctor' && (
-                          (r.targetName && r.targetName.toLowerCase().includes(d.name.toLowerCase())) ||
-                          (r.doctorName && r.doctorName.toLowerCase().includes(d.name.toLowerCase())) ||
-                          String(r.targetId) === String(d.id || d._id) ||
-                          String(r.doctorId) === String(d.id || d._id)
-                        )).length;
+                        const dReviews = getDoctorVerifiedReviews(d, reviews);
+                        const dCount = dReviews.length;
                         return (
                           <option key={d.id || d._id} value={d.name}>
                             {d.name} ({dCount} reviews)

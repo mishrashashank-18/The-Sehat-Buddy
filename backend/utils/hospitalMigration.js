@@ -27,7 +27,7 @@ export const initHospitalPublicationAndCompletion = async () => {
         needsSave = true;
       }
 
-      if (!hospital.publicationStatus) {
+      if (!hospital.publicationStatus || hospital.publicationStatus === 'draft') {
         hospital.publicationStatus = 'published';
         needsSave = true;
       }

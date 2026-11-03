@@ -17,7 +17,7 @@ import ReviewFormModal from '../admin/ReviewFormModal';
 import ExpandableReviewComment from '../common/ExpandableReviewComment';
 import { getAuthenticatedPatient } from '../../utils/patientAuth';
 import { api, API_BASE } from '../../services/api';
-import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
+import { parseAvailableDaysAndHours, sortTimeSlots } from '../../utils/doctorScheduleUtils';
 import styles from './DoctorProfile.module.css';
 
 // Local date string helper matching clinic calendar time (YYYY-MM-DD)
@@ -174,9 +174,9 @@ const SocialYoutubeIcon = ({ size = 18 }) => (
 
 // Helper to format experience stably as a consistent number + string
 export const formatDoctorExperience = (exp) => {
-  if (exp === undefined || exp === null || exp === '') return '15+ Years';
+  if (exp === undefined || exp === null || exp === '' || Number(exp) === 0) return 'Experienced';
   const num = parseInt(String(exp).replace(/\D/g, ''), 10);
-  return `${!isNaN(num) && num > 0 ? num : 15}+ Years`;
+  return !isNaN(num) && num > 0 ? `${num}+ Years` : 'Experienced';
 };
 
 // Helper to extract biography content (custom doctor about only)
@@ -246,24 +246,33 @@ const TimelineSymbolIcon = ({ size = 18, color = '#4f46e5', className = '' }) =>
 export const getDoctorVerifiedReviews = (doc, liveReviews) => {
   if (!doc) return [];
   const cleanDocName = (doc.name || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
-  const dId = String(doc.id || '');
-  const dMongoId = String(doc._id || '');
+  const dId = String(doc.id || '').trim();
+  const dMongoId = String(doc._id || '').trim();
 
   // 1. Strictly real-time verified patient reviews for this doctor
   const matched = (liveReviews || []).filter(r => {
-    if (r.status === 'rejected') return false;
-    const cleanTargetName = (r.targetName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
-    const rTargetId = String(r.targetId || '');
-    const rDoctorId = String(r.doctorId || '');
-    const rDoctorName = (r.doctorName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+    if (!r || r.status === 'rejected') return false;
 
-    // Match by Doctor ID or Name
-    if (rDoctorId && (rDoctorId === dId || (dMongoId && rDoctorId === dMongoId))) return true;
-    if (rDoctorName && cleanDocName && (rDoctorName.includes(cleanDocName) || cleanDocName.includes(rDoctorName))) return true;
+    const rTargetId = String(r.targetId || '').trim();
+    const rDoctorId = String(r.doctorId || '').trim();
 
-    if (r.targetType === 'doctor') {
-      if (rTargetId && (rTargetId === dId || (dMongoId && rTargetId === dMongoId))) return true;
-      if (cleanTargetName && cleanDocName && (cleanTargetName.includes(cleanDocName) || cleanDocName.includes(cleanTargetName))) return true;
+    // Priority 1: Match by unique Doctor ID or Target ID
+    const hasDocId = Boolean(rDoctorId);
+    const hasTargetId = Boolean(rTargetId && r.targetType === 'doctor');
+
+    if (hasDocId || hasTargetId) {
+      const idMatches = (dMongoId && (rDoctorId === dMongoId || (r.targetType === 'doctor' && rTargetId === dMongoId))) ||
+                        (dId && (rDoctorId === dId || (r.targetType === 'doctor' && rTargetId === dId)));
+      return Boolean(idMatches);
+    }
+
+    // Priority 2: Fallback for legacy reviews with NO ID specified at all.
+    // Must be a doctor review and require STRICT exact match of normalized names (never loose substring)
+    if (r.targetType === 'doctor' && cleanDocName) {
+      const cleanTargetName = (r.targetName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+      const rDoctorName = (r.doctorName || '').toLowerCase().replace(/^dr\.?\s*/i, '').trim();
+      if (cleanTargetName && cleanTargetName === cleanDocName) return true;
+      if (rDoctorName && rDoctorName === cleanDocName) return true;
     }
 
     return false;
@@ -272,32 +281,85 @@ export const getDoctorVerifiedReviews = (doc, liveReviews) => {
   return matched;
 };
 
-const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
+export const getEmbedUrl = (url) => {
+  if (!url) return '';
+  try {
+    if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
+      let videoId = '';
+      if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+      else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
+      else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    }
+    if (url.includes('instagram.com')) {
+      const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1]) {
+        return `https://www.instagram.com/reel/${match[1]}/embed/`;
+      }
+      if (!url.includes('/embed')) {
+        const cleanUrl = url.split('?')[0].replace(/\/$/, '');
+        return `${cleanUrl}/embed/`;
+      }
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
+export const getCloudinaryVideoPoster = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return '';
+  const idx = url.indexOf('/video/upload/');
+  if (idx === -1) return '';
+  const prefix = url.substring(0, idx + '/video/upload/'.length);
+  const remainder = url.substring(idx + '/video/upload/'.length);
+  const versionMatch = remainder.match(/(v\d+\/.+?)\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+  if (versionMatch) {
+    return prefix + 'so_0/' + versionMatch[1] + '.jpg';
+  }
+  const pathMatch = remainder.replace(/^[^/]+\//, '').replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, '.jpg');
+  return prefix + 'so_0/' + pathMatch;
+};
+
+const DoctorReelCard = React.memo(({ reelItem, idx, onOpen }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [coverError, setCoverError] = useState(false);
   const isHoveredRef = useRef(false);
+  const enterTimerRef = useRef(null);
   const leaveTimerRef = useRef(null);
-  const [directVideoUrl, setDirectVideoUrl] = useState('');
 
-  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
+  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : (typeof reelItem === 'string' ? reelItem : '');
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
   const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
   const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
   const isBrokenInstagramDirectUrl = coverPhoto && coverPhoto.includes('instagram.com/p/') && coverPhoto.includes('/media/?size=');
-  const effectiveCover = (!coverPhoto || isBrokenInstagramDirectUrl)
-    ? (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '')
-    : coverPhoto;
+  
+  const isDirect = Boolean(rawUrl && (rawUrl.includes('cloudinary.com') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl)));
+  const [directVideoUrl, setDirectVideoUrl] = useState(() => (isDirect ? rawUrl : ''));
 
-  const isDirect = rawUrl && (rawUrl.includes('cloudinary.com') || /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(rawUrl));
+  const cloudinaryPoster = getCloudinaryVideoPoster(rawUrl);
+  const isInternalProxyCover = coverPhoto && (coverPhoto.includes('reel-cover') || coverPhoto.startsWith('api/') || coverPhoto.startsWith('/api/'));
+  const customCover = (!isBrokenInstagramDirectUrl && !isInternalProxyCover && coverPhoto) ? coverPhoto : '';
+  const fallbackProxyCover = rawUrl && rawUrl.includes('instagram.com')
+    ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : `/api/reel-cover?url=${encodeURIComponent(rawUrl)}`)
+    : '';
+  const effectiveCover = coverError
+    ? (customCover ? cloudinaryPoster : '')
+    : (customCover || cloudinaryPoster || fallbackProxyCover);
+
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverPhoto, rawUrl]);
 
   useEffect(() => {
     let active = true;
     if (!rawUrl) return;
     if (isDirect) {
-      setDirectVideoUrl(rawUrl);
+      if (directVideoUrl !== rawUrl) setDirectVideoUrl(rawUrl);
       return;
     }
     fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawUrl)}`)
@@ -319,7 +381,11 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
       leaveTimerRef.current = null;
     }
     isHoveredRef.current = true;
-    if (videoRef.current && !videoError) {
+
+    // Smooth hover intent delay (90ms) to eliminate accidental hover jitter
+    if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+    enterTimerRef.current = setTimeout(() => {
+      if (!isHoveredRef.current || !videoRef.current || videoError) return;
       setHasStarted(true);
       if (!isPlaying) {
         setIsLoading(true);
@@ -344,23 +410,31 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
             setIsLoading(false);
           });
       }
-    }
+    }, 90);
   };
 
   const handleMouseLeave = () => {
+    if (enterTimerRef.current) {
+      clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     leaveTimerRef.current = setTimeout(() => {
       isHoveredRef.current = false;
+      setIsPlaying(false);
+      setIsLoading(false);
       if (videoRef.current) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        setIsLoading(false);
+        try {
+          videoRef.current.pause();
+          videoRef.current.currentTime = 0;
+        } catch {}
       }
-    }, 120);
+    }, 100);
   };
 
   useEffect(() => {
     return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
       if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     };
   }, []);
@@ -374,47 +448,29 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
       title="Hover to preview, click to watch with sound"
       style={{
         background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
-        position: 'relative'
+        position: 'relative',
+        overflow: 'hidden'
       }}
     >
-      {effectiveCover && (
-        <img
-          src={effectiveCover}
-          alt="Instagram Reel"
-          className={styles.reelCoverImg}
-          loading="eager"
-          style={{
-            opacity: isPlaying ? 0 : 1,
-            transition: 'opacity 0.25s ease',
-            pointerEvents: 'none',
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-          }}
-          onError={(e) => {
-            e.target.style.display = 'none';
-          }}
-        />
-      )}
-
-      {videoSrc && (
+      {/* Background Hover Video at z-index 1 */}
+      {videoSrc && !videoError && (
         <video
           ref={videoRef}
           src={videoSrc}
-          poster={coverPhoto || effectiveCover}
+          poster={effectiveCover || ''}
           muted
           playsInline
           loop
-          preload="auto"
+          preload="metadata"
           className={styles.reelHoverVideo}
           style={{
-            opacity: isPlaying ? 1 : 0,
-            transition: 'opacity 0.25s ease',
-            zIndex: 1,
-            pointerEvents: 'none',
+            position: 'absolute',
+            inset: 0,
             width: '100%',
             height: '100%',
-            objectFit: 'cover'
+            objectFit: 'cover',
+            zIndex: 1,
+            pointerEvents: 'none'
           }}
           onPlaying={() => {
             if (isHoveredRef.current) {
@@ -425,6 +481,31 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
           onError={() => {
             setVideoError(true);
             setIsLoading(false);
+          }}
+        />
+      )}
+
+      {/* Reel Cover Photo at z-index 2 - sits directly on top of video, smoothly fades out ONLY after video confirmed playing */}
+      {effectiveCover && (
+        <img
+          src={effectiveCover}
+          alt="Instagram Reel"
+          className={styles.reelCoverImg}
+          loading="eager"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: 2,
+            opacity: isPlaying ? 0 : 1,
+            transition: 'opacity 0.25s ease-out, transform 0.35s ease',
+            pointerEvents: 'none',
+            display: 'block'
+          }}
+          onError={() => {
+            setCoverError(true);
           }}
         />
       )}
@@ -452,28 +533,33 @@ const DoctorReelCard = ({ reelItem, idx, onOpen }) => {
         </div>
       )}
 
-      <div className={styles.reelGradientScrim} style={{ zIndex: 2, pointerEvents: 'none' }} />
+      <div className={styles.reelGradientScrim} style={{ zIndex: 3, pointerEvents: 'none' }} />
 
-      <div className={styles.reelTopBadge} style={{ zIndex: 3, pointerEvents: 'none' }}>
+      <div className={styles.reelTopBadge} style={{ zIndex: 4, pointerEvents: 'none' }}>
         <SocialInstagramIcon size={14} />
         <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
     </div>
   );
-};
+});
 
 // Robust Modal Video Player component for DoctorProfile with anti-pause and reliable audio handling
 const ReelModalPlayer = ({ activeReel, onClose }) => {
   const videoRef = useRef(null);
   const [videoError, setVideoError] = useState(false);
-  const [directVideoUrl, setDirectVideoUrl] = useState('');
+  const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
+  const isDirect = Boolean(rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget)));
+  const [directVideoUrl, setDirectVideoUrl] = useState(() => (isDirect ? rawTarget : ''));
   const [isMuted, setIsMuted] = useState(false);
 
-  const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
-  const isDirect = rawTarget && (rawTarget.includes('cloudinary.com') || /\.(mp4|webm|mov)(\?.*)?$/i.test(rawTarget));
-  const coverSrc = typeof activeReel === 'object' 
-    ? (activeReel.coverPhoto || activeReel.primaryCover || '') 
-    : (rawTarget ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : '');
+  const customModalCover = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+  const isInternalModalProxy = customModalCover && (customModalCover.includes('reel-cover') || customModalCover.startsWith('api/') || customModalCover.startsWith('/api/'));
+  const cleanModalCover = (!isInternalModalProxy && customModalCover) ? customModalCover : '';
+  const cloudinaryModalPoster = getCloudinaryVideoPoster(rawTarget);
+  const fallbackModalCover = rawTarget && rawTarget.includes('instagram.com')
+    ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : `/api/reel-cover?url=${encodeURIComponent(rawTarget)}`)
+    : '';
+  const coverSrc = cleanModalCover || cloudinaryModalPoster || fallbackModalCover;
 
   useEffect(() => {
     let active = true;
@@ -938,7 +1024,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   // Doctor's available slots & schedule from database (configured explicitly by doctor or admin)
   const configuredSlots = React.useMemo(() => {
     if (Array.isArray(doctor?.availableSlots) && doctor.availableSlots.length > 0) {
-      return doctor.availableSlots;
+      return sortTimeSlots(doctor.availableSlots);
     }
     return [];
   }, [doctor?.availableSlots]);
@@ -954,57 +1040,30 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     return [];
   }, [doctor?.scheduleDays, doctor?.availableDays]);
 
-  // Helper to resolve specific slots for any date (Date-wise > Day-wise > Default Standard)
+  // Helper to resolve specific slots for any date (Live real-time slots configured by this individual doctor)
   const resolveSlotsForDate = React.useCallback((dateObj) => {
-    const dayNameShort = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
     const dateStr = getLocalDateString(dateObj);
     
-    // 1. Date-wise check (highest priority override)
+    // 1. Date-wise check (highest priority: individual doctor's live calendar dates)
     const dateCustom = doctor?.dateWiseSlots?.[dateStr];
     if (dateCustom !== undefined && dateCustom !== null) {
-      if (dateCustom === 'off' || dateCustom?.isOff === true || (Array.isArray(dateCustom) && dateCustom.length === 0)) {
+      if (dateCustom === 'off' || dateCustom?.isOff === true) {
         return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: true };
       }
       const customList = Array.isArray(dateCustom) ? dateCustom : (Array.isArray(dateCustom?.slots) ? dateCustom.slots : []);
       if (customList.length > 0) {
-        return { isWorkingDay: true, isDayOff: false, hasNoSlots: false, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
+        const sortedCustomList = sortTimeSlots(customList);
+        return { isWorkingDay: true, isDayOff: false, hasNoSlots: false, slots: sortedCustomList, statusText: `${sortedCustomList.length} Slots`, isCustom: true };
       }
+      return { isWorkingDay: false, isDayOff: false, hasNoSlots: true, slots: [], statusText: 'No Slots', isCustom: true };
     }
 
-    // 2. Day-wise check (Mon, Tue, etc.)
-    const dayCustom = doctor?.dayWiseSlots?.[dayNameShort];
-    if (dayCustom !== undefined && dayCustom !== null) {
-      if (dayCustom === 'off' || dayCustom?.isOff === true || (Array.isArray(dayCustom) && dayCustom.length === 0)) {
-        return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: true };
-      }
-      const customList = Array.isArray(dayCustom) ? dayCustom : (Array.isArray(dayCustom?.slots) ? dayCustom.slots : []);
-      if (customList.length > 0) {
-        return { isWorkingDay: true, isDayOff: false, hasNoSlots: false, slots: customList, statusText: `${customList.length} Slots`, isCustom: true };
-      }
-    }
-
-    // 3. Fallback to standard scheduleDays and availableSlots
-    const isExplicitDayOff = configuredDays.length > 0 && !configuredDays.some(cd => cd.toLowerCase().startsWith(dayNameShort.toLowerCase()));
-    if (isExplicitDayOff || (configuredDays.length === 0 && dayNameShort === 'Sun')) {
-      return { isWorkingDay: false, isDayOff: true, hasNoSlots: false, slots: [], statusText: 'Off', isCustom: false };
-    }
-
-    const hasSlots = configuredSlots.length > 0;
-    if (!hasSlots) {
-      return { isWorkingDay: false, isDayOff: false, hasNoSlots: true, slots: [], statusText: 'No Slots', isCustom: false };
-    }
-
-    return {
-      isWorkingDay: true,
-      isDayOff: false,
-      hasNoSlots: false,
-      slots: configuredSlots,
-      statusText: `${configuredSlots.length} Slots`,
-      isCustom: false
-    };
-  }, [doctor?.dateWiseSlots, doctor?.dayWiseSlots, configuredDays, configuredSlots]);
+    // 2. If doctor has NOT marked slots for this date: it has NO slots (never fallback to dummy/fake slots)
+    return { isWorkingDay: false, isDayOff: false, hasNoSlots: true, slots: [], statusText: 'No Slots', isCustom: false };
+  }, [doctor?.dateWiseSlots]);
 
   // Dynamic appointment days strictly from current date till end of current month (not beyond)
+  // The day for which doctor has not marked slots will not be displayed in doctor page!
   const dateOptions = React.useMemo(() => {
     const dates = [];
     const today = new Date();
@@ -1018,7 +1077,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       dates.push(d);
     }
 
-    return dates.map((d) => {
+    const allMapped = dates.map((d) => {
       const dayNameShort = d.toLocaleDateString('en-US', { weekday: 'short' });
       const isToday = d.toDateString() === today.toDateString();
       const tomorrow = new Date(today);
@@ -1030,7 +1089,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       
       const resolved = resolveSlotsForDate(d);
       const booked = (doctor?.slots_booked && doctor.slots_booked[dateStr]) || [];
-      const freeSlots = resolved.isWorkingDay ? resolved.slots.filter(s => !booked.includes(s)) : [];
+      const freeSlots = resolved.isWorkingDay ? sortTimeSlots(resolved.slots.filter(s => !booked.includes(s))) : [];
 
       let slotsLabel = 'No Slots';
       if (resolved.isDayOff) {
@@ -1053,11 +1112,14 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
         isDayOff: resolved.isDayOff,
         hasNoSlots: resolved.hasNoSlots,
         freeSlots,
-        allSlots: resolved.slots,
+        allSlots: sortTimeSlots(resolved.slots),
         slots: slotsLabel,
-        slotsCount: resolved.isDayOff ? 'Doctor is off duty' : (resolved.hasNoSlots ? 'No slots configured' : `${freeSlots.length} slots available`)
+        slotsCount: resolved.isDayOff ? 'Doctor is on Leave / Off Duty' : (resolved.hasNoSlots ? 'No slots configured' : `${freeSlots.length} slots available`)
       };
     });
+
+    // Filter out unmarked days: only display days where doctor has marked slots or explicitly marked leave/off
+    return allMapped.filter(item => !item.hasNoSlots && (item.allSlots.length > 0 || item.isDayOff));
   }, [resolveSlotsForDate, doctor?.slots_booked]);
 
   // Navigate through dates 3 at a time across the month, stopping strictly at month bounds
@@ -1092,7 +1154,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
     if (!activeDateObj) return [];
     const booked = (doctor?.slots_booked && doctor.slots_booked[activeDateObj.dateStr]) || [];
-    const dayConfiguredSlots = activeDateObj.allSlots || configuredSlots;
+    const dayConfiguredSlots = sortTimeSlots(activeDateObj.allSlots || configuredSlots);
     
     return dayConfiguredSlots.map(slot => ({
       time: slot,
@@ -1114,11 +1176,18 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   }, [currentDaySlots, selectedDateIdx]);
 
   // Derived booking status for currently selected date
+  const todayDateStr = React.useMemo(() => getLocalDateString(new Date()), []);
+  const isDoctorOnLeaveToday = React.useMemo(() => {
+    if (doctor?.availabilityStatus === 'On Leave' || doctor?.available === false) return true;
+    if (doctor?.dateWiseSlots?.[todayDateStr] === 'off' || doctor?.dateWiseSlots?.[todayDateStr]?.isOff === true) return true;
+    return false;
+  }, [doctor?.availabilityStatus, doctor?.available, doctor?.dateWiseSlots, todayDateStr]);
+
   const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
   const isDayOff = Boolean(activeDateObj && activeDateObj.isDayOff);
-  const isNoSlotsConfigured = !isDayOff && (activeDateObj?.hasNoSlots || currentDaySlots.length === 0);
+  const isNoSlotsConfigured = !isDayOff && (dateOptions.length === 0 || activeDateObj?.hasNoSlots || currentDaySlots.length === 0);
   const isAllBooked = !isDayOff && !isNoSlotsConfigured && currentDaySlots.length > 0 && currentDaySlots.filter(s => !s.isBooked).length === 0;
-  const canBookAppointment = !isDayOff && !isAllBooked && !isNoSlotsConfigured && Boolean(selectedTimeSlot);
+  const canBookAppointment = dateOptions.length > 0 && !isDayOff && !isAllBooked && !isNoSlotsConfigured && Boolean(selectedTimeSlot);
 
   // Stable bio sentence management with clean More/Less toggle (flicker-free)
   const [visibleSentenceCount, setVisibleSentenceCount] = useState(2);
@@ -1245,6 +1314,19 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
     return () => window.removeEventListener('resize', handleResize);
   }, [updateBalancedBio]);
 
+  // Track auto-opening of the booking CTA popup per doctor visit so that:
+  // 1. Whenever a user opens any doctor who has available slots, the CTA modal opens automatically.
+  // 2. If the user closes the modal, it stays closed while they view that doctor profile (no annoying re-trigger loop).
+  // 3. Opening another doctor or navigating again will auto-open for doctors with slots.
+  const autoOpenedDoctorIdRef = React.useRef(null);
+
+  React.useEffect(() => {
+    // Reset tracker if doctorId changes
+    if (autoOpenedDoctorIdRef.current && String(autoOpenedDoctorIdRef.current) !== String(doctorId)) {
+      autoOpenedDoctorIdRef.current = null;
+    }
+  }, [doctorId]);
+
   React.useEffect(() => {
     // Check if there's a pending booking after login
     const pending = localStorage.getItem('pendingBooking');
@@ -1257,22 +1339,56 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
       }
       localStorage.removeItem('pendingBooking');
     }
+  }, [doctorId]);
 
-    // Auto-open booking modal if arriving from "Book Now" and doctor is available
-    if (localStorage.getItem('autoOpenBooking') === 'true') {
-      localStorage.removeItem('autoOpenBooking');
-      const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
-      if (activeObj && activeObj.isWorkingDay !== false && selectedTimeSlot) {
-        setShowBookingModal(true);
+  // Always auto-open booking CTA popup modal when opening a doctor profile that has available slots
+  React.useEffect(() => {
+    if (autoOpenedDoctorIdRef.current === String(doctorId)) return;
+    if (!doctor || !dateOptions || dateOptions.length === 0) return;
+
+    // Check if doctor has any available slots anywhere across dates
+    const firstAvailableIdx = dateOptions.findIndex(
+      d => !d.isDayOff && Array.isArray(d.freeSlots) && d.freeSlots.length > 0
+    );
+
+    // If doctor has NO available slots anywhere in the schedule yet, wait (do NOT set autoOpenedDoctorIdRef to avoid premature blocking while slots are loading)
+    if (firstAvailableIdx === -1) {
+      return;
+    }
+
+    // Doctor has slots!
+    // Check if current date has available slots; if not, switch to the first upcoming available date
+    const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
+    const hasActiveSlots = activeObj && !activeObj.isDayOff && Array.isArray(activeObj.freeSlots) && activeObj.freeSlots.length > 0;
+
+    if (!hasActiveSlots) {
+      if (selectedDateIdx !== firstAvailableIdx) {
+        setSelectedDateIdx(firstAvailableIdx);
+        return;
       }
     }
-  }, [doctorId, dateOptions, selectedDateIdx, selectedTimeSlot]);
+
+    // Ensure selectedTimeSlot is set to the first valid slot if not already set
+    const targetObj = (hasActiveSlots ? activeObj : dateOptions[firstAvailableIdx]) || dateOptions[0];
+    const validSlot = selectedTimeSlot || (targetObj && targetObj.freeSlots && targetObj.freeSlots[0]);
+
+    if (validSlot) {
+      if (!selectedTimeSlot) {
+        setSelectedTimeSlot(validSlot);
+      }
+      autoOpenedDoctorIdRef.current = String(doctorId);
+      try {
+        localStorage.removeItem('autoOpenBooking');
+      } catch (err) {}
+      setShowBookingModal(true);
+    }
+  }, [doctorId, doctor, dateOptions, selectedDateIdx, selectedTimeSlot]);
 
 
   const handleBookNow = () => {
     const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    if (activeObj && activeObj.isWorkingDay === false) {
-      alert('Doctor is off duty on this day. Please choose another date.');
+    if (activeObj && (activeObj.isWorkingDay === false || activeObj.isDayOff)) {
+      alert('Doctor is on leave on this day. Please choose another date.');
       return;
     }
     if (!selectedTimeSlot) {
@@ -1284,8 +1400,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
 
   const processBooking = async (slotDate, slotTime, type = consultationType) => {
     const activeObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    if (activeObj && activeObj.isWorkingDay === false) {
-      alert('Doctor is off duty on this day. Please choose another date.');
+    if (activeObj && (activeObj.isWorkingDay === false || activeObj.isDayOff)) {
+      alert('Doctor is on leave on this day. Please choose another date.');
       return;
     }
 
@@ -1340,8 +1456,8 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const submitBooking = async (e) => {
     e.preventDefault();
     const chosenDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
-    if (chosenDateObj && chosenDateObj.isWorkingDay === false) {
-      alert('Doctor is off duty on this day. Please choose another date.');
+    if (chosenDateObj && (chosenDateObj.isWorkingDay === false || chosenDateObj.isDayOff)) {
+      alert('Doctor is on leave on this day. Please choose another date.');
       return;
     }
     const chosenDate = chosenDateObj?.dateStr;
@@ -1393,7 +1509,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
           dateLabel: chosenDateObj.label,
           slotTime: chosenTime,
           consultationType: consultationType,
-          fee: doctor.price || doctor.fees || 800,
+          fee: (doctor.price !== undefined && doctor.price !== null && doctor.price !== '') ? Number(doctor.price) : ((doctor.fees !== undefined && doctor.fees !== null && doctor.fees !== '') ? Number(doctor.fees) : 0),
           status: 'Confirmed',
           bookedAt: new Date().toISOString()
         };
@@ -1443,34 +1559,6 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   const doctorTags = React.useMemo(() => {
     return getDoctorTags(doctor);
   }, [doctor?.tags, doctor?.degree, doctor?.qualifications, doctor?.specialty, doctor?.specialization]);
-
-  const getEmbedUrl = (url) => {
-    if (!url) return '';
-    try {
-      if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
-        let videoId = '';
-        if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-        else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
-        else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-      }
-      if (url.includes('instagram.com')) {
-        // Extract the shortcode from /reel/SHORTCODE, /reels/SHORTCODE, /p/SHORTCODE, or /tv/SHORTCODE
-        const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-        if (match && match[1]) {
-          const shortcode = match[1];
-          return `https://www.instagram.com/reel/${shortcode}/embed/`;
-        }
-        if (!url.includes('/embed')) {
-          const cleanUrl = url.split('?')[0].replace(/\/$/, '');
-          return `${cleanUrl}/embed/`;
-        }
-      }
-      return url;
-    } catch {
-      return url;
-    }
-  };
 
   const isAdmin = React.useMemo(() => {
     try {
@@ -1731,7 +1819,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         title="Visit Instagram Profile"
                         aria-label="Instagram Profile"
                       >
-                        <SocialInstagramIcon size={18} />
+                        <SocialInstagramIcon size={16} />
                       </a>
                     )}
                     {doctor.facebook && (
@@ -1743,7 +1831,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         title="Visit Facebook Profile"
                         aria-label="Facebook Profile"
                       >
-                        <SocialFacebookIcon size={18} />
+                        <SocialFacebookIcon size={16} />
                       </a>
                     )}
                     {doctor.linkedin && (
@@ -1755,7 +1843,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         title="Visit LinkedIn Profile"
                         aria-label="LinkedIn Profile"
                       >
-                        <SocialLinkedinIcon size={18} />
+                        <SocialLinkedinIcon size={16} />
                       </a>
                     )}
                     {doctor.twitter && (
@@ -1767,7 +1855,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         title="Visit Twitter/X Profile"
                         aria-label="Twitter/X Profile"
                       >
-                        <SocialTwitterXIcon size={15} />
+                        <SocialTwitterXIcon size={14} />
                       </a>
                     )}
                     {doctor.youtube && (
@@ -1779,7 +1867,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         title="Visit YouTube Channel"
                         aria-label="YouTube Channel"
                       >
-                        <SocialYoutubeIcon size={18} />
+                        <SocialYoutubeIcon size={16} />
                       </a>
                     )}
                   </div>
@@ -1813,6 +1901,39 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     <CheckCircle2 size={13} color="#059669" />
                     Verified
                   </span>
+                  {isDoctorOnLeaveToday ? (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '3px 10px',
+                      borderRadius: '20px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      background: '#fee2e2',
+                      color: '#b91c1c',
+                      border: '1px solid #fca5a5'
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }}></span>
+                      On Leave
+                    </span>
+                  ) : (
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '3px 10px',
+                      borderRadius: '20px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      background: '#ecfdf5',
+                      color: '#047857',
+                      border: '1px solid #a7f3d0'
+                    }}>
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+                      Available
+                    </span>
+                  )}
                 </div>
 
                 {/* Tags / Degrees / Clinical Focus */}
@@ -1974,7 +2095,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 </div>
                 <div className={styles.feePriceRow}>
                   <span className={styles.feeCurrency}>₹</span>
-                  <span className={styles.feeAmount}>{doctor.price || doctor.fees || 800}</span>
+                  <span className={styles.feeAmount}>{(doctor.price !== undefined && doctor.price !== null && doctor.price !== '') ? doctor.price : (doctor.fees ?? 0)}</span>
                   <span className={styles.feeSub}>/ visit</span>
                 </div>
               </div>
@@ -1996,19 +2117,12 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               <div className={styles.consultTypeToggleGroup}>
                 <button 
                   type="button" 
-                  className={`${styles.consultTypeBtn} ${consultationType === 'In-Clinic Visit' ? styles.consultTypeActive : ''}`}
+                  className={`${styles.consultTypeBtn} ${styles.consultTypeActive}`}
                   onClick={() => setConsultationType('In-Clinic Visit')}
+                  style={{ cursor: 'default' }}
                 >
                   <Building2 size={14} />
                   <span>In-Clinic Visit</span>
-                </button>
-                <button 
-                  type="button" 
-                  className={`${styles.consultTypeBtn} ${consultationType === 'Video Consultation' ? styles.consultTypeActive : ''}`}
-                  onClick={() => setConsultationType('Video Consultation')}
-                >
-                  <Video size={14} />
-                  <span>Video Call</span>
                 </button>
               </div>
             </div>
@@ -2027,98 +2141,110 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
                 </div>
                 <div className={styles.dateNavCounter}>
-                  {dateWindowStart + 1}–{Math.min(dateWindowStart + 3, dateOptions.length)} of {dateOptions.length}
+                  {dateOptions.length > 0 ? `${dateWindowStart + 1}–${Math.min(dateWindowStart + 3, dateOptions.length)} of ${dateOptions.length}` : '0 Available'}
                 </div>
               </div>
 
-              <div className={styles.dateCarouselWrapper}>
-                <button
-                  type="button"
-                  className={styles.dateStripArrowBtn}
-                  onClick={handlePrevDates}
-                  disabled={dateWindowStart === 0}
-                  title="Previous Dates"
-                  aria-label="Previous Dates"
-                >
-                  <ChevronLeft size={16} />
-                </button>
-
-                <div className={styles.dateSlotsGroup}>
-                  {currentVisibleDates.map((opt, vIdx) => {
-                    const actualIdx = dateWindowStart + vIdx;
-                    return (
-                      <button 
-                        key={actualIdx} 
-                        type="button"
-                        className={`${styles.dateSlotCard} ${selectedDateIdx === actualIdx ? styles.dateSlotCardActive : ''}`}
-                        onClick={() => setSelectedDateIdx(actualIdx)}
-                      >
-                        <span className={styles.dateSlotDayName}>{opt.day}</span>
-                        <span className={styles.dateSlotDateNum}>{opt.date}</span>
-                        <span 
-                          className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}
-                          style={
-                            opt.slots === 'No Slots' 
-                              ? { color: '#64748b', background: '#f1f5f9', borderColor: '#cbd5e1' }
-                              : (opt.slots === 'Off' 
-                                ? { color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }
-                                : (opt.slots === 'Booked' 
-                                  ? { color: '#d97706', background: '#fffbeb', borderColor: '#fde68a' }
-                                  : {}))
-                          }
-                        >
-                          {opt.slots}
-                        </span>
-                      </button>
-                    );
-                  })}
+              {dateOptions.length === 0 ? (
+                <div style={{ padding: '28px 16px', background: '#f8fafc', borderRadius: '12px', border: '1.5px dashed #cbd5e1', textAlign: 'center', color: '#64748b', margin: '14px 0' }}>
+                  <Calendar size={28} color="#94a3b8" style={{ margin: '0 auto 8px', display: 'block' }} />
+                  <h4 style={{ margin: '0 0 6px', color: '#334155', fontSize: '0.96rem', fontWeight: 700 }}>No Slots Configured</h4>
+                  <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>
+                    Dr. {doctor.name ? doctor.name.replace('Dr. ', '') : 'Doctor'} has not added consultation slots for this month yet.
+                  </p>
                 </div>
-
-                <button
-                  type="button"
-                  className={styles.dateStripArrowBtn}
-                  onClick={handleNextDates}
-                  disabled={dateWindowStart + 3 >= dateOptions.length}
-                  title="Next Dates"
-                  aria-label="Next Dates"
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-
-              <div className={styles.timeSlotsHeader}>
-                <Clock size={13} color="#475569" />
-                <span>Available Slots for {dateOptions[selectedDateIdx]?.day || 'Today'}</span>
-              </div>
-              <div className={styles.timeSlotsGrid}>
-                {isDayOff ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.84rem', textAlign: 'center' }}>
-                    Doctor is off duty on this day. Please choose another date.
-                  </div>
-                ) : isNoSlotsConfigured ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.84rem', textAlign: 'center' }}>
-                    No appointment slots configured for this day. Doctor has not added slots yet.
-                  </div>
-                ) : isAllBooked ? (
-                  <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fff1f2', borderRadius: '8px', border: '1px dashed #fecdd3', color: '#e11d48', fontSize: '0.84rem', textAlign: 'center' }}>
-                    All slots are fully booked for this day. Please select another date.
-                  </div>
-                ) : (
-                  currentDaySlots.map((item, idx) => (
+              ) : (
+                <>
+                  <div className={styles.dateCarouselWrapper}>
                     <button
-                      key={idx}
                       type="button"
-                      disabled={item.isBooked}
-                      className={`${styles.timeSlotPill} ${selectedTimeSlot === item.time ? styles.timeSlotPillActive : ''}`}
-                      onClick={() => !item.isBooked && setSelectedTimeSlot(item.time)}
-                      title={item.isBooked ? 'Slot already booked' : `Select ${item.time}`}
-                      style={item.isBooked ? { opacity: 0.45, textDecoration: 'line-through', cursor: 'not-allowed', background: '#f1f5f9' } : {}}
+                      className={styles.dateStripArrowBtn}
+                      onClick={handlePrevDates}
+                      disabled={dateWindowStart === 0}
+                      title="Previous Dates"
+                      aria-label="Previous Dates"
                     >
-                      {item.time}
+                      <ChevronLeft size={16} />
                     </button>
-                  ))
-                )}
-              </div>
+
+                    <div className={styles.dateSlotsGroup}>
+                      {currentVisibleDates.map((opt, vIdx) => {
+                        const actualIdx = dateWindowStart + vIdx;
+                        return (
+                          <button 
+                            key={actualIdx} 
+                            type="button"
+                            className={`${styles.dateSlotCard} ${selectedDateIdx === actualIdx ? styles.dateSlotCardActive : ''}`}
+                            onClick={() => setSelectedDateIdx(actualIdx)}
+                          >
+                            <span className={styles.dateSlotDayName}>{opt.day}</span>
+                            <span className={styles.dateSlotDateNum}>{opt.date}</span>
+                            <span 
+                              className={`${styles.dateSlotPill} ${selectedDateIdx === actualIdx ? styles.dateSlotPillActive : ''}`}
+                              style={
+                                opt.slots === 'No Slots' 
+                                  ? { color: '#64748b', background: '#f1f5f9', borderColor: '#cbd5e1' }
+                                  : (opt.slots === 'Off' 
+                                    ? { color: '#dc2626', background: '#fef2f2', borderColor: '#fecaca' }
+                                    : (opt.slots === 'Booked' 
+                                      ? { color: '#d97706', background: '#fffbeb', borderColor: '#fde68a' }
+                                      : {}))
+                              }
+                            >
+                              {opt.slots}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      className={styles.dateStripArrowBtn}
+                      onClick={handleNextDates}
+                      disabled={dateWindowStart + 3 >= dateOptions.length}
+                      title="Next Dates"
+                      aria-label="Next Dates"
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  <div className={styles.timeSlotsHeader}>
+                    <Clock size={13} color="#475569" />
+                    <span>Available Slots for {dateOptions[selectedDateIdx]?.day || 'Today'}</span>
+                  </div>
+                  <div className={styles.timeSlotsGrid}>
+                    {isDayOff ? (
+                      <div style={{ gridColumn: '1 / -1', padding: '16px', background: '#fff1f2', borderRadius: '8px', border: '1.5px dashed #fca5a5', color: '#991b1b', fontSize: '0.86rem', textAlign: 'center', fontWeight: 600 }}>
+                        🏖️ Dr. {doctor.name ? doctor.name.replace('Dr. ', '') : 'Doctor'} is on leave / off duty on this day. Booking is closed for this date.
+                      </div>
+                    ) : isNoSlotsConfigured ? (
+                      <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', color: '#64748b', fontSize: '0.84rem', textAlign: 'center' }}>
+                        No appointment slots configured for this day. Doctor has not added slots yet.
+                      </div>
+                    ) : isAllBooked ? (
+                      <div style={{ gridColumn: '1 / -1', padding: '14px 16px', background: '#fff1f2', borderRadius: '8px', border: '1px dashed #fecdd3', color: '#e11d48', fontSize: '0.84rem', textAlign: 'center' }}>
+                        All slots are fully booked for this day. Please select another date.
+                      </div>
+                    ) : (
+                      currentDaySlots.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          disabled={item.isBooked}
+                          className={`${styles.timeSlotPill} ${selectedTimeSlot === item.time ? styles.timeSlotPillActive : ''}`}
+                          onClick={() => !item.isBooked && setSelectedTimeSlot(item.time)}
+                          title={item.isBooked ? 'Slot already booked' : `Select ${item.time}`}
+                          style={item.isBooked ? { opacity: 0.45, textDecoration: 'line-through', cursor: 'not-allowed', background: '#f1f5f9' } : {}}
+                        >
+                          {item.time}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Book Appointment CTA Button */}
@@ -2130,7 +2256,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 onClick={handleBookNow}
                 title={
                   isDayOff
-                    ? 'Doctor is off duty on this day. Please choose another date.'
+                    ? 'Doctor is on leave on this day. Please choose another date.'
                     : isNoSlotsConfigured
                     ? 'No appointment slots configured for this day.'
                     : isAllBooked
@@ -2142,7 +2268,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
               >
                 <span>
                   {isDayOff 
-                    ? 'Doctor is Off Duty' 
+                    ? 'Doctor is On Leave' 
                     : isNoSlotsConfigured 
                     ? 'No Slots Available' 
                     : isAllBooked 
@@ -2180,40 +2306,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                 'Distinguished Clinical Researcher Award - Indian Council of Medical Research (2018)',
                 'Excellence in Patient Care & Clinical Service - Apollo Healthcare (2022)'
               ];
-              const isRahulDoc = matchesId(doctor, '1') || (doctor?.name && doctor.name.toLowerCase().includes('rahul verma'));
-              const awardsList = Array.isArray(doctor?.awards) 
-                ? doctor.awards 
-                : (isRahulDoc ? default4Awards : []);
-
-              const defaultCerts = [
-                'Fellow of the American College of Cardiology (FACC)',
-                'Fellow of Society for Cardiovascular Angiography & Interventions (FSCAI)',
-                'Advanced Cardiac Life Support (ACLS) Certified Provider',
-                'Post-Doctoral Fellowship in Complex Coronary Angioplasty (P-DF)'
-              ];
-              const certificationsList = Array.isArray(doctor?.certifications) 
-                ? doctor.certifications 
-                : (isRahulDoc ? defaultCerts : []);
-
-              const defaultMemberships = [
-                'Cardiological Society of India (CSI) - Life Member',
-                'Indian Medical Association (IMA) - Senior Member',
-                'European Society of Cardiology (ESC) - Fellow Member',
-                'Association of Physicians of India (API) - Registered Member'
-              ];
-              const membershipsList = Array.isArray(doctor?.memberships) 
-                ? doctor.memberships 
-                : (isRahulDoc ? defaultMemberships : []);
-
-              const default4Timeline = [
-                'Senior Consultant Interventional Cardiologist - Apollo Hospital (2018 – Present)',
-                'Associate Consultant Cardiology - Fortis Healthcare (2014 – 2018)',
-                'Chief Resident in Cardiology - All India Institute of Medical Sciences (2011 – 2014)',
-                'Clinical Fellow in Interventional Cardiology - AIIMS New Delhi (2009 – 2011)'
-              ];
-              const timelineList = Array.isArray(doctor?.careerExperience) 
-                ? doctor.careerExperience 
-                : (isRahulDoc ? default4Timeline : []);
+              const awardsList = Array.isArray(doctor?.awards) ? doctor.awards : [];
+              const certificationsList = Array.isArray(doctor?.certifications) ? doctor.certifications : [];
+              const membershipsList = Array.isArray(doctor?.memberships) ? doctor.memberships : [];
+              const timelineList = Array.isArray(doctor?.careerExperience) ? doctor.careerExperience : [];
 
               const parseAwardItem = (text) => {
                 let title = typeof text === 'string' ? text : (text?.title || '');
@@ -2368,7 +2464,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                         Credentials, Honors & Clinical Experience
                       </h3>
                       <p className={styles.credentialsSubtitle}>
-                        Verified clinical certifications, institutional awards, professional memberships, and hospital timeline of Dr. {doctor.name ? doctor.name.replace(/^Dr\.\s*/i, '') : 'Rahul Verma'}.
+                        Verified clinical certifications, institutional awards, professional memberships, and hospital timeline of {doctor.name || 'Doctor'}.
                       </p>
                     </div>
                     <div className={styles.verifiedHeaderBadge}>
@@ -2722,31 +2818,35 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                     </div>
                   </div>
 
-                  {/* Dedicated Support Card */}
-                  <div className={styles.faqSupportCard}>
-                    <div className={styles.faqSupportHeader}>
-                      <div className={styles.faqSupportIconWrap}>
-                        <MessageSquare size={18} color="#2563eb" />
+                  {/* Dedicated Support Card - Only displayed when doctor has configured a dedicated helpline in DB */}
+                  {(doctor.helplineNumber && String(doctor.helplineNumber).trim()) ? (
+                    <div className={styles.faqSupportCard}>
+                      <div className={styles.faqSupportHeader}>
+                        <div className={styles.faqSupportIconWrap}>
+                          <MessageSquare size={18} color="#2563eb" />
+                        </div>
+                        <div>
+                          <h4 className={styles.faqSupportTitle}>Have a Specific Question?</h4>
+                          <p className={styles.faqSupportSub}>Our clinic care desk can assist with bookings or cashless claims.</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className={styles.faqSupportTitle}>Have a Specific Question?</h4>
-                        <p className={styles.faqSupportSub}>Our clinic care desk can assist with bookings or cashless claims.</p>
+                      <div className={styles.faqSupportActions}>
+                        <a 
+                          href={`tel:${String(doctor.helplineNumber).replace(/[^0-9+]/g, '')}`} 
+                          className={styles.faqSupportPhoneBtn}
+                        >
+                          <Phone size={14} />
+                          <span>Call Clinic Desk: {String(doctor.helplineNumber).trim()}</span>
+                        </a>
+                        {(doctor.helplineDays || doctor.helplineTime) && (
+                          <div className={styles.faqSupportHours}>
+                            <Clock size={12} color="#64748b" />
+                            <span>{[doctor.helplineDays, doctor.helplineTime].filter(Boolean).join(' • ')}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className={styles.faqSupportActions}>
-                      <a 
-                        href={`tel:${String(doctor.helplineNumber || doctor.phone || doctor.contact_number || '+919876543210').replace(/[^0-9+]/g, '')}`} 
-                        className={styles.faqSupportPhoneBtn}
-                      >
-                        <Phone size={14} />
-                        <span>Call Clinic Desk: {doctor.helplineNumber || doctor.phone || doctor.contact_number || '+91 98765 43210'}</span>
-                      </a>
-                      <div className={styles.faqSupportHours}>
-                        <Clock size={12} color="#64748b" />
-                        <span>{doctor.helplineDays || 'Mon – Sat'} • {doctor.helplineTime || '8:00 AM – 8:00 PM'}</span>
-                      </div>
-                    </div>
-                  </div>
+                  ) : null}
                 </div>
 
                 {/* Right Column: Interactive Accordions */}
@@ -3174,7 +3274,7 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #D1D5DB', paddingTop: '8px', marginTop: '8px' }}>
                     <span style={{ fontWeight: '600', color: '#111827' }}>Total Consultation Fee</span>
-                    <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '1.2rem' }}>₹{doctor.price || doctor.fees}</span>
+                    <span style={{ fontWeight: '700', color: '#2563eb', fontSize: '1.2rem' }}>₹{(doctor.price !== undefined && doctor.price !== null && doctor.price !== '') ? Number(doctor.price) : ((doctor.fees !== undefined && doctor.fees !== null && doctor.fees !== '') ? Number(doctor.fees) : 0)}</span>
                   </div>
                 </div>
 

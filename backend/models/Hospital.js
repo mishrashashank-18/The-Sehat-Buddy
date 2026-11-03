@@ -27,7 +27,7 @@ const hospitalSchema = new mongoose.Schema({
   publicationStatus: {
     type: String,
     enum: ['draft', 'pending_review', 'published', 'suspended'],
-    default: 'draft',
+    default: 'published',
     index: true
   },
   status: {
@@ -122,6 +122,10 @@ hospitalSchema.pre('save', async function() {
 hospitalSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
+
+// Multikey indexes for high-throughput reference counting across 100,000+ profiles
+hospitalSchema.index({ 'reels.url': 1 });
+hospitalSchema.index({ 'reels.coverPhoto': 1 });
 
 const Hospital = mongoose.model('Hospital', hospitalSchema);
 export default Hospital;

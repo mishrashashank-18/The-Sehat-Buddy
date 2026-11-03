@@ -9,9 +9,11 @@ import { broadcastDbChange } from '../services/storageMonitor.js';
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
-import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
+import { parseAvailableDaysAndHours, sortTimeSlots } from '../utils/doctorScheduleUtils.js';
 import { processDoctorReelsInBackground } from '../utils/reelService.js';
-import { cleanupReplacedReels } from '../utils/reelCleanup.js';
+import { cleanupReplacedReels, deleteDoctorReelByIndex, deleteDoctorReelCoverByIndex } from '../utils/reelCleanup.js';
+import { enrichAppointmentsWithLiveUserData } from '../utils/appointmentUtils.js';
+import { calculateDoctorProfileCompletion } from '../utils/doctorProfileCompletion.js';
 
 export const authDoctor = async (req, res) => {
   const { email, password } = req.body;
@@ -473,23 +475,30 @@ export const addDoctorByHospital = async (req, res) => {
       const temporaryPassword = generateTemporaryPassword();
       const newDocId = new mongoose.Types.ObjectId();
       const docSpec = specialization || req.body.specialty || 'General Medicine';
-      doctor = await Doctor.create({
-        _id: newDocId,
-        id: newDocId.toString(),
+      const initialDocData = {
         name: docName,
         email: cleanEmail,
-        password: temporaryPassword,
         specialization: docSpec,
         specialty: docSpec,
         experience: Number(experience) || 5,
-        fees: Number(fees) || 500,
-        price: Number(fees) || 500,
+        fees: (fees !== undefined && fees !== null && fees !== '' && !isNaN(Number(fees))) ? Number(fees) : 500,
+        price: (fees !== undefined && fees !== null && fees !== '' && !isNaN(Number(fees))) ? Number(fees) : 500,
         hospital: hospitalName || '',
+        about: `Clinical specialist affiliated with ${hospitalName || 'hospital'}.`
+      };
+      const initPct = calculateDoctorProfileCompletion(initialDocData);
+
+      doctor = await Doctor.create({
+        _id: newDocId,
+        id: newDocId.toString(),
+        ...initialDocData,
+        password: temporaryPassword,
         isStarDoctor: Boolean(isStarDoctor),
         starUpdatedAt: Date.now(),
         isFirstLogin: true,
         passwordSet: false,
-        about: `Clinical specialist affiliated with ${hospitalName || 'hospital'}.`
+        profileCompletion: initPct,
+        isProfileComplete: initPct >= 80
       });
 
       // Send welcome email with temporary password
@@ -637,9 +646,11 @@ export const doctorDashboard = async (req, res) => {
       return res.json({ success: true, data: [] });
     }
 
-    const appointments = await Appointment.find({ $or: conditions })
+    const rawAppointments = await Appointment.find({ $or: conditions })
       .sort({ createdAt: -1, date: -1 })
       .lean();
+
+    const appointments = await enrichAppointmentsWithLiveUserData(rawAppointments);
 
     doctorDashboardCache.set(cacheKey, { timestamp: Date.now(), data: appointments });
     res.json({ success: true, data: appointments });
@@ -701,12 +712,18 @@ export const createDoctorAppointment = async (req, res) => {
       if (!doctor) doctor = await Doctor.findOne({ id: docId });
     }
     if (!doctor) {
-      doctor = await Doctor.findOne({ email: 'dr.rahul@sehatbuddy.com' }) || await Doctor.findOne({});
+      doctor = await Doctor.findOne({});
     }
 
     const sDate = String(slotDate || date || new Date().toISOString().split('T')[0]).trim();
     const sTime = String(slotTime || time || '10:00 AM').trim();
-    const fee = Number(amount) || Number(doctor?.fees || doctor?.price || 800);
+    const fee = (amount !== undefined && amount !== null && amount !== '' && !isNaN(Number(amount)))
+      ? Number(amount)
+      : ((doctor?.fees !== undefined && doctor?.fees !== null && doctor?.fees !== '' && !isNaN(Number(doctor.fees)))
+        ? Number(doctor.fees)
+        : ((doctor?.price !== undefined && doctor?.price !== null && doctor?.price !== '' && !isNaN(Number(doctor.price)))
+          ? Number(doctor.price)
+          : 0));
     const pName = (patientName || 'Patient').trim();
     const targetDocId = doctor ? doctor._id.toString() : (docId || 'default');
 
@@ -731,9 +748,9 @@ export const createDoctorAppointment = async (req, res) => {
         _id: null,
         name: pName,
         email: '',
-        phone: phone || '+91 98000 00000',
-        age: parseInt(age, 10) || 30,
-        gender: gender || 'Male',
+        phone: phone || '',
+        age: (age && !isNaN(parseInt(age, 10)) && parseInt(age, 10) > 0) ? parseInt(age, 10) : null,
+        gender: (gender && gender !== 'Not specified' && gender !== 'Not Selected') ? gender : null,
         symptoms: symptoms || 'Clinical Consultation'
       },
       docData: {
@@ -900,22 +917,26 @@ export const updateDoctorProfile = async (req, res) => {
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        if (field === 'address') {
+        if (field === 'name') {
+          doctor.name = req.body.name !== undefined ? String(req.body.name).trim() : doctor.name;
+        } else if (field === 'address') {
           try {
             doctor.address = typeof req.body.address === 'string' ? JSON.parse(req.body.address) : req.body.address;
           } catch {
             doctor.address = req.body.address;
           }
         } else if (field === 'experience') {
-          const expNum = parseInt(req.body.experience, 10);
-          doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
+          const rawExp = req.body.experience;
+          const expNum = Number(rawExp);
+          doctor.experience = (!isNaN(expNum) && rawExp !== '' && rawExp !== null) ? expNum : 0;
         } else if (field === 'qualifications' || field === 'degree') {
-          const deg = req.body.degree || req.body.qualifications || '';
+          const deg = (req.body.degree !== undefined ? req.body.degree : req.body.qualifications) || '';
           doctor.degree = deg;
           doctor.qualifications = deg;
         } else if (field === 'fees' || field === 'price') {
-          const feesNum = Number(req.body.fees ?? req.body.price);
-          doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
+          const rawFee = req.body.fees !== undefined ? req.body.fees : req.body.price;
+          const feesNum = Number(rawFee);
+          doctor.fees = (!isNaN(feesNum) && rawFee !== '' && rawFee !== null) ? feesNum : 0;
           doctor.price = doctor.fees;
         } else if (field === 'availabilityStatus') {
           const incomingStatusTs = Number(req.body.statusUpdatedAt || 0);
@@ -927,8 +948,10 @@ export const updateDoctorProfile = async (req, res) => {
             doctor.markModified('statusUpdatedAt');
           }
         } else if (field === 'specialty' || field === 'specialization') {
-          doctor.specialization = req.body.specialization || req.body.specialty;
-          doctor.specialty = req.body.specialty || req.body.specialization;
+          const spec = req.body.specialization !== undefined ? req.body.specialization : (req.body.specialty !== undefined ? req.body.specialty : '');
+          const cleanSpec = typeof spec === 'string' ? spec.trim() : '';
+          doctor.specialization = cleanSpec;
+          doctor.specialty = cleanSpec;
         } else if (field === 'image') {
           const oldImage = doctor.image;
           const newImage = typeof req.body.image === 'string' ? req.body.image.trim() : '';
@@ -1002,18 +1025,46 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.faqs = Array.isArray(incomingFaqs) ? incomingFaqs : [];
       doctor.markModified('faqs');
     }
-    if (req.body.reels !== undefined) {
-      const previousReels = Array.isArray(doctor.reels) ? [...doctor.reels] : [];
+
+    // Critical Business Rule: Reels are managed exclusively by Platform Admin.
+    // Doctors and hospitals must never have permission to independently upload, add, edit, replace, or delete reels.
+    if (!isAdmin && req.body.reels !== undefined) {
+      const existingReelsStr = JSON.stringify(doctor.reels || []);
+      let incomingReelsStr = '';
+      if (Array.isArray(req.body.reels)) {
+        incomingReelsStr = JSON.stringify(req.body.reels);
+      } else if (typeof req.body.reels === 'string') {
+        try { incomingReelsStr = JSON.stringify(JSON.parse(req.body.reels)); } catch { incomingReelsStr = req.body.reels; }
+      }
+      if (existingReelsStr !== incomingReelsStr) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden: Reels and cover photos are managed exclusively by platform administrators. Doctors cannot upload, add, edit, replace, or delete reels.'
+        });
+      }
+    }
+
+    if (isAdmin && req.body.reels !== undefined) {
       const nextReels = Array.isArray(req.body.reels)
         ? req.body.reels.map(r => {
-            if (typeof r === 'string') return r.trim();
-            if (r && typeof r === 'object') return r;
-            return '';
+            if (typeof r === 'string') {
+              const u = r.trim();
+              return u ? { url: u, coverPhoto: '' } : null;
+            }
+            if (r && typeof r === 'object') {
+              const u = (r.url || r.link || '').trim();
+              const c = (r.coverPhoto || r.cover || '').trim();
+              if (u || c) return { url: u, coverPhoto: c };
+            }
+            return null;
           }).filter(Boolean)
         : [];
-      cleanupReplacedReels(previousReels, nextReels).catch(() => {});
+      const oldReels = doctor.reels || [];
       doctor.reels = nextReels;
       doctor.markModified('reels');
+      cleanupReplacedReels(oldReels, nextReels, doctor._id).catch(err => {
+        console.warn('[DoctorController] cleanupReplacedReels warning:', err.message);
+      });
     }
     if (req.body.youtube_videos !== undefined) {
       doctor.youtube_videos = Array.isArray(req.body.youtube_videos)
@@ -1036,9 +1087,10 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('scheduleDays');
     } else {
       if (req.body.availableSlots !== undefined) {
-        doctor.availableSlots = Array.isArray(req.body.availableSlots)
+        const rawSlots = Array.isArray(req.body.availableSlots)
           ? req.body.availableSlots.map(s => (typeof s === 'string' ? s.trim() : '')).filter(Boolean)
           : [];
+        doctor.availableSlots = sortTimeSlots(rawSlots);
         doctor.markModified('availableSlots');
       }
       if (req.body.scheduleDays !== undefined) {
@@ -1053,11 +1105,35 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('slots_booked');
     }
     if (req.body.dayWiseSlots !== undefined) {
-      doctor.dayWiseSlots = typeof req.body.dayWiseSlots === 'object' && req.body.dayWiseSlots !== null ? req.body.dayWiseSlots : {};
+      if (typeof req.body.dayWiseSlots === 'object' && req.body.dayWiseSlots !== null) {
+        const sortedDayWise = {};
+        for (const [k, v] of Object.entries(req.body.dayWiseSlots)) {
+          sortedDayWise[k] = Array.isArray(v) ? sortTimeSlots(v) : v;
+        }
+        doctor.dayWiseSlots = sortedDayWise;
+      } else {
+        doctor.dayWiseSlots = {};
+      }
       doctor.markModified('dayWiseSlots');
     }
     if (req.body.dateWiseSlots !== undefined) {
-      doctor.dateWiseSlots = typeof req.body.dateWiseSlots === 'object' && req.body.dateWiseSlots !== null ? req.body.dateWiseSlots : {};
+      if (typeof req.body.dateWiseSlots === 'object' && req.body.dateWiseSlots !== null) {
+        const sortedDateWise = {};
+        for (const [k, v] of Object.entries(req.body.dateWiseSlots)) {
+          if (v === 'off' || v?.isOff === true) {
+            sortedDateWise[k] = 'off';
+          } else if (Array.isArray(v)) {
+            sortedDateWise[k] = sortTimeSlots(v);
+          } else if (v && Array.isArray(v.slots)) {
+            sortedDateWise[k] = { ...v, slots: sortTimeSlots(v.slots) };
+          } else {
+            sortedDateWise[k] = v;
+          }
+        }
+        doctor.dateWiseSlots = sortedDateWise;
+      } else {
+        doctor.dateWiseSlots = {};
+      }
       doctor.markModified('dateWiseSlots');
     }
 
@@ -1078,31 +1154,8 @@ export const updateDoctorProfile = async (req, res) => {
       doctor.markModified('image');
     }
 
-    // Ensure core flagship doctor (Dr. Rahul Verma) always stays available / listed in directory
-    const isRahul = doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'));
-    if (isRahul) {
-      doctor.available = true;
-      doctor.markModified('available');
-    }
-
-    // Compute Profile Completion Percentage (0-100%)
-    let pct = 0;
-    if (isRahul) {
-      pct = 100;
-    } else {
-      if (doctor.name && String(doctor.name).trim().length >= 2) pct += 10;
-      if (doctor.email && String(doctor.email).includes('@')) pct += 10;
-      const ph = String(doctor.phone || doctor.contact_number || '').replace(/\D/g, '');
-      if (ph.length >= 10) pct += 10;
-      if ((doctor.specialty || doctor.specialization) && String(doctor.specialty || doctor.specialization).trim().length >= 3) pct += 10;
-      if (doctor.hospital && String(doctor.hospital).trim().length >= 2) pct += 10;
-      if (doctor.licenseNumber && String(doctor.licenseNumber).trim().length >= 3) pct += 15;
-      if ((doctor.degree || doctor.qualifications) && String(doctor.degree || doctor.qualifications).trim().length >= 2) pct += 10;
-      if (doctor.about && String(doctor.about).trim().length >= 20) pct += 10;
-      if (doctor.image && String(doctor.image).trim().length > 0) pct += 10;
-      const hasSched = Boolean(doctor.availableDays || (Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0) || (Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0));
-      if (hasSched) pct += 5;
-    }
+    // Compute Profile Completion Percentage (0-100%) in real-time matching frontend
+    const pct = calculateDoctorProfileCompletion(doctor);
 
     doctor.profileCompletion = Math.min(100, pct);
     doctor.isProfileComplete = pct >= 80;
@@ -1267,6 +1320,97 @@ export const deleteDoctorProfile = async (req, res) => {
   } catch (error) {
     const status = error.statusCode || 500;
     return res.status(status).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Atomically delete a reel from a doctor profile and perform dynamic reference cleanup in Cloudinary
+ */
+export const deleteDoctorReel = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Reels and cover photos are managed exclusively by platform administrators. Doctors and hospitals cannot delete reels.'
+      });
+    }
+
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      doctor = await Doctor.findById(id);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: String(id) });
+    }
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    if (!Array.isArray(doctor.reels) || numIndex >= doctor.reels.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Reel index ${numIndex} out of range (doctor profile contains ${doctor.reels?.length || 0} reels).`
+      });
+    }
+
+    const result = await deleteDoctorReelByIndex(doctor._id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[DoctorController] deleteDoctorReel error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Atomically delete a reel cover photo from a doctor profile and perform dynamic reference cleanup in Cloudinary.
+ * Admin-only operation.
+ */
+export const deleteDoctorReelCover = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Reels and cover photos are managed exclusively by platform administrators. Doctors and hospitals cannot delete cover photos.'
+      });
+    }
+
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+
+    let doctor = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      doctor = await Doctor.findById(id);
+    }
+    if (!doctor) {
+      doctor = await Doctor.findOne({ id: String(id) });
+    }
+    if (!doctor) {
+      return res.status(404).json({ success: false, message: 'Doctor not found' });
+    }
+
+    if (!Array.isArray(doctor.reels) || numIndex >= doctor.reels.length) {
+      return res.status(400).json({
+        success: false,
+        message: `Reel index ${numIndex} out of range (doctor profile contains ${doctor.reels?.length || 0} reels).`
+      });
+    }
+
+    const result = await deleteDoctorReelCoverByIndex(doctor._id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[DoctorController] deleteDoctorReelCover error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

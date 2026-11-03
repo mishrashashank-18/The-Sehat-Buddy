@@ -9,7 +9,8 @@ import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
 import { calculateHospitalProfileCompletion, normalizeAndValidatePhone, validateBedCapacity, MIN_PROFILE_COMPLETION_THRESHOLD } from '../utils/hospitalProfileCompletion.js';
-import { cleanupReplacedReels } from '../utils/reelCleanup.js';
+import { calculateDoctorProfileCompletion } from '../utils/doctorProfileCompletion.js';
+import { cleanupReplacedReels, extractReelPublicIds, isReelAssetStillInUse } from '../utils/reelCleanup.js';
 
 export const authHospital = async (req, res) => {
   const { email, password } = req.body;
@@ -361,18 +362,24 @@ const syncHospitalStaff = async (hospitalName, staffList, hospitalId) => {
       }
       
       const temporaryPassword = generateTemporaryPassword();
-      const newDoc = await Doctor.create({
+      const initialDocInfo = {
         name: formattedName,
         email: cleanEmail,
-        password: temporaryPassword,
         specialization: 'General Physician',
         experience: 5,
         fees: 500,
         price: 500,
         hospital: hospitalName,
+        about: `Clinical specialist affiliated with ${hospitalName}.`
+      };
+      const docPct = calculateDoctorProfileCompletion(initialDocInfo);
+      const newDoc = await Doctor.create({
+        ...initialDocInfo,
+        password: temporaryPassword,
         isFirstLogin: true,
         passwordSet: false,
-        about: `Clinical specialist affiliated with ${hospitalName}.`
+        profileCompletion: docPct,
+        isProfileComplete: docPct >= 80
       });
 
       // Dispatch welcome email with temporary password to doctor
@@ -775,7 +782,7 @@ export const updateHospital = async (req, res) => {
       req.user._id?.toString() === hospital._id.toString() ||
       (req.user.email && hospital.email && req.user.email.toLowerCase() === hospital.email.toLowerCase())
     );
-    const isAdmin = req.user.role === 'admin' || req.headers['x-admin-request'] === 'true';
+    const isAdmin = req.user.role === 'admin' || req.headers?.['x-admin-request'] === 'true';
     const isHospitalAdmin = req.user.role === 'hospital';
 
     if (!isAdmin && (!isHospitalAdmin || !isSelf)) {
@@ -975,21 +982,45 @@ export const updateHospital = async (req, res) => {
       if (req.body.reels !== undefined) {
         let incomingReels = [];
         if (Array.isArray(req.body.reels)) {
-          incomingReels = req.body.reels;
+          incomingReels = req.body.reels.map(r => {
+            if (typeof r === 'string') {
+              const u = r.trim();
+              return u ? { url: u, coverPhoto: '' } : null;
+            }
+            if (r && typeof r === 'object') {
+              const u = (r.url || r.link || '').trim();
+              const c = (r.coverPhoto || r.cover || '').trim();
+              if (u || c) return { url: u, coverPhoto: c };
+            }
+            return null;
+          }).filter(Boolean);
         } else if (typeof req.body.reels === 'string') {
           try {
             const parsed = JSON.parse(req.body.reels);
-            incomingReels = Array.isArray(parsed) ? parsed : [req.body.reels];
+            incomingReels = (Array.isArray(parsed) ? parsed : [req.body.reels]).map(r => {
+              if (typeof r === 'string') {
+                const u = r.trim();
+                return u ? { url: u, coverPhoto: '' } : null;
+              }
+              if (r && typeof r === 'object') {
+                const u = (r.url || r.link || '').trim();
+                const c = (r.coverPhoto || r.cover || '').trim();
+                if (u || c) return { url: u, coverPhoto: c };
+              }
+              return null;
+            }).filter(Boolean);
           } catch {
-            incomingReels = req.body.reels.split(/\s+/).filter(Boolean);
+            incomingReels = req.body.reels.split(/\s+/).filter(Boolean).map(u => ({ url: u.trim(), coverPhoto: '' }));
           }
         } else {
           incomingReels = [];
         }
-        const previousReels = Array.isArray(hospital.reels) ? [...hospital.reels] : [];
-        cleanupReplacedReels(previousReels, incomingReels).catch(() => {});
+        const oldHospitalReels = hospital.reels || [];
         hospital.reels = incomingReels;
         hospital.markModified('reels');
+        cleanupReplacedReels(oldHospitalReels, incomingReels, null, hospital._id).catch(err => {
+          console.warn('[HospitalController] cleanupReplacedReels warning:', err.message);
+        });
 
         // Automatic background conversion of Instagram links to Cloudinary direct video
         (async () => {
@@ -999,6 +1030,8 @@ export const updateHospital = async (req, res) => {
             for (let i = 0; i < updatedReels.length; i++) {
               const r = updatedReels[i];
               const rUrl = typeof r === 'string' ? r : r?.url;
+              const curCover = (typeof r === 'object' && r !== null) ? r.coverPhoto : undefined;
+
               if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
                 const { exec } = await import('child_process');
                 const { promisify } = await import('util');
@@ -1037,7 +1070,8 @@ export const updateHospital = async (req, res) => {
                     if (cldRes && cldRes.secure_url) {
                       updatedReels[i] = {
                         url: cldRes.secure_url,
-                        coverPhoto: cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')
+                        // Preserve explicit empty coverPhoto if admin removed it
+                        coverPhoto: (curCover === '' ? '' : (curCover || cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')))
                       };
                       changed = true;
                     }
@@ -1208,8 +1242,8 @@ export const updateHospital = async (req, res) => {
     hospital.profileCompletion = completion.percentage;
     hospital.markModified('profileCompletion');
 
-    // Auto-update publication status if completion falls below threshold
-    if (hospital.publicationStatus === 'published' && completion.percentage < MIN_PROFILE_COMPLETION_THRESHOLD) {
+    // Auto-update publication status if completion falls drastically below operational minimum (< 20%)
+    if (hospital.publicationStatus === 'published' && completion.percentage < 20 && !hospital.isVerified) {
       hospital.publicationStatus = 'draft';
       hospital.markModified('publicationStatus');
     }
@@ -1309,7 +1343,7 @@ export const deleteHospital = async (req, res) => {
         ...(Array.isArray(hospital.photos) ? hospital.photos : [])
       ].filter(Boolean);
 
-      if (imagesToDelete.length > 0) {
+      if (imagesToDelete.length > 0 || (Array.isArray(hospital.reels) && hospital.reels.length > 0)) {
         try {
           const cld = getCloudinary();
           for (const imgUrl of imagesToDelete) {
@@ -1320,8 +1354,24 @@ export const deleteHospital = async (req, res) => {
               }
             }
           }
+
+          if (Array.isArray(hospital.reels) && hospital.reels.length > 0) {
+            const { videoPublicIds, coverPublicIds } = extractReelPublicIds(hospital.reels);
+            for (const vPubId of videoPublicIds) {
+              const inUse = await isReelAssetStillInUse(vPubId, null, hospital._id);
+              if (!inUse) {
+                await cld.uploader.destroy(vPubId, { resource_type: 'video', invalidate: true }).catch(() => {});
+              }
+            }
+            for (const cPubId of coverPublicIds) {
+              const inUse = await isReelAssetStillInUse(cPubId, null, hospital._id);
+              if (!inUse) {
+                await cld.uploader.destroy(cPubId, { resource_type: 'image', invalidate: true }).catch(() => {});
+              }
+            }
+          }
         } catch (cldErr) {
-          console.warn('Failed to clean up hospital photos from Cloudinary:', cldErr.message);
+          console.warn('Failed to clean up hospital photos and reels from Cloudinary:', cldErr.message);
         }
       }
 
@@ -1455,7 +1505,7 @@ export const updateHospitalBeds = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Hospital not found' });
     }
 
-    const isAdmin = req.user.role === 'admin' || req.headers['x-admin-request'] === 'true';
+    const isAdmin = req.user.role === 'admin' || req.headers?.['x-admin-request'] === 'true';
     const isSelf = (
       req.user.id === hospital._id.toString() ||
       req.user._id?.toString() === hospital._id.toString() ||

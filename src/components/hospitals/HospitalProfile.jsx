@@ -277,6 +277,32 @@ const formatSocialUrl = (url, platform) => {
   return `https://${trimmed}`;
 };
 
+export const getEmbedUrl = (url) => {
+  if (!url) return '';
+  try {
+    if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
+      let videoId = '';
+      if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
+      else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
+      else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+    }
+    if (url.includes('instagram.com')) {
+      const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+      if (match && match[1]) {
+        return `https://www.instagram.com/reel/${match[1]}/embed/`;
+      }
+      if (!url.includes('/embed')) {
+        const cleanUrl = url.split('?')[0].replace(/\/$/, '');
+        return `${cleanUrl}/embed/`;
+      }
+    }
+    return url;
+  } catch {
+    return url;
+  }
+};
+
 const getInstagramEmbedUrl = (url) => {
   if (!url) return '';
   const match = String(url).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
@@ -295,32 +321,59 @@ const isDirectVideoUrl = (url) => {
   );
 };
 
-const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
+export const getCloudinaryVideoPoster = (url) => {
+  if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return '';
+  const idx = url.indexOf('/video/upload/');
+  if (idx === -1) return '';
+  const prefix = url.substring(0, idx + '/video/upload/'.length);
+  const remainder = url.substring(idx + '/video/upload/'.length);
+  const versionMatch = remainder.match(/(v\d+\/.+?)\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+  if (versionMatch) {
+    return prefix + 'so_0/' + versionMatch[1] + '.jpg';
+  }
+  const pathMatch = remainder.replace(/^[^/]+\//, '').replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, '.jpg');
+  return prefix + 'so_0/' + pathMatch;
+};
+
+const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [coverError, setCoverError] = useState(false);
   const isHoveredRef = useRef(false);
+  const enterTimerRef = useRef(null);
   const leaveTimerRef = useRef(null);
-  const [directVideoUrl, setDirectVideoUrl] = useState('');
 
-  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : reelItem;
+  const rawUrl = typeof reelItem === 'object' ? (reelItem.url || '') : (typeof reelItem === 'string' ? reelItem : '');
   const coverPhoto = typeof reelItem === 'object' ? (reelItem.coverPhoto || '') : '';
   const shortcodeMatch = String(rawUrl).match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
   const shortcode = shortcodeMatch ? shortcodeMatch[1] : '';
   const isBrokenInstagramDirectUrl = coverPhoto && coverPhoto.includes('instagram.com/p/') && coverPhoto.includes('/media/?size=');
-  const effectiveCover = (!coverPhoto || isBrokenInstagramDirectUrl)
-    ? (rawUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : '')
-    : coverPhoto;
 
   const isDirect = isDirectVideoUrl(rawUrl);
+  const [directVideoUrl, setDirectVideoUrl] = useState(() => (isDirect ? rawUrl : ''));
+
+  const cloudinaryPoster = getCloudinaryVideoPoster(rawUrl);
+  const isInternalProxyCover = coverPhoto && (coverPhoto.includes('reel-cover') || coverPhoto.startsWith('api/') || coverPhoto.startsWith('/api/'));
+  const customCover = (!isBrokenInstagramDirectUrl && !isInternalProxyCover && coverPhoto) ? coverPhoto : '';
+  const fallbackProxyCover = rawUrl && rawUrl.includes('instagram.com')
+    ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : `/api/reel-cover?url=${encodeURIComponent(rawUrl)}`)
+    : '';
+  const effectiveCover = coverError
+    ? (customCover ? cloudinaryPoster : '')
+    : (customCover || cloudinaryPoster || fallbackProxyCover);
+
+  useEffect(() => {
+    setCoverError(false);
+  }, [coverPhoto, rawUrl]);
 
   useEffect(() => {
     let active = true;
     if (!rawUrl) return;
     if (isDirect) {
-      setDirectVideoUrl(rawUrl);
+      if (directVideoUrl !== rawUrl) setDirectVideoUrl(rawUrl);
       return;
     }
     fetch(`${API_BASE}/reel-video?json=true&url=${encodeURIComponent(rawUrl)}`)
@@ -342,7 +395,10 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       leaveTimerRef.current = null;
     }
     isHoveredRef.current = true;
-    if (videoRef.current && !videoError) {
+
+    if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
+    enterTimerRef.current = setTimeout(() => {
+      if (!isHoveredRef.current || !videoRef.current || videoError) return;
       setHasStarted(true);
       if (!isPlaying) {
         setIsLoading(true);
@@ -367,23 +423,31 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
             setIsLoading(false);
           });
       }
-    }
+    }, 90);
   };
 
   const handleMouseLeave = () => {
+    if (enterTimerRef.current) {
+      clearTimeout(enterTimerRef.current);
+      enterTimerRef.current = null;
+    }
     if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     leaveTimerRef.current = setTimeout(() => {
       isHoveredRef.current = false;
+      setIsPlaying(false);
+      setIsLoading(false);
       if (videoRef.current) {
-        videoRef.current.pause();
-        setIsPlaying(false);
-        setIsLoading(false);
+        try {
+          videoRef.current.pause();
+          videoRef.current.currentTime = 0;
+        } catch {}
       }
-    }, 120);
+    }, 100);
   };
 
   useEffect(() => {
     return () => {
+      if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
       if (leaveTimerRef.current) clearTimeout(leaveTimerRef.current);
     };
   }, []);
@@ -397,40 +461,20 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
       title="Hover to preview, click to watch with sound"
       style={{
         background: 'linear-gradient(145deg, #090d16 0%, #1e293b 100%)',
-        position: 'relative'
+        position: 'relative',
+        overflow: 'hidden'
       }}
     >
-      {/* Background/Cover Image (visible when paused) */}
-      {effectiveCover && (
-        <img
-          src={effectiveCover}
-          alt="Instagram Reel"
-          className={styles.reelCoverImg}
-          loading="eager"
-          style={{
-            opacity: isPlaying ? 0 : 1,
-            transition: 'opacity 0.25s ease',
-            pointerEvents: 'none',
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-          }}
-          onError={(e) => {
-            e.target.style.display = 'none';
-          }}
-        />
-      )}
-
-      {/* Hover Video Element */}
+      {/* Hover Video Element at z-index 1 */}
       {videoSrc && !videoError && (
         <video
           ref={videoRef}
           src={videoSrc}
-          poster={coverPhoto || effectiveCover}
+          poster={effectiveCover || ''}
           muted
           playsInline
           loop
-          preload="auto"
+          preload="metadata"
           className={styles.reelHoverVideo}
           style={{
             position: 'absolute',
@@ -438,40 +482,98 @@ const HospitalReelCard = ({ reelItem, idx, onOpen }) => {
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            opacity: isPlaying ? 1 : 0,
-            transition: 'opacity 0.3s ease',
             zIndex: 1,
             pointerEvents: 'none'
           }}
-          onPlay={() => setIsPlaying(true)}
-          onError={() => setVideoError(true)}
+          onPlaying={() => {
+            if (isHoveredRef.current) {
+              setIsPlaying(true);
+              setIsLoading(false);
+            }
+          }}
+          onError={() => {
+            setVideoError(true);
+            setIsLoading(false);
+          }}
         />
       )}
 
-      {/* Gradient shadow scrim overlay */}
-      <div className={styles.reelGradientScrim} style={{ zIndex: 2, pointerEvents: 'none' }} />
+      {/* Reel Cover Image at z-index 2 - smoothly fades out only once video confirms playing */}
+      {effectiveCover && (
+        <img
+          src={effectiveCover}
+          alt="Instagram Reel"
+          className={styles.reelCoverImg}
+          loading="eager"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: 2,
+            opacity: isPlaying ? 0 : 1,
+            transition: 'opacity 0.25s ease-out, transform 0.35s ease',
+            pointerEvents: 'none',
+            display: 'block'
+          }}
+          onError={() => {
+            setCoverError(true);
+          }}
+        />
+      )}
 
-      {/* Top Badge: Instagram Tag / Playing Status */}
-      <div className={styles.reelTopBadge} style={{ zIndex: 3, pointerEvents: 'none' }}>
-        <SocialInstagramIcon size={14} />
+      {isLoading && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0, 0, 0, 0.35)',
+          zIndex: 4,
+          backdropFilter: 'blur(2px)',
+          pointerEvents: 'none'
+        }}>
+          <div style={{
+            width: '28px',
+            height: '28px',
+            borderRadius: '50%',
+            border: '3px solid rgba(255, 255, 255, 0.25)',
+            borderTopColor: '#f43f5e',
+            animation: 'spin 0.8s linear infinite'
+          }} />
+        </div>
+      )}
+
+      {/* Gradient shadow scrim overlay */}
+      <div className={styles.reelGradientScrim} style={{ zIndex: 3, pointerEvents: 'none' }} />
+
+      <div className={styles.reelTopBadge} style={{ zIndex: 4, pointerEvents: 'none' }}>
+        <Instagram size={14} />
         <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
     </div>
   );
-};
+});
 
 // Robust Modal Video Player component for HospitalProfile with reliable sound handling
 const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
   const videoRef = useRef(null);
   const [videoError, setVideoError] = useState(false);
-  const [directVideoUrl, setDirectVideoUrl] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
-
   const rawTarget = typeof activeReel === 'object' ? (activeReel.url || activeReel.embedUrl) : activeReel;
   const isDirect = isDirectVideoUrl(rawTarget);
-  const coverSrc = typeof activeReel === 'object' 
-    ? (activeReel.coverPhoto || activeReel.primaryCover || '') 
-    : (rawTarget ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : '');
+  const [directVideoUrl, setDirectVideoUrl] = useState(() => (isDirect ? rawTarget : ''));
+  const [isMuted, setIsMuted] = useState(false);
+
+  const customModalCover = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
+  const isInternalModalProxy = customModalCover && (customModalCover.includes('reel-cover') || customModalCover.startsWith('api/') || customModalCover.startsWith('/api/'));
+  const cleanModalCover = (!isInternalModalProxy && customModalCover) ? customModalCover : '';
+  const cloudinaryModalPoster = getCloudinaryVideoPoster(rawTarget);
+  const fallbackModalCover = rawTarget && rawTarget.includes('instagram.com')
+    ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : `/api/reel-cover?url=${encodeURIComponent(rawTarget)}`)
+    : '';
+  const coverSrc = cleanModalCover || cloudinaryModalPoster || fallbackModalCover;
 
   useEffect(() => {
     let active = true;
@@ -931,34 +1033,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     );
   };
-
-  const getEmbedUrl = (url) => {
-    if (!url) return '';
-    try {
-      if (url.includes('youtu.be/') || url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/')) {
-        let videoId = '';
-        if (url.includes('youtu.be/')) videoId = url.split('youtu.be/')[1].split('?')[0];
-        else if (url.includes('youtube.com/watch?v=')) videoId = url.split('v=')[1].split('&')[0];
-        else if (url.includes('youtube.com/shorts/')) videoId = url.split('shorts/')[1].split('?')[0];
-        return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
-      }
-      if (url.includes('instagram.com')) {
-        const match = url.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-        if (match && match[1]) {
-          const shortcode = match[1];
-          return `https://www.instagram.com/reel/${shortcode}/embed/`;
-        }
-        if (!url.includes('/embed')) {
-          const cleanUrl = url.split('?')[0].replace(/\/$/, '');
-          return `${cleanUrl}/embed/`;
-        }
-      }
-      return url;
-    } catch {
-      return url;
-    }
-  };
-
 
   // Filtered reviews belonging strictly to this hospital
   const hospitalReviews = useMemo(() => {

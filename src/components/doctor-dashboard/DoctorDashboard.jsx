@@ -56,8 +56,9 @@ import { api, API_BASE } from '../../services/api';
 import { getDoctorVerifiedReviews } from '../doctors/DoctorProfile';
 import { getDoctorProfileCompletionDetails, calculateDoctorProfileCompletion, isDoctorProfileEligibleForListing } from '../../utils/doctorProfileCompletion';
 import { DEFAULT_DOCTOR_AVATARS, isPresetAvatar } from '../../constants/doctorAvatars';
-import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
+import { parseAvailableDaysAndHours, sortTimeSlots, parseTimeToMinutes } from '../../utils/doctorScheduleUtils';
 import ExpandableReviewComment from '../common/ExpandableReviewComment';
+import BasicClinicalDetailsSection from './BasicClinicalDetailsSection';
 import logoImg from '../../assets/images/logo.png';
 import styles from './DoctorDashboard.module.css';
 
@@ -402,7 +403,9 @@ const DoctorDashboard = ({ onNavigate }) => {
       candidate = doctors[0] || {};
     }
 
-    const resolvedSpecialty = candidate.specialty || candidate.specialization || storedUser?.specialty || storedUser?.specialization || 'Cardiologist';
+    const resolvedSpecialty = candidate.specialty !== undefined
+      ? candidate.specialty
+      : (candidate.specialization !== undefined ? candidate.specialization : (storedUser?.specialty ?? storedUser?.specialization ?? ''));
     return {
       ...candidate,
       specialty: resolvedSpecialty,
@@ -411,18 +414,22 @@ const DoctorDashboard = ({ onNavigate }) => {
     };
   }, [doctors, storedUser]);
 
+  const activeDoctorRef = React.useRef(activeDoctor);
+  activeDoctorRef.current = activeDoctor;
+
   // Real-time automatic logout if doctor is deleted by Admin or Hospital
   useEffect(() => {
     const checkTargetMatchesCurrentDoctor = (targetId, targetEmail) => {
+      const currentDoc = activeDoctorRef.current;
       const tId = String(targetId || '').toLowerCase().trim();
       const tEmail = String(targetEmail || '').toLowerCase().trim();
-      const myId = String(storedUser?._id || storedUser?.id || activeDoctor?._id || activeDoctor?.id || '').toLowerCase().trim();
-      const myEmail = String(storedUser?.email || activeDoctor?.email || '').toLowerCase().trim();
+      const myId = String(storedUser?._id || storedUser?.id || currentDoc?._id || currentDoc?.id || '').toLowerCase().trim();
+      const myEmail = String(storedUser?.email || currentDoc?.email || '').toLowerCase().trim();
 
-      if (tId && (tId === myId || (activeDoctor?._id && tId === String(activeDoctor._id).toLowerCase()) || (activeDoctor?.id && tId === String(activeDoctor.id).toLowerCase()))) {
+      if (tId && (tId === myId || (currentDoc?._id && tId === String(currentDoc._id).toLowerCase()) || (currentDoc?.id && tId === String(currentDoc.id).toLowerCase()))) {
         return true;
       }
-      if (tEmail && (tEmail === myEmail || (activeDoctor?.email && tEmail === activeDoctor.email.toLowerCase().trim()))) {
+      if (tEmail && (tEmail === myEmail || (currentDoc?.email && tEmail === currentDoc.email.toLowerCase().trim()))) {
         return true;
       }
       return false;
@@ -474,9 +481,10 @@ const DoctorDashboard = ({ onNavigate }) => {
 
     // 5. Real-time doctor update handler (Available Hours / Days reflection in dashboard)
     const handleDoctorsUpdated = (e) => {
+      const currentDoc = activeDoctorRef.current;
       const updatedList = Array.isArray(e.detail) ? e.detail : [];
-      const myId = storedUser?._id || storedUser?.id || activeDoctor?._id || activeDoctor?.id;
-      const myEmail = (storedUser?.email || activeDoctor?.email || '').toLowerCase().trim();
+      const myId = storedUser?._id || storedUser?.id || currentDoc?._id || currentDoc?.id;
+      const myEmail = (storedUser?.email || currentDoc?.email || '').toLowerCase().trim();
       const meUpdated = updatedList.find(d => 
         (myId && matchesId(d, myId)) || 
         (myEmail && (d.email || '').toLowerCase().trim() === myEmail)
@@ -492,9 +500,24 @@ const DoctorDashboard = ({ onNavigate }) => {
           setProfileForm(prev => ({ ...prev, licenseNumber: meUpdated.licenseNumber || '' }));
         }
 
-        if (meUpdated.availableDays) {
+        if (meUpdated.linkedin !== undefined && isEditingFieldRef.current !== 'linkedin') {
+          setProfileForm(prev => ({ ...prev, linkedin: meUpdated.linkedin || '' }));
+        }
+        if (meUpdated.twitter !== undefined && isEditingFieldRef.current !== 'twitter') {
+          setProfileForm(prev => ({ ...prev, twitter: meUpdated.twitter || '' }));
+        }
+        if (meUpdated.instagram !== undefined && isEditingFieldRef.current !== 'instagram') {
+          setProfileForm(prev => ({ ...prev, instagram: meUpdated.instagram || '' }));
+        }
+        if (meUpdated.facebook !== undefined && isEditingFieldRef.current !== 'facebook') {
+          setProfileForm(prev => ({ ...prev, facebook: meUpdated.facebook || '' }));
+        }
+
+        if (meUpdated.availableDays !== undefined) {
           if (!isEditingAvailableDaysRef.current && (Date.now() - isLocalSlotUpdateRef.current >= 2000)) {
-            const parsed = parseAvailableDaysAndHours(meUpdated.availableDays, meUpdated.slotDuration || 30);
+            const parsed = (typeof meUpdated.availableDays === 'string' && meUpdated.availableDays.trim()) 
+              ? parseAvailableDaysAndHours(meUpdated.availableDays, meUpdated.slotDuration || 30) 
+              : { days: [], slots: [] };
             setProfileForm(prev => {
               if (!prev) return prev;
               return {
@@ -535,10 +558,12 @@ const DoctorDashboard = ({ onNavigate }) => {
             setProfileForm(prev => ({ ...prev, licenseNumber: fresh.licenseNumber || '' }));
           }
 
-          if (fresh.availableDays && !isEditingAvailableDaysRef.current) {
+          if (fresh.availableDays !== undefined && !isEditingAvailableDaysRef.current) {
             setProfileForm(prev => {
               if (prev?.availableDays === fresh.availableDays) return prev;
-              const parsed = parseAvailableDaysAndHours(fresh.availableDays, fresh.slotDuration || 30);
+              const parsed = (typeof fresh.availableDays === 'string' && fresh.availableDays.trim()) 
+                ? parseAvailableDaysAndHours(fresh.availableDays, fresh.slotDuration || 30) 
+                : { days: [], slots: [] };
               return {
                 ...prev,
                 availableDays: fresh.availableDays,
@@ -582,7 +607,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       window.removeEventListener('sehat_doctors_updated', handleDoctorsUpdated);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [storedUser, activeDoctor, executeDoctorLogout]);
+  }, [storedUser?._id, storedUser?.id, storedUser?.email, executeDoctorLogout]);
 
   // Real-time verified patient reviews & rating calculation (strictly synchronized with public Doctor Profile)
   const doctorVerifiedReviews = React.useMemo(() => {
@@ -600,9 +625,17 @@ const DoctorDashboard = ({ onNavigate }) => {
   const doctorLiveFaqs = React.useMemo(() => {
     const docId = String(activeDoctor?._id || activeDoctor?.id || '');
     const docName = (activeDoctor?.name || '').toLowerCase().trim();
-    const docHosp = (activeDoctor?.hospital || '').toLowerCase().trim();
 
-    // 1. FAQs from platform Admin FAQs manager targeted specifically to this doctor
+    // 1. Embedded FAQs configured directly on the doctor profile by Admin
+    const embedded = (Array.isArray(activeDoctor?.faqs) && activeDoctor.faqs.length > 0)
+      ? activeDoctor.faqs.map(f => ({
+          q: f.q || f.question,
+          a: f.a || f.answer,
+          source: 'Doctor Profile'
+        }))
+      : [];
+
+    // 2. FAQs from platform Admin FAQs manager targeted specifically to this doctor
     const specificTargeted = (faqs || [])
       .filter(f => f.isActive !== false && f.targetType === 'doctor' && (
         (f.targetId && String(f.targetId) === docId) ||
@@ -614,28 +647,18 @@ const DoctorDashboard = ({ onNavigate }) => {
         source: 'Doctor FAQ'
       }));
 
-    // 2. FAQs from platform Admin FAQs manager targeted to the doctor's affiliated hospital
-    const hospitalTargeted = (faqs || [])
-      .filter(f => f.isActive !== false && f.targetType === 'hospital' && docHosp && (
-        (f.targetName && f.targetName.toLowerCase().trim() === docHosp) ||
-        (activeDoctor?.hospitalId && f.targetId && String(f.targetId) === String(activeDoctor.hospitalId))
-      ))
-      .map(f => ({
-        q: f.question || f.q,
-        a: f.answer || f.a,
-        source: `${activeDoctor?.hospital || 'Hospital'} FAQ`
-      }));
+    // Deduplicate by question text so identical questions are never repeated
+    const seen = new Set();
+    const result = [];
+    for (const item of [...embedded, ...specificTargeted]) {
+      const key = (item.q || '').trim().toLowerCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        result.push(item);
+      }
+    }
 
-    // 3. Embedded FAQs configured directly on the doctor profile by Admin
-    const embedded = (Array.isArray(activeDoctor?.faqs) && activeDoctor.faqs.length > 0)
-      ? activeDoctor.faqs.map(f => ({
-          q: f.q || f.question,
-          a: f.a || f.answer,
-          source: 'Doctor Profile'
-        }))
-      : [];
-
-    return [...specificTargeted, ...hospitalTargeted, ...embedded];
+    return result;
   }, [activeDoctor, faqs]);
 
   // Status: 'Available' | 'Busy' | 'On Leave'
@@ -850,18 +873,18 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Dedicated local state for Clinic Desk & Helpline Support (isolated from continuous profileForm sync to eliminate flickering/lag)
   const [helplineDraft, setHelplineDraft] = useState(() => ({
-    number: activeDoctor?.helplineNumber || '+91 98765 43210',
-    days: activeDoctor?.helplineDays || 'Mon – Sat',
-    time: activeDoctor?.helplineTime || '8:00 AM – 8:00 PM'
+    number: activeDoctor?.helplineNumber || '',
+    days: activeDoctor?.helplineDays || '',
+    time: activeDoctor?.helplineTime || ''
   }));
 
   // Synchronize helplineDraft strictly when doctor identity changes
   React.useEffect(() => {
     if (activeDoctor) {
       setHelplineDraft({
-        number: activeDoctor.helplineNumber || '+91 98765 43210',
-        days: activeDoctor.helplineDays || 'Mon – Sat',
-        time: activeDoctor.helplineTime || '8:00 AM – 8:00 PM'
+        number: activeDoctor.helplineNumber || '',
+        days: activeDoctor.helplineDays || '',
+        time: activeDoctor.helplineTime || ''
       });
     }
   }, [activeDoctor?._id, activeDoctor?.id]);
@@ -869,52 +892,23 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Dedicated local state for Basic Clinical & Consultation Details inputs (isolated from continuous profileForm sync to eliminate flickering/lag)
   const [clinicalDraft, setClinicalDraft] = useState(() => ({
     name: activeDoctor?.name || '',
-    specialty: activeDoctor?.specialization || activeDoctor?.specialty || 'General Medicine',
+    specialty: activeDoctor?.specialization ?? activeDoctor?.specialty ?? '',
     jobTitle: activeDoctor?.jobTitle || '',
-    experience: activeDoctor?.experience !== undefined ? activeDoctor.experience : 5,
+    experience: (activeDoctor?.experience !== undefined && activeDoctor?.experience !== null && activeDoctor?.experience !== '') ? activeDoctor.experience : '',
     hospital: activeDoctor?.hospital || '',
     degree: activeDoctor?.degree || activeDoctor?.qualifications || '',
-    price: activeDoctor?.fees ?? activeDoctor?.price ?? 500,
+    price: (activeDoctor?.fees !== undefined && activeDoctor?.fees !== null && activeDoctor?.fees !== '') ? activeDoctor.fees : ((activeDoctor?.price !== undefined && activeDoctor?.price !== null && activeDoctor?.price !== '') ? activeDoctor.price : ''),
     phone: (() => {
       const raw = String(activeDoctor?.phone || activeDoctor?.contact_number || '').replace(/\D/g, '');
       return raw.length > 10 ? raw.slice(-10) : raw;
     })(),
     licenseNumber: activeDoctor?.licenseNumber || '',
-    availableDays: activeDoctor?.availableDays || 'Mon - Sat (10am - 4pm)'
+    availableDays: activeDoctor?.availableDays || ''
   }));
 
-  // Synchronize clinicalDraft when doctor identity changes or activeDoctor is populated/updated from admin/DB
-  React.useEffect(() => {
-    if (activeDoctor) {
-      setClinicalDraft(prev => {
-        // If doctor identity changed, completely reinitialize
-        const prevId = initialDoctorIdRef.current;
-        const curId = String(activeDoctor._id || activeDoctor.id || '');
-        if (!prev || !prevId || prevId !== curId) {
-          return {
-            name: activeDoctor.name || '',
-            specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
-            jobTitle: activeDoctor.jobTitle || '',
-            experience: activeDoctor.experience !== undefined ? activeDoctor.experience : 5,
-            hospital: activeDoctor.hospital || '',
-            degree: activeDoctor.degree || activeDoctor.qualifications || '',
-            price: activeDoctor.fees ?? activeDoctor.price ?? 500,
-            phone: (() => {
-              const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
-              return raw.length > 10 ? raw.slice(-10) : raw;
-            })(),
-            licenseNumber: activeDoctor.licenseNumber || '',
-            availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
-          };
-        }
-        // If same doctor and licenseNumber arrived or changed, sync it if not being actively edited
-        if (activeDoctor.licenseNumber !== undefined && activeDoctor.licenseNumber !== prev.licenseNumber && isEditingFieldRef.current !== 'licenseNumber') {
-          return { ...prev, licenseNumber: activeDoctor.licenseNumber || '' };
-        }
-        return prev;
-      });
-    }
-  }, [activeDoctor?._id, activeDoctor?.id, activeDoctor?.licenseNumber]);
+  const clinicalDraftRef = useRef(clinicalDraft);
+  // clinicalDraftRef is kept continuously updated by BasicClinicalDetailsSection draftRef
+
 
   // Schedule & Time Slots Management state (persisted across refresh)
   const [slotConfigMode, setSlotConfigModeState] = useState(() => {
@@ -958,11 +952,32 @@ const DoctorDashboard = ({ onNavigate }) => {
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   });
+  const [calendarViewDate, setCalendarViewDate] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
   const [newSlotTime, setNewSlotTime] = useState('');
   const [slotHour, setSlotHour] = useState('04');
   const [slotMin, setSlotMin] = useState('00');
   const [slotPeriod, setSlotPeriod] = useState('PM');
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
+  // Auto-sync availability status to 'On Leave' if today is marked as leave in calendar
+  React.useEffect(() => {
+    if (!todayDateStr) return;
+    const todayConfig = profileForm.dateWiseSlots?.[todayDateStr];
+    const isTodayLeave = todayConfig === 'off' || todayConfig?.isOff === true;
+    if (isTodayLeave && availabilityStatus !== 'On Leave') {
+      setAvailabilityStatus('On Leave');
+      const docId = activeDoctor?._id || activeDoctor?.id;
+      if (docId) {
+        updateDoctor(docId, {
+          availabilityStatus: 'On Leave',
+          available: false
+        }).catch(() => {});
+      }
+    }
+  }, [todayDateStr, profileForm.dateWiseSlots, availabilityStatus, activeDoctor?._id, activeDoctor?.id]);
 
   // Track and restore scroll position reliably across refreshes and tab reloads
   const isRestoringDashboardScrollRef = React.useRef(false);
@@ -1130,7 +1145,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, [activeDoctor?.id, activeDoctor?._id]);
 
   const lookupId = activeDoctor?._id || activeDoctor?.id || (doctors[0]?._id || doctors[0]?.id || '1');
-  const lookupEmail = activeDoctor?.email || storedUser?.email || (doctors[0]?.email || 'dr.rahul@sehatbuddy.com');
+  const lookupEmail = activeDoctor?.email || storedUser?.email || (doctors[0]?.email || '');
   const docFee = Number(activeDoctor?.price ?? activeDoctor?.fees) || 800;
 
   // Fetch remote appointments from database in real time
@@ -1154,8 +1169,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                 id: apt._id || apt.id,
                 _id: apt._id,
                 patientName: apt.userData?.name || 'Patient',
-                age: apt.userData?.age || 30,
-                gender: apt.userData?.gender || 'Male',
+                age: (apt.userData?.age && !isNaN(parseInt(apt.userData.age, 10)) && parseInt(apt.userData.age, 10) > 0) ? parseInt(apt.userData.age, 10) : null,
+                gender: (apt.userData?.gender && apt.userData.gender !== 'Not specified' && apt.userData.gender !== 'Not Selected') ? apt.userData.gender : null,
                 time: apt.slotTime || '02:00 PM',
                 date: apt.slotDate || resolvedDateStr,
                 dateStr: resolvedDateStr,
@@ -1166,7 +1181,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                 symptoms: apt.symptoms || apt.userData?.symptoms || 'Clinical Consultation Booking',
                 status: isCompleted ? 'Completed' : (apt.cancelled ? 'Cancelled' : (apt.status || 'Confirmed')),
                 isCompleted,
-                phone: apt.userData?.phone || apt.phone || '+91 98000 00000',
+                phone: (apt.userData?.phone || apt.phone || '').replace('+91 98000 00000', '').trim(),
                 isRealtime: true,
                 createdAt: apt.createdAt || apt.date
               };
@@ -1191,8 +1206,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                       id: b.id || b._id,
                       _id: b._id,
                       patientName: b.patientName || 'Guest Patient',
-                      age: b.age || 30,
-                      gender: b.gender || 'Not specified',
+                      age: (b.age && !isNaN(parseInt(b.age, 10)) && parseInt(b.age, 10) > 0) ? parseInt(b.age, 10) : null,
+                      gender: (b.gender && b.gender !== 'Not specified' && b.gender !== 'Not Selected') ? b.gender : null,
                       time: b.slotTime || '10:00 AM',
                       date: b.slotDate || resolvedDateStr,
                       dateStr: resolvedDateStr,
@@ -1203,7 +1218,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                       symptoms: b.symptoms || 'General Consultation',
                       status: isCompleted ? 'Completed' : (b.status || 'Confirmed'),
                       isCompleted,
-                      phone: b.patientPhone || '+91 98000 00000',
+                      phone: (b.patientPhone || '').replace('+91 98000 00000', '').trim(),
                       isRealtime: true,
                       createdAt: b.bookedAt || new Date().toISOString()
                     };
@@ -1439,11 +1454,11 @@ const DoctorDashboard = ({ onNavigate }) => {
       setProfileForm({
         ...activeDoctor,
         name: activeDoctor.name || '',
-        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
-        specialization: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
-        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
-        fees: activeDoctor.fees ?? activeDoctor.price ?? 500,
-        experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : (activeDoctor.experience || 5),
+        specialty: activeDoctor.specialization ?? activeDoctor.specialty ?? '',
+        specialization: activeDoctor.specialization ?? activeDoctor.specialty ?? '',
+        price: (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '') ? activeDoctor.fees : ((activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '') ? activeDoctor.price : ''),
+        fees: (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '') ? activeDoctor.fees : ((activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '') ? activeDoctor.price : ''),
+        experience: (activeDoctor.experience !== undefined && activeDoctor.experience !== null && activeDoctor.experience !== '') ? (typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : activeDoctor.experience) : '',
         licenseNumber: activeDoctor.licenseNumber || '',
         jobTitle: activeDoctor.jobTitle || '',
         hospital: activeDoctor.hospital || '',
@@ -1465,9 +1480,9 @@ const DoctorDashboard = ({ onNavigate }) => {
         reels: Array.isArray(activeDoctor.reels) ? activeDoctor.reels : [],
         youtube_videos: Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : [],
         availableDays: activeDoctor.availableDays || '',
-        helplineNumber: activeDoctor.helplineNumber || '+91 98765 43210',
-        helplineDays: activeDoctor.helplineDays || 'Mon – Sat',
-        helplineTime: activeDoctor.helplineTime || '8:00 AM – 8:00 PM',
+        helplineNumber: activeDoctor.helplineNumber || '',
+        helplineDays: activeDoctor.helplineDays || '',
+        helplineTime: activeDoctor.helplineTime || '',
         scheduleDays: Array.isArray(activeDoctor.scheduleDays) 
           ? activeDoctor.scheduleDays 
           : [],
@@ -1480,18 +1495,18 @@ const DoctorDashboard = ({ onNavigate }) => {
       });
       setClinicalDraft({
         name: activeDoctor.name || '',
-        specialty: activeDoctor.specialization || activeDoctor.specialty || 'General Medicine',
+        specialty: activeDoctor.specialization ?? activeDoctor.specialty ?? '',
         jobTitle: activeDoctor.jobTitle || '',
-        experience: typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : (activeDoctor.experience || 5),
+        experience: (activeDoctor.experience !== undefined && activeDoctor.experience !== null && activeDoctor.experience !== '') ? (typeof activeDoctor.experience === 'string' ? parseInt(activeDoctor.experience, 10) : activeDoctor.experience) : '',
         hospital: activeDoctor.hospital || '',
         degree: activeDoctor.degree || activeDoctor.qualifications || '',
-        price: activeDoctor.fees ?? activeDoctor.price ?? 500,
+        price: (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '') ? activeDoctor.fees : ((activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '') ? activeDoctor.price : ''),
         phone: (() => {
           const raw = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
           return raw.length > 10 ? raw.slice(-10) : raw;
         })(),
         licenseNumber: activeDoctor.licenseNumber || '',
-        availableDays: activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)'
+        availableDays: activeDoctor.availableDays || ''
       });
     }
   }, [activeDoctor?.id, activeDoctor?._id, activeDoctor?.email]);
@@ -1511,15 +1526,15 @@ const DoctorDashboard = ({ onNavigate }) => {
       const next = { ...prev };
 
       // 1. Name
-      if (activeDoctor.name !== prevRemote.name && activeDoctor.name && isEditingFieldRef.current !== 'name') {
-        next.name = activeDoctor.name;
+      if (activeDoctor.name !== prevRemote.name && isEditingFieldRef.current !== 'name') {
+        next.name = activeDoctor.name || '';
         changed = true;
       }
 
       // 2. Specialty & Specialization
-      const incomingSpec = activeDoctor.specialization || activeDoctor.specialty || '';
-      const prevRemoteSpec = prevRemote.specialization || prevRemote.specialty || '';
-      if (incomingSpec !== prevRemoteSpec && incomingSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
+      const incomingSpec = activeDoctor.specialization !== undefined ? activeDoctor.specialization : (activeDoctor.specialty !== undefined ? activeDoctor.specialty : '');
+      const prevRemoteSpec = prevRemote.specialization !== undefined ? prevRemote.specialization : (prevRemote.specialty !== undefined ? prevRemote.specialty : '');
+      if (incomingSpec !== prevRemoteSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
         next.specialty = incomingSpec;
         next.specialization = incomingSpec;
         changed = true;
@@ -1532,9 +1547,9 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
 
       // 4. Experience
-      const incomingExp = parseInt(activeDoctor.experience ?? activeDoctor.experienceYears, 10);
-      const prevRemoteExp = parseInt(prevRemote.experience ?? prevRemote.experienceYears, 10);
-      if (!isNaN(incomingExp) && incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
+      const incomingExp = (activeDoctor.experience !== undefined && activeDoctor.experience !== null && activeDoctor.experience !== '') ? parseInt(activeDoctor.experience, 10) : '';
+      const prevRemoteExp = (prevRemote.experience !== undefined && prevRemote.experience !== null && prevRemote.experience !== '') ? parseInt(prevRemote.experience, 10) : '';
+      if (incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
         next.experience = incomingExp;
         changed = true;
       }
@@ -1546,18 +1561,18 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
 
       // 6. Degree & Qualifications
-      const incomingDegree = activeDoctor.degree || activeDoctor.qualifications || '';
-      const prevRemoteDegree = prevRemote.degree || prevRemote.qualifications || '';
-      if (incomingDegree !== prevRemoteDegree && incomingDegree && isEditingFieldRef.current !== 'degree') {
+      const incomingDegree = activeDoctor.degree !== undefined ? activeDoctor.degree : (activeDoctor.qualifications || '');
+      const prevRemoteDegree = prevRemote.degree !== undefined ? prevRemote.degree : (prevRemote.qualifications || '');
+      if (incomingDegree !== prevRemoteDegree && isEditingFieldRef.current !== 'degree') {
         next.degree = incomingDegree;
         next.qualifications = incomingDegree;
         changed = true;
       }
 
       // 7. Consultation Fee / Price
-      const incomingPrice = Number(activeDoctor.fees ?? activeDoctor.price);
-      const prevRemotePrice = Number(prevRemote.fees ?? prevRemote.price);
-      if (!isNaN(incomingPrice) && incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
+      const incomingPrice = (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '') ? Number(activeDoctor.fees) : ((activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '') ? Number(activeDoctor.price) : '');
+      const prevRemotePrice = (prevRemote.fees !== undefined && prevRemote.fees !== null && prevRemote.fees !== '') ? Number(prevRemote.fees) : ((prevRemote.price !== undefined && prevRemote.price !== null && prevRemote.price !== '') ? Number(prevRemote.price) : '');
+      if (incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
         next.price = incomingPrice;
         next.fees = incomingPrice;
         changed = true;
@@ -1568,7 +1583,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       const incomingPhone = rawInPhone.length > 10 ? rawInPhone.slice(-10) : rawInPhone;
       const rawPrevRemotePhone = String(prevRemote.phone || prevRemote.contact_number || '').replace(/\D/g, '');
       const prevRemotePhone = rawPrevRemotePhone.length > 10 ? rawPrevRemotePhone.slice(-10) : rawPrevRemotePhone;
-      if (incomingPhone !== prevRemotePhone && incomingPhone && isEditingFieldRef.current !== 'phone') {
+      if (incomingPhone !== prevRemotePhone && isEditingFieldRef.current !== 'phone') {
         next.phone = incomingPhone;
         next.contact_number = incomingPhone;
         changed = true;
@@ -1582,12 +1597,14 @@ const DoctorDashboard = ({ onNavigate }) => {
 
       // 10. Available Days / Hours
       if (
-        activeDoctor.availableDays &&
+        activeDoctor.availableDays !== undefined &&
         activeDoctor.availableDays !== prevRemote.availableDays &&
         !isEditingAvailableDaysRef.current
       ) {
         next.availableDays = activeDoctor.availableDays;
-        const parsed = parseAvailableDaysAndHours(activeDoctor.availableDays, activeDoctor.slotDuration || 30);
+        const parsed = (typeof activeDoctor.availableDays === 'string' && activeDoctor.availableDays.trim()) 
+          ? parseAvailableDaysAndHours(activeDoctor.availableDays, activeDoctor.slotDuration || 30) 
+          : { days: [], slots: [] };
         next.scheduleDays = parsed.days;
         next.availableSlots = parsed.slots;
         changed = true;
@@ -1676,24 +1693,24 @@ const DoctorDashboard = ({ onNavigate }) => {
       }
 
       // 18. Credentials (Awards, Certifications, Memberships, Career, Tags)
-      if (Date.now() - isLocalCredentialUpdateRef.current >= 2000) {
-        if (Array.isArray(activeDoctor.awards) && JSON.stringify(activeDoctor.awards) !== JSON.stringify(prevRemote.awards)) {
+      if (Date.now() - isLocalCredentialUpdateRef.current >= 5000) {
+        if (Array.isArray(activeDoctor.awards) && JSON.stringify(activeDoctor.awards) !== JSON.stringify(prevRemote.awards) && JSON.stringify(activeDoctor.awards) !== JSON.stringify(prev.awards)) {
           next.awards = activeDoctor.awards;
           changed = true;
         }
-        if (Array.isArray(activeDoctor.certifications) && JSON.stringify(activeDoctor.certifications) !== JSON.stringify(prevRemote.certifications)) {
+        if (Array.isArray(activeDoctor.certifications) && JSON.stringify(activeDoctor.certifications) !== JSON.stringify(prevRemote.certifications) && JSON.stringify(activeDoctor.certifications) !== JSON.stringify(prev.certifications)) {
           next.certifications = activeDoctor.certifications;
           changed = true;
         }
-        if (Array.isArray(activeDoctor.memberships) && JSON.stringify(activeDoctor.memberships) !== JSON.stringify(prevRemote.memberships)) {
+        if (Array.isArray(activeDoctor.memberships) && JSON.stringify(activeDoctor.memberships) !== JSON.stringify(prevRemote.memberships) && JSON.stringify(activeDoctor.memberships) !== JSON.stringify(prev.memberships)) {
           next.memberships = activeDoctor.memberships;
           changed = true;
         }
-        if (Array.isArray(activeDoctor.careerExperience) && JSON.stringify(activeDoctor.careerExperience) !== JSON.stringify(prevRemote.careerExperience)) {
+        if (Array.isArray(activeDoctor.careerExperience) && JSON.stringify(activeDoctor.careerExperience) !== JSON.stringify(prevRemote.careerExperience) && JSON.stringify(activeDoctor.careerExperience) !== JSON.stringify(prev.careerExperience)) {
           next.careerExperience = activeDoctor.careerExperience;
           changed = true;
         }
-        if (Array.isArray(activeDoctor.tags) && JSON.stringify(activeDoctor.tags) !== JSON.stringify(prevRemote.tags)) {
+        if (Array.isArray(activeDoctor.tags) && JSON.stringify(activeDoctor.tags) !== JSON.stringify(prevRemote.tags) && JSON.stringify(activeDoctor.tags) !== JSON.stringify(prev.tags)) {
           next.tags = activeDoctor.tags;
           changed = true;
         }
@@ -1712,13 +1729,13 @@ const DoctorDashboard = ({ onNavigate }) => {
         nextDraft.licenseNumber = activeDoctor.licenseNumber || '';
         draftChanged = true;
       }
-      if (activeDoctor.name && activeDoctor.name !== prevRemote.name && isEditingFieldRef.current !== 'name') {
-        nextDraft.name = activeDoctor.name;
+      if (activeDoctor.name !== undefined && activeDoctor.name !== prevRemote.name && isEditingFieldRef.current !== 'name') {
+        nextDraft.name = activeDoctor.name || '';
         draftChanged = true;
       }
-      const incomingSpec = activeDoctor.specialization || activeDoctor.specialty || '';
-      const prevRemoteSpec = prevRemote.specialization || prevRemote.specialty || '';
-      if (incomingSpec && incomingSpec !== prevRemoteSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
+      const incomingSpec = activeDoctor.specialization !== undefined ? activeDoctor.specialization : (activeDoctor.specialty !== undefined ? activeDoctor.specialty : '');
+      const prevRemoteSpec = prevRemote.specialization !== undefined ? prevRemote.specialization : (prevRemote.specialty !== undefined ? prevRemote.specialty : '');
+      if (incomingSpec !== prevRemoteSpec && isEditingFieldRef.current !== 'specialty' && isEditingFieldRef.current !== 'specialization') {
         nextDraft.specialty = incomingSpec;
         draftChanged = true;
       }
@@ -1726,9 +1743,9 @@ const DoctorDashboard = ({ onNavigate }) => {
         nextDraft.jobTitle = activeDoctor.jobTitle || '';
         draftChanged = true;
       }
-      const incomingExp = parseInt(activeDoctor.experience ?? activeDoctor.experienceYears, 10);
-      const prevRemoteExp = parseInt(prevRemote.experience ?? prevRemote.experienceYears, 10);
-      if (!isNaN(incomingExp) && incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
+      const incomingExp = (activeDoctor.experience !== undefined && activeDoctor.experience !== null && activeDoctor.experience !== '') ? parseInt(activeDoctor.experience, 10) : '';
+      const prevRemoteExp = (prevRemote.experience !== undefined && prevRemote.experience !== null && prevRemote.experience !== '') ? parseInt(prevRemote.experience, 10) : '';
+      if (incomingExp !== prevRemoteExp && isEditingFieldRef.current !== 'experience') {
         nextDraft.experience = incomingExp;
         draftChanged = true;
       }
@@ -1736,15 +1753,15 @@ const DoctorDashboard = ({ onNavigate }) => {
         nextDraft.hospital = activeDoctor.hospital;
         draftChanged = true;
       }
-      const incomingDegree = activeDoctor.degree || activeDoctor.qualifications || '';
-      const prevRemoteDegree = prevRemote.degree || prevRemote.qualifications || '';
-      if (incomingDegree && incomingDegree !== prevRemoteDegree && isEditingFieldRef.current !== 'degree') {
+      const incomingDegree = activeDoctor.degree !== undefined ? activeDoctor.degree : (activeDoctor.qualifications || '');
+      const prevRemoteDegree = prevRemote.degree !== undefined ? prevRemote.degree : (prevRemote.qualifications || '');
+      if (incomingDegree !== prevRemoteDegree && isEditingFieldRef.current !== 'degree') {
         nextDraft.degree = incomingDegree;
         draftChanged = true;
       }
-      const incomingPrice = Number(activeDoctor.fees ?? activeDoctor.price);
-      const prevRemotePrice = Number(prevRemote.fees ?? prevRemote.price);
-      if (!isNaN(incomingPrice) && incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
+      const incomingPrice = (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '') ? Number(activeDoctor.fees) : ((activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '') ? Number(activeDoctor.price) : '');
+      const prevRemotePrice = (prevRemote.fees !== undefined && prevRemote.fees !== null && prevRemote.fees !== '') ? Number(prevRemote.fees) : ((prevRemote.price !== undefined && prevRemote.price !== null && prevRemote.price !== '') ? Number(prevRemote.price) : '');
+      if (incomingPrice !== prevRemotePrice && isEditingFieldRef.current !== 'price') {
         nextDraft.price = incomingPrice;
         draftChanged = true;
       }
@@ -1752,11 +1769,11 @@ const DoctorDashboard = ({ onNavigate }) => {
       const incomingPhone = rawInPhone.length > 10 ? rawInPhone.slice(-10) : rawInPhone;
       const rawPrevRemotePhone = String(prevRemote.phone || prevRemote.contact_number || '').replace(/\D/g, '');
       const prevRemotePhone = rawPrevRemotePhone.length > 10 ? rawPrevRemotePhone.slice(-10) : rawPrevRemotePhone;
-      if (incomingPhone && incomingPhone !== prevRemotePhone && isEditingFieldRef.current !== 'phone') {
+      if (incomingPhone !== undefined && incomingPhone !== prevRemotePhone && isEditingFieldRef.current !== 'phone') {
         nextDraft.phone = incomingPhone;
         draftChanged = true;
       }
-      if (activeDoctor.availableDays && activeDoctor.availableDays !== prevRemote.availableDays && !isEditingAvailableDaysRef.current) {
+      if (activeDoctor.availableDays !== undefined && activeDoctor.availableDays !== prevRemote.availableDays && !isEditingAvailableDaysRef.current) {
         nextDraft.availableDays = activeDoctor.availableDays;
         draftChanged = true;
       }
@@ -1765,10 +1782,12 @@ const DoctorDashboard = ({ onNavigate }) => {
     });
   }, [activeDoctor, isSavingAbout]);
 
-  // Tags / Badges handlers (reflects instantly in real time)
-  const handleAddTag = (e) => {
-    e?.preventDefault();
-    const tagText = (newTagInput || '').trim();
+  // Tags / Badges handlers (reflects instantly in real time without flickering)
+  const handleAddTag = (customOrEvent) => {
+    if (customOrEvent && typeof customOrEvent.preventDefault === 'function') {
+      customOrEvent.preventDefault();
+    }
+    const tagText = (typeof customOrEvent === 'string' ? customOrEvent : (newTagInput || '')).trim();
     if (!tagText) return;
     const current = Array.isArray(profileForm.tags) ? profileForm.tags : getDefaultDoctorTags(activeDoctor);
     if (current.includes(tagText)) {
@@ -1778,17 +1797,26 @@ const DoctorDashboard = ({ onNavigate }) => {
     isLocalCredentialUpdateRef.current = Date.now();
     const updated = [...current, tagText];
     setProfileForm(prev => ({ ...prev, tags: updated }));
-    setNewTagInput('');
-    updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
-    showToast(`Badge "${tagText}" added!`);
+    if (typeof customOrEvent !== 'string') {
+      setNewTagInput('');
+    }
+    const docId = activeDoctor._id || activeDoctor.id;
+    if (docId) {
+      updateDoctor(docId, { tags: updated }).catch(() => {});
+    }
+    showToast(`Added badge: "${tagText}"`);
   };
 
   const handleRemoveTag = (tagToRemove) => {
+    if (!tagToRemove) return;
     isLocalCredentialUpdateRef.current = Date.now();
     const current = Array.isArray(profileForm.tags) ? profileForm.tags : getDefaultDoctorTags(activeDoctor);
     const updated = current.filter(t => t !== tagToRemove);
     setProfileForm(prev => ({ ...prev, tags: updated }));
-    updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
+    const docId = activeDoctor._id || activeDoctor.id;
+    if (docId) {
+      updateDoctor(docId, { tags: updated }).catch(() => {});
+    }
     showToast(`Badge "${tagToRemove}" removed.`);
   };
 
@@ -2436,60 +2464,58 @@ const DoctorDashboard = ({ onNavigate }) => {
     Sun: 'Sunday'
   };
 
-  // Helper to get slots for a specific day
-  const getDaySlots = (dayKey) => {
-    if (!dayKey) return [];
-    const dayConfig = profileForm.dayWiseSlots?.[dayKey];
-    if (dayConfig === 'off' || dayConfig?.isOff === true) return [];
-    if (Array.isArray(dayConfig)) return dayConfig;
-    if (Array.isArray(dayConfig?.slots)) return dayConfig.slots;
-    // Default fallback to configured availableSlots
-    return Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : [];
+  // Live calendar date slots helpers
+  const getDateSlots = (dateStr) => {
+    if (!dateStr) return [];
+    const dateConfig = profileForm.dateWiseSlots?.[dateStr];
+    if (dateConfig === 'off' || dateConfig?.isOff === true) return [];
+    if (Array.isArray(dateConfig)) return sortTimeSlots(dateConfig);
+    if (Array.isArray(dateConfig?.slots)) return sortTimeSlots(dateConfig.slots);
+    return [];
   };
 
-  const selectDayForSlots = (dayKey) => {
-    setSelectedScheduleDay(dayKey);
-    setSlotConfigMode('day');
+  const isDateOnLeave = (dateStr) => {
+    if (!dateStr) return false;
+    const dateConfig = profileForm.dateWiseSlots?.[dateStr];
+    return dateConfig === 'off' || dateConfig?.isOff === true;
   };
 
-  // Helper to get slots for current mode (Day / Date)
-  const getCurrentModeSlots = () => {
-    if (slotConfigMode === 'date') {
-      const dateConfig = profileForm.dateWiseSlots?.[selectedScheduleDate];
-      if (dateConfig === 'off' || dateConfig?.isOff === true) return [];
-      if (Array.isArray(dateConfig)) return dateConfig;
-      if (Array.isArray(dateConfig?.slots)) return dateConfig.slots;
-      // Inherited from day-wise or default
-      const dayOfWeekShort = new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-      return getDaySlots(dayOfWeekShort);
-    }
-    // Default is day mode
-    return getDaySlots(selectedScheduleDay);
-  };
+  const handleToggleDateLeave = async (targetDate = selectedScheduleDate) => {
+    if (!targetDate) return;
+    isLocalSlotUpdateRef.current = Date.now();
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    const isCurrentlyOff = isDateOnLeave(targetDate);
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
 
-  const isDayOff = (day) => {
-    if (!day) return false;
-    const dayConfig = profileForm.dayWiseSlots?.[day];
-    if (dayConfig === 'off' || dayConfig?.isOff === true) return true;
-    const currentDays = Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    if (!currentDays.includes(day) && (dayConfig === undefined || dayConfig === null)) return true;
-    return false;
-  };
-
-  const isCurrentModeOff = () => {
-    if (slotConfigMode === 'date') {
-      const dateConfig = profileForm.dateWiseSlots?.[selectedScheduleDate];
-      if (dateConfig === 'off' || dateConfig?.isOff === true) return true;
-      if (dateConfig === undefined) {
-        const dayOfWeekShort = new Date(selectedScheduleDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
-        return isDayOff(dayOfWeekShort);
+    if (isCurrentlyOff) {
+      delete newDateWise[targetDate];
+      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+      if (targetDate === todayDateStr && availabilityStatus === 'On Leave') {
+        handleSetAvailabilityStatus('Available');
       }
-      return false;
+      if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+      showToast(`Leave removed for ${targetDate}. Doctor is open on this day.`);
+    } else {
+      newDateWise[targetDate] = 'off';
+      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+
+      // "as soon as doctor leaves comes availability status changes to leave....."
+      if (targetDate === todayDateStr) {
+        handleSetAvailabilityStatus('On Leave');
+      }
+      if (docId) {
+        const payload = { dateWiseSlots: newDateWise };
+        if (targetDate === todayDateStr) {
+          payload.availabilityStatus = 'On Leave';
+          payload.available = false;
+        }
+        await updateDoctor(docId, payload);
+      }
+      showToast(`Marked ${targetDate} as Leave. Doctor availability status set to On Leave.`);
     }
-    return isDayOff(selectedScheduleDay);
   };
 
-  const handleAddSlot = async (customSlot) => {
+  const handleAddSlotToDate = async (customSlot, targetDate = selectedScheduleDate) => {
     let slot = '';
     if (typeof customSlot === 'string' && customSlot.trim()) {
       slot = customSlot.trim();
@@ -2499,300 +2525,126 @@ const DoctorDashboard = ({ onNavigate }) => {
       slot = `${slotHour}:${slotMin} ${slotPeriod}`;
     }
 
-    if (!slot) return;
+    if (!slot || !targetDate) return;
     isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
+    const currentSlots = getDateSlots(targetDate);
 
-    if (slotConfigMode === 'date') {
-      const currentSlots = getCurrentModeSlots();
-      if (currentSlots.includes(slot)) {
-        showToast(`Slot "${slot}" already exists for date ${selectedScheduleDate}!`);
-        return;
-      }
-      const updated = [...currentSlots, slot];
-      const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
-      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
-      showToast(`Slot "${slot}" added for date ${selectedScheduleDate}!`);
-    } else {
-      // Day mode: Adds strictly to the selected day!
-      const targetDay = selectedScheduleDay;
-      const currentSlots = getDaySlots(targetDay);
-      if (currentSlots.includes(slot)) {
-        showToast(`Slot "${slot}" already exists for ${DAY_NAME_MAP[targetDay] || targetDay}!`);
-        return;
-      }
-      const updated = [...currentSlots, slot];
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: updated };
-      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (!newScheduleDays.includes(targetDay)) {
-        newScheduleDays.push(targetDay);
-      }
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }).catch(() => {});
-      showToast(`Slot "${slot}" added to ${DAY_NAME_MAP[targetDay] || targetDay}!`);
+    if (currentSlots.includes(slot)) {
+      showToast(`Slot "${slot}" already exists for ${targetDate}!`);
+      return;
     }
+
+    const updated = sortTimeSlots([...currentSlots, slot]);
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}), [targetDate]: updated };
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise, availableSlots: updated }));
+    if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise, availableSlots: updated }).catch(() => {});
+    showToast(`Slot "${slot}" added for ${targetDate}!`);
     setNewSlotTime('');
   };
 
-  const handleDeleteSlot = async (slotToRemove) => {
+  const handleDeleteSlotFromDate = async (slotToRemove, targetDate = selectedScheduleDate) => {
+    if (!targetDate) return;
     isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
-
-    if (slotConfigMode === 'date') {
-      const currentSlots = getCurrentModeSlots();
-      const updated = currentSlots.filter(s => s !== slotToRemove);
-      const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: updated };
-      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
-    } else {
-      // Day mode: Removes strictly from the selected day without layout flickering
-      const targetDay = selectedScheduleDay;
-      const currentSlots = getDaySlots(targetDay);
-      const updated = currentSlots.filter(s => s !== slotToRemove);
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: updated };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise }).catch(() => {});
-    }
-  };
-
-  const handleApplySlotPreset = async (presetSlots, presetTitle) => {
-    isLocalSlotUpdateRef.current = Date.now();
-    const docId = activeDoctor?._id || activeDoctor?.id;
-
-    if (slotConfigMode === 'date') {
-      const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: presetSlots };
-      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
-      showToast(`Applied "${presetTitle}" to date ${selectedScheduleDate} (${presetSlots.length} slots)`);
-    } else {
-      // Day mode: Applies strictly to the selected day!
-      const targetDay = selectedScheduleDay;
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: presetSlots };
-      let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      if (!newScheduleDays.includes(targetDay)) {
-        newScheduleDays.push(targetDay);
-      }
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }).catch(() => {});
-      showToast(`Applied "${presetTitle}" to ${DAY_NAME_MAP[targetDay] || targetDay} (${presetSlots.length} slots)!`);
-    }
-  };
-
-  const handleClearAllSlots = async () => {
-    isLocalSlotUpdateRef.current = Date.now();
-    const docId = activeDoctor?._id || activeDoctor?.id;
-
-    if (slotConfigMode === 'date') {
-      if (!window.confirm(`Are you sure you want to clear all slots for date ${selectedScheduleDate}?`)) return;
-      const newDateWise = { ...(profileForm.dateWiseSlots || {}), [selectedScheduleDate]: [] };
-      setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-      if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
-      showToast(`Cleared all slots for date ${selectedScheduleDate}.`);
-    } else {
-      const targetDay = selectedScheduleDay;
-      if (!window.confirm(`Are you sure you want to clear all slots for ${DAY_NAME_MAP[targetDay] || targetDay}?`)) return;
-      const newDayWise = { ...(profileForm.dayWiseSlots || {}), [targetDay]: [] };
-      setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise }));
-      if (docId) updateDoctor(docId, { dayWiseSlots: newDayWise }).catch(() => {});
-      showToast(`Cleared all slots for ${DAY_NAME_MAP[targetDay] || targetDay}.`);
-    }
-  };
-
-  const handleCopyDaySlotsToAll = async (sourceDay) => {
-    isLocalSlotUpdateRef.current = Date.now();
-    const sourceSlots = getDaySlots(sourceDay);
-    if (!sourceSlots || sourceSlots.length === 0) {
-      showToast(`No slots configured on ${DAY_NAME_MAP[sourceDay] || sourceDay} to copy!`);
-      return;
-    }
-    if (!window.confirm(`Copy ${DAY_NAME_MAP[sourceDay] || sourceDay}'s slots (${sourceSlots.length} slots) to all active working days?`)) return;
-    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-    let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    // Apply to all active days
-    DAYS_LIST.forEach(d => {
-      if (!isDayOff(d)) {
-        newDayWise[d] = [...sourceSlots];
-        if (!newScheduleDays.includes(d)) newScheduleDays.push(d);
-      }
-    });
-
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays, availableSlots: sourceSlots }));
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    if (docId) {
-      await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays, availableSlots: sourceSlots });
-    }
-    showToast(`Copied ${sourceSlots.length} slots from ${DAY_NAME_MAP[sourceDay] || sourceDay} to all active days!`);
-  };
-
-  // Day-wise specific helpers
-  const handleToggleDayOff = async (targetDay) => {
-    const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    const currentDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const isCurrentlyOff = isDayOff(dayKey);
-
-    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-    let newScheduleDays = [...currentDays];
-
-    if (isCurrentlyOff) {
-      delete newDayWise[dayKey];
-      if (!newScheduleDays.includes(dayKey)) {
-        newScheduleDays.push(dayKey);
-      }
-      // Populate with existing baseline slots or standard slots so doctor immediately sees & can customize slots
-      const existing = Array.isArray(profileForm.dayWiseSlots?.[dayKey]) ? profileForm.dayWiseSlots[dayKey] : null;
-      if (!existing || existing.length === 0) {
-        const baselineSlots = Array.isArray(profileForm.availableSlots) && profileForm.availableSlots.length > 0
-          ? [...profileForm.availableSlots]
-          : [];
-        newDayWise[dayKey] = baselineSlots;
-      }
-      showToast(`${DAY_NAME_MAP[dayKey] || dayKey} marked Open & Active!`);
-    } else {
-      newDayWise[dayKey] = 'off';
-      newScheduleDays = newScheduleDays.filter(d => d !== dayKey);
-      showToast(`${DAY_NAME_MAP[dayKey] || dayKey} marked Closed / Off`);
-    }
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
-  };
-
-  const handleResetDayToDefault = async (targetDay) => {
-    const dayKey = (typeof targetDay === 'string' && targetDay) ? targetDay : selectedScheduleDay;
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-    delete newDayWise[dayKey];
-    let newScheduleDays = Array.isArray(profileForm.scheduleDays) ? [...profileForm.scheduleDays] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    if (!newScheduleDays.includes(dayKey)) {
-      newScheduleDays.push(dayKey);
-    }
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
-    showToast(`${DAY_NAME_MAP[dayKey] || dayKey} reset to General Default Schedule`);
-  };
-
-  const handleCopyDayToAllDays = async () => {
-    const currentSlots = getCurrentModeSlots();
-    if (!window.confirm(`Copy ${DAY_NAME_MAP[selectedScheduleDay] || selectedScheduleDay}'s slots (${currentSlots.length} slots) to all 7 days?`)) return;
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-    DAYS_LIST.forEach(d => {
-      newDayWise[d] = [...currentSlots];
-    });
-    const allWorkingDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, availableSlots: [...currentSlots], scheduleDays: allWorkingDays }));
-    if (docId) await updateDoctor(docId, { dayWiseSlots: newDayWise, availableSlots: [...currentSlots], scheduleDays: allWorkingDays });
-    showToast(`Copied ${currentSlots.length} slots to all days of the week!`);
-  };
-
-  // Date-wise specific helpers
-  const handleToggleDateOff = async () => {
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    const isCurrentlyOff = profileForm.dateWiseSlots?.[selectedScheduleDate] === 'off';
-    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
-    if (isCurrentlyOff) {
-      delete newDateWise[selectedScheduleDate];
-      showToast(`Date ${selectedScheduleDate} marked Open (Restored Day Schedule)`);
-    } else {
-      newDateWise[selectedScheduleDate] = 'off';
-      showToast(`Date ${selectedScheduleDate} marked Closed / Leave`);
-    }
+    const currentSlots = getDateSlots(targetDate);
+    const updated = sortTimeSlots(currentSlots.filter(s => s !== slotToRemove));
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}), [targetDate]: updated };
     setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-    if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise }).catch(() => {});
   };
 
-  const handleResetDateToDaySchedule = async (dateKeyToRemove) => {
-    const dateKey = dateKeyToRemove || selectedScheduleDate;
+  const handleApplyPresetToDate = async (presetSlots, presetTitle, targetDate = selectedScheduleDate) => {
+    if (!targetDate) return;
+    isLocalSlotUpdateRef.current = Date.now();
     const docId = activeDoctor?._id || activeDoctor?.id;
-    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
-    delete newDateWise[dateKey];
-    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-    if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
-    showToast(`Date ${dateKey} reset to standard schedule`);
+    const sortedPresets = sortTimeSlots(presetSlots);
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}), [targetDate]: sortedPresets };
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise, availableSlots: sortedPresets }));
+    if (docId) updateDoctor(docId, { dateWiseSlots: newDateWise, availableSlots: sortedPresets }).catch(() => {});
+    showToast(`Applied "${presetTitle}" (${sortedPresets.length} slots) to ${targetDate}!`);
   };
 
-  // Planned Leave / Multi-day Off Handlers
-  const handleApplyDateRangeLeave = async (e) => {
-    e?.preventDefault();
-    if (!leaveStartDate || !leaveEndDate) {
-      showToast('Please select both Start Date and End Date');
+  const handleCopySlotsToRestOfMonth = async () => {
+    const slotsToCopy = sortTimeSlots(getDateSlots(selectedScheduleDate));
+    if (slotsToCopy.length === 0) {
+      showToast('Please add time slots to this day first before copying to other days!');
       return;
     }
-    const start = new Date(leaveStartDate + 'T00:00:00');
-    const end = new Date(leaveEndDate + 'T00:00:00');
-    if (end < start) {
-      showToast('End Date must be on or after Start Date');
-      return;
-    }
+    const selObj = new Date(selectedScheduleDate + 'T00:00:00');
+    const y = selObj.getFullYear();
+    const m = selObj.getMonth();
+    const daysInM = new Date(y, m + 1, 0).getDate();
+    const startDayNum = Math.max(1, new Date(todayDateStr + 'T00:00:00').getDate());
 
-    const docId = activeDoctor?._id || activeDoctor?.id;
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
-
-    const curr = new Date(start);
     let count = 0;
-    while (curr <= end && count < 60) {
-      const y = curr.getFullYear();
-      const m = String(curr.getMonth() + 1).padStart(2, '0');
-      const d = String(curr.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${d}`;
-      newDateWise[dateStr] = 'off';
-      curr.setDate(curr.getDate() + 1);
-      count++;
+    for (let d = startDayNum; d <= daysInM; d++) {
+      const dStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const isOff = newDateWise[dStr] === 'off' || newDateWise[dStr]?.isOff === true;
+      if (!isOff) {
+        newDateWise[dStr] = [...slotsToCopy];
+        count++;
+      }
     }
-
-    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-    if (docId) {
-      await updateDoctor(docId, { dateWiseSlots: newDateWise });
-    }
-    showToast(`Marked ${count} day(s) off from ${leaveStartDate} to ${leaveEndDate}!`);
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise, availableSlots: slotsToCopy }));
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise, availableSlots: slotsToCopy });
+    showToast(`Copied ${slotsToCopy.length} slots to ${count} working days till end of ${selObj.toLocaleDateString('en-US', { month: 'long' })}!`);
   };
 
-  const handleApplyWeeklyDaysOffPreset = async (presetType) => {
-    const docId = activeDoctor?._id || activeDoctor?.id;
-    let newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const newDayWise = { ...(profileForm.dayWiseSlots || {}) };
-
-    if (presetType === 'weekend') {
-      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-      newDayWise['Sat'] = 'off';
-      newDayWise['Sun'] = 'off';
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].forEach(d => {
-        if (newDayWise[d] === 'off') delete newDayWise[d];
-      });
-      showToast('Set Weekend Off (Saturday & Sunday Closed)');
-    } else if (presetType === 'sunday') {
-      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      newDayWise['Sun'] = 'off';
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(d => {
-        if (newDayWise[d] === 'off') delete newDayWise[d];
-      });
-      showToast('Set Sunday Only Off (Monday - Saturday Working)');
-    } else if (presetType === 'all_working') {
-      newScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      DAYS_LIST.forEach(d => {
-        if (newDayWise[d] === 'off') delete newDayWise[d];
-      });
-      showToast('All 7 Days Marked Working (No Days Off)');
-    }
-
-    setProfileForm(prev => ({ ...prev, dayWiseSlots: newDayWise, scheduleDays: newScheduleDays }));
-    if (docId) {
-      await updateDoctor(docId, { dayWiseSlots: newDayWise, scheduleDays: newScheduleDays });
-    }
-  };
-
-  const handleRemoveDateOff = async (dateStr) => {
-    const docId = activeDoctor?._id || activeDoctor?.id;
+  const handleMarkAllSundaysLeave = async () => {
+    const selObj = new Date(selectedScheduleDate + 'T00:00:00');
+    const y = selObj.getFullYear();
+    const m = selObj.getMonth();
+    const daysInM = new Date(y, m + 1, 0).getDate();
     const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
-    delete newDateWise[dateStr];
-    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
-    if (docId) {
-      await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    let count = 0;
+
+    for (let d = 1; d <= daysInM; d++) {
+      const dObj = new Date(y, m, d);
+      if (dObj.getDay() === 0) {
+        const dStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        newDateWise[dStr] = 'off';
+        count++;
+      }
     }
-    showToast(`Removed leave for ${dateStr} (Restored regular schedule)`);
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    showToast(`Marked ${count} Sundays as Leave / Off for this month!`);
   };
+
+  const handleClearSlotsForDate = async (targetDate = selectedScheduleDate) => {
+    if (!targetDate) return;
+    if (!window.confirm(`Clear all slots for ${targetDate}? This day will be hidden from patient booking.`)) return;
+    const newDateWise = { ...(profileForm.dateWiseSlots || {}) };
+    delete newDateWise[targetDate];
+    setProfileForm(prev => ({ ...prev, dateWiseSlots: newDateWise }));
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (docId) await updateDoctor(docId, { dateWiseSlots: newDateWise });
+    showToast(`Cleared slots for ${targetDate}. It will not be shown to patients.`);
+  };
+
+  // Backwards compatibility aliases
+  const getDaySlots = (dayKey) => getDateSlots(selectedScheduleDate);
+  const selectDayForSlots = (dayKey) => {};
+  const getCurrentModeSlots = () => getDateSlots(selectedScheduleDate);
+  const isDayOff = (day) => false;
+  const isCurrentModeOff = () => isDateOnLeave(selectedScheduleDate);
+  const handleAddSlot = (slot) => handleAddSlotToDate(slot, selectedScheduleDate);
+  const handleDeleteSlot = (slot) => handleDeleteSlotFromDate(slot, selectedScheduleDate);
+  const handleApplySlotPreset = (slots, title) => handleApplyPresetToDate(slots, title, selectedScheduleDate);
+  const handleClearAllSlots = () => handleClearSlotsForDate(selectedScheduleDate);
+  const handleCopyDaySlotsToAll = () => handleCopySlotsToRestOfMonth();
+  const handleToggleDayOff = () => handleToggleDateLeave(selectedScheduleDate);
+  const handleResetDayToDefault = () => handleClearSlotsForDate(selectedScheduleDate);
+  const handleCopyDayToAllDays = () => handleCopySlotsToRestOfMonth();
+  const handleToggleDateOff = () => handleToggleDateLeave(selectedScheduleDate);
+  const handleResetDateToDaySchedule = (dateKey) => handleClearSlotsForDate(dateKey || selectedScheduleDate);
+  const handleApplyDateRangeLeave = () => {};
+  const handleApplyWeeklyDaysOffPreset = () => {};
+  const handleRemoveDateOff = (dateStr) => handleToggleDateLeave(dateStr);
 
   const handleSlotDurationChange = async (durationMinutes) => {
     const durNum = Number(durationMinutes) || 20;
@@ -2883,7 +2735,7 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Remove / Delete profile photo permanently from Cloudinary & DB
   const handleRemovePhoto = async () => {
     const curImage = profileForm.image || activeDoctor?.image || '';
-    if (!window.confirm('Are you sure you want to permanently delete your profile photo? It will be deleted from Cloudinary storage and removed from your doctor profile.')) {
+    if (!window.confirm('Are you sure you want to permanently delete your profile photo?')) {
       return;
     }
 
@@ -2955,37 +2807,40 @@ const DoctorDashboard = ({ onNavigate }) => {
     if (!activeDoctor) return false;
 
     // Check clinicalDraft against activeDoctor
-    if (clinicalDraft) {
-      if ((clinicalDraft.name || '').trim() !== (activeDoctor.name || '').trim()) return true;
-      const curSpec = clinicalDraft.specialty || '';
-      const docSpec = activeDoctor.specialization || activeDoctor.specialty || '';
-      if (curSpec.trim() !== docSpec.trim()) return true;
-      if ((clinicalDraft.jobTitle || '').trim() !== (activeDoctor.jobTitle || '').trim()) return true;
-      const curExp = clinicalDraft.experience === '' ? 0 : parseInt(clinicalDraft.experience, 10);
-      const docExp = activeDoctor.experience === '' ? 0 : parseInt(activeDoctor.experience, 10);
+    const activeDraft = clinicalDraftRef.current || clinicalDraft;
+    if (activeDraft) {
+      if ((activeDraft.name || '').trim() !== (activeDoctor.name || '').trim()) return true;
+      const curSpec = (activeDraft.specialty || '').trim();
+      const docSpec = (activeDoctor.specialization || activeDoctor.specialty || '').trim();
+      if (curSpec !== docSpec) return true;
+      if ((activeDraft.jobTitle || '').trim() !== (activeDoctor.jobTitle || '').trim()) return true;
+      const curExp = (activeDraft.experience === '' || activeDraft.experience === undefined || activeDraft.experience === null) ? '' : parseFloat(activeDraft.experience);
+      const docExp = (activeDoctor.experience === '' || activeDoctor.experience === undefined || activeDoctor.experience === null) ? '' : parseFloat(activeDoctor.experience);
       if (curExp !== docExp) return true;
-      if ((clinicalDraft.hospital || '').trim() !== (activeDoctor.hospital || '').trim()) return true;
-      const curDeg = clinicalDraft.degree || '';
-      const docDeg = activeDoctor.degree || activeDoctor.qualifications || '';
-      if (curDeg.trim() !== docDeg.trim()) return true;
-      const curPrice = Number(clinicalDraft.price);
-      const docPrice = Number(activeDoctor.fees ?? activeDoctor.price);
-      if (!isNaN(curPrice) && !isNaN(docPrice) && curPrice !== docPrice) return true;
-      const curPhone = String(clinicalDraft.phone || '').replace(/\D/g, '');
+      if ((activeDraft.hospital || '').trim() !== (activeDoctor.hospital || '').trim()) return true;
+      const curDeg = (activeDraft.degree || '').trim();
+      const docDeg = (activeDoctor.degree || activeDoctor.qualifications || '').trim();
+      if (curDeg !== docDeg) return true;
+      const curPrice = (activeDraft.price === '' || activeDraft.price === undefined || activeDraft.price === null) ? '' : Number(activeDraft.price);
+      const docPrice = (activeDoctor.fees === '' || activeDoctor.fees === undefined || activeDoctor.fees === null) 
+        ? ((activeDoctor.price === '' || activeDoctor.price === undefined || activeDoctor.price === null) ? '' : Number(activeDoctor.price)) 
+        : Number(activeDoctor.fees);
+      if (curPrice !== docPrice) return true;
+      const curPhone = String(activeDraft.phone || '').replace(/\D/g, '');
       const docPhone = String(activeDoctor.phone || activeDoctor.contact_number || '').replace(/\D/g, '');
       if (curPhone !== docPhone) return true;
-      if ((clinicalDraft.licenseNumber || '').trim() !== (activeDoctor.licenseNumber || '').trim()) return true;
-      if ((clinicalDraft.availableDays || '').trim() !== (activeDoctor.availableDays || '').trim()) return true;
+      if ((activeDraft.licenseNumber || '').trim() !== (activeDoctor.licenseNumber || '').trim()) return true;
+      if ((activeDraft.availableDays || '').trim() !== (activeDoctor.availableDays || '').trim()) return true;
     }
 
     const textFields = [
       'about', 'instagram', 'facebook', 'linkedin', 'twitter'
     ];
     for (const f of textFields) {
-      if (profileForm[f] !== undefined && activeDoctor[f] !== undefined) {
-        if (String(profileForm[f] || '').trim() !== String(activeDoctor[f] || '').trim()) {
-          return true;
-        }
+      const curVal = String(profileForm[f] || '').trim();
+      const docVal = String(activeDoctor[f] || '').trim();
+      if (curVal !== docVal) {
+        return true;
       }
     }
     const formDur = Number(profileForm.slotDuration);
@@ -3029,7 +2884,6 @@ const DoctorDashboard = ({ onNavigate }) => {
       } else if (api.updateDoctor) {
         await api.updateDoctor(docId, payload);
       }
-      setActiveDoctor(prev => ({ ...prev, ...payload }));
       setProfileForm(prev => ({ ...prev, ...payload }));
 
       setIsHelplineSaved(true);
@@ -3071,24 +2925,31 @@ const DoctorDashboard = ({ onNavigate }) => {
 
     setIsSavingProfileSettings(true);
     try {
+      const activeDraft = clinicalDraftRef.current || clinicalDraft;
       const payload = {
         ...profileForm,
         _id: activeDoctor._id,
         id: activeDoctor.id,
         email: activeDoctor.email,
-        phone: clinicalDraft.phone !== undefined ? clinicalDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
-        contact_number: clinicalDraft.phone !== undefined ? clinicalDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
-        name: clinicalDraft.name !== undefined ? (clinicalDraft.name.trim() || activeDoctor.name || 'Doctor') : (profileForm.name?.trim() || activeDoctor.name || 'Doctor'),
-        specialization: clinicalDraft.specialty || profileForm.specialty || profileForm.specialization || 'General Medicine',
-        specialty: clinicalDraft.specialty || profileForm.specialty || profileForm.specialization || 'General Medicine',
-        fees: (clinicalDraft.price !== undefined && clinicalDraft.price !== '') ? Number(clinicalDraft.price) : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 500),
-        price: (clinicalDraft.price !== undefined && clinicalDraft.price !== '') ? Number(clinicalDraft.price) : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 500),
-        experience: clinicalDraft.experience !== undefined && clinicalDraft.experience !== '' ? (parseInt(clinicalDraft.experience, 10) || 0) : (parseInt(profileForm.experience, 10) || 0),
-        jobTitle: clinicalDraft.jobTitle !== undefined ? clinicalDraft.jobTitle : (profileForm.jobTitle !== undefined ? profileForm.jobTitle : (activeDoctor.jobTitle || '')),
-        licenseNumber: clinicalDraft.licenseNumber !== undefined ? clinicalDraft.licenseNumber : (profileForm.licenseNumber !== undefined ? profileForm.licenseNumber : (activeDoctor.licenseNumber || '')),
-        hospital: clinicalDraft.hospital !== undefined ? clinicalDraft.hospital : (profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || '')),
-        degree: clinicalDraft.degree || profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
-        qualifications: clinicalDraft.degree || profileForm.degree || profileForm.qualifications || activeDoctor.degree || activeDoctor.qualifications || '',
+        phone: activeDraft.phone !== undefined ? activeDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
+        contact_number: activeDraft.phone !== undefined ? activeDraft.phone : (profileForm.phone || profileForm.contact_number || activeDoctor.phone || activeDoctor.contact_number || ''),
+        name: activeDraft.name !== undefined ? activeDraft.name.trim() : (profileForm.name !== undefined ? profileForm.name.trim() : (activeDoctor.name || '')),
+        specialization: activeDraft.specialty !== undefined ? activeDraft.specialty.trim() : (profileForm.specialty !== undefined ? profileForm.specialty : (activeDoctor.specialization || '')),
+        specialty: activeDraft.specialty !== undefined ? activeDraft.specialty.trim() : (profileForm.specialty !== undefined ? profileForm.specialty : (activeDoctor.specialty || '')),
+        fees: (activeDraft.price !== undefined && activeDraft.price !== '' && !isNaN(Number(activeDraft.price)))
+          ? Number(activeDraft.price)
+          : (activeDraft.price === '' ? 0 : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 0)),
+        price: (activeDraft.price !== undefined && activeDraft.price !== '' && !isNaN(Number(activeDraft.price)))
+          ? Number(activeDraft.price)
+          : (activeDraft.price === '' ? 0 : ((profileForm.price !== undefined && profileForm.price !== '') ? Number(profileForm.price) : 0)),
+        experience: (activeDraft.experience !== undefined && activeDraft.experience !== '' && !isNaN(parseFloat(activeDraft.experience)))
+          ? parseFloat(activeDraft.experience)
+          : (activeDraft.experience === '' ? 0 : (parseFloat(profileForm.experience) || 0)),
+        jobTitle: activeDraft.jobTitle !== undefined ? activeDraft.jobTitle : (profileForm.jobTitle !== undefined ? profileForm.jobTitle : (activeDoctor.jobTitle || '')),
+        licenseNumber: activeDraft.licenseNumber !== undefined ? activeDraft.licenseNumber : (profileForm.licenseNumber !== undefined ? profileForm.licenseNumber : (activeDoctor.licenseNumber || '')),
+        hospital: activeDraft.hospital !== undefined ? activeDraft.hospital : (profileForm.hospital !== undefined ? profileForm.hospital : (activeDoctor.hospital || '')),
+        degree: activeDraft.degree !== undefined ? activeDraft.degree.trim() : (profileForm.degree !== undefined ? profileForm.degree.trim() : (activeDoctor.degree || '')),
+        qualifications: activeDraft.degree !== undefined ? activeDraft.degree.trim() : (profileForm.qualifications !== undefined ? profileForm.qualifications.trim() : (activeDoctor.qualifications || '')),
         image: profileForm.image !== undefined ? profileForm.image : (activeDoctor.image || ''),
         about: profileForm.about !== undefined ? profileForm.about : (activeDoctor.about || ''),
         awards: Array.isArray(profileForm.awards) ? profileForm.awards : (Array.isArray(activeDoctor.awards) ? activeDoctor.awards : []),
@@ -3098,10 +2959,10 @@ const DoctorDashboard = ({ onNavigate }) => {
         tags: Array.isArray(profileForm.tags) ? profileForm.tags : (Array.isArray(activeDoctor.tags) ? activeDoctor.tags : []),
         reels: Array.isArray(profileForm.reels) ? profileForm.reels : (Array.isArray(activeDoctor.reels) ? activeDoctor.reels : []),
         youtube_videos: Array.isArray(profileForm.youtube_videos) ? profileForm.youtube_videos : (Array.isArray(activeDoctor.youtube_videos) ? activeDoctor.youtube_videos : []),
-        availableDays: clinicalDraft.availableDays || profileForm.availableDays || activeDoctor.availableDays || 'Mon - Sat (10am - 4pm)',
-        helplineNumber: activeDoctor.helplineNumber || '+91 98765 43210',
-        helplineDays: activeDoctor.helplineDays || 'Mon – Sat',
-        helplineTime: activeDoctor.helplineTime || '8:00 AM – 8:00 PM',
+        availableDays: activeDraft.availableDays !== undefined ? activeDraft.availableDays.trim() : (profileForm.availableDays || ''),
+        helplineNumber: activeDoctor.helplineNumber || '',
+        helplineDays: activeDoctor.helplineDays || '',
+        helplineTime: activeDoctor.helplineTime || '',
         scheduleDays: Array.isArray(profileForm.scheduleDays) ? profileForm.scheduleDays : (activeDoctor.scheduleDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']),
         availableSlots: Array.isArray(profileForm.availableSlots) ? profileForm.availableSlots : (activeDoctor.availableSlots || []),
         slotDuration: Number(profileForm.slotDuration) || activeDoctor.slotDuration || 20,
@@ -3113,6 +2974,8 @@ const DoctorDashboard = ({ onNavigate }) => {
       delete payload.otp;
       delete payload.otpExpires;
       delete payload.otpAttempts;
+      delete payload.reels;
+      delete payload.youtube_videos;
 
       const compPercent = calculateDoctorProfileCompletion(payload);
       payload.profileCompletion = compPercent;
@@ -3144,15 +3007,14 @@ const DoctorDashboard = ({ onNavigate }) => {
         name: payload.name,
         specialty: payload.specialty,
         jobTitle: payload.jobTitle,
-        experience: payload.experience,
+        experience: clinicalDraft.experience !== '' ? payload.experience : '',
         hospital: payload.hospital,
         degree: payload.degree,
-        price: payload.price,
+        price: clinicalDraft.price !== '' ? payload.price : '',
         phone: payload.phone,
         licenseNumber: payload.licenseNumber,
         availableDays: payload.availableDays
       });
-      setActiveDoctor(prev => ({ ...prev, ...payload }));
 
       setIsProfileSettingsSaved(true);
       setTimeout(() => setIsProfileSettingsSaved(false), 2500);
@@ -3165,6 +3027,66 @@ const DoctorDashboard = ({ onNavigate }) => {
       setIsSavingProfileSettings(false);
     }
   };
+
+  // Save Basic Clinical & Consultation Details from isolated BasicClinicalDetailsSection
+  const handleSaveClinicalDetails = useCallback(async (clinicalPayload, { isDirty } = {}) => {
+    const docId = activeDoctor?._id || activeDoctor?.id;
+    if (!docId) return;
+
+    if (isDirty === false) {
+      showToast('Profile is already up to date!');
+      return;
+    }
+
+    setIsSavingProfileSettings(true);
+    try {
+      const payload = {
+        ...clinicalPayload,
+        _id: activeDoctor._id,
+        id: activeDoctor.id,
+        email: activeDoctor.email
+      };
+      delete payload.password;
+      delete payload.otp;
+      delete payload.otpExpires;
+      delete payload.otpAttempts;
+      delete payload.reels;
+      delete payload.youtube_videos;
+
+      const compPercent = calculateDoctorProfileCompletion(payload);
+      payload.profileCompletion = compPercent;
+      payload.isProfileComplete = compPercent >= 80;
+
+      try {
+        const rawStored = localStorage.getItem('doctor_user') || localStorage.getItem('user');
+        const stored = rawStored ? JSON.parse(rawStored) : {};
+        if (stored && (stored.email === activeDoctor.email || String(stored._id) === String(activeDoctor._id) || String(stored.id) === String(activeDoctor.id))) {
+          Object.assign(stored, payload);
+          stored.role = 'doctor';
+          localStorage.setItem('doctor_user', JSON.stringify(stored));
+          localStorage.setItem('user', JSON.stringify(stored));
+        }
+      } catch {}
+
+      if (updateDoctor) {
+        await updateDoctor(docId, payload);
+      } else if (api.updateDoctor) {
+        await api.updateDoctor(docId, payload);
+      }
+
+      setProfileForm(prev => ({ ...prev, ...payload }));
+      setClinicalDraft(prev => ({ ...prev, ...clinicalPayload }));
+      setIsProfileSettingsSaved(true);
+      setTimeout(() => setIsProfileSettingsSaved(false), 2500);
+
+      showToast('Clinical details saved and updated on public doctor page!');
+    } catch (saveErr) {
+      console.error('Failed to sync clinical settings with backend:', saveErr);
+      showToast('⚠️ Failed to save changes: ' + (saveErr?.message || 'Server error'), 'error');
+    } finally {
+      setIsSavingProfileSettings(false);
+    }
+  }, [activeDoctor?._id, activeDoctor?.id, activeDoctor?.email, profileForm, updateDoctor]);
 
   // Save About Section directly
   const handleSaveAbout = async () => {
@@ -3279,12 +3201,64 @@ const DoctorDashboard = ({ onNavigate }) => {
   const [newAppointmentData, setNewAppointmentData] = useState({
     patientName: '',
     age: '',
-    gender: 'Male',
+    gender: '',
+    date: todayDateStr,
     time: '03:00 PM',
     type: 'In-Clinic',
     symptoms: '',
     phone: ''
   });
+
+  // Dynamic available time slots for the selected appointment date
+  const availableSlotOptions = useMemo(() => {
+    const selectedDate = newAppointmentData.date || todayDateStr;
+    const dateSlots = profileForm?.dateWiseSlots?.[selectedDate] || activeDoctor?.dateWiseSlots?.[selectedDate];
+    if (Array.isArray(dateSlots) && dateSlots.length > 0) {
+      return dateSlots;
+    }
+
+    try {
+      const parts = selectedDate.split('-');
+      if (parts.length === 3) {
+        const dObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const dayName = dObj.toLocaleDateString('en-US', { weekday: 'short' });
+        const daySlots = profileForm?.dayWiseSlots?.[dayName] || activeDoctor?.dayWiseSlots?.[dayName];
+        if (Array.isArray(daySlots) && daySlots.length > 0) {
+          return daySlots;
+        }
+      }
+    } catch {}
+
+    const generalSlots = profileForm?.availableSlots || activeDoctor?.availableSlots;
+    if (Array.isArray(generalSlots) && generalSlots.length > 0) {
+      return generalSlots;
+    }
+
+    return ['09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM', '06:00 PM', '07:00 PM'];
+  }, [newAppointmentData.date, todayDateStr, profileForm?.dateWiseSlots, profileForm?.dayWiseSlots, profileForm?.availableSlots, activeDoctor]);
+
+  // Formatted day helper for selected appointment date in modal
+  const formattedSelectedDay = useMemo(() => {
+    const rawDate = newAppointmentData.date || todayDateStr;
+    if (!rawDate) return '';
+    try {
+      const parts = rawDate.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        if (rawDate === todayDateStr) {
+          return `Today • ${d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}`;
+        }
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+        if (rawDate === tomStr) {
+          return `Tomorrow • ${d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short' })}`;
+        }
+        return d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {}
+    return rawDate;
+  }, [newAppointmentData.date, todayDateStr]);
 
   const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false);
   const [isSubmittingAppointment, setIsSubmittingAppointment] = useState(false);
@@ -3428,23 +3402,23 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
 
     setIsSubmittingAppointment(true);
-    const sDate = todayDateStr;
-    const sTime = newAppointmentData.time || '03:00 PM';
+    const sDate = (newAppointmentData.date || '').trim() || todayDateStr;
+    const sTime = (newAppointmentData.time || '').trim() || '03:00 PM';
     const fee = consultationFee;
 
     const newAptData = {
       docId: activeDoctor?._id ? activeDoctor._id.toString() : (activeDoctor?.id || 'default'),
       patientName: newAppointmentData.patientName.trim(),
-      age: parseInt(newAppointmentData.age, 10) || 30,
-      gender: newAppointmentData.gender || 'Male',
+      age: (newAppointmentData.age && !isNaN(parseInt(newAppointmentData.age, 10)) && parseInt(newAppointmentData.age, 10) > 0) ? parseInt(newAppointmentData.age, 10) : null,
+      gender: (newAppointmentData.gender && newAppointmentData.gender !== 'Not specified' && newAppointmentData.gender !== 'Not Selected') ? newAppointmentData.gender : null,
       time: sTime,
       slotTime: sTime,
       date: sDate,
       slotDate: sDate,
       type: newAppointmentData.type || 'In-Clinic',
-      consultationType: newAppointmentData.type || 'In-Clinic Visit',
+      consultationType: newAppointmentData.type === 'Video Call' ? 'Teleconsultation (Video)' : 'In-Clinic Visit',
       symptoms: newAppointmentData.symptoms || 'General Consultation',
-      phone: phoneDigits ? `+91 ${phoneDigits}` : '+91 98000 00000',
+      phone: phoneDigits ? `+91 ${phoneDigits}` : '',
       status: 'Confirmed',
       amount: fee
     };
@@ -3477,7 +3451,8 @@ const DoctorDashboard = ({ onNavigate }) => {
     setNewAppointmentData({
       patientName: '',
       age: '',
-      gender: 'Male',
+      gender: '',
+      date: todayDateStr,
       time: '03:00 PM',
       type: 'In-Clinic',
       symptoms: '',
@@ -3597,6 +3572,69 @@ const DoctorDashboard = ({ onNavigate }) => {
     return resolveAppointmentDateKey(apt) === todayDateStr;
   }, [resolveAppointmentDateKey, todayDateStr]);
 
+  // Comparator to sort appointments strictly chronologically by date and time
+  const sortAppointmentsChronologically = React.useCallback((a, b) => {
+    // 1. Resolve date key (YYYY-MM-DD)
+    const dateA = resolveAppointmentDateKey(a) || '';
+    const dateB = resolveAppointmentDateKey(b) || '';
+
+    if (dateA !== dateB) {
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return dateA.localeCompare(dateB);
+    }
+
+    // 2. Resolve time in minutes (0 to 1439)
+    const timeA = parseTimeToMinutes(a.slotTime || a.time);
+    const timeB = parseTimeToMinutes(b.slotTime || b.time);
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    // 3. Fallback tie-breaker by patient name or id
+    const nameA = String(a.patientName || a.userData?.name || '');
+    const nameB = String(b.patientName || b.userData?.name || '');
+    if (nameA !== nameB) {
+      return nameA.localeCompare(nameB);
+    }
+
+    return String(a.id || a._id || '').localeCompare(String(b.id || b._id || ''));
+  }, [resolveAppointmentDateKey]);
+
+  // Formatter for day section headers
+  const formatDayHeading = React.useCallback((dateKey) => {
+    if (!dateKey || dateKey === 'unscheduled') return 'Scheduled Consultations';
+    if (dateKey === todayDateStr) {
+      const today = new Date();
+      return `Today • ${today.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}`;
+    }
+
+    try {
+      const parts = dateKey.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+
+        const dStr = d.toDateString();
+        if (dStr === tomorrow.toDateString()) {
+          return `Tomorrow • ${d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+        if (dStr === yesterday.toDateString()) {
+          return `Yesterday • ${d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}`;
+        }
+
+        return d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+      }
+    } catch {}
+
+    return dateKey;
+  }, [todayDateStr]);
+
   // Today's scheduled appointments count
   const scheduledTodayCount = React.useMemo(() => {
     return appointments.filter(a => isTodayAppointment(a)).length;
@@ -3611,7 +3649,15 @@ const DoctorDashboard = ({ onNavigate }) => {
   }, [appointments, isTodayAppointment]);
 
   // Consultation fee for active doctor
-  const consultationFee = Number(activeDoctor.price ?? activeDoctor.fees) || 800;
+  const consultationFee = React.useMemo(() => {
+    const raw = (activeDoctor.price !== undefined && activeDoctor.price !== null && activeDoctor.price !== '')
+      ? activeDoctor.price
+      : (activeDoctor.fees !== undefined && activeDoctor.fees !== null && activeDoctor.fees !== '' ? activeDoctor.fees : null);
+    if (raw !== null && !isNaN(Number(raw))) {
+      return Number(raw);
+    }
+    return 0;
+  }, [activeDoctor.price, activeDoctor.fees]);
 
   // Today's completed appointments with patient details
   const todayCompletedAppointments = React.useMemo(() => {
@@ -3646,20 +3692,20 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Filtered appointments displayed inside Scheduled Appointments Modal
   const scheduledModalAppointments = React.useMemo(() => {
+    let list = [];
     if (scheduledModalFilter === 'today') {
-      return todayAppointments;
+      list = todayAppointments;
+    } else if (scheduledModalFilter === 'today-scheduled') {
+      list = todayScheduledAppointments;
+    } else if (scheduledModalFilter === 'all-scheduled') {
+      list = allScheduledAppointments;
+    } else if (scheduledModalFilter === 'completed') {
+      list = appointments.filter(a => a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed');
+    } else {
+      list = appointments;
     }
-    if (scheduledModalFilter === 'today-scheduled') {
-      return todayScheduledAppointments;
-    }
-    if (scheduledModalFilter === 'all-scheduled') {
-      return allScheduledAppointments;
-    }
-    if (scheduledModalFilter === 'completed') {
-      return appointments.filter(a => a.status === 'Completed' || a.isCompleted === true || String(a.status).toLowerCase() === 'completed');
-    }
-    return appointments;
-  }, [appointments, scheduledModalFilter, todayAppointments, todayScheduledAppointments, allScheduledAppointments]);
+    return [...list].sort(sortAppointmentsChronologically);
+  }, [appointments, scheduledModalFilter, todayAppointments, todayScheduledAppointments, allScheduledAppointments, sortAppointmentsChronologically]);
 
   // Navigate & scroll directly to appointments queue
   const handleJumpToQueue = React.useCallback((appointmentId = null) => {
@@ -3691,7 +3737,12 @@ const DoctorDashboard = ({ onNavigate }) => {
   // Amount made today = sum of actual consultation amounts for today's completed visits
   const amountMadeToday = React.useMemo(() => {
     if (todayCompletedAppointments.length === 0) return 0;
-    return todayCompletedAppointments.reduce((sum, a) => sum + (Number(a.amount) || consultationFee), 0);
+    return todayCompletedAppointments.reduce((sum, a) => {
+      const aptFee = (a.amount !== undefined && a.amount !== null && a.amount !== '' && !isNaN(Number(a.amount)))
+        ? Number(a.amount)
+        : consultationFee;
+      return sum + aptFee;
+    }, 0);
   }, [todayCompletedAppointments, consultationFee]);
 
   // Real-time map of earnings and completed appointments per day
@@ -3706,7 +3757,9 @@ const DoctorDashboard = ({ onNavigate }) => {
           map[dateKey] = { count: 0, earnings: 0, patients: [] };
         }
         map[dateKey].count += 1;
-        const fee = Number(apt.amount) || consultationFee;
+        const fee = (apt.amount !== undefined && apt.amount !== null && apt.amount !== '' && !isNaN(Number(apt.amount)))
+          ? Number(apt.amount)
+          : consultationFee;
         map[dateKey].earnings += fee;
         map[dateKey].patients.push({
           name: apt.patientName || apt.userData?.name || 'Patient',
@@ -3726,6 +3779,12 @@ const DoctorDashboard = ({ onNavigate }) => {
     const c = Number(count) || 0;
     const e = Number(earnings) || 0;
     if (c === 0 && e === 0) return '#ebedf0'; // Empty day (clean light gray tile)
+    if (consultationFee === 0) {
+      if (c === 1) return '#9be9a8';
+      if (c === 2) return '#40c463';
+      if (c <= 4) return '#30a14e';
+      return '#216e39';
+    }
     if (c === 1 || e <= consultationFee) return '#9be9a8'; // Level 1 (soft mint green)
     if (c === 2 || e <= consultationFee * 2) return '#40c463'; // Level 2 (medium light green)
     if (c <= 4 || e <= consultationFee * 4) return '#30a14e'; // Level 3 (vibrant green)
@@ -3939,16 +3998,42 @@ const DoctorDashboard = ({ onNavigate }) => {
     return { totalRevenue, totalCompleted, peakDay };
   }, [dailyEarningsMap, todayDateStr]);
 
-  // Filtered appointments
+  // Filtered and chronologically sorted appointments
   const filteredAppointments = useMemo(() => {
-    return appointments.filter(apt => {
+    const matched = appointments.filter(apt => {
       if (appointmentFilter === 'all') return true;
       if (appointmentFilter === 'today') return isTodayAppointment(apt) || apt.date === 'Today';
       if (appointmentFilter === 'confirmed') return apt.status === 'Confirmed' || apt.status === 'In-Progress';
       if (appointmentFilter === 'completed') return apt.status === 'Completed';
       return true;
     });
-  }, [appointments, appointmentFilter, isTodayAppointment]);
+
+    return [...matched].sort(sortAppointmentsChronologically);
+  }, [appointments, appointmentFilter, isTodayAppointment, sortAppointmentsChronologically]);
+
+  // Group sorted appointments by day for clean chronological day sections
+  const groupedAppointments = useMemo(() => {
+    const groups = [];
+    let currentKey = null;
+    let currentGroup = null;
+
+    filteredAppointments.forEach(apt => {
+      const dateKey = resolveAppointmentDateKey(apt) || 'unscheduled';
+      if (dateKey !== currentKey) {
+        currentKey = dateKey;
+        currentGroup = {
+          dateKey,
+          heading: formatDayHeading(dateKey),
+          isToday: dateKey === todayDateStr,
+          items: []
+        };
+        groups.push(currentGroup);
+      }
+      currentGroup.items.push(apt);
+    });
+
+    return groups;
+  }, [filteredAppointments, resolveAppointmentDateKey, formatDayHeading, todayDateStr]);
 
   // Clinic timing display info
   const clinicTimingInfo = useMemo(() => {
@@ -3964,6 +4049,36 @@ const DoctorDashboard = ({ onNavigate }) => {
       const parts = rawTiming.split(':');
       daysText = parts[0].trim();
       hoursText = parts.slice(1).join(':').trim();
+    }
+
+    // Map day abbreviations cleanly without overflowing
+    const mapDayName = (d) => {
+      const clean = d.trim().toLowerCase();
+      if (clean.startsWith('mon')) return 'Mon';
+      if (clean.startsWith('tue')) return 'Tue';
+      if (clean.startsWith('wed')) return 'Wed';
+      if (clean.startsWith('thu')) return 'Thu';
+      if (clean.startsWith('fri')) return 'Fri';
+      if (clean.startsWith('sat')) return 'Sat';
+      if (clean.startsWith('sun')) return 'Sun';
+      return d.trim();
+    };
+
+    if (daysText.includes(',')) {
+      const dayParts = daysText.split(',').map(s => mapDayName(s)).filter(Boolean);
+      if (dayParts.length === 7) {
+        daysText = 'All 7 Days';
+      } else if (dayParts.length === 6 && dayParts[0] === 'Mon' && dayParts[5] === 'Sat') {
+        daysText = 'Mon – Sat';
+      } else if (dayParts.length === 5 && dayParts[0] === 'Mon' && dayParts[4] === 'Fri') {
+        daysText = 'Mon – Fri';
+      } else if (dayParts.length > 0) {
+        daysText = dayParts.join(', ');
+      }
+    } else if (/mon\s*-\s*sat/i.test(daysText)) {
+      daysText = 'Mon – Sat';
+    } else if (/mon\s*-\s*fri/i.test(daysText)) {
+      daysText = 'Mon – Fri';
     }
 
     const timingSub = hoursText || `${activeDoctor?.slotDuration || profileForm?.slotDuration || 20} mins slot`;
@@ -4305,10 +4420,10 @@ const DoctorDashboard = ({ onNavigate }) => {
             <div>
               <span className={styles.kpiLabel}>Appointments Today</span>
               <div className={styles.kpiValue}>
-                {scheduledTodayCount} Scheduled
+                {scheduledTodayCount} <span className={styles.kpiValueUnit}>Scheduled</span>
               </div>
               <span className={styles.kpiSub}>
-                {completedTodayCount} Completed • Click to view
+                {completedTodayCount} Completed
               </span>
             </div>
           </div>
@@ -4341,7 +4456,7 @@ const DoctorDashboard = ({ onNavigate }) => {
               <span className={styles.kpiLabel}>Consultation Fee</span>
               <div className={styles.kpiValue}>₹{consultationFee}</div>
               <span className={styles.kpiSub}>
-                Per patient consultation
+                Per consultation
               </span>
             </div>
           </div>
@@ -4359,7 +4474,7 @@ const DoctorDashboard = ({ onNavigate }) => {
               <span className={styles.kpiLabel}>Patient Satisfaction</span>
               <div className={styles.kpiValue}>{verifiedAvgRating} ★</div>
               <span className={styles.kpiSub}>
-                {verifiedReviewsCount} {verifiedReviewsCount === 1 ? 'review' : 'reviews'} • Click to view
+                {verifiedReviewsCount} {verifiedReviewsCount === 1 ? 'review' : 'reviews'}
               </span>
             </div>
           </div>
@@ -4368,11 +4483,14 @@ const DoctorDashboard = ({ onNavigate }) => {
             <div className={`${styles.kpiIconWrap} ${styles.kpiPurple}`}>
               <Clock size={22} />
             </div>
-            <div>
+            <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
               <span className={styles.kpiLabel}>Clinic Timings</span>
               <div
-                className={styles.kpiValue}
+                className={styles.kpiTimingValue}
                 title={clinicTimingInfo.rawTiming}
+                style={{
+                  fontSize: clinicTimingInfo.daysText.length > 14 ? '0.92rem' : (clinicTimingInfo.daysText.length > 10 ? '1.05rem' : '1.18rem')
+                }}
               >
                 {clinicTimingInfo.daysText}
               </div>
@@ -4697,68 +4815,80 @@ const DoctorDashboard = ({ onNavigate }) => {
 
               {/* VIEW 2: CURRENT MONTH CALENDAR VIEW */}
               {heatmapView === 'month' && (
-                <div style={{ background: '#181d24', border: '1px solid #272f3d', borderRadius: '12px', padding: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <h4 style={{ margin: 0, fontSize: '0.94rem', color: '#ffffff', fontWeight: 700 }}>
-                      <CalendarDays size={16} color="#38bdf8" style={{ display: 'inline', marginRight: '6px', verticalAlign: 'text-bottom' }} />
-                      {heatmapMonthData.monthName} Consultation Earnings
+                <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.96rem', color: '#0f172a', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <CalendarDays size={18} color="#2563eb" style={{ display: 'inline', flexShrink: 0 }} />
+                      <span>{heatmapMonthData.monthName} Consultation Earnings</span>
                     </h4>
-                    <span style={{ fontSize: '0.76rem', color: '#8b949e' }}>
+                    <span style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 500 }}>
                       Click on any date to inspect earnings breakdown
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '6px', textAlign: 'center' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', textAlign: 'center' }}>
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(dName => (
-                      <div key={dName} style={{ fontSize: '0.72rem', fontWeight: 700, color: '#8b949e', paddingBottom: '4px' }}>
+                      <div key={dName} style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', paddingBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         {dName}
                       </div>
                     ))}
 
                     {heatmapMonthData.days.map((cell, idx) => {
                       if (!cell) {
-                        return <div key={idx} style={{ minHeight: '52px', background: 'transparent' }} />;
+                        return <div key={idx} style={{ minHeight: '58px', background: 'transparent' }} />;
                       }
                       const isSelected = selectedHeatmapCell?.dateStr === cell.dateStr;
                       const isFuture = cell.isFuture;
-                      const bgColor = isFuture ? '#1a2029' : getHeatmapColor(cell.earnings, cell.count, false);
+                      const hasEarnings = !isFuture && Number(cell.earnings) > 0;
+                      const hasVisits = !isFuture && Number(cell.count) > 0;
+                      
+                      const bgColor = isFuture 
+                        ? '#f8fafc' 
+                        : (hasEarnings ? '#f0fdf4' : '#f8fafc');
+
+                      const borderColor = isSelected 
+                        ? '#16a34a' 
+                        : (isFuture ? '#e2e8f0' : (hasEarnings ? '#bbf7d0' : '#e2e8f0'));
+
                       return (
                         <div
                           key={idx}
                           onClick={() => !isFuture && setSelectedHeatmapCell(cell)}
                           style={{
-                            minHeight: '54px',
-                            borderRadius: '8px',
+                            minHeight: '58px',
+                            borderRadius: '10px',
                             background: bgColor,
-                            border: isSelected ? '2px solid #56e36d' : (isFuture ? '1px dashed #2d3644' : '1px solid #30363d'),
-                            padding: '4px 6px',
+                            border: isSelected ? '2px solid #16a34a' : (isFuture ? '1.5px dashed #e2e8f0' : `1.5px solid ${borderColor}`),
+                            padding: '6px 8px',
                             cursor: isFuture ? 'default' : 'pointer',
-                            opacity: isFuture ? 0.45 : 1,
+                            opacity: isFuture ? 0.65 : 1,
                             pointerEvents: isFuture ? 'none' : 'auto',
                             display: 'flex',
                             flexDirection: 'column',
                             justifyContent: 'space-between',
                             alignItems: 'center',
                             transition: 'all 0.15s ease',
-                            boxShadow: isSelected ? '0 0 12px rgba(86, 227, 109, 0.35)' : 'none'
+                            boxShadow: isSelected 
+                              ? '0 0 0 3px rgba(22, 163, 74, 0.18)' 
+                              : (cell.isToday ? '0 2px 6px rgba(22, 163, 74, 0.12)' : 'none')
                           }}
                           title={isFuture ? `${cell.formattedDate} (Upcoming)` : `${cell.formattedDate}: ₹${cell.earnings} (${cell.count} completed)`}
                         >
                           <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: cell.isToday ? '#4ade80' : (isFuture ? '#64748b' : '#c9d1d9') }}>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: cell.isToday ? '#15803d' : (isFuture ? '#94a3b8' : '#1e293b') }}>
                               {cell.dayNum}
                             </span>
                             {cell.isToday && (
-                              <span style={{ fontSize: '0.62rem', fontWeight: 800, background: '#238636', color: '#fff', borderRadius: '4px', padding: '0 3px' }}>
+                              <span style={{ fontSize: '0.62rem', fontWeight: 800, background: '#16a34a', color: '#ffffff', borderRadius: '4px', padding: '1px 5px', letterSpacing: '0.02em' }}>
                                 Today
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '0.76rem', fontWeight: 800, color: !isFuture && cell.earnings > 0 ? '#4ade80' : '#64748b' }}>
-                            {!isFuture && cell.earnings > 0 ? `₹${cell.earnings}` : '—'}
+                          <div style={{ fontSize: '0.80rem', fontWeight: 800, color: hasEarnings ? '#15803d' : '#94a3b8', margin: '2px 0' }}>
+                            {hasEarnings ? `₹${cell.earnings.toLocaleString('en-IN')}` : '—'}
                           </div>
-                          <div style={{ fontSize: '0.64rem', color: isFuture ? '#64748b' : (cell.count > 0 ? '#86efac' : '#64748b'), fontWeight: 600 }}>
-                            {isFuture ? 'Upcoming' : (cell.count > 0 ? `${cell.count} visit${cell.count === 1 ? '' : 's'}` : '0 visits')}
+                          <div style={{ fontSize: '0.66rem', color: isFuture ? '#94a3b8' : (hasVisits ? '#166534' : '#64748b'), fontWeight: 600 }}>
+                            {isFuture ? 'Upcoming' : (hasVisits ? `${cell.count} visit${cell.count === 1 ? '' : 's'}` : '0 visits')}
                           </div>
                         </div>
                       );
@@ -4840,7 +4970,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                                 fontSize: '0.72rem'
                               }}
                             >
-                              ₹{Number(p.fee || consultationFee).toLocaleString('en-IN')}
+                              ₹{Number(p.fee !== undefined && p.fee !== null && p.fee !== '' ? p.fee : consultationFee).toLocaleString('en-IN')}
                             </span>
                           </span>
                         ))}
@@ -4927,7 +5057,7 @@ const DoctorDashboard = ({ onNavigate }) => {
               onClick={() => setActiveTab('prescriptions')}
             >
               <FileText size={18} />
-              <span>Prescriptions & Notes ({prescriptions.length})</span>
+              <span>Prescriptions & Notes (Upcoming)</span>
             </button>
             <button
               className={`${styles.tabBtn} ${activeTab === 'profile' ? styles.tabBtnActive : ''}`}
@@ -4954,14 +5084,7 @@ const DoctorDashboard = ({ onNavigate }) => {
             </button>
           )}
 
-          {activeTab === 'prescriptions' && (
-            <button
-              className={styles.addPrimaryBtn}
-              onClick={() => setIsPrescriptionModalOpen(true)}
-            >
-              <Plus size={16} /> Write Prescription
-            </button>
-          )}
+
         </div>
 
         {/* TAB 1: APPOINTMENTS */}
@@ -5008,105 +5131,129 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </p>
                 </div>
               ) : (
-                filteredAppointments.map((apt) => (
-                <div
-                  key={apt.id || apt._id || `${apt.patientName}-${apt.time}-${apt.date}`}
-                  id={`apt-card-${apt.id || apt._id}`}
-                  className={styles.appointmentCard}
-                >
-                  <div className={styles.aptTimeCol}>
-                    <Clock size={16} className={styles.timeIcon} />
-                    <span className={styles.aptTime}>{apt.time}</span>
-                    <span className={styles.aptDate}>{apt.date}</span>
-                    <span className={apt.type === 'Video Call' ? styles.videoBadge : styles.clinicBadge}>
-                      {apt.type === 'Video Call' ? <Video size={12} /> : <User size={12} />}
-                      {apt.type}
-                    </span>
-                  </div>
-
-                  <div className={styles.aptDetailsCol}>
-                    <div className={styles.aptPatientHeader}>
-                      <h4>
-                        {apt.patientName}
-                        {apt.isRealtime && (
-                          <span style={{ marginLeft: '8px', fontSize: '0.7rem', background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: '6px', fontWeight: '700', letterSpacing: '0.02em', border: '1px solid #bbf7d0', verticalAlign: 'middle' }}>
-                            ● Online Patient
-                          </span>
+                groupedAppointments.map((group) => (
+                  <div key={group.dateKey} className={styles.dayGroupWrapper}>
+                    <div className={styles.dayGroupHeader}>
+                      <div className={styles.dayGroupTitleWrap}>
+                        <Calendar size={15} color="#475569" />
+                        <span className={styles.dayGroupTitle}>{group.heading}</span>
+                        {group.isToday && (
+                          <span className={styles.dayGroupTodayPill}>Today</span>
                         )}
-                      </h4>
-                      <span className={styles.aptPatientDemog}>
-                        {apt.gender}, {apt.age} yrs • {apt.phone}
+                      </div>
+                      <span className={styles.dayGroupCountPill}>
+                        {group.items.length} {group.items.length === 1 ? 'Patient' : 'Patients'}
                       </span>
                     </div>
-                    <p className={styles.aptSymptoms}>
-                      <strong>Reason for Visit:</strong> {apt.symptoms}
-                    </p>
-                  </div>
 
-                  <div className={styles.aptStatusCol}>
-                    <span
-                      className={`${styles.statusBadge} ${
-                        apt.status === 'Completed'
-                          ? styles.statusBadgeCompleted
-                          : apt.status === 'In-Progress'
-                          ? styles.statusBadgeProgress
-                          : styles.statusBadgeConfirmed
-                      }`}
-                    >
-                      {apt.status}
-                    </span>
+                    <div className={styles.dayGroupCardsList}>
+                      {group.items.map((apt) => (
+                        <div
+                          key={apt.id || apt._id || `${apt.patientName}-${apt.time}-${apt.date}`}
+                          id={`apt-card-${apt.id || apt._id}`}
+                          className={styles.appointmentCard}
+                        >
+                          <div className={styles.aptTimeCol}>
+                            <Clock size={16} className={styles.timeIcon} />
+                            <span className={styles.aptTime}>{apt.time}</span>
+                            <span className={styles.aptDate}>{apt.date}</span>
+                            <span className={apt.type === 'Video Call' ? styles.videoBadge : styles.clinicBadge}>
+                              {apt.type === 'Video Call' ? <Video size={12} /> : <User size={12} />}
+                              {apt.type}
+                            </span>
+                          </div>
 
-                    <div className={styles.aptActionBtns}>
-                      {apt.status !== 'Completed' ? (
-                        <button
-                          className={styles.completeBtn}
-                          onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
-                          title="Mark Completed"
-                        >
-                          <Check size={14} /> Completed
-                        </button>
-                      ) : (
-                        <button
-                          className={styles.completeBtn}
-                          style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}
-                          onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
-                          title="Reopen appointment"
-                        >
-                          <RotateCcw size={13} /> Reopen
-                        </button>
-                      )}
-                      {apt.type === 'Video Call' && apt.status !== 'Completed' && (
-                        <button
-                          className={styles.joinCallBtn}
-                          onClick={() => showToast(`Starting teleconsultation call with ${apt.patientName}...`)}
-                        >
-                          <Video size={14} /> Start Call
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid #fecdd3',
-                          color: '#e11d48',
-                          borderRadius: '7px',
-                          padding: '5px 8px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontSize: '0.76rem',
-                          fontWeight: 600
-                        }}
-                        title="Delete appointment"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                          <div className={styles.aptDetailsCol}>
+                            <div className={styles.aptPatientHeader}>
+                              <h4>
+                                {apt.patientName}
+                                {apt.isRealtime && (
+                                  <span style={{ marginLeft: '8px', fontSize: '0.7rem', background: '#dcfce7', color: '#166534', padding: '2px 7px', borderRadius: '6px', fontWeight: '700', letterSpacing: '0.02em', border: '1px solid #bbf7d0', verticalAlign: 'middle' }}>
+                                    ● Online Patient
+                                  </span>
+                                )}
+                              </h4>
+                              <span className={styles.aptPatientDemog}>
+                                {[
+                                  (apt.gender && apt.gender !== 'Not specified' && apt.gender !== 'Not Selected') ? apt.gender : null,
+                                  apt.age ? `${apt.age} yrs` : null,
+                                  (apt.phone && !String(apt.phone).includes('98000') && !String(apt.phone).includes('0000000000') && String(apt.phone).trim() !== '-') ? apt.phone : null
+                                ].filter(Boolean).join(' • ')}
+                              </span>
+                            </div>
+                            <p className={styles.aptSymptoms}>
+                              <strong>Reason for Visit:</strong> {apt.symptoms}
+                            </p>
+                          </div>
+
+                          <div className={styles.aptStatusCol}>
+                            <span
+                              className={`${styles.statusBadge} ${
+                                apt.status === 'Completed'
+                                  ? styles.statusBadgeCompleted
+                                  : apt.status === 'In-Progress'
+                                  ? styles.statusBadgeProgress
+                                  : styles.statusBadgeConfirmed
+                              }`}
+                            >
+                              {apt.status}
+                            </span>
+
+                            <div className={styles.aptActionBtns}>
+                              {apt.status !== 'Completed' ? (
+                                <button
+                                  className={styles.completeBtn}
+                                  onClick={() => updateAppointmentStatus(apt.id, 'Completed')}
+                                  title="Mark Completed"
+                                >
+                                  <Check size={14} /> Completed
+                                </button>
+                              ) : (
+                                <button
+                                  className={styles.completeBtn}
+                                  style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a' }}
+                                  onClick={() => updateAppointmentStatus(apt.id, 'Confirmed')}
+                                  title="Reopen appointment"
+                                >
+                                  <RotateCcw size={13} /> Reopen
+                                </button>
+                              )}
+                              {apt.type === 'Video Call' && apt.status !== 'Completed' && (
+                                <button
+                                  className={styles.joinCallBtn}
+                                  onClick={() => showToast(`Starting teleconsultation call with ${apt.patientName}...`)}
+                                >
+                                  <Video size={14} /> Start Call
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAppointment(apt.id)}
+                                style={{
+                                  background: 'transparent',
+                                  border: '1px solid #fecdd3',
+                                  color: '#e11d48',
+                                  borderRadius: '7px',
+                                  padding: '5px 8px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px',
+                                  fontSize: '0.76rem',
+                                  fontWeight: 600
+                                }}
+                                title="Delete appointment"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                </div>
-              )))}
+                ))
+              )}
             </div>
           </div>
         )}
@@ -5117,10 +5264,13 @@ const DoctorDashboard = ({ onNavigate }) => {
             <div className={styles.rxGrid}>
               {prescriptions.length === 0 ? (
                 <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '48px 20px', color: '#64748b', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
-                  <FileText size={36} color="#94a3b8" style={{ marginBottom: '10px' }} />
-                  <h4 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: '1rem', fontWeight: 700 }}>No Prescriptions Issued</h4>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '3px 12px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '14px' }}>
+                    Upcoming Feature
+                  </div>
+                  <FileText size={36} color="#94a3b8" style={{ marginBottom: '10px', display: 'block', margin: '0 auto 10px' }} />
+                  <h4 style={{ margin: '0 0 6px', color: '#1e293b', fontSize: '1rem', fontWeight: 700 }}>Digital Prescriptions & Clinical Notes</h4>
                   <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                    Click "Write New Prescription" above to write and issue a patient prescription.
+                    This feature is currently upcoming. Digital prescriptions, medication protocols, and automated patient export tools will be active soon.
                   </p>
                 </div>
               ) : (
@@ -5589,309 +5739,16 @@ const DoctorDashboard = ({ onNavigate }) => {
               </div>
 
               {/* SECTION: BASIC CLINICAL & CONSULTATION DETAILS */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '12px',
-                marginTop: '28px',
-                marginBottom: '16px',
-                paddingBottom: '12px',
-                borderBottom: '1.5px solid #e2e8f0'
-              }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.08rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <UserCheck size={19} color="#2563eb" />
-                    Basic Clinical & Consultation Details
-                  </h3>
-                  <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#64748b' }}>
-                    Information is only updated in the database and doctor's public page when you click <strong>Save Details</strong> or press <strong>Enter</strong>.
-                  </p>
-                </div>
+              <BasicClinicalDetailsSection
+                doctor={activeDoctor}
+                onSave={handleSaveClinicalDetails}
+                draftRef={clinicalDraftRef}
+                isSaving={isSavingProfileSettings}
+                isSaved={isProfileSettingsSaved}
+                styles={styles}
+              />
 
-                <button
-                  type="button"
-                  onClick={(e) => handleSaveAllProfileSettings(e, { explicit: true })}
-                  disabled={isSavingProfileSettings}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: isProfileSettingsSaved ? '#16a34a' : '#2563eb',
-                    color: '#ffffff',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '8px 18px',
-                    fontSize: '0.84rem',
-                    fontWeight: 600,
-                    cursor: isSavingProfileSettings ? 'not-allowed' : 'pointer',
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
-                    transition: 'all 0.2s ease'
-                  }}
-                  title="Save clinical details to database and public profile"
-                >
-                  {isProfileSettingsSaved ? <Check size={15} /> : <Save size={15} />}
-                  <span>{isSavingProfileSettings ? 'Saving...' : isProfileSettingsSaved ? 'Saved to Database!' : 'Save Details'}</span>
-                </button>
-              </div>
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveAllProfileSettings(e, { explicit: true });
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    isEditingFieldRef.current = null;
-                    handleSaveAllProfileSettings(e, { explicit: true });
-                    e.target?.blur?.();
-                  }
-                }}
-                className={styles.settingsGrid}
-              >
-                <div className={styles.formGroup}>
-                  <label>Full Name</label>
-                  <input
-                    type="text"
-                    value={clinicalDraft.name ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, name: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-                
-                <div className={styles.formGroup}>
-                  <label>Specialty / Department</label>
-                  <input
-                    type="text"
-                    value={clinicalDraft.specialty ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, specialty: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Job Title / Designation</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Senior consultant"
-                    value={clinicalDraft.jobTitle !== undefined ? clinicalDraft.jobTitle : ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, jobTitle: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Experience (Years)</label>
-                  <input
-                    type="number"
-                    value={clinicalDraft.experience ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, experience: val === '' ? '' : Number(val) }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Hospital Affiliation</label>
-                  <input
-                    type="text"
-                    value={clinicalDraft.hospital ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, hospital: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Degrees / Qualifications</label>
-                  <input
-                    type="text"
-                    value={clinicalDraft.degree ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, degree: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Consultation Fee (₹)</label>
-                  <input
-                    type="number"
-                    value={clinicalDraft.price ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, price: val === '' ? '' : Number(val) }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label>Contact Phone</label>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    placeholder="Enter 10-digit mobile number"
-                    value={clinicalDraft.phone ?? ''}
-                    onChange={(e) => {
-                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                      setClinicalDraft(prev => ({ ...prev, phone: digits }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <ShieldCheck size={16} color="#2563eb" />
-                    Medical Registration / License No.
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. DMC-2009-44182 or MCI-48291"
-                    value={clinicalDraft.licenseNumber ?? ''}
-                    onFocus={() => { isEditingFieldRef.current = 'licenseNumber'; }}
-                    onChange={(e) => {
-                      isEditingFieldRef.current = 'licenseNumber';
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, licenseNumber: val }));
-                    }}
-                    onBlur={() => { isEditingFieldRef.current = null; }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        isEditingFieldRef.current = null;
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                  />
-                </div>
-
-                <div className={styles.formGroup} style={{ gridColumn: 'span 2' }}>
-                  <label>Available Consultation Hours</label>
-                  <input
-                    type="text"
-                    value={clinicalDraft.availableDays ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setClinicalDraft(prev => ({ ...prev, availableDays: val }));
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleSaveAllProfileSettings(e, { explicit: true });
-                        e.target?.blur?.();
-                      }
-                    }}
-                    style={{
-                      fontVariantNumeric: 'tabular-nums',
-                      fontFeatureSettings: '"tnum"',
-                    }}
-                  />
-                </div>
-
-                {/* Bottom Action Save Button */}
-                <div style={{
-                  gridColumn: 'span 2',
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  marginTop: '8px',
-                  marginBottom: '6px'
-                }}>
-                  <button
-                    type="button"
-                    onClick={(e) => handleSaveAllProfileSettings(e, { explicit: true })}
-                    disabled={isSavingProfileSettings}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      background: isProfileSettingsSaved ? '#16a34a' : '#2563eb',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      padding: '9px 22px',
-                      fontSize: '0.86rem',
-                      fontWeight: 600,
-                      cursor: isSavingProfileSettings ? 'not-allowed' : 'pointer',
-                      boxShadow: '0 2px 8px rgba(37,99,235,0.25)',
-                      transition: 'all 0.2s ease'
-                    }}
-                    title="Click to save clinical details to database and public profile"
-                  >
-                    {isProfileSettingsSaved ? <Check size={16} /> : <Save size={16} />}
-                    <span>{isSavingProfileSettings ? 'Saving...' : isProfileSettingsSaved ? 'Saved to Database!' : 'Save Clinical Details'}</span>
-                  </button>
-                </div>
-
-                {/* DEDICATED SECTION: CLINIC DESK & PATIENT HELPLINE */}
+                              {/* DEDICATED SECTION: CLINIC DESK & PATIENT HELPLINE */}
                 <div style={{
                   gridColumn: 'span 2',
                   marginTop: '12px',
@@ -6030,25 +5887,35 @@ const DoctorDashboard = ({ onNavigate }) => {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                      <span style={{
-                        background: '#2563eb',
-                        color: '#ffffff',
-                        padding: '7px 16px',
-                        borderRadius: '24px',
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
-                      }}>
-                        <Phone size={13} />
-                        Call Clinic Desk: {helplineDraft.number || '+91 98765 43210'}
-                      </span>
-                      <span style={{ fontSize: '0.8rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                        <Clock size={13} color="#64748b" />
-                        {helplineDraft.days || 'Mon – Sat'} • {helplineDraft.time || '8:00 AM – 8:00 PM'}
-                      </span>
+                      {helplineDraft.number ? (
+                        <>
+                          <span style={{
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            padding: '7px 16px',
+                            borderRadius: '24px',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                          }}>
+                            <Phone size={13} />
+                            Call Clinic Desk: {helplineDraft.number}
+                          </span>
+                          {(helplineDraft.days || helplineDraft.time) && (
+                            <span style={{ fontSize: '0.8rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                              <Clock size={13} color="#64748b" />
+                              {[helplineDraft.days, helplineDraft.time].filter(Boolean).join(' • ')}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                          No helpline configured. Enter phone number above to enable the clinic desk button.
+                        </span>
+                      )}
 
                       <button
                         type="button"
@@ -6076,7 +5943,6 @@ const DoctorDashboard = ({ onNavigate }) => {
                     </div>
                   </div>
                 </div>
-              </form>
 
               {/* SECTION: CLINICAL FOCUS, PROCEDURES & QUALIFICATION BADGES */}
               <div style={{
@@ -6123,9 +5989,9 @@ const DoctorDashboard = ({ onNavigate }) => {
                   border: '1px dashed #cbd5e1'
                 }}>
                   {Array.isArray(profileForm.tags) && profileForm.tags.length > 0 ? (
-                    profileForm.tags.map((tag, tIdx) => (
+                    profileForm.tags.map((tag) => (
                       <div
-                        key={`tag-${tIdx}-${tag}`}
+                        key={`badge-${tag}`}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -6137,7 +6003,8 @@ const DoctorDashboard = ({ onNavigate }) => {
                           fontSize: '0.82rem',
                           fontWeight: 700,
                           color: '#1e40af',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                          contain: 'layout style'
                         }}
                       >
                         <span>{tag}</span>
@@ -6227,19 +6094,11 @@ const DoctorDashboard = ({ onNavigate }) => {
                     'Consultant Physician'
                   ].filter(sug => !Array.isArray(profileForm.tags) || !profileForm.tags.includes(sug))
                    .slice(0, 5)
-                   .map((sug, sIdx) => (
+                   .map((sug) => (
                     <button
-                      key={sIdx}
+                      key={`sug-${sug}`}
                       type="button"
-                      onClick={() => {
-                        const current = Array.isArray(profileForm.tags) ? profileForm.tags : getDefaultDoctorTags(activeDoctor);
-                        if (!current.includes(sug)) {
-                          const updated = [...current, sug];
-                          setProfileForm(prev => ({ ...prev, tags: updated }));
-                          updateDoctor(activeDoctor._id || activeDoctor.id, { tags: updated });
-                          showToast(`Added badge: "${sug}"`);
-                        }
-                      }}
+                      onClick={() => handleAddTag(sug)}
                       style={{
                         background: '#f1f5f9',
                         border: '1px solid #cbd5e1',
@@ -6257,1306 +6116,701 @@ const DoctorDashboard = ({ onNavigate }) => {
                 </div>
               </div>
 
-              {/* SECTION: APPOINTMENT DATES & TIME SLOTS MANAGEMENT */}
-              <div style={{
-                marginTop: '28px',
-                border: '1.5px solid #bfdbfe',
-                background: '#ffffff',
-                borderRadius: '12px',
-                padding: '22px 24px',
-                boxShadow: '0 2px 8px rgba(37,99,235,0.06)'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                  <div>
-                    <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#1e3a8a', fontSize: '1.05rem', fontWeight: 800 }}>
-                      <Calendar size={20} color="#2563eb" />
-                      Appointment Dates & Booking Time Slots
-                    </h4>
-                    <p style={{ margin: '4px 0 0 0', fontSize: '0.84rem', color: '#64748b' }}>
-                      Configure your clinic working days and time slots. These are displayed live to patients on your Doctor Booking page.
-                    </p>
-                  </div>
+              {/* SECTION: APPOINTMENT DATES & TIME SLOTS MANAGEMENT (REDESIGNED CALENDAR) */}
+              {(() => {
+                const calYear = calendarViewDate.getFullYear();
+                const calMonth = calendarViewDate.getMonth();
+                const monthDisplayTitle = calendarViewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+                const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay(); // 0 = Sun, 1 = Mon...
+                const totalDaysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+                const leadingPadding = Array.from({ length: firstDayOfWeek });
+                const monthDays = Array.from({ length: totalDaysInMonth }, (_, i) => i + 1);
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      disabled={isSavingSchedule}
-                      onClick={handleSaveSchedule}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        background: '#2563eb',
-                        color: '#ffffff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '8px 16px',
-                        fontWeight: 700,
-                        fontSize: '0.84rem',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
-                      }}
-                    >
-                      {isSavingSchedule ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />}
-                      <span>Save Schedule & Slots</span>
-                    </button>
-                  </div>
-                </div>
+                const selectedDateObj = new Date(selectedScheduleDate + 'T00:00:00');
+                const selectedDateFormatted = selectedDateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+                const isSelectedOnLeave = isDateOnLeave(selectedScheduleDate);
+                const selectedDateSlots = getDateSlots(selectedScheduleDate);
+                const isSelectedToday = selectedScheduleDate === todayDateStr;
 
-                {/* SCHEDULE MODE SWITCHER: WEEKLY (DAY-BY-DAY) | SPECIFIC DATE OVERRIDE | DAYS OFF & LEAVES */}
-                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', marginBottom: '18px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <CalendarDays size={18} color="#2563eb" />
-                      <span>Doctor Consultation Schedule Management:</span>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => setSlotConfigMode('day')}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          border: slotConfigMode === 'day' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: slotConfigMode === 'day' ? '#eff6ff' : '#ffffff',
-                          color: slotConfigMode === 'day' ? '#1d4ed8' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '0.84rem',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '7px',
-                          boxShadow: slotConfigMode === 'day' ? '0 2px 4px rgba(37,99,235,0.15)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Clock size={15} color={slotConfigMode === 'day' ? '#2563eb' : '#64748b'} />
-                        <span>🗓️ Weekly Schedule (Regular Hours)</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setSlotConfigMode('date')}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          border: slotConfigMode !== 'day' ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: slotConfigMode !== 'day' ? '#eff6ff' : '#ffffff',
-                          color: slotConfigMode !== 'day' ? '#1d4ed8' : '#475569',
-                          fontWeight: 700,
-                          fontSize: '0.84rem',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '7px',
-                          boxShadow: slotConfigMode !== 'day' ? '0 2px 4px rgba(37,99,235,0.15)' : 'none',
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        <Calendar size={15} color={slotConfigMode !== 'day' ? '#2563eb' : '#64748b'} />
-                        <span>📅 Calendar Dates & Leaves</span>
-                        {Object.keys(profileForm.dateWiseSlots || {}).length > 0 && (
-                          <span style={{
-                            background: '#dbeafe',
-                            color: '#1e40af',
-                            padding: '1px 7px',
-                            borderRadius: '10px',
-                            fontSize: '0.7rem',
-                            fontWeight: 800
-                          }}>
-                            {Object.keys(profileForm.dateWiseSlots || {}).length}
-                          </span>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 7 Day Bar - Always Visible in 'day' Mode */}
-                  {slotConfigMode === 'day' && (
-                    <div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>👉 Click any day to view, add, or edit time slots specifically for that day:</span>
+                return (
+                  <div style={{
+                    marginTop: '28px',
+                    border: '1.5px solid #bfdbfe',
+                    background: '#ffffff',
+                    borderRadius: '14px',
+                    padding: '24px',
+                    boxShadow: '0 2px 10px rgba(37,99,235,0.06)'
+                  }}>
+                    {/* Header Bar */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+                      <div>
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '9px', color: '#1e3a8a', fontSize: '1.1rem', fontWeight: 800 }}>
+                          <Calendar size={22} color="#2563eb" />
+                          <span>Appointment Schedule & Booking Calendar</span>
+                        </h4>
+                        <p style={{ margin: '5px 0 0 0', fontSize: '0.84rem', color: '#64748b' }}>
+                          Live monthly calendar. Click any day to configure time slots or mark leave. Days without configured slots are not displayed to patients.
+                        </p>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(115px, 1fr))', gap: '8px' }}>
-                        {DAYS_LIST.map(dayKey => {
-                          const isSelected = selectedScheduleDay === dayKey;
-                          const daySlots = getDaySlots(dayKey);
-                          const isDayOffVal = isDayOff(dayKey);
-                          const slotCount = isDayOffVal ? 0 : daySlots.length;
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {/* Month Selector Bar */}
+                        <div style={{ display: 'inline-flex', alignItems: 'center', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '3px' }}>
+                          <button
+                            type="button"
+                            title="Previous Month"
+                            onClick={() => setCalendarViewDate(new Date(calYear, calMonth - 1, 1))}
+                            style={{ background: 'transparent', border: 'none', borderRadius: '6px', padding: '6px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#334155' }}
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a', padding: '0 10px', minWidth: '130px', textAlign: 'center' }}>
+                            {monthDisplayTitle}
+                          </span>
+                          <button
+                            type="button"
+                            title="Next Month"
+                            onClick={() => setCalendarViewDate(new Date(calYear, calMonth + 1, 1))}
+                            style={{ background: 'transparent', border: 'none', borderRadius: '6px', padding: '6px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#334155' }}
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+
+                        {/* Jump to Current Live Month */}
+                        {(calYear !== currentPcDate.getFullYear() || calMonth !== currentPcDate.getMonth()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCalendarViewDate(new Date(currentPcDate.getFullYear(), currentPcDate.getMonth(), 1));
+                              setSelectedScheduleDate(todayDateStr);
+                            }}
+                            style={{
+                              background: '#eff6ff',
+                              border: '1px solid #bfdbfe',
+                              color: '#1d4ed8',
+                              borderRadius: '8px',
+                              padding: '7px 12px',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Current Month ({currentPcDate.toLocaleDateString('en-US', { month: 'short' })})
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={isSavingSchedule}
+                          onClick={handleSaveSchedule}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            background: '#2563eb',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '8px',
+                            padding: '8px 16px',
+                            fontWeight: 700,
+                            fontSize: '0.84rem',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                          }}
+                        >
+                          {isSavingSchedule ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={15} />}
+                          <span>Save Schedule & Slots</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Month Calendar Grid Card */}
+                    <div style={{ background: '#ffffff', border: '1.5px solid #e2e8f0', borderRadius: '12px', padding: '16px', marginBottom: '22px', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <CalendarDays size={17} color="#2563eb" />
+                          <span>{monthDisplayTitle} — Click any date to configure</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.74rem', color: '#64748b' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></span>
+                            Slots Marked (Open)
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444' }}></span>
+                            On Leave (Closed)
+                          </span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#94a3b8' }}></span>
+                            Unmarked (Hidden)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Weekday Labels Row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px', marginBottom: '8px' }}>
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(dayLabel => (
+                          <div
+                            key={dayLabel}
+                            style={{
+                              textAlign: 'center',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              color: dayLabel === 'Sun' ? '#e11d48' : '#475569',
+                              padding: '6px 0',
+                              background: '#f8fafc',
+                              borderRadius: '6px'
+                            }}
+                          >
+                            {dayLabel.toUpperCase()}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Calendar Day Cells */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '8px' }}>
+                        {/* Leading padding for days before month start */}
+                        {leadingPadding.map((_, pIdx) => (
+                          <div
+                            key={`pad-${pIdx}`}
+                            style={{
+                              minHeight: '74px',
+                              background: '#f8fafc',
+                              border: '1px dashed #e2e8f0',
+                              borderRadius: '10px',
+                              opacity: 0.35
+                            }}
+                          />
+                        ))}
+
+                        {/* Days of the month */}
+                        {monthDays.map(dayNum => {
+                          const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                          const isToday = dateStr === todayDateStr;
+                          const isPast = dateStr < todayDateStr;
+                          const isSelected = dateStr === selectedScheduleDate;
+                          const onLeave = isDateOnLeave(dateStr);
+                          const slots = getDateSlots(dateStr);
+                          const hasSlots = slots.length > 0;
 
                           return (
-                            <button
-                              key={dayKey}
-                              type="button"
-                              onClick={() => setSelectedScheduleDay(dayKey)}
+                            <div
+                              key={dateStr}
+                              onClick={() => setSelectedScheduleDate(dateStr)}
                               style={{
-                                padding: '12px 8px',
+                                minHeight: '74px',
+                                padding: '8px 7px',
                                 borderRadius: '10px',
                                 cursor: 'pointer',
-                                textAlign: 'center',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '5px',
-                                border: isSelected 
-                                  ? '2.5px solid #2563eb' 
-                                  : (isDayOffVal ? '1.5px solid #fca5a5' : '1px solid #cbd5e1'),
-                                background: isSelected 
-                                  ? '#eff6ff' 
-                                  : (isDayOffVal ? '#fff1f2' : '#ffffff'),
-                                color: isSelected ? '#1d4ed8' : '#1e293b',
-                                boxShadow: isSelected ? '0 3px 10px rgba(37,99,235,0.22)' : '0 1px 2px rgba(0,0,0,0.02)',
-                                transform: isSelected ? 'translateY(-1px)' : 'none',
-                                transition: 'all 0.15s ease'
+                                justifyContent: 'space-between',
+                                transition: 'all 0.15s ease',
+                                border: isSelected
+                                  ? '2.5px solid #2563eb'
+                                  : onLeave
+                                  ? '1.5px solid #fca5a5'
+                                  : hasSlots
+                                  ? '1.5px solid #93c5fd'
+                                  : '1px solid #e2e8f0',
+                                background: isSelected
+                                  ? '#eff6ff'
+                                  : onLeave
+                                  ? '#fff5f5'
+                                  : hasSlots
+                                  ? '#ffffff'
+                                  : '#fcfcfc',
+                                boxShadow: isSelected
+                                  ? '0 3px 10px rgba(37,99,235,0.2)'
+                                  : '0 1px 2px rgba(0,0,0,0.02)',
+                                opacity: isPast ? 0.6 : 1,
+                                transform: isSelected ? 'translateY(-1px)' : 'none'
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ fontWeight: 800, fontSize: '0.88rem' }}>
-                                  {DAY_NAME_MAP[dayKey] || dayKey}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{
+                                  fontSize: '0.88rem',
+                                  fontWeight: 800,
+                                  color: isSelected ? '#1d4ed8' : onLeave ? '#b91c1c' : '#1e293b'
+                                }}>
+                                  {dayNum}
                                 </span>
+                                {isToday && (
+                                  <span style={{
+                                    fontSize: '0.64rem',
+                                    fontWeight: 800,
+                                    background: '#2563eb',
+                                    color: '#ffffff',
+                                    padding: '1px 5px',
+                                    borderRadius: '4px'
+                                  }}>
+                                    Today
+                                  </span>
+                                )}
                               </div>
-                              <span style={{
-                                fontSize: '0.72rem',
-                                fontWeight: 700,
-                                padding: '2px 8px',
-                                borderRadius: '6px',
-                                background: isDayOffVal ? '#fee2e2' : (isSelected ? '#dbeafe' : '#f1f5f9'),
-                                color: isDayOffVal ? '#b91c1c' : (isSelected ? '#1d4ed8' : '#475569')
-                              }}>
-                                {isDayOffVal ? '🔴 Closed' : `🟢 ${slotCount} slots`}
-                              </span>
-                            </button>
+
+                              <div style={{ marginTop: '4px' }}>
+                                {onLeave ? (
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    color: '#dc2626',
+                                    background: '#fee2e2',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}>
+                                    🔴 Leave
+                                  </span>
+                                ) : hasSlots ? (
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    color: '#047857',
+                                    background: '#ecfdf5',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '3px'
+                                  }}>
+                                    🟢 {slots.length} slots
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    fontSize: '0.68rem',
+                                    fontWeight: 600,
+                                    color: '#94a3b8',
+                                    background: '#f1f5f9',
+                                    padding: '2px 5px',
+                                    borderRadius: '5px',
+                                    display: 'inline-block'
+                                  }}>
+                                    ⚪ Not marked
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
                     </div>
-                  )}
-                </div>
 
-                {/* TAB 1: WEEKLY SCHEDULE DETAILS PANEL */}
-                {slotConfigMode === 'day' && (
-                  <div style={{
-                    background: '#f8fafc',
-                    border: '1.5px solid #bfdbfe',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginBottom: '20px',
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.05)'
-                  }}>
-                    {/* Header Bar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Clock size={18} color="#2563eb" />
-                          <span>🗓️ {DAY_NAME_MAP[selectedScheduleDay]}'s Consultation Slots</span>
-                        </div>
-                        <span style={{
-                          fontSize: '0.76rem',
-                          fontWeight: 700,
-                          padding: '3px 10px',
-                          borderRadius: '8px',
-                          background: isDayOff(selectedScheduleDay) ? '#fee2e2' : '#dbeafe',
-                          color: isDayOff(selectedScheduleDay) ? '#b91c1c' : '#1d4ed8'
-                        }}>
-                          {isDayOff(selectedScheduleDay)
-                            ? '🔴 Clinic Closed on this day'
-                            : `🟢 ${getDaySlots(selectedScheduleDay).length} slots configured`}
-                        </span>
-                      </div>
+                    {/* SELECTED DATE DETAILS & SLOT CONFIGURATION PANEL */}
+                    <div style={{
+                      background: isSelectedOnLeave ? '#fff5f5' : '#f8fafc',
+                      border: isSelectedOnLeave ? '1.5px solid #fca5a5' : '1.5px solid #bfdbfe',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      marginBottom: '20px',
+                      boxShadow: '0 2px 6px rgba(37,99,235,0.04)'
+                    }}>
+                      {/* Date Header & Status Controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '1rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Clock size={18} color="#2563eb" />
+                            <span>📅 {selectedDateFormatted}</span>
+                          </span>
 
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {/* Day Status Toggle */}
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDayOff(selectedScheduleDay)}
-                          style={{
-                            background: isDayOff(selectedScheduleDay) ? '#10b981' : '#fee2e2',
-                            color: isDayOff(selectedScheduleDay) ? '#ffffff' : '#b91c1c',
-                            border: 'none',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            fontSize: '0.78rem',
+                          {isSelectedToday && (
+                            <span style={{ fontSize: '0.72rem', fontWeight: 800, background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '6px' }}>
+                              Today's Date
+                            </span>
+                          )}
+
+                          <span style={{
+                            fontSize: '0.76rem',
                             fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          {isDayOff(selectedScheduleDay) ? <Check size={13} /> : <X size={13} />}
-                          {isDayOff(selectedScheduleDay) ? `Reopen ${DAY_NAME_MAP[selectedScheduleDay]}` : `Mark ${DAY_NAME_MAP[selectedScheduleDay]} Closed`}
-                        </button>
+                            padding: '3px 10px',
+                            borderRadius: '8px',
+                            background: isSelectedOnLeave ? '#fee2e2' : selectedDateSlots.length > 0 ? '#ecfdf5' : '#f1f5f9',
+                            color: isSelectedOnLeave ? '#b91c1c' : selectedDateSlots.length > 0 ? '#047857' : '#64748b'
+                          }}>
+                            {isSelectedOnLeave
+                              ? '🔴 Clinic Closed / Doctor On Leave'
+                              : selectedDateSlots.length > 0
+                              ? `🟢 ${selectedDateSlots.length} Slots Configured (Live on Doctor Page)`
+                              : '⚪ No Slots Marked (Hidden from Patient Booking)'}
+                          </span>
+                        </div>
 
-                        {/* Copy to All Working Days */}
-                        {!isDayOff(selectedScheduleDay) && getDaySlots(selectedScheduleDay).length > 0 && (
+                        {/* Leave Toggle & Action Buttons */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           <button
                             type="button"
-                            onClick={() => handleCopyDaySlotsToAll(selectedScheduleDay)}
-                            title={`Replicate ${DAY_NAME_MAP[selectedScheduleDay]}'s slots across all open working days`}
+                            onClick={() => handleToggleDateLeave(selectedScheduleDate)}
                             style={{
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
-                              border: '1px solid #bfdbfe',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '0.78rem',
+                              background: isSelectedOnLeave ? '#10b981' : '#fee2e2',
+                              color: isSelectedOnLeave ? '#ffffff' : '#b91c1c',
+                              border: isSelectedOnLeave ? 'none' : '1px solid #fca5a5',
+                              padding: '7px 14px',
+                              borderRadius: '7px',
+                              fontSize: '0.8rem',
                               fontWeight: 700,
                               cursor: 'pointer',
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: '5px'
+                              gap: '5px',
+                              boxShadow: isSelectedOnLeave ? '0 2px 4px rgba(16,185,129,0.2)' : 'none'
                             }}
                           >
-                            <Copy size={13} />
-                            <span>Copy to All Working Days</span>
+                            {isSelectedOnLeave ? <Check size={14} /> : <X size={14} />}
+                            <span>{isSelectedOnLeave ? 'Cancel Leave & Open Slots' : '🏖️ Mark Leave on this Day'}</span>
                           </button>
-                        )}
 
-                        {/* Clear Day Slots */}
-                        {!isDayOff(selectedScheduleDay) && getDaySlots(selectedScheduleDay).length > 0 && (
-                          <button
-                            type="button"
-                            onClick={handleClearAllSlots}
-                            style={{
-                              background: '#fff1f2',
-                              border: '1px solid #fecdd3',
-                              color: '#e11d48',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              fontSize: '0.78rem',
-                              fontWeight: 600,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}
-                          >
-                            <Trash2 size={13} />
-                            <span>Clear Slots</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Day Content */}
-                    {isDayOff(selectedScheduleDay) ? (
-                      <div style={{ background: '#fff1f2', border: '1.5px dashed #f87171', borderRadius: '10px', padding: '20px', textAlign: 'center', margin: '8px 0' }}>
-                        <AlertTriangle size={28} color="#ef4444" style={{ marginBottom: '8px' }} />
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#991b1b', marginBottom: '4px' }}>
-                          {DAY_NAME_MAP[selectedScheduleDay]} is Marked Closed / Off
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#b91c1c', maxWidth: '520px', margin: '0 auto 14px' }}>
-                          Patients booking on {DAY_NAME_MAP[selectedScheduleDay]}s will see "Clinic Closed" and cannot book appointments.
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDayOff(selectedScheduleDay)}
-                          style={{
-                            background: '#10b981',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '8px',
-                            padding: '8px 18px',
-                            fontSize: '0.82rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            boxShadow: '0 2px 6px rgba(16,185,129,0.25)'
-                          }}
-                        >
-                          <Check size={14} />
-                          <span>Mark {DAY_NAME_MAP[selectedScheduleDay]} Open & Add Slots</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        {/* Explanatory subtitle */}
-                        <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '10px' }}>
-                          Slots configured below apply <strong>strictly to {DAY_NAME_MAP[selectedScheduleDay]}s</strong>. Modifying these slots will not affect other days.
-                        </div>
-
-                        {/* Active Slots Chips */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '16px', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                          {getDaySlots(selectedScheduleDay).length > 0 ? (
-                            getDaySlots(selectedScheduleDay).map((slot) => (
-                              <div
-                                key={`${selectedScheduleDay}_${slot}`}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '8px',
-                                  background: '#eff6ff',
-                                  border: '1.5px solid #93c5fd',
-                                  borderRadius: '8px',
-                                  padding: '6px 12px',
-                                  fontSize: '0.82rem',
-                                  fontWeight: 700,
-                                  color: '#1e3a8a',
-                                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                                  contain: 'layout style'
-                                }}
-                              >
-                                <Clock size={12} color="#2563eb" />
-                                <span>{slot}</span>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleDeleteSlot(slot);
-                                  }}
-                                  title={`Remove ${slot} from ${DAY_NAME_MAP[selectedScheduleDay]}`}
-                                  style={{
-                                    background: '#fee2e2',
-                                    border: 'none',
-                                    color: '#ef4444',
-                                    borderRadius: '50%',
-                                    width: '18px',
-                                    height: '18px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    cursor: 'pointer',
-                                    padding: 0
-                                  }}
-                                >
-                                  <X size={11} />
-                                </button>
-                              </div>
-                            ))
-                          ) : (
-                            <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '6px 0' }}>
-                              No time slots configured for {DAY_NAME_MAP[selectedScheduleDay]}. Add custom slots below or choose an OPD preset.
-                            </div>
+                          {!isSelectedOnLeave && selectedDateSlots.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleClearSlotsForDate(selectedScheduleDate)}
+                              style={{
+                                background: '#fff1f2',
+                                border: '1px solid #fecdd3',
+                                color: '#e11d48',
+                                padding: '7px 12px',
+                                borderRadius: '7px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <Trash2 size={13} />
+                              <span>Clear Slots</span>
+                            </button>
                           )}
                         </div>
+                      </div>
 
-                        {/* Add Slot Form */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
-                          <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
-                            ➕ Add Slot to {DAY_NAME_MAP[selectedScheduleDay]}:
-                          </span>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <select
-                              value={slotHour}
-                              onChange={(e) => setSlotHour(e.target.value)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                            >
-                              {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
-                                <option key={h} value={h}>{h}</option>
-                              ))}
-                            </select>
-                            <span>:</span>
-                            <select
-                              value={slotMin}
-                              onChange={(e) => setSlotMin(e.target.value)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                            >
-                              {['00', '15', '20', '30', '40', '45', '50'].map(m => (
-                                <option key={m} value={m}>{m}</option>
-                              ))}
-                            </select>
-                            <select
-                              value={slotPeriod}
-                              onChange={(e) => setSlotPeriod(e.target.value)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                            >
-                              <option value="AM">AM</option>
-                              <option value="PM">PM</option>
-                            </select>
+                      {/* Content when Marked ON LEAVE */}
+                      {isSelectedOnLeave ? (
+                        <div style={{ background: '#ffffff', border: '1.5px dashed #f87171', borderRadius: '10px', padding: '22px', textAlign: 'center', margin: '8px 0' }}>
+                          <AlertTriangle size={30} color="#ef4444" style={{ marginBottom: '8px' }} />
+                          <div style={{ fontSize: '0.96rem', fontWeight: 800, color: '#991b1b', marginBottom: '4px' }}>
+                            Dr. {activeDoctor.name ? activeDoctor.name.replace('Dr. ', '') : 'Doctor'} is Marked ON LEAVE on {selectedDateFormatted}
                           </div>
-
+                          <div style={{ fontSize: '0.82rem', color: '#b91c1c', maxWidth: '560px', margin: '0 auto 16px', lineHeight: 1.5 }}>
+                            Patients visiting your profile cannot book appointments on off days. If today is marked as leave, your availability status automatically updates to "On Leave".
+                          </div>
                           <button
                             type="button"
-                            onClick={() => handleAddSlot(`${slotHour}:${slotMin} ${slotPeriod}`)}
+                            onClick={() => handleToggleDateLeave(selectedScheduleDate)}
                             style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              background: '#2563eb',
+                              background: '#10b981',
                               color: '#ffffff',
                               border: 'none',
-                              borderRadius: '6px',
-                              padding: '7px 16px',
+                              borderRadius: '8px',
+                              padding: '8px 18px',
                               fontSize: '0.82rem',
                               fontWeight: 700,
                               cursor: 'pointer',
-                              boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              boxShadow: '0 2px 6px rgba(16,185,129,0.25)'
                             }}
                           >
-                            <Plus size={14} />
-                            <span>Add Slot</span>
+                            <Check size={14} />
+                            <span>Remove Leave & Configure Working Slots</span>
                           </button>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Explanatory subtitle */}
+                          <div style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '10px' }}>
+                            Slots configured below apply strictly to <strong>{selectedDateFormatted}</strong>. Days without marked slots are hidden from patients on the booking page.
+                          </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-                            <input
-                              type="text"
-                              placeholder="Or custom (e.g. 06:15 PM)"
-                              value={newSlotTime}
-                              onChange={(e) => setNewSlotTime(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddSlot(newSlotTime);
-                                }
+                          {/* Active Slots Chips */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '16px', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            {selectedDateSlots.length > 0 ? (
+                              selectedDateSlots.map((slot) => (
+                                <div
+                                  key={`${selectedScheduleDate}_${slot}`}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '8px',
+                                    background: '#eff6ff',
+                                    border: '1.5px solid #93c5fd',
+                                    borderRadius: '8px',
+                                    padding: '6px 12px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    color: '#1e3a8a',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)'
+                                  }}
+                                >
+                                  <Clock size={12} color="#2563eb" />
+                                  <span>{slot}</span>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleDeleteSlotFromDate(slot, selectedScheduleDate);
+                                    }}
+                                    title={`Remove ${slot}`}
+                                    style={{
+                                      background: '#fee2e2',
+                                      border: 'none',
+                                      color: '#ef4444',
+                                      borderRadius: '50%',
+                                      width: '18px',
+                                      height: '18px',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      padding: 0
+                                    }}
+                                  >
+                                    <X size={11} />
+                                  </button>
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{ color: '#94a3b8', fontSize: '0.84rem', fontStyle: 'italic', padding: '6px 0' }}>
+                                ⚠️ No time slots marked for {selectedDateFormatted}. This date will NOT be displayed to patients on your booking page until you add slots below.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Add Slot Form Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px 14px', marginBottom: '14px' }}>
+                            <span style={{ fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
+                              ➕ Add Slot:
+                            </span>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <select
+                                value={slotHour}
+                                onChange={(e) => setSlotHour(e.target.value)}
+                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                              >
+                                {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
+                                  <option key={h} value={h}>{h}</option>
+                                ))}
+                              </select>
+                              <span>:</span>
+                              <select
+                                value={slotMin}
+                                onChange={(e) => setSlotMin(e.target.value)}
+                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                              >
+                                {['00', '15', '20', '30', '40', '45', '50'].map(m => (
+                                  <option key={m} value={m}>{m}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={slotPeriod}
+                                onChange={(e) => setSlotPeriod(e.target.value)}
+                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
+                              >
+                                <option value="AM">AM</option>
+                                <option value="PM">PM</option>
+                              </select>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAddSlotToDate(`${slotHour}:${slotMin} ${slotPeriod}`, selectedScheduleDate)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: '#2563eb',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                padding: '7px 16px',
+                                fontSize: '0.82rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 4px rgba(37,99,235,0.2)'
                               }}
-                              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '180px' }}
-                            />
-                            {newSlotTime && (
+                            >
+                              <Plus size={14} />
+                              <span>Add Slot</span>
+                            </button>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+                              <input
+                                type="text"
+                                placeholder="Or custom (e.g. 06:15 PM)"
+                                value={newSlotTime}
+                                onChange={(e) => setNewSlotTime(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleAddSlotToDate(newSlotTime, selectedScheduleDate);
+                                  }
+                                }}
+                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '180px' }}
+                              />
+                              {newSlotTime && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddSlotToDate(newSlotTime, selectedScheduleDate)}
+                                  style={{
+                                    background: '#10b981',
+                                    color: '#ffffff',
+                                    border: 'none',
+                                    borderRadius: '6px',
+                                    padding: '6px 12px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Add
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quick Slot Presets */}
+                          <div style={{ marginBottom: '14px' }}>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
+                              ⚡ Quick OPD Slot Presets:
+                            </span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                               <button
                                 type="button"
-                                onClick={() => handleAddSlot(newSlotTime)}
+                                onClick={() => handleApplyPresetToDate(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots', selectedScheduleDate)}
+                                style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 11px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', color: '#334155' }}
+                              >
+                                Standard 4 Slots (04:00 PM - 05:30 PM)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApplyPresetToDate(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD', selectedScheduleDate)}
+                                style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 11px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', color: '#334155' }}
+                              >
+                                Morning OPD (09:00 AM - 01:00 PM)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApplyPresetToDate(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD', selectedScheduleDate)}
+                                style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 11px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', color: '#334155' }}
+                              >
+                                Evening OPD (04:00 PM - 08:00 PM)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleApplyPresetToDate([
+                                  '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
+                                  '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
+                                ], 'Full Day OPD', selectedScheduleDate)}
+                                style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '6px 11px', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', color: '#334155' }}
+                              >
+                                Full Day OPD (Morning + Evening)
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Bulk Month Helpers */}
+                          <div style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>
+                              💡 Month Schedule Shortcuts:
+                            </span>
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={handleMarkAllSundaysLeave}
+                                style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '5px 10px', fontSize: '0.74rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
+                              >
+                                ☀️ Mark All Sundays as Leave
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* SUBSECTION: SLOT DURATION & SUMMARY */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
+                          Slot Duration (Per Patient)
+                        </label>
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                          {[15, 20, 30, 45, 60].map(dur => {
+                            const isSelected = (profileForm.slotDuration || 20) === dur;
+                            return (
+                              <button
+                                key={dur}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleSlotDurationChange(dur);
+                                }}
                                 style={{
-                                  background: '#10b981',
-                                  color: '#ffffff',
-                                  border: 'none',
+                                  padding: '5px 10px',
                                   borderRadius: '6px',
-                                  padding: '6px 12px',
-                                  fontSize: '0.82rem',
-                                  fontWeight: 700,
+                                  border: isSelected ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                                  background: isSelected ? '#eff6ff' : '#ffffff',
+                                  color: isSelected ? '#1d4ed8' : '#475569',
+                                  fontWeight: isSelected ? 700 : 500,
+                                  fontSize: '0.78rem',
                                   cursor: 'pointer'
                                 }}
                               >
-                                Add
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Quick Presets for this Day */}
-                        <div style={{ marginBottom: '16px' }}>
-                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                            ⚡ Quick Slot Presets for {DAY_NAME_MAP[selectedScheduleDay]}:
-                          </span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots')}
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: '6px',
-                                padding: '6px 11px',
-                                fontSize: '0.76rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                color: '#334155'
-                              }}
-                            >
-                              Standard 4 Slots (04:00 PM - 05:30 PM)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApplySlotPreset(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD')}
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: '6px',
-                                padding: '6px 11px',
-                                fontSize: '0.76rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                color: '#334155'
-                              }}
-                            >
-                              Morning OPD (09:00 AM - 01:00 PM)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD')}
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: '6px',
-                                padding: '6px 11px',
-                                fontSize: '0.76rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                color: '#334155'
-                              }}
-                            >
-                              Evening OPD (04:00 PM - 08:00 PM)
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApplySlotPreset([
-                                '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-                                '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
-                              ], 'Full Day OPD')}
-                              style={{
-                                background: '#ffffff',
-                                border: '1px solid #cbd5e1',
-                                borderRadius: '6px',
-                                padding: '6px 11px',
-                                fontSize: '0.76rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                color: '#334155'
-                              }}
-                            >
-                              Full Day OPD (Morning + Evening)
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Quick Weekly Working Days Presets */}
-                        <div style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                          <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>
-                            💡 Recurring Days Off Shortcuts:
-                          </span>
-                          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleApplyWeeklyDaysOffPreset('sunday')}
-                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
-                            >
-                              ☀️ Sunday Off
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApplyWeeklyDaysOffPreset('weekend')}
-                              style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#334155', cursor: 'pointer' }}
-                            >
-                              🏖️ Sat & Sun Off
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleApplyWeeklyDaysOffPreset('all_working')}
-                              style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '6px', padding: '4px 9px', fontSize: '0.74rem', fontWeight: 700, color: '#065f46', cursor: 'pointer' }}
-                            >
-                              💼 All 7 Days Open
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* TAB 2: CALENDAR DATES & LEAVES PANEL */}
-                {slotConfigMode !== 'day' && (
-                  <div style={{
-                    background: '#ffffff',
-                    border: '1.5px solid #bfdbfe',
-                    borderRadius: '12px',
-                    padding: '20px',
-                    marginBottom: '20px',
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.05)'
-                  }}>
-                    {/* SECTION 1: SINGLE DATE PICKER & OVERRIDE */}
-                    <div style={{ marginBottom: '22px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
-                        <div>
-                          <div style={{ fontSize: '0.94rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Calendar size={17} color="#2563eb" />
-                            <span>1. Single Calendar Date Management (Overrides & Leaves)</span>
-                          </div>
-                          <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                            Pick a specific date to mark it as leave/closed or configure custom hours for that day.
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Date Picker Input & Quick Chips */}
-                      <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-                        <div 
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            background: '#ffffff',
-                            border: '1.5px solid #2563eb',
-                            padding: '7px 14px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            boxShadow: '0 1px 3px rgba(37,99,235,0.1)'
-                          }}
-                          onClick={() => {
-                            if (scheduleDateInputRef.current) {
-                              if (typeof scheduleDateInputRef.current.showPicker === 'function') {
-                                try {
-                                  scheduleDateInputRef.current.showPicker();
-                                } catch {
-                                  scheduleDateInputRef.current.focus();
-                                }
-                              } else {
-                                scheduleDateInputRef.current.focus();
-                              }
-                            }
-                          }}
-                        >
-                          <Calendar size={16} color="#2563eb" />
-                          <input
-                            ref={scheduleDateInputRef}
-                            type="date"
-                            value={selectedScheduleDate}
-                            min={todayDateStr}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) => {
-                              if (e.target.value) setSelectedScheduleDate(e.target.value);
-                            }}
-                            style={{
-                              border: 'none',
-                              outline: 'none',
-                              fontSize: '0.84rem',
-                              fontWeight: 700,
-                              color: '#1e293b',
-                              background: 'transparent',
-                              cursor: 'pointer'
-                            }}
-                          />
-                        </div>
-
-                        {/* Quick Date Shortcuts */}
-                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                          {[
-                            { label: 'Today', offset: 0 },
-                            { label: 'Tomorrow', offset: 1 },
-                            { label: '+2 Days', offset: 2 },
-                            { label: '+3 Days', offset: 3 },
-                            { label: '+7 Days', offset: 7 }
-                          ].map(q => {
-                            const targetDate = new Date();
-                            targetDate.setDate(targetDate.getDate() + q.offset);
-                            const dateStr = getLocalDateString(targetDate);
-                            const isPicked = selectedScheduleDate === dateStr;
-
-                            return (
-                              <button
-                                key={q.offset}
-                                type="button"
-                                onClick={() => setSelectedScheduleDate(dateStr)}
-                                style={{
-                                  padding: '6px 11px',
-                                  borderRadius: '6px',
-                                  border: isPicked ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                                  background: isPicked ? '#eff6ff' : '#ffffff',
-                                  color: isPicked ? '#1d4ed8' : '#475569',
-                                  fontWeight: isPicked ? 800 : 600,
-                                  fontSize: '0.76rem',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.1s ease'
-                                }}
-                              >
-                                {q.label}
+                                {dur} mins
                               </button>
                             );
                           })}
                         </div>
                       </div>
 
-                      {/* Selected Date Card */}
-                      {(() => {
-                        const dateObj = new Date(selectedScheduleDate + 'T00:00:00');
-                        const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-                        const fullDateFormatted = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
-                        const dateOverrideVal = profileForm.dateWiseSlots?.[selectedScheduleDate];
-                        const isDateLeave = dateOverrideVal === 'off' || dateOverrideVal?.isOff === true;
-                        const hasCustomSlots = Array.isArray(dateOverrideVal) || Array.isArray(dateOverrideVal?.slots);
-                        const activeSlots = getCurrentModeSlots();
-
-                        return (
-                          <div style={{
-                            background: isDateLeave ? '#fff1f2' : '#f8fafc',
-                            border: isDateLeave ? '1.5px solid #fca5a5' : '1px solid #cbd5e1',
-                            borderRadius: '10px',
-                            padding: '16px',
-                            marginBottom: '16px'
-                          }}>
-                            {/* Date Status & Controls Header */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: isDateLeave ? 0 : '14px', paddingBottom: isDateLeave ? 0 : '12px', borderBottom: isDateLeave ? 'none' : '1px solid #e2e8f0' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-                                  📅 {fullDateFormatted}
-                                </span>
-                                <span style={{
-                                  fontSize: '0.74rem',
-                                  fontWeight: 700,
-                                  padding: '3px 8px',
-                                  borderRadius: '6px',
-                                  background: isDateLeave ? '#fee2e2' : (hasCustomSlots ? '#fef3c7' : '#ecfdf5'),
-                                  color: isDateLeave ? '#b91c1c' : (hasCustomSlots ? '#92400e' : '#065f46')
-                                }}>
-                                  {isDateLeave
-                                    ? '🔴 Clinic Closed / Doctor On Leave'
-                                    : (hasCustomSlots
-                                        ? `🟡 Custom Hours (${activeSlots.length} slots)`
-                                        : `🟢 Standard Hours (${activeSlots.length} slots from ${dayOfWeek})`)}
-                                </span>
-                              </div>
-
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                {isDateLeave ? (
-                                  <button
-                                    type="button"
-                                    onClick={handleToggleDateOff}
-                                    style={{
-                                      background: '#10b981',
-                                      color: '#ffffff',
-                                      border: 'none',
-                                      padding: '6px 14px',
-                                      borderRadius: '6px',
-                                      fontSize: '0.78rem',
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      boxShadow: '0 2px 4px rgba(16,185,129,0.2)'
-                                    }}
-                                  >
-                                    <Check size={13} />
-                                    <span>Re-open Date (Restore {dayOfWeek} Hours)</span>
-                                  </button>
-                                ) : (
-                                  <>
-                                    <button
-                                      type="button"
-                                      onClick={handleToggleDateOff}
-                                      style={{
-                                        background: '#fff1f2',
-                                        color: '#b91c1c',
-                                        border: '1px solid #fca5a5',
-                                        padding: '6px 12px',
-                                        borderRadius: '6px',
-                                        fontSize: '0.76rem',
-                                        fontWeight: 700,
-                                        cursor: 'pointer',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '4px'
-                                      }}
-                                    >
-                                      <X size={12} />
-                                      <span>Mark Date as Leave / Closed</span>
-                                    </button>
-
-                                    {hasCustomSlots && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleResetDateToDaySchedule(selectedScheduleDate)}
-                                        style={{
-                                          background: '#f8fafc',
-                                          color: '#64748b',
-                                          border: '1px solid #cbd5e1',
-                                          padding: '6px 12px',
-                                          borderRadius: '6px',
-                                          fontSize: '0.76rem',
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '4px'
-                                        }}
-                                      >
-                                        <RotateCcw size={12} />
-                                        <span>Reset to Standard {dayOfWeek}</span>
-                                      </button>
-                                    )}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* When NOT on leave: Slots chips, add slot bar, presets */}
-                            {!isDateLeave && (
-                              <div>
-                                <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '8px' }}>
-                                  {hasCustomSlots 
-                                    ? `These slots specifically override appointments for ${selectedScheduleDate}:` 
-                                    : `Currently using standard ${dayOfWeek} slots. Modifying or adding slots here will set custom hours for ${selectedScheduleDate} only.`}
-                                </div>
-
-                                {/* Active Slots Chips */}
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', minHeight: '44px', marginBottom: '14px', background: '#ffffff', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                  {activeSlots.length > 0 ? (
-                                    activeSlots.map((slot) => (
-                                      <div
-                                        key={`${selectedScheduleDate}_${slot}`}
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '8px',
-                                          background: '#eff6ff',
-                                          border: '1.5px solid #93c5fd',
-                                          borderRadius: '8px',
-                                          padding: '5px 10px',
-                                          fontSize: '0.8rem',
-                                          fontWeight: 700,
-                                          color: '#1e3a8a',
-                                          contain: 'layout style'
-                                        }}
-                                      >
-                                        <Clock size={12} color="#2563eb" />
-                                        <span>{slot}</span>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            handleDeleteSlot(slot);
-                                          }}
-                                          title={`Remove slot ${slot}`}
-                                          style={{
-                                            background: '#fee2e2',
-                                            border: 'none',
-                                            color: '#ef4444',
-                                            borderRadius: '50%',
-                                            width: '18px',
-                                            height: '18px',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'center',
-                                            cursor: 'pointer',
-                                            padding: 0
-                                          }}
-                                        >
-                                          <X size={11} />
-                                        </button>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div style={{ color: '#94a3b8', fontSize: '0.82rem', fontStyle: 'italic', padding: '6px 0' }}>
-                                      No time slots active for {selectedScheduleDate}. Add slots below or pick a preset.
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Add Slot Row */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px' }}>
-                                  <span style={{ fontSize: '0.82rem', fontWeight: 800, color: '#0f172a' }}>
-                                    ➕ Add Slot:
-                                  </span>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <select
-                                      value={slotHour}
-                                      onChange={(e) => setSlotHour(e.target.value)}
-                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                                    >
-                                      {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(h => (
-                                        <option key={h} value={h}>{h}</option>
-                                      ))}
-                                    </select>
-                                    <span>:</span>
-                                    <select
-                                      value={slotMin}
-                                      onChange={(e) => setSlotMin(e.target.value)}
-                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                                    >
-                                      {['00', '15', '20', '30', '40', '45', '50'].map(m => (
-                                        <option key={m} value={m}>{m}</option>
-                                      ))}
-                                    </select>
-                                    <select
-                                      value={slotPeriod}
-                                      onChange={(e) => setSlotPeriod(e.target.value)}
-                                      style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.82rem', fontWeight: 600, background: '#ffffff' }}
-                                    >
-                                      <option value="AM">AM</option>
-                                      <option value="PM">PM</option>
-                                    </select>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddSlot(`${slotHour}:${slotMin} ${slotPeriod}`)}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '5px',
-                                      background: '#2563eb',
-                                      color: '#ffffff',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      padding: '6px 14px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 700,
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    <Plus size={13} />
-                                    <span>Add</span>
-                                  </button>
-
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-                                    <input
-                                      type="text"
-                                      placeholder="Or custom (e.g. 06:15 PM)"
-                                      value={newSlotTime}
-                                      onChange={(e) => setNewSlotTime(e.target.value)}
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          e.preventDefault();
-                                          handleAddSlot(newSlotTime);
-                                        }
-                                      }}
-                                      style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', width: '170px' }}
-                                    />
-                                    {newSlotTime && (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddSlot(newSlotTime)}
-                                        style={{ background: '#10b981', color: '#ffffff', border: 'none', borderRadius: '6px', padding: '6px 10px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}
-                                      >
-                                        Add
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Quick Presets */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                  <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b' }}>Quick Presets:</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM'], 'Standard 4 Slots')}
-                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
-                                  >
-                                    Standard 4 Slots
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApplySlotPreset(['09:00 AM', '09:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM'], 'Morning OPD')}
-                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
-                                  >
-                                    Morning OPD (9 AM - 1 PM)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApplySlotPreset(['04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM', '07:30 PM'], 'Evening OPD')}
-                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
-                                  >
-                                    Evening OPD (4 PM - 8 PM)
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleApplySlotPreset([
-                                      '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM', '12:00 PM', '12:30 PM',
-                                      '04:00 PM', '04:30 PM', '05:00 PM', '05:30 PM', '06:00 PM', '06:30 PM', '07:00 PM'
-                                    ], 'Full Day OPD')}
-                                    style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '4px 8px', fontSize: '0.72rem', fontWeight: 600, color: '#334155', cursor: 'pointer' }}
-                                  >
-                                    Full Day OPD
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* SECTION 2: MULTI-DAY VACATION / DATE RANGE LEAVE PLANNER */}
-                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
-                      <div style={{ marginBottom: '10px' }}>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>✈️ 2. Multi-Day Vacation / Leave Range Planner</span>
-                        </div>
-                        <span style={{ fontSize: '0.76rem', color: '#64748b' }}>
-                          Going out of town or attending a conference? Quickly block a continuous date range.
-                        </span>
-                      </div>
-
-                      <form onSubmit={handleApplyDateRangeLeave} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', alignItems: 'flex-end', background: '#ffffff', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
-                            From (Start Date):
-                          </label>
-                          <input
-                            type="date"
-                            value={leaveStartDate}
-                            min={new Date().toISOString().split('T')[0]}
-                            onChange={(e) => setLeaveStartDate(e.target.value)}
-                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
-                            To (End Date):
-                          </label>
-                          <input
-                            type="date"
-                            value={leaveEndDate}
-                            min={leaveStartDate || new Date().toISOString().split('T')[0]}
-                            onChange={(e) => setLeaveEndDate(e.target.value)}
-                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem', fontWeight: 600 }}
-                            required
-                          />
-                        </div>
-
-                        <div>
-                          <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 700, color: '#475569', marginBottom: '3px' }}>
-                            Reason / Note (Optional):
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Vacation, Conference"
-                            value={leaveNote}
-                            onChange={(e) => setLeaveNote(e.target.value)}
-                            style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                          />
-                        </div>
-
-                        <div>
-                          <button
-                            type="submit"
-                            style={{
-                              width: '100%',
-                              background: '#dc2626',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '7px 12px',
-                              fontSize: '0.8rem',
-                              fontWeight: 700,
-                              cursor: 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px',
-                              boxShadow: '0 2px 4px rgba(220,38,38,0.2)'
-                            }}
-                          >
-                            <CalendarDays size={14} />
-                            <span>Mark On Leave</span>
-                          </button>
-                        </div>
-                      </form>
-
-                      {/* Quick fill buttons */}
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '8px' }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', alignSelf: 'center' }}>Quick Fill:</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const today = new Date().toISOString().split('T')[0];
-                            setLeaveStartDate(today);
-                            setLeaveEndDate(today);
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>
+                          Consultation Hours Text (Summary)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Mon - Sat (10am - 4pm)"
+                          value={profileForm.availableDays || ''}
+                          onFocus={() => {
+                            isEditingAvailableDaysRef.current = true;
                           }}
-                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
-                        >
-                          Today Only
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const tom = new Date();
-                            tom.setDate(tom.getDate() + 1);
-                            const tomStr = tom.toISOString().split('T')[0];
-                            setLeaveStartDate(tomStr);
-                            setLeaveEndDate(tomStr);
+                          onChange={(e) => {
+                            isEditingAvailableDaysRef.current = true;
+                            setProfileForm({ ...profileForm, availableDays: e.target.value });
                           }}
-                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
-                        >
-                          Tomorrow Only
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const d = new Date();
-                            const day = d.getDay();
-                            const satDiff = (6 - day + 7) % 7;
-                            const sat = new Date(d);
-                            sat.setDate(d.getDate() + satDiff);
-                            const sun = new Date(sat);
-                            sun.setDate(sat.getDate() + 1);
-                            setLeaveStartDate(sat.toISOString().split('T')[0]);
-                            setLeaveEndDate(sun.toISOString().split('T')[0]);
+                          onBlur={() => {
+                            isEditingAvailableDaysRef.current = false;
                           }}
-                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
-                        >
-                          Upcoming Weekend
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const d1 = new Date();
-                            const d2 = new Date();
-                            d2.setDate(d2.getDate() + 6);
-                            setLeaveStartDate(d1.toISOString().split('T')[0]);
-                            setLeaveEndDate(d2.toISOString().split('T')[0]);
-                          }}
-                          style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer' }}
-                        >
-                          Next 7 Days
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* SECTION 3: CONFIGURED DATE EXCEPTIONS & LEAVES OVERVIEW */}
-                    <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
-                            📋 3. Configured Calendar Leaves & Date Overrides
-                          </div>
-                          <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                            Overview of all dates with custom hours or marked leaves.
-                          </span>
-                        </div>
-                      </div>
-
-                      {Object.keys(profileForm.dateWiseSlots || {}).length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: '18px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                          <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                            ✨ No calendar leaves or date overrides configured. All dates follow your regular weekly schedule.
-                          </span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px' }}>
-                          {Object.entries(profileForm.dateWiseSlots || {})
-                            .sort(([a], [b]) => a.localeCompare(b))
-                            .map(([dKey, dVal]) => {
-                              const isOff = dVal === 'off' || dVal?.isOff === true;
-                              const count = Array.isArray(dVal) ? dVal.length : (Array.isArray(dVal?.slots) ? dVal.slots.length : 0);
-                              const dObj = new Date(dKey + 'T00:00:00');
-                              const formatted = dObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                              const isCurrentlySelected = selectedScheduleDate === dKey;
-
-                              return (
-                                <div
-                                  key={dKey}
-                                  onClick={() => setSelectedScheduleDate(dKey)}
-                                  style={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '8px 12px',
-                                    borderRadius: '8px',
-                                    background: isOff ? '#fff1f2' : '#eff6ff',
-                                    border: isCurrentlySelected
-                                      ? '2px solid #2563eb'
-                                      : (isOff ? '1px solid #fecdd3' : '1px solid #bfdbfe'),
-                                    cursor: 'pointer',
-                                    transition: 'all 0.1s ease'
-                                  }}
-                                >
-                                  <div>
-                                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: isOff ? '#991b1b' : '#1e40af' }}>
-                                      {formatted}
-                                    </div>
-                                    <div style={{ fontSize: '0.7rem', fontWeight: 600, color: isOff ? '#b91c1c' : '#2563eb' }}>
-                                      {isOff ? '🔴 Closed / Leave' : `🟡 ${count} custom slots`}
-                                    </div>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleResetDateToDaySchedule(dKey);
-                                    }}
-                                    title={`Reset ${dKey} to regular hours`}
-                                    style={{
-                                      background: '#ffffff',
-                                      border: isOff ? '1px solid #fca5a5' : '1px solid #bfdbfe',
-                                      color: '#ef4444',
-                                      borderRadius: '6px',
-                                      padding: '3px 7px',
-                                      fontSize: '0.7rem',
-                                      fontWeight: 700,
-                                      cursor: 'pointer',
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '3px'
-                                    }}
-                                  >
-                                    <X size={11} />
-                                    <span>Reset</span>
-                                  </button>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* SUBSECTION 3: SLOT DURATION & SUMMARY */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', marginBottom: '8px' }}>
-                      Slot Duration (Per Patient)
-                    </label>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                      {[15, 20, 30, 45, 60].map(dur => {
-                        const isSelected = (profileForm.slotDuration || 20) === dur;
-                        return (
-                          <button
-                            key={dur}
-                            type="button"
-                            onClick={(e) => {
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
                               e.preventDefault();
-                              e.stopPropagation();
-                              handleSlotDurationChange(dur);
-                            }}
-                            style={{
-                              padding: '5px 10px',
-                              borderRadius: '6px',
-                              border: isSelected ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
-                              background: isSelected ? '#eff6ff' : '#ffffff',
-                              color: isSelected ? '#1d4ed8' : '#475569',
-                              fontWeight: isSelected ? 700 : 500,
-                              fontSize: '0.78rem',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            {dur} mins
-                          </button>
-                        );
-                      })}
+                              isEditingAvailableDaysRef.current = false;
+                              handleSaveAllProfileSettings(e, { explicit: true });
+                              e.target?.blur?.();
+                            }
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.82rem',
+                            boxSizing: 'border-box',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontFeatureSettings: '"tnum"',
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
-
-                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>
-                      Consultation Hours Text (Summary)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mon - Sat (10am - 4pm)"
-                      value={profileForm.availableDays || ''}
-                      onFocus={() => {
-                        isEditingAvailableDaysRef.current = true;
-                      }}
-                      onChange={(e) => {
-                        isEditingAvailableDaysRef.current = true;
-                        setProfileForm({ ...profileForm, availableDays: e.target.value });
-                      }}
-                      onBlur={() => {
-                        isEditingAvailableDaysRef.current = false;
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          isEditingAvailableDaysRef.current = false;
-                          handleSaveAllProfileSettings(e, { explicit: true });
-                          e.target?.blur?.();
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '7px 10px',
-                        borderRadius: '6px',
-                        border: '1px solid #cbd5e1',
-                        fontSize: '0.82rem',
-                        boxSizing: 'border-box',
-                        fontVariantNumeric: 'tabular-nums',
-                        fontFeatureSettings: '"tnum"',
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
 
               {/* SECTION: ABOUT DOCTOR / PROFESSIONAL BIO */}
               <div style={{
@@ -9132,9 +8386,14 @@ const DoctorDashboard = ({ onNavigate }) => {
               </div>
 
               {/* SECTION: SOCIAL LINKS */}
-              <h4 style={{ marginTop: '24px', marginBottom: '12px' }}>Social Profiles (Optional)</h4>
+              <h4 style={{ marginTop: '24px', marginBottom: '12px', color: '#0f172a' }}>Social Profiles (Optional)</h4>
+
               <form
-                onSubmit={handleSaveAllProfileSettings}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  isEditingFieldRef.current = null;
+                  handleSaveAllProfileSettings(e, { explicit: true });
+                }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -9240,6 +8499,44 @@ const DoctorDashboard = ({ onNavigate }) => {
                       }
                     }}
                   />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '6px' }}>
+                  <button
+                    type="submit"
+                    disabled={isSavingProfileSettings}
+                    onClick={(e) => {
+                      isEditingFieldRef.current = null;
+                      handleSaveAllProfileSettings(e, { explicit: true });
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '7px',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      border: 'none',
+                      padding: '8px 20px',
+                      borderRadius: '8px',
+                      fontSize: '0.84rem',
+                      fontWeight: 700,
+                      cursor: isSavingProfileSettings ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {isSavingProfileSettings ? (
+                      <>
+                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={14} />
+                        <span>Save Social Profiles</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </form>
 
@@ -9434,10 +8731,51 @@ const DoctorDashboard = ({ onNavigate }) => {
                     value={newAppointmentData.gender}
                     onChange={(e) => setNewAppointmentData({ ...newAppointmentData, gender: e.target.value })}
                   >
+                    <option value="">Select Gender (Optional)</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
                   </select>
+                </div>
+              </div>
+
+              <div className={styles.grid2}>
+                <div className={styles.formGroup}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Calendar size={13} color="#2563eb" />
+                    Appointment Date / Day *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    min={todayDateStr}
+                    value={newAppointmentData.date || todayDateStr}
+                    onChange={(e) => setNewAppointmentData({ ...newAppointmentData, date: e.target.value })}
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  />
+                  {formattedSelectedDay && (
+                    <span style={{ fontSize: '0.72rem', color: '#2563eb', fontWeight: 600, marginTop: '3px', display: 'block' }}>
+                      {formattedSelectedDay}
+                    </span>
+                  )}
+                </div>
+                <div className={styles.formGroup}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Clock size={13} color="#2563eb" />
+                    Time Slot *
+                  </label>
+                  <input
+                    type="text"
+                    list="doctor-available-time-slots"
+                    placeholder="03:00 PM"
+                    value={newAppointmentData.time}
+                    onChange={(e) => setNewAppointmentData({ ...newAppointmentData, time: e.target.value })}
+                  />
+                  <datalist id="doctor-available-time-slots">
+                    {availableSlotOptions.map((s, idx) => (
+                      <option key={idx} value={s} />
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -9453,29 +8791,19 @@ const DoctorDashboard = ({ onNavigate }) => {
                   </select>
                 </div>
                 <div className={styles.formGroup}>
-                  <label>Time Slot</label>
+                  <label>Contact Phone</label>
                   <input
-                    type="text"
-                    placeholder="03:30 PM"
-                    value={newAppointmentData.time}
-                    onChange={(e) => setNewAppointmentData({ ...newAppointmentData, time: e.target.value })}
+                    type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
+                    placeholder="Enter 10-digit mobile number"
+                    value={newAppointmentData.phone}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                      setNewAppointmentData({ ...newAppointmentData, phone: digits });
+                    }}
                   />
                 </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label>Contact Phone</label>
-                <input
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  placeholder="Enter 10-digit mobile number"
-                  value={newAppointmentData.phone}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
-                    setNewAppointmentData({ ...newAppointmentData, phone: digits });
-                  }}
-                />
               </div>
 
               <div className={styles.formGroup}>
@@ -10360,7 +9688,7 @@ const DoctorDashboard = ({ onNavigate }) => {
                   const patientName = apt.patientName || apt.userData?.name || 'Patient';
                   const timeSlot = apt.slotTime || apt.time || 'Today';
                   const consultType = apt.consultationType || apt.type || 'In-Clinic Consultation';
-                  const feePaid = Number(apt.amount) || consultationFee;
+                  const feePaid = (apt.amount !== undefined && apt.amount !== null && apt.amount !== '' && !isNaN(Number(apt.amount))) ? Number(apt.amount) : consultationFee;
 
                   return (
                     <div
@@ -10672,8 +10000,13 @@ const DoctorDashboard = ({ onNavigate }) => {
                             )}
                           </div>
                           <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span>{apt.gender || 'Patient'}{apt.age ? `, ${apt.age} yrs` : ''}</span>
-                            {apt.phone && (
+                            <span>
+                              {[
+                                (apt.gender && apt.gender !== 'Not specified' && apt.gender !== 'Not Selected') ? apt.gender : null,
+                                apt.age ? `${apt.age} yrs` : null
+                              ].filter(Boolean).join(', ') || 'Patient'}
+                            </span>
+                            {apt.phone && !String(apt.phone).includes('98000') && !String(apt.phone).includes('0000000000') && String(apt.phone).trim() !== '-' && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 • <Phone size={12} color="#64748b" /> {apt.phone}
                               </span>

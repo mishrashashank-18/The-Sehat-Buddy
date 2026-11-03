@@ -120,15 +120,6 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
     if (doctor.id !== undefined && doctor.id !== null) keys.add(`sehatbuddy_doc_appointments_${doctor.id}`);
     if (doctor._id) keys.add(`sehatbuddy_doc_appointments_${doctor._id}`);
 
-    // If Dr. Rahul Verma (flagship doctor), check default fallback keys
-    if (
-      email === 'dr.rahul@sehatbuddy.com' ||
-      String(doctor.id) === '1' ||
-      (doctor.name && doctor.name.toLowerCase().includes('rahul verma'))
-    ) {
-      keys.add('sehatbuddy_doc_appointments_1');
-      keys.add('sehatbuddy_doc_appointments_default');
-    }
     return Array.from(keys);
   }, [doctor]);
 
@@ -156,8 +147,12 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
               id: apt._id || apt.id,
               _id: apt._id,
               patientName: apt.userData?.name || apt.patientName || 'Patient',
-              age: apt.userData?.age || apt.age || 30,
-              gender: apt.userData?.gender || apt.gender || 'Not specified',
+              age: (apt.userData?.age && !isNaN(parseInt(apt.userData.age, 10)) && parseInt(apt.userData.age, 10) > 0)
+                ? parseInt(apt.userData.age, 10)
+                : ((apt.age && !isNaN(parseInt(apt.age, 10)) && parseInt(apt.age, 10) > 0) ? parseInt(apt.age, 10) : null),
+              gender: (apt.userData?.gender && apt.userData.gender !== 'Not specified' && apt.userData.gender !== 'Not Selected')
+                ? apt.userData.gender
+                : ((apt.gender && apt.gender !== 'Not specified' && apt.gender !== 'Not Selected') ? apt.gender : null),
               phone: apt.userData?.phone || apt.patientPhone || apt.phone || '—',
               time: apt.slotTime || apt.time || '10:00 AM',
               date: rawDate,
@@ -194,8 +189,8 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                 id: b.id || b._id,
                 _id: b._id,
                 patientName: b.patientName || 'Patient',
-                age: b.age || 30,
-                gender: b.gender || 'Not specified',
+                age: (b.age && !isNaN(parseInt(b.age, 10)) && parseInt(b.age, 10) > 0) ? parseInt(b.age, 10) : null,
+                gender: (b.gender && b.gender !== 'Not specified' && b.gender !== 'Not Selected') ? b.gender : null,
                 phone: b.patientPhone || b.phone || '—',
                 time: b.slotTime || b.time || '10:00 AM',
                 date: rawDate,
@@ -291,8 +286,12 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                 id: apt._id || apt.id,
                 _id: apt._id,
                 patientName: apt.userData?.name || apt.patientName || 'Patient',
-                age: apt.userData?.age || apt.age || 30,
-                gender: apt.userData?.gender || apt.gender || 'Not specified',
+                age: (apt.userData?.age && !isNaN(parseInt(apt.userData.age, 10)) && parseInt(apt.userData.age, 10) > 0)
+                  ? parseInt(apt.userData.age, 10)
+                  : ((apt.age && !isNaN(parseInt(apt.age, 10)) && parseInt(apt.age, 10) > 0) ? parseInt(apt.age, 10) : null),
+                gender: (apt.userData?.gender && apt.userData.gender !== 'Not specified' && apt.userData.gender !== 'Not Selected')
+                  ? apt.userData.gender
+                  : ((apt.gender && apt.gender !== 'Not specified' && apt.gender !== 'Not Selected') ? apt.gender : null),
                 phone: apt.userData?.phone || apt.patientPhone || apt.phone || '—',
                 time: apt.slotTime || apt.time || '10:00 AM',
                 date: rawDate,
@@ -333,8 +332,8 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                   id: b.id || b._id,
                   _id: b._id,
                   patientName: b.patientName || 'Patient',
-                  age: b.age || 30,
-                  gender: b.gender || 'Not specified',
+                  age: (b.age && !isNaN(parseInt(b.age, 10)) && parseInt(b.age, 10) > 0) ? parseInt(b.age, 10) : null,
+                  gender: (b.gender && b.gender !== 'Not specified' && b.gender !== 'Not Selected') ? b.gender : null,
                   phone: b.patientPhone || b.phone || '—',
                   time: b.slotTime || b.time || '10:00 AM',
                   date: rawDate,
@@ -653,7 +652,7 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
               <div className={styles.kpiContent}>
                 <span className={styles.kpiLabel}>Consultation Fee</span>
                 <div className={styles.kpiValue}>
-                  ₹{doctor.price || doctor.fees || 500}
+                  ₹{(doctor.price !== undefined && doctor.price !== null && doctor.price !== '') ? Number(doctor.price) : ((doctor.fees !== undefined && doctor.fees !== null && doctor.fees !== '') ? Number(doctor.fees) : 0)}
                 </div>
                 <span className={styles.kpiSub}>
                   Per patient consultation
@@ -985,8 +984,11 @@ const DoctorHistoryModal = ({ doctor, initialAppointments = [], onClose }) => {
                               <div>
                                 <div className={styles.patientName}>{apt.patientName}</div>
                                 <div className={styles.patientDetails}>
-                                  {apt.age ? `${apt.age}y` : ''}{apt.gender && apt.gender !== 'Not specified' ? ` • ${apt.gender}` : ''}
-                                  {apt.phone && apt.phone !== '—' && ` • ${apt.phone}`}
+                                  {[
+                                    apt.age ? `${apt.age}y` : null,
+                                    (apt.gender && apt.gender !== 'Not specified' && apt.gender !== 'Not Selected') ? apt.gender : null,
+                                    (apt.phone && apt.phone !== '—' && apt.phone !== '0000000000' && apt.phone !== '-') ? apt.phone : null
+                                  ].filter(Boolean).join(' • ')}
                                 </div>
                               </div>
                             </div>

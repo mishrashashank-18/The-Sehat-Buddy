@@ -3,17 +3,17 @@ import bcrypt from 'bcrypt';
 
 const doctorSchema = new mongoose.Schema({
   id: { type: String, index: true },
-  name: { type: String, required: true },
+  name: { type: String, default: '' },
   email: { type: String, required: true, unique: true },
   password: { type: String, default: 'CHANGEME_PENDING_SETUP', select: false },
   role: { type: String, default: 'doctor' },
-  specialization: { type: String, default: 'General Medicine' },
-  specialty: { type: String, default: 'General Medicine' },
-  experience: { type: Number, default: 5 },
+  specialization: { type: String, default: '' },
+  specialty: { type: String, default: '' },
+  experience: { type: Number, default: 0 },
   jobTitle: { type: String, default: '' },
   about: { type: String },
-  fees: { type: Number, default: 500 },
-  price: { type: Number, default: 500 },
+  fees: { type: Number, default: 0 },
+  price: { type: Number, default: 0 },
   image: { type: String },
   available: { type: Boolean, default: true },
   availabilityStatus: { type: String, enum: ['Available', 'Busy', 'On Leave'], default: 'Available' },
@@ -27,9 +27,9 @@ const doctorSchema = new mongoose.Schema({
   degree: { type: String },
   contact_number: { type: String },
   phone: { type: String },
-  helplineNumber: { type: String, default: '+91 98765 43210' },
-  helplineDays: { type: String, default: 'Mon – Sat' },
-  helplineTime: { type: String, default: '8:00 AM – 8:00 PM' },
+  helplineNumber: { type: String, default: '' },
+  helplineDays: { type: String, default: '' },
+  helplineTime: { type: String, default: '' },
   instagram: { type: String },
   facebook: { type: String },
   linkedin: { type: String },
@@ -67,7 +67,7 @@ const doctorSchema = new mongoose.Schema({
   tokenVersion: { type: Number, default: 0 },
   failedLoginAttempts: { type: Number, default: 0, select: false },
   lockUntil: { type: Date, select: false },
-  availableDays: { type: String, default: 'Mon - Sat (10am - 4pm)' },
+  availableDays: { type: String, default: '' },
   scheduleDays: [{ type: String }],
   availableSlots: [{ type: String }],
   slotDuration: { type: Number, default: 20 },
@@ -113,33 +113,27 @@ doctorSchema.pre('save', async function() {
   }
 
   // Mirror paired fields to prevent desync across schemas and legacy clients
-  if (this.specialization || this.specialty) {
-    const spec = (this.specialization && this.specialization !== 'General Medicine')
-      ? this.specialization
-      : (this.specialty || this.specialization || 'General Medicine');
+  if (this.specialization !== undefined || this.specialty !== undefined) {
+    const spec = this.specialization !== undefined ? this.specialization : (this.specialty !== undefined ? this.specialty : '');
     this.specialization = spec;
     this.specialty = spec;
   }
 
-  if (this.qualifications || this.degree) {
-    const deg = this.qualifications || this.degree || '';
+  if (this.qualifications !== undefined || this.degree !== undefined) {
+    const deg = this.qualifications !== undefined ? this.qualifications : (this.degree !== undefined ? this.degree : '');
     this.qualifications = deg;
     this.degree = deg;
   }
 
   if (this.fees !== undefined || this.price !== undefined) {
-    let feeVal = 500;
-    if (this.fees !== undefined && this.fees !== null && this.fees !== 500) {
+    let feeVal = 0;
+    if (this.fees !== undefined && this.fees !== null && this.fees !== '') {
       feeVal = Number(this.fees);
-    } else if (this.price !== undefined && this.price !== null && this.price !== 500) {
-      feeVal = Number(this.price);
-    } else if (this.fees !== undefined && this.fees !== null) {
-      feeVal = Number(this.fees);
-    } else if (this.price !== undefined && this.price !== null) {
+    } else if (this.price !== undefined && this.price !== null && this.price !== '') {
       feeVal = Number(this.price);
     }
-    this.fees = feeVal;
-    this.price = feeVal;
+    this.fees = !isNaN(feeVal) ? feeVal : 0;
+    this.price = this.fees;
   }
 
   if (this.contact_number !== undefined || this.phone !== undefined) {
@@ -152,6 +146,10 @@ doctorSchema.pre('save', async function() {
 doctorSchema.methods.matchPassword = async function(enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
+
+// Multikey indexes for high-throughput reference counting across 100,000+ profiles
+doctorSchema.index({ 'reels.url': 1 });
+doctorSchema.index({ 'reels.coverPhoto': 1 });
 
 const Doctor = mongoose.model('Doctor', doctorSchema);
 export default Doctor;

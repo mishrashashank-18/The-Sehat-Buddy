@@ -146,15 +146,53 @@ export const getAuthHeaders = (isFormData = false, forcedRole = null) => {
   return headers;
 };
 
+export const safeFetch = async (url, options = {}, retries = 2, delay = 800) => {
+  try {
+    const res = await fetch(url, options);
+    if ((res.status === 502 || res.status === 503) && retries > 0) {
+      console.warn(`[API] Received status ${res.status} from ${url}. Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      return safeFetch(url, options, retries - 1, delay * 1.5);
+    }
+    return res;
+  } catch (err) {
+    if (retries > 0 && (err.name === 'TypeError' || err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError'))) {
+      console.warn(`[API] Network error fetching ${url}: ${err.message}. Retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      return safeFetch(url, options, retries - 1, delay * 1.5);
+    }
+    throw err;
+  }
+};
+
 const handleResponse = async (res) => {
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
+    let errorData = {};
+    try {
+      const text = await res.text();
+      try {
+        errorData = JSON.parse(text);
+      } catch {
+        errorData = { message: text };
+      }
+    } catch {}
+
     if (res.status === 401) {
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('sehat_auth_unauthorized', { detail: { message: errorData.message || '' } }));
       }
     }
-    const err = new Error(errorData.message || `HTTP error ${res.status}`);
+
+    let message = errorData.message;
+    if (!message || typeof message !== 'string' || message.startsWith('<!DOCTYPE') || message.startsWith('<html')) {
+      if (res.status === 502 || res.status === 503) {
+        message = 'Backend server is temporarily restarting or unreachable on port 5000. Please wait a moment and try again.';
+      } else {
+        message = `HTTP error ${res.status}`;
+      }
+    }
+
+    const err = new Error(message);
     err.status = res.status;
     throw err;
   }
@@ -242,7 +280,7 @@ export const api = {
   },
 
   async addDoctor(doctorData) {
-    const res = await fetch(`${API_BASE}/admin/add-doctor`, {
+    const res = await safeFetch(`${API_BASE}/admin/add-doctor`, {
       method: 'POST',
       headers: getAuthHeaders(false, 'admin'),
       body: JSON.stringify(doctorData)
@@ -252,7 +290,7 @@ export const api = {
   },
 
   async addDoctorByHospital(doctorData) {
-    const res = await fetch(`${API_BASE}/doctors/add-by-hospital`, {
+    const res = await safeFetch(`${API_BASE}/doctors/add-by-hospital`, {
       method: 'POST',
       headers: getAuthHeaders(false, 'hospital'),
       body: JSON.stringify(doctorData)
@@ -280,11 +318,11 @@ export const api = {
 
     const payload = { ...doctorData };
     if (payload.experience !== undefined) {
-      const parsedExp = parseInt(payload.experience, 10);
-      payload.experience = !isNaN(parsedExp) ? parsedExp : 5;
+      const parsedExp = parseFloat(payload.experience);
+      payload.experience = !isNaN(parsedExp) ? parsedExp : 0;
     }
     if (payload.price !== undefined && payload.fees === undefined) {
-      payload.fees = Number(payload.price) || 500;
+      payload.fees = !isNaN(Number(payload.price)) ? Number(payload.price) : 0;
     }
 
     if (role === 'admin') {
@@ -511,6 +549,46 @@ export const api = {
 
     if (lastError) throw lastError;
     throw new Error('Failed to delete doctor from database');
+  },
+
+  async deleteDoctorReel(id, index) {
+    const rawId = (id && typeof id === 'object') ? (id._id || id.id) : id;
+    const cleanId = String(rawId || '').trim();
+    if (!cleanId) throw new Error('Doctor ID required');
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/doctors/${encodeURIComponent(cleanId)}/reels/${index}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(false, 'admin')
+      });
+      if (res.ok) return await handleResponse(res);
+    } catch {}
+
+    const res2 = await fetch(`${API_BASE}/doctors/${encodeURIComponent(cleanId)}/reels/${index}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await handleResponse(res2);
+  },
+
+  async deleteDoctorReelCover(id, index) {
+    const rawId = (id && typeof id === 'object') ? (id._id || id.id) : id;
+    const cleanId = String(rawId || '').trim();
+    if (!cleanId) throw new Error('Doctor ID required');
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/doctors/${encodeURIComponent(cleanId)}/reels/${index}/cover`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(false, 'admin')
+      });
+      if (res.ok) return await handleResponse(res);
+    } catch {}
+
+    const res2 = await fetch(`${API_BASE}/doctors/${encodeURIComponent(cleanId)}/reels/${index}/cover`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return await handleResponse(res2);
   },
 
   // Hospitals
@@ -843,9 +921,10 @@ export const api = {
     return data.data;
   },
 
-  // Storage Quota Stats (MongoDB & Cloudinary)
-  async getStorageStats() {
-    const res = await fetch(`${API_BASE}/admin/storage-stats`, {
+  // Storage Quota Stats (MongoDB, Cloudinary & Brevo)
+  async getStorageStats(force = false) {
+    const query = force ? `?force=true&_t=${Date.now()}` : '';
+    const res = await fetch(`${API_BASE}/admin/storage-stats${query}`, {
       headers: getAuthHeaders()
     });
     return handleResponse(res);
@@ -1015,10 +1094,9 @@ export const api = {
   },
 
   // Delete Media / Image / PDF completely from Server Disk and Cloudinary
-  async deleteMedia(urlOrPublicId, resourceType = 'raw') {
-    const token = getActiveAuthToken();
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+  async deleteMedia(urlOrPublicId, resourceType = 'raw', options = {}) {
+    const headers = getAuthHeaders(false);
+    headers['Content-Type'] = 'application/json';
 
     const isLocalOrHttpUrl = typeof urlOrPublicId === 'string' && (urlOrPublicId.startsWith('http') || urlOrPublicId.startsWith('/uploads/') || urlOrPublicId.startsWith('uploads/'));
     try {
@@ -1028,7 +1106,9 @@ export const api = {
         body: JSON.stringify({
           url: isLocalOrHttpUrl ? urlOrPublicId : undefined,
           public_id: !isLocalOrHttpUrl ? urlOrPublicId : undefined,
-          resource_type: resourceType
+          resource_type: resourceType,
+          excludeDocId: options.excludeDocId,
+          excludeHospId: options.excludeHospId
         })
       });
       return await handleResponse(res);
@@ -1038,12 +1118,12 @@ export const api = {
     }
   },
 
-  async deleteImage(urlOrPublicId, resourceType = 'image') {
-    return this.deleteMedia(urlOrPublicId, resourceType);
+  async deleteImage(urlOrPublicId, resourceType = 'image', options = {}) {
+    return this.deleteMedia(urlOrPublicId, resourceType, options);
   },
 
-  async deleteVideo(urlOrPublicId) {
-    return this.deleteMedia(urlOrPublicId, 'video');
+  async deleteVideo(urlOrPublicId, options = {}) {
+    return this.deleteMedia(urlOrPublicId, 'video', options);
   },
 
   // Video Upload (Cloudinary)
@@ -1113,13 +1193,13 @@ export const api = {
 
   // Auto-extract Instagram Reel Cover Thumbnail and Upload to Cloudinary
   async getInstagramReelCover(url, folder = 'sehatbuddy/covers') {
-    const token = getActiveAuthToken();
-    const headers = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch(`${API_BASE}/upload/instagram-cover`, {
+    const authHeaders = getAuthHeaders();
+    const res = await safeFetch(`${API_BASE}/upload/instagram-cover`, {
       method: 'POST',
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders
+      },
       body: JSON.stringify({ url, folder })
     });
     return await handleResponse(res);

@@ -38,20 +38,11 @@ const FindDoctors = ({ onNavigate }) => {
     }
   }, []);
 
-  // Helper to ensure core anchor doctor (Dr. Rahul Verma) is permanently visible
-  const isProtectedDoctor = (doc) => {
-    if (!doc) return false;
-    const name = (doc.name || '').toLowerCase();
-    const email = (doc.email || '').toLowerCase();
-    const id = String(doc.id || doc._id || '');
-    return name.includes('rahul') || email.includes('rahul') || id === '1' || id === '6ac270f38586bcec9f96207f';
-  };
-
   // Get unique specialties for the dropdown (only from active doctors with >=80% profile completion)
   const uniqueSpecialties = useMemo(() => {
     return Array.from(new Set(
       doctors
-        .filter(d => (d.available !== false || isProtectedDoctor(d)) && (isProtectedDoctor(d) || isDoctorProfileEligibleForListing(d)))
+        .filter(d => d.available !== false && isDoctorProfileEligibleForListing(d))
         .map(d => d.specialty || d.specialization)
         .filter(Boolean)
     ));
@@ -60,11 +51,11 @@ const FindDoctors = ({ onNavigate }) => {
   // Filter for active/listed doctors and apply search criteria
   const activeDoctors = useMemo(() => {
     return doctors.filter(doc => {
-      // Only filter out doctors explicitly de-listed by admin, never core doctor Dr. Rahul Verma
-      if (!isProtectedDoctor(doc) && doc.available === false) return false;
+      // Only filter out doctors explicitly de-listed by admin
+      if (doc.available === false) return false;
       
       // Strict rule: Doctor must have completed 80-100% of profile in doctor dashboard to be listed
-      if (!isProtectedDoctor(doc) && !isDoctorProfileEligibleForListing(doc)) {
+      if (!isDoctorProfileEligibleForListing(doc)) {
         return false;
       }
       

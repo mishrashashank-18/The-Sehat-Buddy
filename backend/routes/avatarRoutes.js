@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
           key: 'male_doctor',
           label: 'Male Doctor Avatar',
           gender: 'male',
-          url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1792893957/sehatbuddy/avatars/default_doctor_male.png',
+          url: 'https://res.cloudinary.com/nehlbmp2/image/upload/v1793724988/sehatbuddy/avatars/default_doctor_male.png',
           localPath: '/avatars/avatar-male.png',
           isDefault: true
         },

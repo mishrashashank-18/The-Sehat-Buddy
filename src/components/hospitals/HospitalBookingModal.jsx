@@ -204,8 +204,8 @@ const HospitalBookingModal = ({
       patientName: patientName.trim(),
       patientPhone: patientPhone.trim(),
       patientEmail: patientEmail.trim(),
-      age: parseInt(age, 10) || 30,
-      gender,
+      age: (age && !isNaN(parseInt(age, 10)) && parseInt(age, 10) > 0) ? parseInt(age, 10) : null,
+      gender: (gender && gender !== 'Not specified' && gender !== 'Not Selected') ? gender : null,
       symptoms: symptoms.trim() || `Consultation in ${selectedDept}`
     };
 

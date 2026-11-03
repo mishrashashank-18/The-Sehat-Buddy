@@ -15,7 +15,11 @@ import {
   streamStorageStats,
   getAllAppointments,
   updateAppointmentStatus,
-  deleteAppointment
+  deleteAppointment,
+  deleteDoctorReel,
+  deleteDoctorReelCover,
+  deleteHospitalReel,
+  deleteHospitalReelCover
 } from '../controllers/adminController.js';
 import { deleteReview } from '../controllers/reviewController.js';
 import { protect, requireAdmin } from '../middleware/authMiddleware.js';
@@ -72,6 +76,10 @@ router.post('/register', optionalProtect, registerAdmin);
 router.post('/add-doctor', adminProtect, upload.single('image'), addDoctor);
 router.put('/update-doctor/:id', adminProtect, upload.single('image'), updateDoctor);
 router.delete('/delete-doctor/:id', adminProtect, deleteDoctor);
+router.delete('/doctors/:id/reels/:index/cover', adminProtect, deleteDoctorReelCover);
+router.delete('/doctors/:id/reels/:index', adminProtect, deleteDoctorReel);
+router.delete('/hospitals/:id/reels/:index/cover', adminProtect, deleteHospitalReelCover);
+router.delete('/hospitals/:id/reels/:index', adminProtect, deleteHospitalReel);
 router.get('/all-doctors', adminProtect, allDoctors);
 router.get('/dashboard', adminProtect, getDashboardData);
 router.get('/appointments', adminProtect, getAllAppointments);

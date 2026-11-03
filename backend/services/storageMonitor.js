@@ -171,12 +171,19 @@ export const calculateStorageStats = async (force = false) => {
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const [sentToday, sentThisMonth, totalSent, totalFailed] = await Promise.all([
-      EmailLog.countDocuments({ createdAt: { $gte: startOfToday }, status: 'sent' }),
-      EmailLog.countDocuments({ createdAt: { $gte: startOfMonth }, status: 'sent' }),
-      EmailLog.countDocuments({ status: 'sent' }),
-      EmailLog.countDocuments({ status: 'failed' })
-    ]);
+    let sentToday = 0;
+    let sentThisMonth = 0;
+    let totalSent = 0;
+    let totalFailed = 0;
+
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      [sentToday, sentThisMonth, totalSent, totalFailed] = await Promise.all([
+        EmailLog.countDocuments({ createdAt: { $gte: startOfToday }, status: 'sent' }),
+        EmailLog.countDocuments({ createdAt: { $gte: startOfMonth }, status: 'sent' }),
+        EmailLog.countDocuments({ status: 'sent' }),
+        EmailLog.countDocuments({ status: 'failed' })
+      ]);
+    }
 
     let planName = 'Free';
     let liveCredits = null;
@@ -264,6 +271,14 @@ export const calculateStorageStats = async (force = false) => {
 
   cachedStats = result;
   lastCalculated = Date.now();
+  if (force) {
+    try {
+      storageEvents.emit('storage_update', {
+        source: 'manual_refresh',
+        data: result
+      });
+    } catch {}
+  }
   return result;
 };
 

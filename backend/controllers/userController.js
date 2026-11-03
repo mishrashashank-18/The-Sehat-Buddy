@@ -8,6 +8,7 @@ import { sendEmail } from '../utils/email.js';
 import validatePassword from '../utils/validatePassword.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 import { OAuth2Client } from 'google-auth-library';
+import { enrichAppointmentsWithLiveUserData } from '../utils/appointmentUtils.js';
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -341,6 +342,29 @@ export const bookAppointment = async (req, res) => {
     const clientPhone = (patientPhone || user?.phone || '').trim();
     const clientEmail = (patientEmail || user?.email || '').trim();
 
+    let clientAge = null;
+    if (age !== undefined && age !== null && String(age).trim() !== '') {
+      const parsedAge = parseInt(age, 10);
+      if (!isNaN(parsedAge) && parsedAge > 0) clientAge = parsedAge;
+    }
+    if (clientAge === null && user) {
+      if (user.age && !isNaN(parseInt(user.age, 10)) && parseInt(user.age, 10) > 0) {
+        clientAge = parseInt(user.age, 10);
+      } else if (user.dob && user.dob !== 'Not Selected') {
+        const d = new Date(user.dob);
+        if (!isNaN(d.getTime())) {
+          let a = new Date().getFullYear() - d.getFullYear();
+          const m = new Date().getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && new Date().getDate() < d.getDate())) a--;
+          if (a >= 0 && a <= 130) clientAge = a;
+        }
+      }
+    }
+
+    const clientGender = (gender && gender !== 'Not Selected' && gender !== 'Not specified')
+      ? gender
+      : (user?.gender && user.gender !== 'Not Selected' && user.gender !== 'Not specified' ? user.gender : null);
+
     const newAppointment = await Appointment.create({
       userId: user ? user._id.toString() : `guest_${Date.now()}`,
       docId: doctor._id.toString(),
@@ -351,8 +375,8 @@ export const bookAppointment = async (req, res) => {
         name: clientName,
         email: clientEmail,
         phone: clientPhone,
-        age: parseInt(age, 10) || user?.age || 30,
-        gender: gender || user?.gender || 'Not specified',
+        age: clientAge,
+        gender: clientGender,
         symptoms: (symptoms || 'General Consultation').trim()
       },
       docData: {
@@ -361,9 +385,9 @@ export const bookAppointment = async (req, res) => {
         specialty: doctor.specialization || doctor.specialty || 'General Physician',
         hospital: doctor.hospital || 'Apollo Hospital & Heart Center',
         image: doctor.image,
-        fees: doctor.fees || doctor.price || 500
+        fees: (doctor.fees !== undefined && doctor.fees !== null && !isNaN(Number(doctor.fees))) ? Number(doctor.fees) : ((doctor.price !== undefined && doctor.price !== null && !isNaN(Number(doctor.price))) ? Number(doctor.price) : 0)
       },
-      amount: doctor.fees || doctor.price || 500,
+      amount: (doctor.fees !== undefined && doctor.fees !== null && !isNaN(Number(doctor.fees))) ? Number(doctor.fees) : ((doctor.price !== undefined && doctor.price !== null && !isNaN(Number(doctor.price))) ? Number(doctor.price) : 0),
       status: 'Confirmed',
       symptoms: (symptoms || 'General Consultation').trim(),
       consultationType: consultationType || 'In-Clinic Visit',
@@ -453,6 +477,29 @@ export const bookHospitalAppointment = async (req, res) => {
     const clientPhone = (patientPhone || user?.phone || '').trim();
     const clientEmail = (patientEmail || user?.email || '').trim();
 
+    let clientAge = null;
+    if (age !== undefined && age !== null && String(age).trim() !== '') {
+      const parsedAge = parseInt(age, 10);
+      if (!isNaN(parsedAge) && parsedAge > 0) clientAge = parsedAge;
+    }
+    if (clientAge === null && user) {
+      if (user.age && !isNaN(parseInt(user.age, 10)) && parseInt(user.age, 10) > 0) {
+        clientAge = parseInt(user.age, 10);
+      } else if (user.dob && user.dob !== 'Not Selected') {
+        const d = new Date(user.dob);
+        if (!isNaN(d.getTime())) {
+          let a = new Date().getFullYear() - d.getFullYear();
+          const m = new Date().getMonth() - d.getMonth();
+          if (m < 0 || (m === 0 && new Date().getDate() < d.getDate())) a--;
+          if (a >= 0 && a <= 130) clientAge = a;
+        }
+      }
+    }
+
+    const clientGender = (gender && gender !== 'Not Selected' && gender !== 'Not specified')
+      ? gender
+      : (user?.gender && user.gender !== 'Not Selected' && user.gender !== 'Not specified' ? user.gender : null);
+
     const hospitalName = hospital?.name || 'Hospital Center';
     const hospitalAddress = hospital?.address || '';
 
@@ -469,8 +516,8 @@ export const bookHospitalAppointment = async (req, res) => {
         name: clientName,
         email: clientEmail,
         phone: clientPhone,
-        age: parseInt(age, 10) || user?.age || 30,
-        gender: gender || user?.gender || 'Not specified',
+        age: clientAge,
+        gender: clientGender,
         symptoms: (symptoms || 'Hospital OPD Consultation').trim()
       },
       hospitalData: {
@@ -512,7 +559,8 @@ export const bookHospitalAppointment = async (req, res) => {
 
 export const listAppointments = async (req, res) => {
   try {
-    const appointments = await Appointment.find({ userId: req.user.id });
+    const rawAppointments = await Appointment.find({ userId: req.user.id });
+    const appointments = await enrichAppointmentsWithLiveUserData(rawAppointments);
     res.json({ success: true, data: appointments });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

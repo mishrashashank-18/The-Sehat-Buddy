@@ -8,6 +8,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import connectDB from './config/db.js';
 import { initHospitalPublicationAndCompletion } from './utils/hospitalMigration.js';
+import { initDoctorProfileCompletion } from './utils/doctorMigration.js';
 
 import adminRoutes from './routes/adminRoutes.js';
 import doctorRoutes from './routes/doctorRoutes.js';
@@ -15,7 +16,7 @@ import hospitalRoutes from './routes/hospitalRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import contentRoutes, { seedContentIfEmpty } from './routes/contentRoutes.js';
 import mapRoutes from './routes/mapRoutes.js';
-import uploadRoutes from './routes/uploadRoutes.js';
+import uploadRoutes, { getCloudinary } from './routes/uploadRoutes.js';
 import faqRoutes from './routes/faqRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import specialityRoutes from './routes/specialityRoutes.js';
@@ -26,6 +27,7 @@ import contactRoutes from './routes/contactRoutes.js';
 
 import mongoSanitize from './middleware/mongoSanitize.js';
 import { initMongoDBChangeStream, streamRealtimeDatabase } from './services/storageMonitor.js';
+import { processPendingMediaDeletions } from './utils/reelCleanup.js';
 
 // Resolve directory name
 const __filename = fileURLToPath(import.meta.url);
@@ -58,6 +60,7 @@ if (NODE_ENV === 'production') {
 connectDB().then(() => {
   initMongoDBChangeStream();
   initHospitalPublicationAndCompletion();
+  initDoctorProfileCompletion();
   seedContentIfEmpty().catch(() => {});
 }).catch(() => {});
 
@@ -208,6 +211,21 @@ app.get('/api/realtime-stream', streamRealtimeDatabase);
 // In-memory cache for reel covers (24 hour TTL)
 const reelCoverCache = new Map();
 
+/**
+ * Invalidate cached reel cover thumbnail for a specific URL or shortcode
+ */
+export const invalidateReelCoverCache = (shortcodeOrUrl) => {
+  if (!shortcodeOrUrl) return;
+  const match = String(shortcodeOrUrl).match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&]+)/i);
+  const shortcode = match && match[1] ? match[1].replace(/[^a-zA-Z0-9_-]/g, '') : String(shortcodeOrUrl).replace(/[^a-zA-Z0-9_-]/g, '');
+  if (shortcode) {
+    reelCoverCache.delete(shortcode);
+    reelCoverCache.delete(`ig_${shortcode}`);
+  }
+  reelCoverCache.delete(shortcodeOrUrl);
+  reelCoverCache.delete(String(shortcodeOrUrl).trim());
+};
+
 // Dedicated Instagram Reel Cover & Media Proxy Endpoint
 app.get('/api/reel-cover', async (req, res) => {
   try {
@@ -230,6 +248,20 @@ app.get('/api/reel-cover', async (req, res) => {
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.setHeader('Access-Control-Allow-Origin', '*');
       return res.send(cachedCover.buffer);
+    }
+
+    // Fast check: If Cloudinary already stores this cover, redirect immediately (<50ms)
+    if (shortcode) {
+      const cld = getCloudinary ? getCloudinary() : null;
+      if (cld) {
+        try {
+          const asset = await cld.api.resource(`sehatbuddy/covers/ig_${shortcode}`, { resource_type: 'image' });
+          if (asset && asset.secure_url) {
+            res.setHeader('Cache-Control', 'public, max-age=604800');
+            return res.redirect(asset.secure_url);
+          }
+        } catch {}
+      }
     }
 
     const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
@@ -451,6 +483,13 @@ app.use((err, req, res, next) => {
 // Start Server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🩺 The Sehat Buddy Backend API running in [${NODE_ENV}] mode at port ${PORT}`);
+
+  // Periodic worker to retry any failed Cloudinary media deletions
+  setInterval(() => {
+    processPendingMediaDeletions().catch(err => {
+      console.warn('[BackgroundWorker] processPendingMediaDeletions warning:', err.message);
+    });
+  }, 5 * 60 * 1000);
 });
 
 export default app;

@@ -22,7 +22,6 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
   const handleClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    localStorage.setItem('autoOpenBooking', 'true');
     if (onNavigate) {
       onNavigate('doctor-profile', doctor.id || doctor._id);
     }
@@ -31,7 +30,9 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
   const handleBookNowClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    localStorage.setItem('autoOpenBooking', 'true');
+    try {
+      localStorage.setItem('autoOpenBooking', 'true');
+    } catch (err) {}
     if (onNavigate) {
       onNavigate('doctor-profile', doctor.id || doctor._id);
     }
@@ -67,7 +68,14 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
         </div>
       </div>
       <div className={styles.info}>
-        <h3 className={styles.name}>{doctor.name}</h3>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+          <h3 className={styles.name}>{doctor.name}</h3>
+          {(doctor.availabilityStatus === 'On Leave' || doctor.available === false) && (
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', padding: '1px 7px', borderRadius: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              On Leave
+            </span>
+          )}
+        </div>
         <p className={styles.specialty}>{doctor.specialty || doctor.specialization}</p>
         <p className={styles.experience}>
           {formatDoctorExperience(doctor.experience)}
@@ -81,7 +89,7 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
         </div>
         
         <div className={styles.priceRow}>
-          <div className={styles.price}>₹{doctor.price || doctor.fees}</div>
+          <div className={styles.price}>₹{(doctor.price !== undefined && doctor.price !== null && doctor.price !== '') ? Number(doctor.price) : ((doctor.fees !== undefined && doctor.fees !== null && doctor.fees !== '') ? Number(doctor.fees) : 0)}</div>
           {showBookNow ? (
             <button className={styles.bookLink} onClick={handleBookNowClick}>Book Now</button>
           ) : (

@@ -6,10 +6,25 @@ import { promisify } from 'util';
 import mongoose from 'mongoose';
 import Doctor from '../models/Doctor.js';
 import Hospital from '../models/Hospital.js';
-import { getCloudinary } from '../routes/uploadRoutes.js';
+import { getCloudinary, extractCloudinaryPublicId } from '../routes/uploadRoutes.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
+import { cleanupReplacedReels } from './reelCleanup.js';
 
 const execPromise = promisify(exec);
+
+// In-flight mutex locks to prevent parallel duplicate background conversions
+const inFlightDoctorReelJobs = new Set();
+const inFlightHospitalReelJobs = new Set();
+const inFlightReelUrls = new Map();
+
+/**
+ * Extracts clean Instagram shortcode from reel / post / share URL or Cloudinary asset name
+ */
+export function extractInstagramShortcode(url) {
+  if (!url) return null;
+  const match = String(url).match(/(?:instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/|ig_)([^/?#&.]+)/i);
+  return match && match[1] ? match[1].replace(/[^a-zA-Z0-9_-]/g, '') : null;
+}
 
 /**
  * Downloads an Instagram reel or video to a temporary local MP4 file.
@@ -48,15 +63,24 @@ export async function downloadReelToTemp(rawUrl) {
 
 /**
  * Uploads a local MP4 file to Cloudinary and returns permanent URLs.
+ * Supports deterministic public_id and overwrite to guarantee no duplicate assets.
  */
-export async function uploadVideoFileToCloudinary(filePath, folder = 'sehatbuddy/reels') {
+export async function uploadVideoFileToCloudinary(filePath, folder = 'sehatbuddy/reels', customPublicId = null) {
   const cld = getCloudinary();
-  const cldRes = await cld.uploader.upload(filePath, {
+  const uploadOptions = {
     resource_type: 'video',
     folder,
     quality: 'auto',
     eager_async: true
-  });
+  };
+
+  if (customPublicId) {
+    uploadOptions.public_id = customPublicId;
+    uploadOptions.overwrite = true;
+    uploadOptions.unique_filename = false;
+  }
+
+  const cldRes = await cld.uploader.upload(filePath, uploadOptions);
 
   if (!cldRes || !cldRes.secure_url) {
     throw new Error('Cloudinary did not return a valid video URL');
@@ -68,14 +92,85 @@ export async function uploadVideoFileToCloudinary(filePath, folder = 'sehatbuddy
     : rawUrl;
   const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
-  return { url: autoPlayUrl, coverPhoto };
+  return { url: autoPlayUrl, coverPhoto, public_id: cldRes.public_id };
+}
+
+/**
+ * Deduplicated reel converter:
+ * 1. Checks if Cloudinary already has the video under the deterministic shortcode ID (fast, 0-cost).
+ * 2. Deduplicates concurrent downloads of the same URL across the entire system.
+ * 3. Uploads with deterministic public_id and overwrite to prevent any duplicate assets.
+ */
+export async function convertOrFetchInstagramReel(rUrl) {
+  if (!rUrl) return null;
+  const cleanUrl = String(rUrl).trim().split('?')[0];
+  const shortcode = extractInstagramShortcode(cleanUrl);
+  const lockKey = shortcode ? `ig_${shortcode}` : cleanUrl;
+
+  // If another process is currently downloading/converting this exact reel, await the same promise
+  if (inFlightReelUrls.has(lockKey)) {
+    return await inFlightReelUrls.get(lockKey);
+  }
+
+  const conversionPromise = (async () => {
+    const cld = getCloudinary();
+
+    // 1. Check if Cloudinary already stores this video under deterministic public_id
+    if (cld && shortcode) {
+      try {
+        const existingPublicId = `sehatbuddy/reels/ig_${shortcode}`;
+        const existingAsset = await cld.api.resource(existingPublicId, { resource_type: 'video' });
+        if (existingAsset && existingAsset.secure_url) {
+          const rawUrl = existingAsset.secure_url;
+          const autoPlayUrl = rawUrl.includes('/video/upload/') && !rawUrl.includes('/video/upload/q_auto')
+            ? rawUrl.replace('/video/upload/', '/video/upload/q_auto,f_auto/')
+            : rawUrl;
+          const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
+          return { url: autoPlayUrl, coverPhoto, public_id: existingPublicId };
+        }
+      } catch {
+        // Asset does not exist in Cloudinary yet, proceed to download and upload
+      }
+    }
+
+    // 2. Download reel to temp MP4
+    const tempFile = await downloadReelToTemp(cleanUrl);
+    if (!tempFile || !fs.existsSync(tempFile)) {
+      return null;
+    }
+
+    // 3. Upload to Cloudinary with deterministic public_id
+    try {
+      const customPublicId = shortcode ? `ig_${shortcode}` : null;
+      return await uploadVideoFileToCloudinary(tempFile, 'sehatbuddy/reels', customPublicId);
+    } finally {
+      try {
+        if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      } catch {}
+    }
+  })();
+
+  inFlightReelUrls.set(lockKey, conversionPromise);
+  try {
+    return await conversionPromise;
+  } finally {
+    inFlightReelUrls.delete(lockKey);
+  }
 }
 
 /**
  * Automatically converts doctor Instagram reels to Cloudinary direct video in the background.
+ * Protected with per-doctor concurrency lock and reel deduplication.
  */
 export async function processDoctorReelsInBackground(doctorId, reels) {
   if (!doctorId || !Array.isArray(reels) || reels.length === 0) return;
+
+  const docKey = String(doctorId);
+  if (inFlightDoctorReelJobs.has(docKey)) {
+    console.log(`[ReelService] Already processing reels for doctor ${docKey}, skipping duplicate run.`);
+    return;
+  }
+  inFlightDoctorReelJobs.add(docKey);
 
   (async () => {
     try {
@@ -85,34 +180,41 @@ export async function processDoctorReelsInBackground(doctorId, reels) {
       for (let i = 0; i < updatedReels.length; i++) {
         const r = updatedReels[i];
         const rUrl = typeof r === 'string' ? r : r?.url;
+        const currentCover = (typeof r === 'object' && r !== null) ? r.coverPhoto : undefined;
 
         if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
-          const tempFile = await downloadReelToTemp(rUrl);
-          if (tempFile && fs.existsSync(tempFile)) {
-            try {
-              const cldRes = await uploadVideoFileToCloudinary(tempFile, 'sehatbuddy/reels');
-              if (cldRes && cldRes.url) {
-                const existingCover = typeof r === 'object' && r?.coverPhoto ? r.coverPhoto : '';
-                updatedReels[i] = {
-                  url: cldRes.url,
-                  coverPhoto: existingCover && !existingCover.includes('instagram.com')
-                    ? existingCover
-                    : cldRes.coverPhoto
-                };
-                changed = true;
-              }
-            } catch (upErr) {
-              console.warn(`[ReelService] Cloudinary upload error for doctor reel ${rUrl}:`, upErr.message);
-            } finally {
-              try {
-                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-              } catch {}
+          try {
+            const cldRes = await convertOrFetchInstagramReel(rUrl);
+            if (cldRes && cldRes.url) {
+              updatedReels[i] = {
+                url: cldRes.url,
+                // CRUCIAL: If coverPhoto was explicitly deleted (set to ''), DO NOT resurrect it!
+                coverPhoto: (currentCover === '' ? '' : (currentCover || cldRes.coverPhoto || ''))
+              };
+              changed = true;
             }
+          } catch (upErr) {
+            console.warn(`[ReelService] Cloudinary upload error for doctor reel ${rUrl}:`, upErr.message);
           }
         }
       }
 
       if (changed) {
+        // Automatically cleanup any previous Cloudinary reel video and cover that got replaced
+        try {
+          let currentDoc = null;
+          if (mongoose.isValidObjectId(doctorId)) {
+            currentDoc = await Doctor.findById(doctorId).select('reels');
+          } else {
+            currentDoc = await Doctor.findOne({ id: doctorId }).select('reels');
+          }
+          if (currentDoc && Array.isArray(currentDoc.reels)) {
+            await cleanupReplacedReels(currentDoc.reels, updatedReels);
+          }
+        } catch (cleanErr) {
+          console.warn('[ReelService] Cleanup replaced doctor reels note:', cleanErr.message);
+        }
+
         let updatedDoctor = null;
         if (mongoose.isValidObjectId(doctorId)) {
           updatedDoctor = await Doctor.findByIdAndUpdate(
@@ -134,15 +236,27 @@ export async function processDoctorReelsInBackground(doctorId, reels) {
       }
     } catch (err) {
       console.warn('[ReelService] processDoctorReelsInBackground warning:', err.message);
+    } finally {
+      inFlightDoctorReelJobs.delete(docKey);
     }
-  })().catch(() => {});
+  })().catch(() => {
+    inFlightDoctorReelJobs.delete(docKey);
+  });
 }
 
 /**
  * Automatically converts hospital reels in the background.
+ * Protected with per-hospital concurrency lock and reel deduplication.
  */
 export async function processHospitalReelsInBackground(hospitalId, reels) {
   if (!hospitalId || !Array.isArray(reels) || reels.length === 0) return;
+
+  const hospKey = String(hospitalId);
+  if (inFlightHospitalReelJobs.has(hospKey)) {
+    console.log(`[ReelService] Already processing reels for hospital ${hospKey}, skipping duplicate run.`);
+    return;
+  }
+  inFlightHospitalReelJobs.add(hospKey);
 
   (async () => {
     try {
@@ -152,34 +266,41 @@ export async function processHospitalReelsInBackground(hospitalId, reels) {
       for (let i = 0; i < updatedReels.length; i++) {
         const r = updatedReels[i];
         const rUrl = typeof r === 'string' ? r : r?.url;
+        const currentCover = (typeof r === 'object' && r !== null) ? r.coverPhoto : undefined;
 
         if (rUrl && rUrl.includes('instagram.com') && !rUrl.includes('cloudinary.com')) {
-          const tempFile = await downloadReelToTemp(rUrl);
-          if (tempFile && fs.existsSync(tempFile)) {
-            try {
-              const cldRes = await uploadVideoFileToCloudinary(tempFile, 'sehatbuddy/reels');
-              if (cldRes && cldRes.url) {
-                const existingCover = typeof r === 'object' && r?.coverPhoto ? r.coverPhoto : '';
-                updatedReels[i] = {
-                  url: cldRes.url,
-                  coverPhoto: existingCover && !existingCover.includes('instagram.com')
-                    ? existingCover
-                    : cldRes.coverPhoto
-                };
-                changed = true;
-              }
-            } catch (upErr) {
-              console.warn(`[ReelService] Cloudinary upload error for hospital reel ${rUrl}:`, upErr.message);
-            } finally {
-              try {
-                if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
-              } catch {}
+          try {
+            const cldRes = await convertOrFetchInstagramReel(rUrl);
+            if (cldRes && cldRes.url) {
+              updatedReels[i] = {
+                url: cldRes.url,
+                // CRUCIAL: If coverPhoto was explicitly deleted (set to ''), DO NOT resurrect it!
+                coverPhoto: (currentCover === '' ? '' : (currentCover || cldRes.coverPhoto || ''))
+              };
+              changed = true;
             }
+          } catch (upErr) {
+            console.warn(`[ReelService] Cloudinary upload error for hospital reel ${rUrl}:`, upErr.message);
           }
         }
       }
 
       if (changed) {
+        // Automatically cleanup any previous Cloudinary reel video and cover that got replaced
+        try {
+          let currentHosp = null;
+          if (mongoose.isValidObjectId(hospitalId)) {
+            currentHosp = await Hospital.findById(hospitalId).select('reels');
+          } else {
+            currentHosp = await Hospital.findOne({ id: hospitalId }).select('reels');
+          }
+          if (currentHosp && Array.isArray(currentHosp.reels)) {
+            await cleanupReplacedReels(currentHosp.reels, updatedReels);
+          }
+        } catch (cleanErr) {
+          console.warn('[ReelService] Cleanup replaced hospital reels note:', cleanErr.message);
+        }
+
         let updatedHospital = null;
         if (mongoose.isValidObjectId(hospitalId)) {
           updatedHospital = await Hospital.findByIdAndUpdate(
@@ -201,6 +322,10 @@ export async function processHospitalReelsInBackground(hospitalId, reels) {
       }
     } catch (err) {
       console.warn('[ReelService] processHospitalReelsInBackground warning:', err.message);
+    } finally {
+      inFlightHospitalReelJobs.delete(hospKey);
     }
-  })().catch(() => {});
+  })().catch(() => {
+    inFlightHospitalReelJobs.delete(hospKey);
+  });
 }

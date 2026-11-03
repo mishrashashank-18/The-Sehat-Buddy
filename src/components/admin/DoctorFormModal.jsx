@@ -3,11 +3,11 @@ import {
   X, Upload, Stethoscope, Building2, AlertCircle, HelpCircle, 
   Plus, Trash2, Edit2, Star, Loader2, Award, GraduationCap, 
   Users, User, Briefcase, ArrowUp, ArrowDown, Check, CheckCircle2, Video, Tag,
-  Phone, Clock 
+  Phone, Clock, GripVertical, Sparkles, Camera 
 } from 'lucide-react';
 import { useData } from '../../context/useData';
 import { DEFAULT_DOCTOR_AVATARS } from '../../constants/doctorAvatars';
-import { api } from '../../services/api';
+import { api, API_BASE } from '../../services/api';
 import FaqSymbolSelector from './FaqSymbolSelector';
 import { parseAvailableDaysAndHours } from '../../utils/doctorScheduleUtils';
 import styles from './DoctorFormModal.module.css';
@@ -127,23 +127,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       const spec = doctorToEdit.specialty || doctorToEdit.specialization || 'Cardiologist';
       const rawPhone = String(doctorToEdit.phone || doctorToEdit.contact_number || '').replace(/\D/g, '');
       const cleanPhone = rawPhone.length > 10 ? rawPhone.slice(-10) : rawPhone;
-      const isRahulDoc = doctorToEdit.id === '1' || doctorToEdit._id === '1' || (doctorToEdit.name && doctorToEdit.name.toLowerCase().includes('rahul verma'));
-
-      const initialAwards = Array.isArray(doctorToEdit.awards) && doctorToEdit.awards.length > 0
-        ? doctorToEdit.awards
-        : (isRahulDoc ? DEFAULT_RAHUL_AWARDS : []);
-
-      const initialCerts = Array.isArray(doctorToEdit.certifications) && doctorToEdit.certifications.length > 0
-        ? doctorToEdit.certifications
-        : (isRahulDoc ? DEFAULT_RAHUL_CERTS : []);
-
-      const initialMems = Array.isArray(doctorToEdit.memberships) && doctorToEdit.memberships.length > 0
-        ? doctorToEdit.memberships
-        : (isRahulDoc ? DEFAULT_RAHUL_MEMS : []);
-
-      const initialTimeline = Array.isArray(doctorToEdit.careerExperience) && doctorToEdit.careerExperience.length > 0
-        ? doctorToEdit.careerExperience
-        : (isRahulDoc ? DEFAULT_RAHUL_TIMELINE : []);
+      const initialAwards = Array.isArray(doctorToEdit.awards) ? doctorToEdit.awards : [];
+      const initialCerts = Array.isArray(doctorToEdit.certifications) ? doctorToEdit.certifications : [];
+      const initialMems = Array.isArray(doctorToEdit.memberships) ? doctorToEdit.memberships : [];
+      const initialTimeline = Array.isArray(doctorToEdit.careerExperience) ? doctorToEdit.careerExperience : [];
 
       return {
         name: doctorToEdit.name || '',
@@ -160,15 +147,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         phone: cleanPhone,
         email: doctorToEdit.email || '',
         availableDays: doctorToEdit.availableDays || '',
-        helplineNumber: doctorToEdit.helplineNumber || '+91 98765 43210',
-        helplineDays: doctorToEdit.helplineDays || 'Mon – Sat',
-        helplineTime: doctorToEdit.helplineTime || '8:00 AM – 8:00 PM',
+        helplineNumber: doctorToEdit.helplineNumber || '',
+        helplineDays: doctorToEdit.helplineDays || '',
+        helplineTime: doctorToEdit.helplineTime || '',
         about: doctorToEdit.about || '',
         available: doctorToEdit.available !== undefined ? doctorToEdit.available : true,
         isStarDoctor: Boolean(doctorToEdit.isStarDoctor),
         image: doctorToEdit.image || '',
         instagram: doctorToEdit.instagram || '',
         facebook: doctorToEdit.facebook || '',
+        linkedin: doctorToEdit.linkedin || '',
+        twitter: doctorToEdit.twitter || '',
         reels: Array.isArray(doctorToEdit.reels) ? [...doctorToEdit.reels, '', '', '', '', ''].slice(0, 5) : ['', '', '', '', ''],
         youtube_videos: Array.isArray(doctorToEdit.youtube_videos) ? [...doctorToEdit.youtube_videos, '', ''].slice(0, 2) : ['', ''],
         faqs: Array.isArray(doctorToEdit.faqs) ? doctorToEdit.faqs : [],
@@ -194,15 +183,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       phone: '',
       email: '',
       availableDays: '',
-      helplineNumber: '+91 98765 43210',
-      helplineDays: 'Mon – Sat',
-      helplineTime: '8:00 AM – 8:00 PM',
+      helplineNumber: '',
+      helplineDays: '',
+      helplineTime: '',
       about: '',
       available: true,
       isStarDoctor: false,
       image: '',
       instagram: '',
       facebook: '',
+      linkedin: '',
+      twitter: '',
       reels: ['', '', '', '', ''],
       youtube_videos: ['', ''],
       faqs: [],
@@ -250,6 +241,11 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     const remoteHelplineTimeChanged = doctorToEdit.helplineTime !== prevDoc.helplineTime && doctorToEdit.helplineTime !== undefined && !dirtyFieldsRef.current.has('helplineTime');
     const remoteJobTitleChanged = doctorToEdit.jobTitle !== prevDoc.jobTitle && doctorToEdit.jobTitle !== undefined && !dirtyFieldsRef.current.has('jobTitle');
     const remoteLicenseChanged = doctorToEdit.licenseNumber !== prevDoc.licenseNumber && doctorToEdit.licenseNumber !== undefined && !dirtyFieldsRef.current.has('licenseNumber');
+    const remoteInstagramChanged = doctorToEdit.instagram !== prevDoc.instagram && doctorToEdit.instagram !== undefined && !dirtyFieldsRef.current.has('instagram');
+    const remoteFacebookChanged = doctorToEdit.facebook !== prevDoc.facebook && doctorToEdit.facebook !== undefined && !dirtyFieldsRef.current.has('facebook');
+    const remoteLinkedinChanged = doctorToEdit.linkedin !== prevDoc.linkedin && doctorToEdit.linkedin !== undefined && !dirtyFieldsRef.current.has('linkedin');
+    const remoteTwitterChanged = doctorToEdit.twitter !== prevDoc.twitter && doctorToEdit.twitter !== undefined && !dirtyFieldsRef.current.has('twitter');
+    const remoteReelsChanged = doctorToEdit.reels && JSON.stringify(doctorToEdit.reels) !== JSON.stringify(prevDoc.reels) && !dirtyFieldsRef.current.has('reels');
 
     if (
       !remotePhoneChanged &&
@@ -267,7 +263,12 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       !remoteHelplineDaysChanged &&
       !remoteHelplineTimeChanged &&
       !remoteJobTitleChanged &&
-      !remoteLicenseChanged
+      !remoteLicenseChanged &&
+      !remoteInstagramChanged &&
+      !remoteFacebookChanged &&
+      !remoteLinkedinChanged &&
+      !remoteTwitterChanged &&
+      !remoteReelsChanged
     ) {
       return;
     }
@@ -292,9 +293,18 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       if (remoteTagsChanged) next.tags = Array.isArray(doctorToEdit.tags) ? doctorToEdit.tags : [];
       if (doctorToEdit.jobTitle !== undefined && !dirtyFieldsRef.current.has('jobTitle')) next.jobTitle = doctorToEdit.jobTitle || '';
       if (doctorToEdit.licenseNumber !== undefined && !dirtyFieldsRef.current.has('licenseNumber')) next.licenseNumber = doctorToEdit.licenseNumber || '';
-      if (doctorToEdit.helplineNumber !== undefined && !dirtyFieldsRef.current.has('helplineNumber')) next.helplineNumber = doctorToEdit.helplineNumber || '+91 98765 43210';
-      if (doctorToEdit.helplineDays !== undefined && !dirtyFieldsRef.current.has('helplineDays')) next.helplineDays = doctorToEdit.helplineDays || 'Mon – Sat';
-      if (doctorToEdit.helplineTime !== undefined && !dirtyFieldsRef.current.has('helplineTime')) next.helplineTime = doctorToEdit.helplineTime || '8:00 AM – 8:00 PM';
+      if (doctorToEdit.helplineNumber !== undefined && !dirtyFieldsRef.current.has('helplineNumber')) next.helplineNumber = doctorToEdit.helplineNumber || '';
+      if (doctorToEdit.helplineDays !== undefined && !dirtyFieldsRef.current.has('helplineDays')) next.helplineDays = doctorToEdit.helplineDays || '';
+      if (doctorToEdit.helplineTime !== undefined && !dirtyFieldsRef.current.has('helplineTime')) next.helplineTime = doctorToEdit.helplineTime || '';
+      if (remoteInstagramChanged) next.instagram = doctorToEdit.instagram || '';
+      if (remoteFacebookChanged) next.facebook = doctorToEdit.facebook || '';
+      if (remoteLinkedinChanged) next.linkedin = doctorToEdit.linkedin || '';
+      if (remoteTwitterChanged) next.twitter = doctorToEdit.twitter || '';
+      if (remoteReelsChanged) {
+        next.reels = Array.isArray(doctorToEdit.reels)
+          ? [...doctorToEdit.reels, '', '', '', '', ''].slice(0, 5)
+          : ['', '', '', '', ''];
+      }
       return next;
     });
 
@@ -319,6 +329,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     doctorToEdit?.helplineNumber,
     doctorToEdit?.helplineDays,
     doctorToEdit?.helplineTime,
+    doctorToEdit?.instagram,
+    doctorToEdit?.facebook,
+    doctorToEdit?.linkedin,
+    doctorToEdit?.twitter,
     JSON.stringify(doctorToEdit?.awards || []),
     JSON.stringify(doctorToEdit?.certifications || []),
     JSON.stringify(doctorToEdit?.memberships || []),
@@ -344,7 +358,11 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
             helplineTime: (!dirtyFieldsRef.current.has('helplineTime') && fresh.helplineTime !== undefined) ? fresh.helplineTime : prev.helplineTime,
             phone: (!dirtyFieldsRef.current.has('phone') && (fresh.phone || fresh.contact_number)) ? String(fresh.phone || fresh.contact_number).replace(/\D/g, '').slice(-10) : prev.phone,
             jobTitle: (!dirtyFieldsRef.current.has('jobTitle') && fresh.jobTitle !== undefined) ? fresh.jobTitle : prev.jobTitle,
-            licenseNumber: (!dirtyFieldsRef.current.has('licenseNumber') && fresh.licenseNumber !== undefined) ? fresh.licenseNumber : prev.licenseNumber
+            licenseNumber: (!dirtyFieldsRef.current.has('licenseNumber') && fresh.licenseNumber !== undefined) ? fresh.licenseNumber : prev.licenseNumber,
+            instagram: (!dirtyFieldsRef.current.has('instagram') && fresh.instagram !== undefined) ? fresh.instagram : prev.instagram,
+            facebook: (!dirtyFieldsRef.current.has('facebook') && fresh.facebook !== undefined) ? fresh.facebook : prev.facebook,
+            linkedin: (!dirtyFieldsRef.current.has('linkedin') && fresh.linkedin !== undefined) ? fresh.linkedin : prev.linkedin,
+            twitter: (!dirtyFieldsRef.current.has('twitter') && fresh.twitter !== undefined) ? fresh.twitter : prev.twitter
           }));
         }
       }
@@ -827,6 +845,44 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   const [newFaqImage, setNewFaqImage] = useState('');
   const [editingFaqIdx, setEditingFaqIdx] = useState(null);
   const [editingFaqData, setEditingFaqData] = useState({ q: '', a: '', category: 'Booking & Schedule', icon: 'calendar', image: '' });
+  const [draggedFaqIndex, setDraggedFaqIndex] = useState(null);
+
+  const handleMoveFaq = (index, direction) => {
+    const targetIndex = index + direction;
+    if (!formData.faqs || targetIndex < 0 || targetIndex >= formData.faqs.length) return;
+    const updated = [...formData.faqs];
+    const [moved] = updated.splice(index, 1);
+    updated.splice(targetIndex, 0, moved);
+    dirtyFieldsRef.current.add('faqs');
+    setFormData(prev => ({ ...prev, faqs: updated }));
+  };
+
+  const handleFaqDragStart = (e, index) => {
+    setDraggedFaqIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+      e.dataTransfer.setData('text/plain', String(index));
+    } catch {}
+  };
+
+  const handleFaqDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleFaqDrop = (e, targetIndex) => {
+    e.preventDefault();
+    if (draggedFaqIndex === null || draggedFaqIndex === targetIndex) {
+      setDraggedFaqIndex(null);
+      return;
+    }
+    const updated = [...formData.faqs];
+    const [moved] = updated.splice(draggedFaqIndex, 1);
+    updated.splice(targetIndex, 0, moved);
+    dirtyFieldsRef.current.add('faqs');
+    setFormData(prev => ({ ...prev, faqs: updated }));
+    setDraggedFaqIndex(null);
+  };
 
   const [imageType, setImageType] = useState(() => {
     if (doctorToEdit && typeof doctorToEdit.image === 'string' && doctorToEdit.image.startsWith('http')) {
@@ -851,16 +907,16 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
   const validate = () => {
     const newErrors = {};
-    if (!formData.name || !formData.name.trim()) newErrors.name = 'Doctor name is required';
+    if (!doctorToEdit && (!formData.name || !formData.name.trim())) newErrors.name = 'Doctor name is required';
     if (!formData.email || !formData.email.trim()) {
       newErrors.email = 'Doctor email address is required (for login credentials)';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       newErrors.email = 'Please enter a valid email address';
     }
-    if (formData.specialty === 'Other' && (!formData.customSpecialty || !formData.customSpecialty.trim())) {
+    if (formData.specialty === 'Other' && !doctorToEdit && (!formData.customSpecialty || !formData.customSpecialty.trim())) {
       newErrors.customSpecialty = 'Please specify specialty';
     }
-    if (formData.price === '' || formData.price === undefined || isNaN(Number(formData.price)) || Number(formData.price) <= 0) {
+    if (formData.price === '' || formData.price === undefined || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
       newErrors.price = 'Valid consultation fee is required';
     }
     if (formData.experienceYears === '' || formData.experienceYears === undefined || isNaN(Number(formData.experienceYears)) || Number(formData.experienceYears) < 0) {
@@ -886,7 +942,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     }
 
     if (!skipConfirm) {
-      if (!window.confirm('Are you sure you want to permanently delete this doctor profile photo? It will be deleted from Cloudinary storage.')) {
+      if (!window.confirm('Are you sure you want to permanently delete this doctor profile photo?')) {
         return;
       }
     }
@@ -949,6 +1005,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   const [uploadingReelVideoIdx, setUploadingReelVideoIdx] = useState(null);
   const [deletingCoverIdx, setDeletingCoverIdx] = useState(null);
   const [deletingReelIdx, setDeletingReelIdx] = useState(null);
+  const [fetchingCoverIdx, setFetchingCoverIdx] = useState(null);
 
   const handleDeleteReel = async (index) => {
     const newReels = [...formData.reels];
@@ -958,35 +1015,20 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
     if (!reelUrl && !coverUrl) return;
 
-    if (!window.confirm(`Are you sure you want to permanently delete Reel ${index + 1}? This will delete the video and its cover photo from Cloudinary storage and remove it from the doctor's profile.`)) {
+    if (!window.confirm(`Are you sure you want to permanently delete Reel ${index + 1}? This will remove it from this doctor's profile and delete the video and cover photo from Cloudinary if no other profile is using it.`)) {
       return;
     }
 
     setDeletingReelIdx(index);
     try {
-      // 1. Delete video from Cloudinary if hosted there
-      if (reelUrl.includes('cloudinary.com') || reelUrl.includes('res.cloudinary.com')) {
-        await api.deleteVideo(reelUrl).catch((err) => {
-          console.warn('Failed to delete reel video from Cloudinary:', err);
-        });
-      }
-
-      // 2. Delete cover photo from Cloudinary if hosted there
-      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
-        const coverResType = coverUrl.includes('/video/upload/') ? 'video' : 'image';
-        await api.deleteMedia(coverUrl, coverResType).catch((err) => {
-          console.warn('Failed to delete reel cover from Cloudinary:', err);
-        });
-      }
-
-      // 3. Clear reel slot in state
+      // 1. Clear reel slot in state (both url and coverPhoto)
       newReels[index] = { url: '', coverPhoto: '' };
       setFormData(prev => ({ ...prev, reels: newReels }));
 
-      // 4. Immediately persist to MongoDB Atlas if editing an existing doctor
+      // 2. Call backend atomic delete reel endpoint
       const targetId = doctorToEdit?.id || doctorToEdit?._id;
       if (targetId) {
-        await updateDoctor(targetId, { reels: newReels });
+        await api.deleteDoctorReel(targetId, index);
       }
     } catch (err) {
       console.error('Failed to permanently delete reel:', err);
@@ -1007,22 +1049,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
       const res = await api.uploadVideo(file, 'sehatbuddy/reels');
       const videoUrl = typeof res === 'string' ? res : (res?.url || '');
       if (videoUrl) {
-        // Automatically delete old Cloudinary video if it is being replaced
-        if (oldReelUrl && (oldReelUrl.includes('cloudinary.com') || oldReelUrl.includes('res.cloudinary.com')) && oldReelUrl !== videoUrl) {
-          api.deleteVideo(oldReelUrl).catch((err) => {
-            console.warn('Failed to delete old reel video from Cloudinary:', err);
-          });
-        }
-
         const autoCover = videoUrl.replace(/\.[^/.]+$/, '.jpg');
-
-        // Automatically delete old Cloudinary cover if it is being replaced
-        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== autoCover) {
-          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
-          api.deleteMedia(oldCoverUrl, coverResType).catch((err) => {
-            console.warn('Failed to delete old reel cover from Cloudinary:', err);
-          });
-        }
 
         const newReels = [...formData.reels];
         newReels[index] = { ...cur, url: videoUrl, coverPhoto: autoCover };
@@ -1044,32 +1071,25 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
   const handleDeleteCoverPhoto = async (index) => {
     const newReels = [...formData.reels];
     const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-    const coverUrl = cur.coverPhoto || '';
+    const coverUrl = (cur.coverPhoto || '').trim();
     const currentUrl = (typeof newReels[index] === 'string' ? newReels[index] : (cur.url || cur.link || '')).trim();
 
-    if (!coverUrl) return;
+    if (!coverUrl && !currentUrl) return;
 
-    if (!window.confirm('Are you sure you want to permanently delete this cover photo? It will be removed from Cloudinary storage and doctor profile.')) {
+    if (!window.confirm('Are you sure you want to permanently delete this cover photo? It will be removed from this doctor\'s profile and deleted from Cloudinary if no other profile is using it.')) {
       return;
     }
 
     setDeletingCoverIdx(index);
     try {
-      // 1. Permanently delete from Cloudinary if it's hosted there
-      if (coverUrl.includes('cloudinary.com') || coverUrl.includes('res.cloudinary.com')) {
-        await api.deleteImage(coverUrl, 'image').catch((err) => {
-          console.warn('Failed to delete asset from Cloudinary:', err);
-        });
-      }
-
-      // 2. Clear coverPhoto from form data
+      // 1. Clear coverPhoto from form data completely
       newReels[index] = { ...cur, url: currentUrl, coverPhoto: '' };
       setFormData(prev => ({ ...prev, reels: newReels }));
 
-      // 3. If editing an existing doctor, immediately persist to MongoDB Atlas to guarantee permanent deletion
+      // 2. Call backend atomic delete cover endpoint
       const targetId = doctorToEdit?.id || doctorToEdit?._id;
       if (targetId) {
-        await updateDoctor(targetId, { reels: newReels });
+        await api.deleteDoctorReelCover(targetId, index);
       }
     } catch (err) {
       console.error('Failed to permanently delete cover photo:', err);
@@ -1088,14 +1108,6 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
 
       const url = await api.uploadImage(file, 'sehatbuddy/reels');
       if (url) {
-        // Automatically delete old Cloudinary cover if it is being replaced
-        if (oldCoverUrl && (oldCoverUrl.includes('cloudinary.com') || oldCoverUrl.includes('res.cloudinary.com')) && oldCoverUrl !== url) {
-          const coverResType = oldCoverUrl.includes('/video/upload/') ? 'video' : 'image';
-          api.deleteMedia(oldCoverUrl, coverResType).catch((err) => {
-            console.warn('Failed to delete old reel cover from Cloudinary:', err);
-          });
-        }
-
         const newReels = [...formData.reels];
         newReels[index] = { ...cur, url: currentUrl, coverPhoto: url };
         setFormData(prev => ({ ...prev, reels: newReels }));
@@ -1126,6 +1138,157 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
     }
   };
 
+  const handleCommitReels = async (reelsOverride = null) => {
+    if (fetchingCoverIdx !== null && !reelsOverride) return;
+    dirtyFieldsRef.current.delete('reels');
+    const targetId = doctorToEdit?.id || doctorToEdit?._id;
+    if (!targetId) return;
+    const reelsToSave = reelsOverride || formData.reels;
+    try {
+      const cleaned = (reelsToSave || []).map(r => {
+        if (typeof r === 'string') return r.trim() ? { url: r.trim(), coverPhoto: '' } : null;
+        if (r && typeof r === 'object') {
+          const u = (r.url || '').trim();
+          let c = (r.coverPhoto || '').trim();
+          // Never persist internal fallback proxy URLs as a custom cover
+          if (c && (c.includes('reel-cover') || c.startsWith('api/'))) {
+            c = '';
+          }
+          if (u || c) return { url: u, coverPhoto: c };
+        }
+        return null;
+      }).filter(Boolean);
+      await updateDoctor(targetId, { reels: cleaned });
+    } catch (err) {
+      console.warn('Failed to commit reels update:', err);
+    }
+  };
+
+  const getCloudinaryVideoPoster = (url) => {
+    if (!url || typeof url !== 'string' || !url.includes('cloudinary.com')) return '';
+    const idx = url.indexOf('/video/upload/');
+    if (idx === -1) return '';
+    const prefix = url.substring(0, idx + '/video/upload/'.length);
+    const remainder = url.substring(idx + '/video/upload/'.length);
+    const versionMatch = remainder.match(/(v\d+\/.+?)\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+    if (versionMatch) {
+      return prefix + 'so_0/' + versionMatch[1] + '.jpg';
+    }
+    const pathMatch = remainder.replace(/^[^/]+\//, '').replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, '.jpg');
+    return prefix + 'so_0/' + pathMatch;
+  };
+
+  const handleAutoFetchReelCover = async (index) => {
+    const cur = (typeof formData.reels[index] === 'object' && formData.reels[index]) ? formData.reels[index] : {};
+    const itemUrl = (typeof formData.reels[index] === 'string' ? formData.reels[index] : (cur.url || cur.link || '')).trim();
+    if (!itemUrl) return;
+
+    let shortcode = '';
+    const igMatch = itemUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    if (igMatch && igMatch[1]) {
+      shortcode = igMatch[1];
+    } else {
+      const cldMatch = itemUrl.match(/\/ig_([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9]+|\?|$)/i);
+      if (cldMatch && cldMatch[1]) {
+        shortcode = cldMatch[1];
+      }
+    }
+    if (!shortcode) return;
+
+    setFetchingCoverIdx(index);
+    try {
+      const res = await api.getInstagramReelCover(`https://www.instagram.com/reel/${shortcode}/`);
+      if (res && res.coverPhoto && res.coverPhoto.startsWith('http')) {
+        setFormData(prev => {
+          const updated = [...prev.reels];
+          const item = updated[index] || {};
+          updated[index] = { ...item, coverPhoto: res.coverPhoto };
+          const targetId = doctorToEdit?.id || doctorToEdit?._id;
+          if (targetId) {
+            updateDoctor(targetId, { reels: updated }).catch(() => {});
+          }
+          return { ...prev, reels: updated };
+        });
+      }
+    } catch (err) {
+      console.warn('Manual auto-fetch cover note:', err);
+    } finally {
+      setFetchingCoverIdx(prev => (prev === index ? null : prev));
+    }
+  };
+
+  const handleReelUrlChange = (index, newRawUrl) => {
+    dirtyFieldsRef.current.add('reels');
+    const rawVal = newRawUrl || '';
+    const trimmedVal = rawVal.trim();
+    const match = trimmedVal.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+    const shortcode = match && match[1] ? match[1] : '';
+    const cleanVal = shortcode ? `https://www.instagram.com/reel/${shortcode}/` : rawVal;
+
+    const cur = (typeof formData.reels[index] === 'object' && formData.reels[index]) ? formData.reels[index] : {};
+    const oldUrl = (typeof formData.reels[index] === 'string' ? formData.reels[index] : (cur.url || cur.link || '')).trim();
+
+    const isUrlChanged = cleanVal.trim() !== oldUrl;
+
+    let newCover = cur.coverPhoto || '';
+    if (isUrlChanged) {
+      if (!cleanVal.trim()) {
+        newCover = '';
+      } else if (cleanVal.includes('cloudinary.com')) {
+        newCover = getCloudinaryVideoPoster(cleanVal) || cleanVal.trim().replace(/\.[^/.]+$/, '.jpg');
+      } else {
+        newCover = '';
+      }
+    }
+
+    const newReels = [...formData.reels];
+    newReels[index] = {
+      url: cleanVal,
+      coverPhoto: isUrlChanged ? newCover : (cur.coverPhoto || '')
+    };
+
+    setFormData(prev => ({ ...prev, reels: newReels }));
+
+    // Automatically fetch reel cover photo immediately upon pasting or entering an Instagram reel URL
+    if (shortcode && (isUrlChanged || !cur.coverPhoto)) {
+      const targetVal = `https://www.instagram.com/reel/${shortcode}/`;
+      setFetchingCoverIdx(index);
+      api.getInstagramReelCover(targetVal).then(res => {
+        if (res && res.coverPhoto && res.coverPhoto.startsWith('http')) {
+          setFormData(prev => {
+            const updated = [...prev.reels];
+            const item = updated[index] || {};
+            const itemUrl = (typeof item === 'string' ? item : item.url) || '';
+            const itemMatch = itemUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+            const itemShortcode = itemMatch && itemMatch[1] ? itemMatch[1] : '';
+            // Match if shortcodes match or if URL matches or if index matches
+            if (itemShortcode === shortcode || itemUrl.trim() === targetVal || !itemUrl) {
+              updated[index] = { ...item, url: targetVal, coverPhoto: res.coverPhoto };
+              const targetId = doctorToEdit?.id || doctorToEdit?._id;
+              if (targetId) {
+                updateDoctor(targetId, { reels: updated }).catch(() => {});
+              }
+            }
+            return { ...prev, reels: updated };
+          });
+        }
+      }).catch(err => console.warn('Auto cover fetch note:', err))
+        .finally(() => {
+          setFetchingCoverIdx(prev => (prev === index ? null : prev));
+        });
+    }
+  };
+
+  const handleReelCoverUrlChange = (index, newCoverUrl) => {
+    const newCover = (newCoverUrl || '').trim();
+    const cur = (typeof formData.reels[index] === 'object' && formData.reels[index]) ? formData.reels[index] : {};
+    const currentUrl = (typeof formData.reels[index] === 'string' ? formData.reels[index] : (cur.url || cur.link || '')).trim();
+
+    const newReels = [...formData.reels];
+    newReels[index] = { ...cur, url: currentUrl, coverPhoto: newCover };
+    setFormData(prev => ({ ...prev, reels: newReels }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitError('');
@@ -1141,11 +1304,13 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         name: formData.name.trim(),
         specialty: finalSpecialty,
         specialization: finalSpecialty,
-        experienceYears: parseInt(formData.experienceYears, 10) || 5,
-        experience: parseInt(formData.experienceYears, 10) || 5,
-        experienceText: `${parseInt(formData.experienceYears, 10) || 5}+ Years Experience`,
-        price: parseInt(formData.price, 10) || 500,
-        fees: parseInt(formData.price, 10) || 500,
+        experienceYears: (formData.experienceYears !== '' && !isNaN(parseInt(formData.experienceYears, 10))) ? parseInt(formData.experienceYears, 10) : 0,
+        experience: (formData.experienceYears !== '' && !isNaN(parseInt(formData.experienceYears, 10))) ? parseInt(formData.experienceYears, 10) : 0,
+        experienceText: (formData.experienceYears !== '' && !isNaN(parseInt(formData.experienceYears, 10)) && parseInt(formData.experienceYears, 10) > 0)
+          ? `${parseInt(formData.experienceYears, 10)}+ Years Experience`
+          : 'Experienced',
+        price: (formData.price !== '' && !isNaN(parseInt(formData.price, 10))) ? parseInt(formData.price, 10) : 0,
+        fees: (formData.price !== '' && !isNaN(parseInt(formData.price, 10))) ? parseInt(formData.price, 10) : 0,
         rating: doctorToEdit?.rating !== undefined ? doctorToEdit.rating : (parseFloat(formData.rating) || 0),
         reviews: doctorToEdit?.reviews !== undefined ? doctorToEdit.reviews : (formData.reviews || '0'),
         hospital: formData.hospital || (hospitals[0]?.name || 'City General Hospital'),
@@ -1163,14 +1328,19 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           : [],
         about: formData.about,
         image: finalImage,
-        instagram: formData.instagram,
-        facebook: formData.facebook,
+        instagram: formData.instagram || '',
+        facebook: formData.facebook || '',
+        linkedin: formData.linkedin || '',
+        twitter: formData.twitter || '',
         reels: formData.reels
           .map(r => {
             if (typeof r === 'string') return r.trim();
             if (r && typeof r === 'object') {
               const url = (r.url || '').trim();
-              const coverPhoto = (r.coverPhoto || '').trim();
+              let coverPhoto = (r.coverPhoto || '').trim();
+              if (coverPhoto && (coverPhoto.includes('reel-cover') || coverPhoto.startsWith('api/'))) {
+                coverPhoto = '';
+              }
               if (!url && !coverPhoto) return null;
               if (coverPhoto) return { url, coverPhoto };
               return url;
@@ -1181,9 +1351,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         youtube_videos: formData.youtube_videos.filter(url => url.trim() !== ''),
         qualifications: formData.degree,
         contact_number: formData.phone,
-        helplineNumber: formData.helplineNumber ? String(formData.helplineNumber).trim() : '+91 98765 43210',
-        helplineDays: formData.helplineDays ? String(formData.helplineDays).trim() : 'Mon – Sat',
-        helplineTime: formData.helplineTime ? String(formData.helplineTime).trim() : '8:00 AM – 8:00 PM',
+        helplineNumber: formData.helplineNumber ? String(formData.helplineNumber).trim() : '',
+        helplineDays: formData.helplineDays ? String(formData.helplineDays).trim() : '',
+        helplineTime: formData.helplineTime ? String(formData.helplineTime).trim() : '',
         available: formData.available,
         faqs: (formData.faqs || []).filter(f => (f.q || f.question || '').trim() !== ''),
         awards: Array.isArray(formData.awards) ? formData.awards.filter(Boolean) : [],
@@ -1258,7 +1428,18 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className={styles.form}>
+      <form
+        onSubmit={handleSubmit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            if (e.ctrlKey || e.metaKey) return;
+            if (e.target && e.target.tagName === 'TEXTAREA') return;
+            if (e.target && e.target.type === 'submit') return;
+            e.preventDefault();
+          }
+        }}
+        className={styles.form}
+      >
         <div className={styles.body}>
           {submitError && (
             <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '12px 16px', borderRadius: '8px', fontSize: '0.86rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
@@ -1552,24 +1733,34 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 Profile Card Preview:
               </span>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <span style={{
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  padding: '5px 12px',
-                  borderRadius: '20px',
-                  fontSize: '0.78rem',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  <Phone size={12} />
-                  Call Clinic Desk: {formData.helplineNumber || '+91 98765 43210'}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  <Clock size={12} color="#64748b" />
-                  {formData.helplineDays || 'Mon – Sat'} • {formData.helplineTime || '8:00 AM – 8:00 PM'}
-                </span>
+                {formData.helplineNumber ? (
+                  <>
+                    <span style={{
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      padding: '5px 12px',
+                      borderRadius: '20px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <Phone size={12} />
+                      Call Clinic Desk: {formData.helplineNumber}
+                    </span>
+                    {(formData.helplineDays || formData.helplineTime) && (
+                      <span style={{ fontSize: '0.78rem', color: '#475569', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <Clock size={12} color="#64748b" />
+                        {[formData.helplineDays, formData.helplineTime].filter(Boolean).join(' • ')}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontStyle: 'italic' }}>
+                    No helpline configured (desk button will remain hidden on doctor profile)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1863,7 +2054,10 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 type="url"
                 placeholder="https://instagram.com/..."
                 value={formData.instagram}
-                onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                onChange={(e) => {
+                  dirtyFieldsRef.current.add('instagram');
+                  setFormData({ ...formData, instagram: e.target.value });
+                }}
               />
             </div>
             <div className={styles.formGroup}>
@@ -1872,7 +2066,34 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                 type="url"
                 placeholder="https://facebook.com/..."
                 value={formData.facebook}
-                onChange={(e) => setFormData({ ...formData, facebook: e.target.value })}
+                onChange={(e) => {
+                  dirtyFieldsRef.current.add('facebook');
+                  setFormData({ ...formData, facebook: e.target.value });
+                }}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>LinkedIn URL</label>
+              <input
+                type="url"
+                placeholder="https://linkedin.com/in/..."
+                value={formData.linkedin}
+                onChange={(e) => {
+                  dirtyFieldsRef.current.add('linkedin');
+                  setFormData({ ...formData, linkedin: e.target.value });
+                }}
+              />
+            </div>
+            <div className={styles.formGroup}>
+              <label>Twitter / X URL</label>
+              <input
+                type="url"
+                placeholder="https://x.com/..."
+                value={formData.twitter}
+                onChange={(e) => {
+                  dirtyFieldsRef.current.add('twitter');
+                  setFormData({ ...formData, twitter: e.target.value });
+                }}
               />
             </div>
           </div>
@@ -1888,14 +2109,26 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
           {[0, 1, 2, 3, 4].map((index) => {
             const reelVal = formData.reels[index];
             const reelUrl = typeof reelVal === 'string' ? reelVal : (reelVal?.url || '');
-            const customCover = typeof reelVal === 'object' ? (reelVal?.coverPhoto || '') : '';
+            let rawCover = typeof reelVal === 'object' ? (reelVal?.coverPhoto || '') : '';
+            // If rawCover was saved as an internal proxy url, don't show it in the text box
+            const customCover = (rawCover && (rawCover.includes('reel-cover') || rawCover.startsWith('api/') || rawCover.startsWith('/api/'))) ? '' : rawCover;
 
-            // Extract shortcode for live preview
-            const match = reelUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-            const shortcode = match ? match[1] : '';
-            const previewCover = customCover && !customCover.includes('instagram.com/p/')
+            // Extract shortcode for live preview (supports instagram.com URLs and converted Cloudinary ig_<shortcode> URLs)
+            let shortcode = '';
+            const igMatch = reelUrl.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
+            if (igMatch && igMatch[1]) {
+              shortcode = igMatch[1];
+            } else {
+              const cldMatch = reelUrl.match(/\/ig_([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9]+|\?|$)/i);
+              if (cldMatch && cldMatch[1]) {
+                shortcode = cldMatch[1];
+              }
+            }
+            const isCloudinaryVideo = reelUrl && reelUrl.includes('cloudinary.com');
+            const cloudinaryDirectCover = shortcode ? `https://res.cloudinary.com/nehlbmp2/image/upload/sehatbuddy/covers/ig_${shortcode}.jpg` : '';
+            const previewCover = (customCover && !customCover.includes('instagram.com/p/'))
               ? customCover
-              : (reelUrl ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}` : '');
+              : (shortcode ? (cloudinaryDirectCover || `${API_BASE}/reel-cover?url=${encodeURIComponent(reelUrl)}`) : (isCloudinaryVideo ? getCloudinaryVideoPoster(reelUrl) : ''));
 
             return (
               <div 
@@ -2003,18 +2236,24 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                   </div>
                 </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://www.instagram.com/reel/..."
                   value={reelUrl}
-                  onChange={(e) => {
-                    let val = e.target.value.trim();
-                    const match = val.match(/instagram\.com\/(?:reel|reels|p|tv|share\/reel)\/([^/?#&]+)/i);
-                    const cleanVal = match && match[1] ? `https://www.instagram.com/reel/${match[1]}/` : e.target.value;
-                    const newReels = [...formData.reels];
-                    const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : {};
-                    newReels[index] = { ...cur, url: cleanVal };
-                    setFormData({ ...formData, reels: newReels });
+                  onChange={(e) => handleReelUrlChange(index, e.target.value)}
+                  onPaste={(e) => {
+                    const text = e.clipboardData ? e.clipboardData.getData('text') : '';
+                    if (text && text.trim()) {
+                      e.preventDefault();
+                      handleReelUrlChange(index, text.trim());
+                    }
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleCommitReels();
+                    }
+                  }}
+                  onBlur={() => handleCommitReels()}
                   style={{ marginBottom: '8px' }}
                 />
 
@@ -2023,14 +2262,56 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <span>Reel Cover Photo</span>
+                        {fetchingCoverIdx === index && (
+                          <span style={{ fontSize: '0.7rem', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, border: '1px solid #fde68a', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', border: '2px solid #b45309', borderTopColor: 'transparent', animation: 'spin 0.6s linear infinite' }} />
+                            Auto-fetching cover...
+                          </span>
+                        )}
                         {customCover && customCover.includes('cloudinary.com') && (
                           <span style={{ fontSize: '0.68rem', color: '#0284c7', background: '#e0f2fe', padding: '2px 6px', borderRadius: '4px', fontWeight: 700, border: '1px solid #bae6fd' }}>
-                            Cloudinary
+                            ✓ Cloudinary
                           </span>
                         )}
                       </span>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {/* Auto-Fetch Cover Button */}
+                        {shortcode && (
+                          <button
+                            type="button"
+                            disabled={fetchingCoverIdx === index}
+                            onClick={() => handleAutoFetchReelCover(index)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontSize: '0.76rem',
+                              fontWeight: 700,
+                              color: '#0284c7',
+                              background: '#e0f2fe',
+                              border: '1px solid #bae6fd',
+                              padding: '5px 10px',
+                              borderRadius: '6px',
+                              cursor: fetchingCoverIdx === index ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                            title="Auto-fetch reel cover thumbnail from Instagram"
+                          >
+                            {fetchingCoverIdx === index ? (
+                              <>
+                                <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                                <span>Fetching...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles size={13} />
+                                <span>Auto-Fetch Cover</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+
                         {/* Delete Cover Photo Button (Permanent Delete from Cloudinary & DB) */}
                         {customCover && (
                           <button
@@ -2116,15 +2397,17 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                     <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
                         <input
-                          type="url"
-                          placeholder="Cloudinary URL or image link (Auto-filled on upload, or paste link)"
+                          type="text"
+                          placeholder={fetchingCoverIdx === index ? "⏳ Auto-fetching reel cover from Instagram..." : "Cloudinary URL or image link (Auto-filled on upload, or paste link)"}
                           value={customCover}
-                          onChange={(e) => {
-                            const newReels = [...formData.reels];
-                            const cur = (typeof newReels[index] === 'object' && newReels[index]) ? newReels[index] : { url: reelUrl };
-                            newReels[index] = { ...cur, url: reelUrl, coverPhoto: e.target.value };
-                            setFormData({ ...formData, reels: newReels });
+                          onChange={(e) => handleReelCoverUrlChange(index, e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleCommitReels();
+                            }
                           }}
+                          onBlur={() => handleCommitReels()}
                           style={{ fontSize: '0.8rem', padding: '7px 10px', width: '100%', boxSizing: 'border-box' }}
                         />
                       </div>
@@ -2138,8 +2421,11 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                               overflow: 'hidden', 
                               border: '1px solid #cbd5e1', 
                               flexShrink: 0, 
-                              background: '#000000',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                              background: '#f8fafc',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.08)'
                             }} 
                             title="Reel Cover Photo Preview"
                           >
@@ -2147,8 +2433,14 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                               src={previewCover} 
                               alt="Cover" 
                               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} 
-                              onError={(e) => { e.target.style.display = 'none'; }} 
+                              onError={(e) => { 
+                                e.target.style.display = 'none'; 
+                                if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'flex';
+                              }} 
                             />
+                            <div style={{ display: 'none', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', color: '#94a3b8' }}>
+                              <Camera size={18} />
+                            </div>
                           </div>
                           {customCover && (
                             <button
@@ -3096,64 +3388,6 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               <HelpCircle size={16} />
               Public Doctor Page FAQs
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                const docName = formData.name || doctorToEdit?.name || 'the doctor';
-                const cleanName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
-                const defaults = [
-                  {
-                    q: `How can I book an appointment with ${cleanName}?`,
-                    question: `How can I book an appointment with ${cleanName}?`,
-                    a: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
-                    answer: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
-                    category: 'Booking & Schedule',
-                    icon: 'calendar',
-                    image: ''
-                  },
-                  {
-                    q: 'What do I need to show at the clinic?',
-                    question: 'What do I need to show at the clinic?',
-                    a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
-                    answer: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
-                    category: 'Clinic Preparation',
-                    icon: 'document',
-                    image: ''
-                  },
-                  {
-                    q: 'Is my consultation private with the doctor?',
-                    question: 'Is my consultation private with the doctor?',
-                    a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
-                    answer: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
-                    category: 'Privacy & Security',
-                    icon: 'shield',
-                    image: ''
-                  },
-                  {
-                    q: `Can I reschedule my appointment with ${cleanName}?`,
-                    question: `Can I reschedule my appointment with ${cleanName}?`,
-                    a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
-                    answer: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
-                    category: 'Rescheduling Policy',
-                    icon: 'reschedule',
-                    image: ''
-                  },
-                  {
-                    q: `Does ${cleanName} accept health insurance or cashless claims?`,
-                    question: `Does ${cleanName} accept health insurance or cashless claims?`,
-                    a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
-                    answer: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
-                    category: 'Cashless Insurance',
-                    icon: 'insurance',
-                    image: ''
-                  }
-                ];
-                setFormData(prev => ({ ...prev, faqs: defaults }));
-              }}
-              style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600 }}
-            >
-              Load Defaults
-            </button>
           </div>
           <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '-4px 0 12px 0' }}>
             Frequently Asked Questions shown on this doctor's public profile page. (FAQs can be edited only by admin).
@@ -3164,11 +3398,16 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               formData.faqs.map((faq, fIdx) => (
                 <div
                   key={fIdx}
+                  draggable={editingFaqIdx === null}
+                  onDragStart={(e) => handleFaqDragStart(e, fIdx)}
+                  onDragOver={(e) => handleFaqDragOver(e, fIdx)}
+                  onDrop={(e) => handleFaqDrop(e, fIdx)}
                   style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
+                    background: draggedFaqIndex === fIdx ? '#eff6ff' : '#f8fafc',
+                    border: draggedFaqIndex === fIdx ? '1.5px dashed #3b82f6' : '1px solid #e2e8f0',
                     borderRadius: '8px',
-                    padding: '10px 12px'
+                    padding: '10px 12px',
+                    transition: 'all 0.15s ease'
                   }}
                 >
                   {editingFaqIdx === fIdx ? (
@@ -3221,6 +3460,7 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                               answer: editingFaqData.a.trim(),
                               category: editingFaqData.category?.trim() || 'Doctor FAQ'
                             };
+                            dirtyFieldsRef.current.add('faqs');
                             setFormData({ ...formData, faqs: updated });
                             setEditingFaqIdx(null);
                           }}
@@ -3239,7 +3479,22 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', flex: 1 }}>
+                        <div
+                          style={{
+                            cursor: 'grab',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#94a3b8',
+                            padding: '4px 2px',
+                            flexShrink: 0,
+                            userSelect: 'none'
+                          }}
+                          title="Drag up or down to reorder FAQ"
+                        >
+                          <GripVertical size={16} />
+                        </div>
                         {(faq.image || faq.icon) && (
                           <div style={{
                             width: '28px',
@@ -3265,6 +3520,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                             <span style={{ fontSize: '0.72rem', fontWeight: 700, background: '#eff6ff', color: '#2563eb', padding: '1px 6px', borderRadius: '4px', textTransform: 'uppercase' }}>
                               {faq.category || 'Doctor FAQ'}
                             </span>
+                            <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 600 }}>
+                              #{fIdx + 1}
+                            </span>
                           </div>
                           <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b', marginBottom: '2px' }}>
                             Q{fIdx + 1}: {faq.q || faq.question}
@@ -3274,7 +3532,49 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                           </div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          disabled={fIdx === 0}
+                          onClick={() => handleMoveFaq(fIdx, -1)}
+                          style={{
+                            background: fIdx === 0 ? 'transparent' : '#ffffff',
+                            border: '1px solid',
+                            borderColor: fIdx === 0 ? '#e2e8f0' : '#cbd5e1',
+                            borderRadius: '4px',
+                            color: fIdx === 0 ? '#cbd5e1' : '#334155',
+                            cursor: fIdx === 0 ? 'not-allowed' : 'pointer',
+                            padding: '3px 5px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title={fIdx === 0 ? 'Already at top' : 'Move FAQ Up'}
+                          aria-label="Move FAQ Up"
+                        >
+                          <ArrowUp size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={fIdx === formData.faqs.length - 1}
+                          onClick={() => handleMoveFaq(fIdx, 1)}
+                          style={{
+                            background: fIdx === formData.faqs.length - 1 ? 'transparent' : '#ffffff',
+                            border: '1px solid',
+                            borderColor: fIdx === formData.faqs.length - 1 ? '#e2e8f0' : '#cbd5e1',
+                            borderRadius: '4px',
+                            color: fIdx === formData.faqs.length - 1 ? '#cbd5e1' : '#334155',
+                            cursor: fIdx === formData.faqs.length - 1 ? 'not-allowed' : 'pointer',
+                            padding: '3px 5px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          title={fIdx === formData.faqs.length - 1 ? 'Already at bottom' : 'Move FAQ Down'}
+                          aria-label="Move FAQ Down"
+                        >
+                          <ArrowDown size={13} />
+                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -3287,21 +3587,22 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
                               image: faq.image || ''
                             });
                           }}
-                          style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', padding: '4px' }}
+                          style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', color: '#2563eb', cursor: 'pointer', padding: '3px 5px', display: 'inline-flex', alignItems: 'center' }}
                           title="Edit FAQ"
                         >
-                          <Edit2 size={14} />
+                          <Edit2 size={13} />
                         </button>
                         <button
                           type="button"
                           onClick={() => {
                             const updated = formData.faqs.filter((_, i) => i !== fIdx);
+                            dirtyFieldsRef.current.add('faqs');
                             setFormData({ ...formData, faqs: updated });
                           }}
-                          style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                          style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', color: '#ef4444', cursor: 'pointer', padding: '3px 5px', display: 'inline-flex', alignItems: 'center' }}
                           title="Delete FAQ"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
                     </div>
@@ -3310,67 +3611,9 @@ const DoctorFormContent = ({ doctorToEdit, onClose, onSuccess }) => {
               ))
             ) : (
               <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'center' }}>
-                <span style={{ fontSize: '0.84rem', color: '#64748b', display: 'block', marginBottom: '8px' }}>
-                  No FAQs saved for this doctor in database yet.
+                <span style={{ fontSize: '0.84rem', color: '#64748b', display: 'block' }}>
+                  No FAQs added for this doctor yet. Use the form below to add custom FAQs.
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const docName = formData.name || doctorToEdit?.name || 'the doctor';
-                    const cleanName = docName.startsWith('Dr.') ? docName : `Dr. ${docName}`;
-                    const defaults = [
-                      {
-                        q: `How can I book an appointment with ${cleanName}?`,
-                        question: `How can I book an appointment with ${cleanName}?`,
-                        a: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
-                        answer: `You can book an in-clinic consultation or instant video appointment with ${cleanName} directly on The Sehat Buddy platform. Select your preferred date and time slot for instant confirmation.`,
-                        category: 'Booking & Schedule',
-                        icon: 'calendar',
-                        image: ''
-                      },
-                      {
-                        q: 'What do I need to show at the clinic?',
-                        question: 'What do I need to show at the clinic?',
-                        a: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
-                        answer: 'Please carry a valid government photo ID (Aadhar Card, PAN Card, or Passport), your health insurance policy e-card if claiming cashless coverage, and any previous doctor prescriptions, discharge summaries, or diagnostic reports related to your consultation.',
-                        category: 'Clinic Preparation',
-                        icon: 'document',
-                        image: ''
-                      },
-                      {
-                        q: 'Is my consultation private with the doctor?',
-                        question: 'Is my consultation private with the doctor?',
-                        a: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
-                        answer: 'Yes, 100%. All consultations, patient notes, medical records, and discussions are strictly confidential and protected under standard healthcare privacy regulations.',
-                        category: 'Privacy & Security',
-                        icon: 'shield',
-                        image: ''
-                      },
-                      {
-                        q: `Can I reschedule my appointment with ${cleanName}?`,
-                        question: `Can I reschedule my appointment with ${cleanName}?`,
-                        a: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
-                        answer: 'Yes, you can easily reschedule or cancel your appointment prior to your slot time through your patient account dashboard or by reaching out to our support care desk.',
-                        category: 'Rescheduling Policy',
-                        icon: 'reschedule',
-                        image: ''
-                      },
-                      {
-                        q: `Does ${cleanName} accept health insurance or cashless claims?`,
-                        question: `Does ${cleanName} accept health insurance or cashless claims?`,
-                        a: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
-                        answer: 'Yes, consultations and any recommended clinical procedures or treatments performed at our partner hospitals qualify for 100% cashless mediclaim pre-authorization with all leading insurance TPAs.',
-                        category: 'Cashless Insurance',
-                        icon: 'insurance',
-                        image: ''
-                      }
-                    ];
-                    setFormData(prev => ({ ...prev, faqs: defaults }));
-                  }}
-                  style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '6px 14px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  ⚡ Initialize 5 Standard FAQs
-                </button>
               </div>
             )}
           </div>

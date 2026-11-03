@@ -6,8 +6,9 @@ import path from 'path';
 import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { protect, optionalProtect } from '../middleware/authMiddleware.js';
+import { protect, optionalProtect, requireAdmin } from '../middleware/authMiddleware.js';
 import { notifyStorageChanged } from '../services/storageMonitor.js';
+import PendingMediaDeletion from '../models/PendingMediaDeletion.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -468,6 +469,12 @@ router.post('/video', protect, (req, res, next) => {
     }
 
     const folder = req.body?.folder || 'sehatbuddy/videos';
+    if ((folder.includes('reels') || folder.includes('covers') || req.body?.isReel) && req.user?.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only platform administrators are authorized to upload reels or reel covers.'
+      });
+    }
     const cld = getCloudinary();
 
     if (req.file) {
@@ -516,6 +523,9 @@ router.post('/video', protect, (req, res, next) => {
         : rawUrl;
       const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
+      if (uploadResult.public_id) {
+        PendingMediaDeletion.deleteMany({ publicId: uploadResult.public_id }).catch(() => {});
+      }
       notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
@@ -546,6 +556,9 @@ router.post('/video', protect, (req, res, next) => {
         );
       });
 
+      if (uploadResult.public_id) {
+        PendingMediaDeletion.deleteMany({ publicId: uploadResult.public_id }).catch(() => {});
+      }
       notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
@@ -575,7 +588,7 @@ router.post('/video', protect, (req, res, next) => {
  * Auto-extract Instagram Reel Cover Photo and Upload to Cloudinary
  * Returns permanent Cloudinary image url for the reel cover
  */
-router.post('/instagram-cover', protect, async (req, res) => {
+router.post('/instagram-cover', protect, requireAdmin, async (req, res) => {
   try {
     const { url, folder = 'sehatbuddy/covers' } = req.body;
     if (!url || !url.includes('instagram.com')) {
@@ -588,10 +601,44 @@ router.post('/instagram-cover', protect, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Could not extract Instagram shortcode' });
     }
 
+    const cld = getCloudinary();
+    const targetPublicId = `${folder}/ig_${shortcode}`;
+
+    // 1. Fast Cache Check: If Cloudinary already stores this cover, return it immediately (<100ms)
+    if (cld) {
+      try {
+        const existingAsset = await cld.api.resource(targetPublicId, { resource_type: 'image' });
+        if (existingAsset && existingAsset.secure_url) {
+          return res.json({
+            success: true,
+            coverPhoto: existingAsset.secure_url,
+            public_id: targetPublicId,
+            cached: true
+          });
+        }
+      } catch {}
+
+      // Also check if video was already converted, in which case we have its direct .jpg poster
+      try {
+        const existingVideo = await cld.api.resource(`sehatbuddy/reels/ig_${shortcode}`, { resource_type: 'video' });
+        if (existingVideo && existingVideo.secure_url) {
+          const posterUrl = existingVideo.secure_url.includes('/video/upload/')
+            ? existingVideo.secure_url.replace('/video/upload/', '/video/upload/so_0/').replace(/\.[^/.]+$/, '.jpg')
+            : existingVideo.secure_url.replace(/\.[^/.]+$/, '.jpg');
+          return res.json({
+            success: true,
+            coverPhoto: posterUrl,
+            public_id: `sehatbuddy/reels/ig_${shortcode}`,
+            cached: true
+          });
+        }
+      } catch {}
+    }
+
     let imageBuffer = null;
     let contentType = 'image/jpeg';
 
-    // 1. Fetch from Instagram /media/?size=l
+    // 2. Fetch from Instagram /media/?size=l
     try {
       const igRes = await fetch(`https://www.instagram.com/p/${shortcode}/media/?size=l`, {
         redirect: 'manual',
@@ -602,6 +649,27 @@ router.post('/instagram-cover', protect, async (req, res) => {
 
       const location = igRes.headers.get('location');
       if (location && (igRes.status === 301 || igRes.status === 302)) {
+        // Fast path: Stream directly from location URL into Cloudinary without local buffer overhead
+        if (cld) {
+          try {
+            const uploadRes = await cld.uploader.upload(location, {
+              public_id: targetPublicId,
+              overwrite: true,
+              resource_type: 'image'
+            });
+            if (uploadRes && uploadRes.secure_url) {
+              notifyStorageChanged('cloudinary:image');
+              return res.json({
+                success: true,
+                coverPhoto: uploadRes.secure_url,
+                public_id: uploadRes.public_id
+              });
+            }
+          } catch (cldDirectErr) {
+            console.warn('Direct Cloudinary URL upload note:', cldDirectErr.message);
+          }
+        }
+
         const imgRes = await fetch(location, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
         });
@@ -617,7 +685,7 @@ router.post('/instagram-cover', protect, async (req, res) => {
       console.warn('Direct Instagram media fetch failed, attempting yt-dlp thumbnail extraction:', fetchErr.message);
     }
 
-    // 2. Fallback to yt-dlp thumbnail extraction if direct fetch failed
+    // 3. Fallback to yt-dlp thumbnail extraction if direct fetch failed
     if (!imageBuffer) {
       try {
         const { exec } = await import('child_process');
@@ -626,6 +694,23 @@ router.post('/instagram-cover', protect, async (req, res) => {
         const { stdout } = await execPromise(`yt-dlp --no-warnings --get-thumbnail "${url}"`, { timeout: 15000 });
         const thumbUrl = stdout.trim().split('\n')[0];
         if (thumbUrl && thumbUrl.startsWith('http')) {
+          if (cld) {
+            try {
+              const uploadRes = await cld.uploader.upload(thumbUrl, {
+                public_id: targetPublicId,
+                overwrite: true,
+                resource_type: 'image'
+              });
+              if (uploadRes && uploadRes.secure_url) {
+                notifyStorageChanged('cloudinary:image');
+                return res.json({
+                  success: true,
+                  coverPhoto: uploadRes.secure_url,
+                  public_id: uploadRes.public_id
+                });
+              }
+            } catch {}
+          }
           const imgRes = await fetch(thumbUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
           if (imgRes.ok) {
             imageBuffer = Buffer.from(await imgRes.arrayBuffer());
@@ -637,12 +722,12 @@ router.post('/instagram-cover', protect, async (req, res) => {
       }
     }
 
-    // 3. If we have the image buffer, upload permanently to Cloudinary
-    if (imageBuffer && imageBuffer.length > 500) {
-      const cld = getCloudinary();
+    // 4. If we have the image buffer, upload permanently to Cloudinary
+    if (imageBuffer && imageBuffer.length > 500 && cld) {
       const dataUri = `data:${contentType};base64,${imageBuffer.toString('base64')}`;
       const uploadResult = await cld.uploader.upload(dataUri, {
-        folder,
+        public_id: targetPublicId,
+        overwrite: true,
         resource_type: 'image'
       });
       const coverPhoto = uploadResult.secure_url || uploadResult.url;
@@ -654,10 +739,12 @@ router.post('/instagram-cover', protect, async (req, res) => {
       });
     }
 
-    // 4. Fallback: Return backend proxy URL so it streams without CORS issues
+    // 5. Fallback: Return absolute server proxy URL so it streams without CORS issues
+    const host = req.get('host') || 'localhost:5000';
+    const protocol = req.protocol || 'http';
     return res.json({
       success: true,
-      coverPhoto: `/api/reel-cover?url=${encodeURIComponent(url)}`
+      coverPhoto: `${protocol}://${host}/api/reel-cover?url=${encodeURIComponent(url)}`
     });
   } catch (err) {
     console.error('Error generating reel cover:', err);
@@ -669,7 +756,7 @@ router.post('/instagram-cover', protect, async (req, res) => {
  * Auto-extract Instagram Reel and Upload to Cloudinary
  * Returns permanent Cloudinary video url and auto-generated thumbnail
  */
-router.post('/instagram-reel', protect, async (req, res) => {
+router.post('/instagram-reel', protect, requireAdmin, async (req, res) => {
   try {
     const { url, folder = 'sehatbuddy/reels' } = req.body;
     if (!url || !url.includes('instagram.com')) {
@@ -743,6 +830,9 @@ router.post('/instagram-reel', protect, async (req, res) => {
         : rawUrl;
       const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
+      if (uploadResult.public_id) {
+        PendingMediaDeletion.deleteMany({ publicId: uploadResult.public_id }).catch(() => {});
+      }
       notifyStorageChanged('cloudinary:video');
       return res.json({
         success: true,
@@ -814,8 +904,20 @@ const checkAuth = (req, res, next) => {
  */
 const handleDeleteMedia = async (req, res) => {
   try {
-    let { url, resource_type = 'image' } = req.body;
+    let { url, resource_type = 'image', excludeDocId, excludeHospId } = req.body;
     let public_id = req.body.public_id;
+
+    // Critical Business Rule: Reels and videos can only be deleted by platform administrators
+    const isReelOrVideo = resource_type === 'video' ||
+      (typeof public_id === 'string' && (public_id.includes('reels') || public_id.includes('covers'))) ||
+      (typeof url === 'string' && (url.includes('/video/') || url.includes('/covers/')));
+
+    if (isReelOrVideo && req.user?.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Reels and cover photos are managed exclusively by platform administrators. Doctors and hospitals cannot delete media.'
+      });
+    }
 
     let localDeleted = false;
     // Handle local file deletion if stored locally
@@ -878,6 +980,18 @@ const handleDeleteMedia = async (req, res) => {
       });
     }
 
+    // Safety check: if this asset is a reel/cover still referenced by another doctor or hospital, DO NOT destroy it
+    try {
+      const { isReelAssetStillInUse } = await import('../utils/reelCleanup.js');
+      if (typeof isReelAssetStillInUse === 'function') {
+        const inUse = await isReelAssetStillInUse(public_id, excludeDocId, excludeHospId);
+        if (inUse) {
+          console.log(`[UploadRoutes] Asset ${public_id} is referenced by another doctor/hospital. Preserving Cloudinary file.`);
+          return res.json({ success: true, message: 'Asset unlinked from profile, preserved in cloud for other profiles.', inUse: true });
+        }
+      }
+    } catch {}
+
     const cld = getCloudinary();
     let result = await cld.uploader.destroy(public_id, {
       resource_type: detectedType,
@@ -907,6 +1021,22 @@ const handleDeleteMedia = async (req, res) => {
       }
     }
 
+    // Clean companion shortcode asset if also orphaned
+    try {
+      const { extractInstagramShortcode, isReelAssetStillInUse } = await import('../utils/reelCleanup.js');
+      const shortcode = extractInstagramShortcode ? extractInstagramShortcode(public_id) : null;
+      if (shortcode) {
+        const companionVideo = `sehatbuddy/reels/ig_${shortcode}`;
+        const companionCover = `sehatbuddy/covers/ig_${shortcode}`;
+        const sibling = public_id.includes('covers') ? companionVideo : companionCover;
+        const siblingType = public_id.includes('covers') ? 'video' : 'image';
+        const sibInUse = await isReelAssetStillInUse(sibling, excludeDocId, excludeHospId);
+        if (!sibInUse) {
+          await cld.uploader.destroy(sibling, { resource_type: siblingType, invalidate: true }).catch(() => {});
+        }
+      }
+    } catch {}
+
     notifyStorageChanged(`cloudinary:${detectedType}`);
 
     return res.json({
@@ -924,7 +1054,24 @@ const handleDeleteMedia = async (req, res) => {
   }
 };
 
+const handleCleanupOrphans = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Only platform administrators are authorized to run media cleanup sweeps.'
+      });
+    }
+    const { cleanupAllOrphanedReelAssets } = await import('../utils/reelCleanup.js');
+    const result = await cleanupAllOrphanedReelAssets();
+    return res.json({ success: true, ...result, message: 'Orphaned reel sweep completed successfully.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 router.post('/delete', checkAuth, handleDeleteMedia);
 router.delete('/', checkAuth, handleDeleteMedia);
+router.post('/cleanup-orphans', checkAuth, handleCleanupOrphans);
 
 export default router;

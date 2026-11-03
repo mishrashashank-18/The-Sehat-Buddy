@@ -12,9 +12,11 @@ import { calculateStorageStats, streamStorageStats, broadcastDbChange } from '..
 import { extractCloudinaryPublicId, getCloudinary } from '../routes/uploadRoutes.js';
 import { generateTemporaryPassword, sendDoctorWelcomeEmail } from '../utils/doctorAuthUtils.js';
 import { purgeDoctorPermanently } from '../services/doctorPurgeService.js';
-import { parseAvailableDaysAndHours } from '../utils/doctorScheduleUtils.js';
+import { parseAvailableDaysAndHours, sortTimeSlots } from '../utils/doctorScheduleUtils.js';
+import { enrichAppointmentsWithLiveUserData } from '../utils/appointmentUtils.js';
+import { calculateDoctorProfileCompletion } from '../utils/doctorProfileCompletion.js';
 import { processDoctorReelsInBackground } from '../utils/reelService.js';
-import { cleanupReplacedReels } from '../utils/reelCleanup.js';
+import { cleanupReplacedReels, synchronizeActiveReels, deleteDoctorReelByIndex, deleteDoctorReelCoverByIndex, deleteHospitalReelByIndex, deleteHospitalReelCoverByIndex } from '../utils/reelCleanup.js';
 
 export const generateStandardDoctorFaqs = (docName) => {
   const cleanName = (docName || '').trim().startsWith('Dr.') ? (docName || '').trim() : `Dr. ${(docName || 'the doctor').trim()}`;
@@ -411,6 +413,8 @@ export const addDoctor = async (req, res) => {
       youtube_videos,
       instagram,
       facebook,
+      linkedin,
+      twitter,
       rating,
       reviews,
       hospital,
@@ -457,23 +461,28 @@ export const addDoctor = async (req, res) => {
     const docDegree = qualifications || degree || '';
     const docPhone = contact_number || phone || '';
 
-    let initPct = 0;
-    if ((name || '').trim().length >= 2) initPct += 10;
-    if (cleanEmail && cleanEmail.includes('@')) initPct += 10;
-    if (String(docPhone).replace(/\D/g, '').length >= 10) initPct += 10;
-    if (docSpecialty.trim().length >= 3) initPct += 10;
-    if (hospital && hospital.trim().length >= 2) initPct += 10;
-    if (req.body.licenseNumber && req.body.licenseNumber.trim().length >= 3) initPct += 15;
-    if (docDegree.trim().length >= 2) initPct += 10;
-    if (about && about.trim().length >= 20) initPct += 10;
-    if (image && image.trim().length > 0) initPct += 10;
-    if (availableDays) initPct += 5;
-
     const parsedSched = (availableDays && typeof availableDays === 'string' && availableDays.trim()) 
       ? parseAvailableDaysAndHours(availableDays, 30) 
       : { days: [], slots: [] };
     const finalScheduleDays = (Array.isArray(req.body.scheduleDays) && req.body.scheduleDays.length > 0) ? req.body.scheduleDays : parsedSched.days;
     const finalAvailableSlots = (Array.isArray(req.body.availableSlots) && req.body.availableSlots.length > 0) ? req.body.availableSlots : [];
+
+    const initPct = calculateDoctorProfileCompletion({
+      name,
+      email: cleanEmail,
+      phone: docPhone,
+      specialty: docSpecialty,
+      hospital,
+      licenseNumber: req.body.licenseNumber,
+      degree: docDegree,
+      about,
+      image,
+      availableDays,
+      scheduleDays: finalScheduleDays,
+      availableSlots: finalAvailableSlots,
+      dateWiseSlots: req.body.dateWiseSlots,
+      dayWiseSlots: req.body.dayWiseSlots
+    });
 
     const doctor = await Doctor.create({
       _id: newDocId,
@@ -496,6 +505,8 @@ export const addDoctor = async (req, res) => {
       youtube_videos: Array.isArray(youtube_videos) ? youtube_videos : [],
       instagram: instagram || '',
       facebook: facebook || '',
+      linkedin: linkedin || '',
+      twitter: twitter || '',
       rating: rating !== undefined && !isNaN(Number(rating)) ? Number(rating) : 0,
       reviews: reviews !== undefined ? String(reviews) : '0',
       hospital: hospital || '',
@@ -504,9 +515,9 @@ export const addDoctor = async (req, res) => {
       contact_number: docPhone,
       phone: docPhone,
       licenseNumber: (req.body.licenseNumber || '').trim(),
-      helplineNumber: req.body.helplineNumber !== undefined ? String(req.body.helplineNumber).trim() : '+91 98765 43210',
-      helplineDays: req.body.helplineDays !== undefined ? String(req.body.helplineDays).trim() : 'Mon – Sat',
-      helplineTime: req.body.helplineTime !== undefined ? String(req.body.helplineTime).trim() : '8:00 AM – 8:00 PM',
+      helplineNumber: req.body.helplineNumber !== undefined ? String(req.body.helplineNumber).trim() : '',
+      helplineDays: req.body.helplineDays !== undefined ? String(req.body.helplineDays).trim() : '',
+      helplineTime: req.body.helplineTime !== undefined ? String(req.body.helplineTime).trim() : '',
       available: available !== undefined ? available : true,
       availableDays: availableDays || '',
       scheduleDays: finalScheduleDays,
@@ -560,6 +571,7 @@ export const addDoctor = async (req, res) => {
     sendDoctorWelcomeEmail({ doctor, temporaryPassword, hospitalName: hospital });
 
     if (doctor.reels && doctor.reels.length > 0) {
+      synchronizeActiveReels(doctor.reels).catch(() => {});
       processDoctorReelsInBackground(doctor._id, doctor.reels);
     }
 
@@ -720,14 +732,12 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.specialty !== undefined || req.body.specialization !== undefined) {
-        const spec = req.body.specialization || req.body.specialty;
-        doctor.specialty = spec;
-        doctor.specialization = spec;
+        const spec = req.body.specialization !== undefined ? req.body.specialization : req.body.specialty;
+        const cleanSpec = typeof spec === 'string' ? spec.trim() : '';
+        doctor.specialty = cleanSpec;
+        doctor.specialization = cleanSpec;
         doctor.markModified('specialty');
         doctor.markModified('specialization');
-      } else if (doctor.specialization && (!doctor.specialty || doctor.specialty === 'General Medicine' || doctor.specialty !== doctor.specialization)) {
-        doctor.specialty = doctor.specialization;
-        doctor.markModified('specialty');
       }
 
       if (req.body.hospital !== undefined) {
@@ -736,7 +746,7 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.degree !== undefined || req.body.qualifications !== undefined) {
-        const deg = req.body.degree || req.body.qualifications;
+        const deg = (req.body.degree !== undefined ? req.body.degree : req.body.qualifications) || '';
         doctor.degree = deg;
         doctor.qualifications = deg;
         doctor.markModified('degree');
@@ -752,8 +762,9 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.experience !== undefined || req.body.experienceYears !== undefined) {
-        const expNum = parseInt(req.body.experience ?? req.body.experienceYears, 10);
-        doctor.experience = !isNaN(expNum) ? expNum : (doctor.experience || 5);
+        const rawExp = req.body.experience ?? req.body.experienceYears;
+        const expNum = Number(rawExp);
+        doctor.experience = (!isNaN(expNum) && rawExp !== '' && rawExp !== null) ? expNum : 0;
         doctor.markModified('experience');
       }
 
@@ -785,8 +796,9 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.fees !== undefined || req.body.price !== undefined) {
-        const feesNum = Number(req.body.fees ?? req.body.price);
-        doctor.fees = !isNaN(feesNum) ? feesNum : (doctor.fees || 500);
+        const rawFee = req.body.fees !== undefined ? req.body.fees : req.body.price;
+        const feesNum = Number(rawFee);
+        doctor.fees = (!isNaN(feesNum) && rawFee !== '' && rawFee !== null) ? feesNum : 0;
         doctor.price = doctor.fees;
         doctor.markModified('fees');
         doctor.markModified('price');
@@ -849,20 +861,23 @@ export const updateDoctor = async (req, res) => {
         doctor.markModified('helplineTime');
       }
       if (req.body.availableDays !== undefined) {
-        doctor.availableDays = req.body.availableDays;
+        const cleanDays = typeof req.body.availableDays === 'string' ? req.body.availableDays.trim() : '';
+        doctor.availableDays = cleanDays;
         doctor.markModified('availableDays');
 
-        const parsedSched = parseAvailableDaysAndHours(req.body.availableDays, doctor.slotDuration || 30);
-        if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays)) {
-          doctor.scheduleDays = req.body.scheduleDays.filter(Boolean);
-        } else if (parsedSched.days && parsedSched.days.length > 0 && (!doctor.scheduleDays || doctor.scheduleDays.length === 0)) {
-          doctor.scheduleDays = parsedSched.days;
-        }
-        doctor.markModified('scheduleDays');
+        if (cleanDays) {
+          const parsedSched = parseAvailableDaysAndHours(cleanDays, doctor.slotDuration || 30);
+          if (req.body.scheduleDays !== undefined && Array.isArray(req.body.scheduleDays)) {
+            doctor.scheduleDays = req.body.scheduleDays.filter(Boolean);
+          } else if (parsedSched.days && parsedSched.days.length > 0 && (!doctor.scheduleDays || doctor.scheduleDays.length === 0)) {
+            doctor.scheduleDays = parsedSched.days;
+          }
+          doctor.markModified('scheduleDays');
 
-        if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots)) {
-          doctor.availableSlots = req.body.availableSlots.filter(Boolean);
-          doctor.markModified('availableSlots');
+          if (req.body.availableSlots !== undefined && Array.isArray(req.body.availableSlots)) {
+            doctor.availableSlots = sortTimeSlots(req.body.availableSlots.filter(Boolean));
+            doctor.markModified('availableSlots');
+          }
         }
       } else {
         if (req.body.scheduleDays !== undefined) {
@@ -870,7 +885,7 @@ export const updateDoctor = async (req, res) => {
           doctor.markModified('scheduleDays');
         }
         if (req.body.availableSlots !== undefined) {
-          doctor.availableSlots = Array.isArray(req.body.availableSlots) ? req.body.availableSlots.filter(Boolean) : [];
+          doctor.availableSlots = sortTimeSlots(Array.isArray(req.body.availableSlots) ? req.body.availableSlots.filter(Boolean) : []);
           doctor.markModified('availableSlots');
         }
       }
@@ -884,26 +899,59 @@ export const updateDoctor = async (req, res) => {
         doctor.markModified('slots_booked');
       }
       if (req.body.dayWiseSlots !== undefined) {
-        doctor.dayWiseSlots = typeof req.body.dayWiseSlots === 'object' && req.body.dayWiseSlots !== null ? req.body.dayWiseSlots : {};
+        if (typeof req.body.dayWiseSlots === 'object' && req.body.dayWiseSlots !== null) {
+          const sortedDayWise = {};
+          for (const [k, v] of Object.entries(req.body.dayWiseSlots)) {
+            sortedDayWise[k] = Array.isArray(v) ? sortTimeSlots(v) : v;
+          }
+          doctor.dayWiseSlots = sortedDayWise;
+        } else {
+          doctor.dayWiseSlots = {};
+        }
         doctor.markModified('dayWiseSlots');
       }
       if (req.body.dateWiseSlots !== undefined) {
-        doctor.dateWiseSlots = typeof req.body.dateWiseSlots === 'object' && req.body.dateWiseSlots !== null ? req.body.dateWiseSlots : {};
+        if (typeof req.body.dateWiseSlots === 'object' && req.body.dateWiseSlots !== null) {
+          const sortedDateWise = {};
+          for (const [k, v] of Object.entries(req.body.dateWiseSlots)) {
+            if (v === 'off' || v?.isOff === true) {
+              sortedDateWise[k] = 'off';
+            } else if (Array.isArray(v)) {
+              sortedDateWise[k] = sortTimeSlots(v);
+            } else if (v && Array.isArray(v.slots)) {
+              sortedDateWise[k] = { ...v, slots: sortTimeSlots(v.slots) };
+            } else {
+              sortedDateWise[k] = v;
+            }
+          }
+          doctor.dateWiseSlots = sortedDateWise;
+        } else {
+          doctor.dateWiseSlots = {};
+        }
         doctor.markModified('dateWiseSlots');
       }
 
       if (req.body.reels !== undefined) {
-        const previousReels = Array.isArray(doctor.reels) ? [...doctor.reels] : [];
         const nextReels = Array.isArray(req.body.reels)
           ? req.body.reels.map(r => {
-              if (typeof r === 'string') return r.trim();
-              if (r && typeof r === 'object') return r;
-              return '';
+              if (typeof r === 'string') {
+                const u = r.trim();
+                return u ? { url: u, coverPhoto: '' } : null;
+              }
+              if (r && typeof r === 'object') {
+                const u = (r.url || r.link || '').trim();
+                const c = (r.coverPhoto || r.cover || '').trim();
+                if (u || c) return { url: u, coverPhoto: c };
+              }
+              return null;
             }).filter(Boolean)
           : [];
-        cleanupReplacedReels(previousReels, nextReels).catch(() => {});
+        const oldReels = doctor.reels || [];
         doctor.reels = nextReels;
         doctor.markModified('reels');
+        cleanupReplacedReels(oldReels, nextReels, doctor._id).catch(err => {
+          console.warn('[AdminController] cleanupReplacedReels warning:', err.message);
+        });
       }
       if (req.body.youtube_videos !== undefined) {
         doctor.youtube_videos = Array.isArray(req.body.youtube_videos)
@@ -911,8 +959,22 @@ export const updateDoctor = async (req, res) => {
           : [];
         doctor.markModified('youtube_videos');
       }
-      if (req.body.instagram !== undefined) doctor.instagram = req.body.instagram;
-      if (req.body.facebook !== undefined) doctor.facebook = req.body.facebook;
+      if (req.body.instagram !== undefined) {
+        doctor.instagram = req.body.instagram;
+        doctor.markModified('instagram');
+      }
+      if (req.body.facebook !== undefined) {
+        doctor.facebook = req.body.facebook;
+        doctor.markModified('facebook');
+      }
+      if (req.body.linkedin !== undefined) {
+        doctor.linkedin = req.body.linkedin;
+        doctor.markModified('linkedin');
+      }
+      if (req.body.twitter !== undefined) {
+        doctor.twitter = req.body.twitter;
+        doctor.markModified('twitter');
+      }
       if (req.body.faqs !== undefined) {
         let incomingFaqs = req.body.faqs;
         if (typeof incomingFaqs === 'string') {
@@ -938,25 +1000,8 @@ export const updateDoctor = async (req, res) => {
         doctor.image = incomingImage || '';
         doctor.markModified('image');
       }
-      // Compute Profile Completion Percentage (0-100%)
-      const isRahul = doctor.email === 'dr.rahul@sehatbuddy.com' || (doctor.name && doctor.name.toLowerCase().includes('rahul verma'));
-      let pct = 0;
-      if (isRahul) {
-        pct = 100;
-      } else {
-        if (doctor.name && String(doctor.name).trim().length >= 2) pct += 10;
-        if (doctor.email && String(doctor.email).includes('@')) pct += 10;
-        const ph = String(doctor.phone || doctor.contact_number || '').replace(/\D/g, '');
-        if (ph.length >= 10) pct += 10;
-        if ((doctor.specialty || doctor.specialization) && String(doctor.specialty || doctor.specialization).trim().length >= 3) pct += 10;
-        if (doctor.hospital && String(doctor.hospital).trim().length >= 2) pct += 10;
-        if (doctor.licenseNumber && String(doctor.licenseNumber).trim().length >= 3) pct += 15;
-        if ((doctor.degree || doctor.qualifications) && String(doctor.degree || doctor.qualifications).trim().length >= 2) pct += 10;
-        if (doctor.about && String(doctor.about).trim().length >= 20) pct += 10;
-        if (doctor.image && String(doctor.image).trim().length > 0) pct += 10;
-        const hasSched = Boolean(doctor.availableDays || (Array.isArray(doctor.scheduleDays) && doctor.scheduleDays.length > 0) || (Array.isArray(doctor.availableSlots) && doctor.availableSlots.length > 0));
-        if (hasSched) pct += 5;
-      }
+      // Compute Profile Completion Percentage (0-100%) in real-time matching frontend
+      const pct = calculateDoctorProfileCompletion(doctor);
       doctor.profileCompletion = Math.min(100, pct);
       doctor.isProfileComplete = pct >= 80;
       doctor.markModified('profileCompletion');
@@ -1032,7 +1077,8 @@ export const deleteDoctor = async (req, res) => {
 
 export const getStorageStats = async (req, res) => {
   try {
-    const stats = await calculateStorageStats();
+    const force = req.query.force === 'true' || req.query.force === '1';
+    const stats = await calculateStorageStats(force);
     res.json(stats);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1041,7 +1087,8 @@ export const getStorageStats = async (req, res) => {
 
 export const getAllAppointments = async (req, res) => {
   try {
-    const appointments = await Appointment.find().sort({ createdAt: -1, date: -1 }).lean();
+    const rawAppointments = await Appointment.find().sort({ createdAt: -1, date: -1 }).lean();
+    const appointments = await enrichAppointmentsWithLiveUserData(rawAppointments);
     res.json({ success: true, count: appointments.length, data: appointments });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1091,6 +1138,78 @@ export const deleteAppointment = async (req, res) => {
     res.json({ success: true, message: 'Appointment deleted successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Admin action: Delete a reel from a doctor profile and safely clean up unreferenced Cloudinary assets
+ */
+export const deleteDoctorReel = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+    const result = await deleteDoctorReelByIndex(id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[AdminController] deleteDoctorReel error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Admin action: Delete a custom reel cover photo from a doctor profile and safely clean up Cloudinary
+ */
+export const deleteDoctorReelCover = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+    const result = await deleteDoctorReelCoverByIndex(id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[AdminController] deleteDoctorReelCover error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Admin action: Delete a reel from a hospital profile and safely clean up unreferenced Cloudinary assets
+ */
+export const deleteHospitalReel = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+    const result = await deleteHospitalReelByIndex(id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[AdminController] deleteHospitalReel error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * Admin action: Delete a custom reel cover photo from a hospital profile and safely clean up Cloudinary
+ */
+export const deleteHospitalReelCover = async (req, res) => {
+  const { id, index } = req.params;
+  try {
+    const numIndex = parseInt(index, 10);
+    if (isNaN(numIndex) || numIndex < 0) {
+      return res.status(400).json({ success: false, message: 'Invalid reel index. Must be a non-negative integer.' });
+    }
+    const result = await deleteHospitalReelCoverByIndex(id, numIndex);
+    return res.json(result);
+  } catch (error) {
+    console.error('[AdminController] deleteHospitalReelCover error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

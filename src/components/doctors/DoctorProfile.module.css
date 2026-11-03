@@ -140,7 +140,8 @@
   align-items: center;
   gap: 12px;
   flex-shrink: 0;
-  width: 150px;
+  width: auto;
+  min-width: 150px;
 }
 
 .heroAvatarWrap {
@@ -157,19 +158,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  width: 100%;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
   padding-top: 2px;
 }
 
 .socialIconBtn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
@@ -687,7 +690,7 @@
 
 .consultTypeToggleGroup {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 6px;
   background: #f1f5f9;
   padding: 4px;
@@ -998,6 +1001,10 @@
   padding: 28px 32px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   border: 1px solid #e2e8f0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .credentialsHeader {
@@ -1049,21 +1056,32 @@
 
 .credentialsGrid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 32px;
   align-items: start;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .credCol {
   display: flex;
   flex-direction: column;
   gap: 28px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .credBlock {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .credBlockTitle {
@@ -1080,6 +1098,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .awardItemPill,
@@ -1096,11 +1117,16 @@
   box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .timelineCard {
   flex: 1;
   min-width: 0;
+  max-width: calc(100% - 36px);
   display: flex;
   align-items: center;
   gap: 14px;
@@ -1112,6 +1138,7 @@
   box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02);
+  overflow: hidden;
 }
 
 .awardItemPill:hover,
@@ -1129,6 +1156,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .timelineRow {
@@ -1137,6 +1167,10 @@
   gap: 12px;
   position: relative;
   transition: transform 0.2s ease;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .timelineRow:hover .timelineCard {
@@ -1244,9 +1278,11 @@
 .credItemTextWrap {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 
 .credItemTitle {
@@ -1254,9 +1290,11 @@
   font-weight: 700;
   color: #0f172a;
   line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .credItemSubRow {
@@ -1264,14 +1302,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .credItemSub {
   font-size: 0.78rem;
   color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1;
 }
 
 /* Micro Chips for Eye-Catching Visual Finish */
@@ -1427,6 +1470,8 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
   transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s ease;
   user-select: none;
+  will-change: transform;
+  transform-origin: center center;
 }
 
 .reelCard:hover {
@@ -1435,11 +1480,16 @@
 }
 
 .reelCoverImg {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.35s ease;
+  z-index: 2;
+  pointer-events: none;
+  transition: opacity 0.25s ease-out, transform 0.35s ease;
 }
 
 .reelCard:hover .reelCoverImg {
@@ -1510,6 +1560,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  z-index: 1;
   pointer-events: none;
 }
 
