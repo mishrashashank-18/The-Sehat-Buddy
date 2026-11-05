@@ -68,18 +68,19 @@ export const enrichAppointmentsWithLiveUserData = async (appointments) => {
         liveAge = calculateAgeFromDob(u.dob);
       }
       
-      // Real-time synchronization: if user has NOT filled age/dob, age is null (never 30)
+      // Real-time synchronization: preserve form-entered age if live user profile doesn't have age set
+      liveAge = liveAge || aptObj.userData?.age || aptObj.age || null;
       aptObj.userData.age = liveAge;
       aptObj.age = liveAge;
 
       // 2. Live gender resolution
+      let liveGender = null;
       if (u.gender && u.gender !== 'Not Selected' && u.gender !== 'Not specified') {
-        aptObj.userData.gender = u.gender;
-        aptObj.gender = u.gender;
-      } else {
-        aptObj.userData.gender = null;
-        aptObj.gender = null;
+        liveGender = u.gender;
       }
+      liveGender = liveGender || aptObj.userData?.gender || aptObj.gender || null;
+      aptObj.userData.gender = liveGender;
+      aptObj.gender = liveGender;
 
       // 3. Live phone resolution
       if (u.phone && u.phone !== '0000000000' && (!aptObj.userData.phone || aptObj.userData.phone === '0000000000')) {

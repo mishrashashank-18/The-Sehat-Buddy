@@ -95,7 +95,7 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
             <span style={{ color: '#2563eb' }}>#{index + 1}</span> of {total}
           </span>
 
-          {!isHospitalView && total > 1 && (
+          {total > 1 && (
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
               <button
                 type="button"
@@ -166,37 +166,24 @@ const HospitalFaqCard = memo(function HospitalFaqCard({
           )}
         </div>
 
-        {/* Existing Edit / Delete / Preview Actions */}
+        {/* Existing Edit / Delete Actions */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
-          {isHospitalView ? (
-            <button
-              type="button"
-              className={styles.faqPreviewBtn}
-              onClick={() => onPreview && onPreview(faq)}
-            >
-              <ExternalLink size={13} />
-              <span>Preview Full FAQ</span>
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className={styles.iconBtn}
-                onClick={() => onEdit && onEdit(faq)}
-              >
-                <Edit3 size={14} />
-                <span>Edit</span>
-              </button>
-              <button
-                type="button"
-                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                onClick={() => onDelete && onDelete(faqId)}
-              >
-                <Trash2 size={14} />
-                <span>Delete</span>
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={() => onEdit && onEdit(faq)}
+          >
+            <Edit3 size={14} />
+            <span>Edit</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+            onClick={() => onDelete && onDelete(faqId)}
+          >
+            <Trash2 size={14} />
+            <span>Delete</span>
+          </button>
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ import {
   Video,
   HelpCircle,
   Phone,
+  PhoneCall,
   Mail,
   MapPin,
   Calendar,
@@ -55,6 +56,8 @@ import DeleteConfirmModal from './DeleteConfirmModal';
 import HospitalFaqCard from './HospitalFaqCard';
 import ReorderHospitalFaqsModal from './ReorderHospitalFaqsModal';
 import PopularDoctorActionButtons from './PopularDoctorActionButtons';
+import SpecialityProcedureModal from './SpecialityProcedureModal';
+import { RenderMedicalIcon, getItemTheme } from '../specialities/SpecialitiesProceduresSection';
 import { validateIndianPhone, validateBedCounts } from '../../utils/validation';
 import { calculateHospitalProfileCompletion, getHospitalProfileCompletionDetails, MIN_PROFILE_COMPLETION_THRESHOLD } from '../../utils/hospitalProfileCompletion';
 import { getHospitalVerifiedReviews, getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
@@ -89,8 +92,7 @@ const VALID_HOSPITAL_TABS = [
   'social-reels',
   'faqs',
   'patients',
-  'reviews',
-  'er-fleet'
+  'reviews'
 ];
 
 const PRESET_HOSPITAL_IMAGES = [
@@ -164,10 +166,6 @@ export const FAQ_ICONS_LIST = [
   { id: 'help-circle', label: 'General Info', icon: HelpCircle, color: '#475569', bg: '#f1f5f9' }
 ];
 
-const INITIAL_ER_CASES = [];
-
-const INITIAL_AMBULANCES = [];
-
 const getYouTubeEmbedUrl = (url) => {
   if (!url) return '';
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
@@ -215,6 +213,13 @@ const parseVideos = (data) => {
   }).filter(v => v.url || v.coverPhoto);
 };
 
+export const getDefaultHospitalDescription = (hosp) => {
+  if (!hosp) return '';
+  const hospName = hosp.name || 'Hospital';
+  const hospCity = hosp.city || 'Bengaluru';
+  return `${hospName} is a major multispecialty hospital in ${hospCity} providing comprehensive medical and surgical care across a wide range of specialties. The hospital provides emergency and critical-care services and is part of the hospital network. Its location makes it accessible to several central and eastern neighbourhoods.`;
+};
+
 export const createInitialHospitalFormData = (hosp) => {
   if (!hosp) return null;
   const existingPhotos = Array.isArray(hosp.photos) ? [...hosp.photos] : [];
@@ -227,6 +232,10 @@ export const createInitialHospitalFormData = (hosp) => {
 
   const existingStaffDocs = Array.isArray(hosp.staff_doctors) ? [...hosp.staff_doctors] : [];
   const existingStaffEmails = Array.isArray(hosp.staff_emails) ? [...hosp.staff_emails] : [];
+
+  const initialDescription = (hosp.description && hosp.description.trim())
+    ? hosp.description
+    : getDefaultHospitalDescription(hosp);
 
   return {
     name: hosp.name || '',
@@ -249,9 +258,10 @@ export const createInitialHospitalFormData = (hosp) => {
     reviews: hosp.reviews || '0 Reviews',
     phone: hosp.phone || '',
     email: hosp.email || '',
-    description: hosp.description || '',
+    description: initialDescription,
     image: hosp.image || '',
     photos: existingPhotos,
+    customPhotoCategories: Array.isArray(hosp.customPhotoCategories) ? hosp.customPhotoCategories : [],
     specialties: Array.isArray(hosp.specialties) ? hosp.specialties : (Array.isArray(hosp.specialities) ? hosp.specialities : []),
     star_doctors: existingStarDocs,
     staff_doctors: existingStaffDocs,
@@ -262,6 +272,10 @@ export const createInitialHospitalFormData = (hosp) => {
     tpaPhone: hosp.tpaHelpdesk?.phone || '',
     tpaEmail: hosp.tpaHelpdesk?.email || '',
     tpaPreAuthTime: hosp.tpaHelpdesk?.preAuthTime || '',
+    faqPhone: (hosp.faqPhone && hosp.faqPhone.trim()) ? hosp.faqPhone : (hosp.phone || ''),
+    faqTitle: (hosp.faqTitle && hosp.faqTitle.trim()) ? hosp.faqTitle : 'Have a Specific Question?',
+    faqSubtitle: (hosp.faqSubtitle && hosp.faqSubtitle.trim()) ? hosp.faqSubtitle : 'Our hospital care desk can assist with admissions, insurance or appointments.',
+    faqTiming: (hosp.faqTiming && hosp.faqTiming.trim()) ? hosp.faqTiming : '24x7 Helpline Available',
     instagram: hosp.instagram || '',
     facebook: hosp.facebook || '',
     youtube: hosp.youtube || '',
@@ -289,7 +303,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     addReview,
     updateReview,
     deleteReview,
-    refreshReviews
+    refreshReviews,
+    specialitiesProcedures = [],
+    addSpecialityProcedure,
+    updateSpecialityProcedure,
+    deleteSpecialityProcedure,
+    refreshSpecialities
   } = useData();
 
   // Fresh refresh from database on page load/mount
@@ -299,6 +318,9 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
     if (typeof refreshReviews === 'function') {
       refreshReviews();
+    }
+    if (typeof refreshSpecialities === 'function') {
+      refreshSpecialities();
     }
   }, [hospitalId]);
 
@@ -417,16 +439,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [faqSearchQuery, setFaqSearchQuery] = useState('');
   const [faqCategoryFilter, setFaqCategoryFilter] = useState('All');
 
-  // ER & Fleet State - initially 0 for newly added hospitals
-  const [erCases, setErCases] = useState(() => (Array.isArray(hospital?.erCases) ? hospital.erCases : INITIAL_ER_CASES));
-  const [ambulances, setAmbulances] = useState(() => (Array.isArray(hospital?.ambulances) ? hospital.ambulances : INITIAL_AMBULANCES));
-
-  const handleDispatchAmbulance = (ambId) => {
-    setAmbulances(prev =>
-      prev.map(a => (a.id === ambId ? { ...a, status: 'Dispatched', location: 'Dispatched to Emergency Call' } : a))
-    );
-  };
-
   // Form State
   const [formData, setFormData] = useState(() => (hospital ? createInitialHospitalFormData(hospital) : null));
   const initializedHospitalId = useRef(hospital ? String(hospital.id || hospital._id || '') : null);
@@ -434,7 +446,14 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const isHomeStatusDirtyRef = useRef(false);
   const [customSpecialtyInput, setCustomSpecialtyInput] = useState('');
   const [doctorSearch, setDoctorSearch] = useState('');
-  const [doctorFilter, setDoctorFilter] = useState('hospital'); // 'hospital' | 'star' | 'all'
+  const [doctorFilter, setDoctorFilter] = useState('hospital'); // 'hospital' | 'star'
+
+  // Specialities & Procedures Management State
+  const [specialtySubTab, setSpecialtySubTab] = useState('clinical'); // 'clinical' | 'surgical' | 'badges'
+  const [specSearchQuery, setSpecSearchQuery] = useState('');
+  const [isSpecModalOpen, setIsSpecModalOpen] = useState(false);
+  const [editingSpecItem, setEditingSpecItem] = useState(null);
+  const [specModalDefaultType, setSpecModalDefaultType] = useState('speciality');
 
   // Real-time authoritative calculation of hospital profile completion percentage & eligibility (>= 80%)
   const completionDetails = useMemo(() => {
@@ -475,23 +494,20 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     return hospitalDoctors.filter(doc => isDoctorInStarList(doc, formData?.star_doctors));
   }, [hospitalDoctors, formData?.star_doctors]);
 
-  // Doctors to display based on selected filter pill and search query
+  // Doctors to display based on selected filter pill and search query (Strictly doctors of THIS hospital only)
   const displayedDoctors = useMemo(() => {
-    const sourceList = doctorFilter === 'all' ? (doctors || []) : hospitalDoctors;
-
-    return sourceList.filter(doc => {
+    return hospitalDoctors.filter(doc => {
       const isSelected = isDoctorInStarList(doc, formData?.star_doctors);
       if (doctorFilter === 'star' && !isSelected) return false;
 
       if (!doctorSearch.trim()) return true;
-      const query = doctorSearch.toLowerCase();
+      const query = doctorSearch.toLowerCase().trim();
       return (
         (doc.name || '').toLowerCase().includes(query) ||
-        (doc.specialty || doc.specialization || '').toLowerCase().includes(query) ||
-        (doc.hospital || '').toLowerCase().includes(query)
+        (doc.specialty || doc.specialization || '').toLowerCase().includes(query)
       );
     });
-  }, [doctorFilter, doctors, hospitalDoctors, formData?.star_doctors, doctorSearch]);
+  }, [doctorFilter, hospitalDoctors, formData?.star_doctors, doctorSearch]);
 
   // Insurance State
   const [newInsuranceInput, setNewInsuranceInput] = useState('');
@@ -524,6 +540,43 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [newPhotoUrl, setNewPhotoUrl] = useState('');
   const [newPhotoTitle, setNewPhotoTitle] = useState('');
   const [newPhotoCategory, setNewPhotoCategory] = useState('Interior');
+  const [isCustomPhotoCategory, setIsCustomPhotoCategory] = useState(false);
+  const [customPhotoCategory, setCustomPhotoCategory] = useState('');
+  const [editingPhotoIdx, setEditingPhotoIdx] = useState(null);
+  const [editingPhotoTitle, setEditingPhotoTitle] = useState('');
+  const [editingPhotoCategory, setEditingPhotoCategory] = useState('Interior');
+  const [isEditingCustomCategory, setIsEditingCustomCategory] = useState(false);
+  const [customEditingCategory, setCustomEditingCategory] = useState('');
+
+  // Dynamically available photo categories (standard list + existing custom categories)
+  const availablePhotoCategories = useMemo(() => {
+    const catSet = new Set(PHOTO_CATEGORIES);
+    if (Array.isArray(formData?.customPhotoCategories)) {
+      formData.customPhotoCategories.forEach(c => {
+        if (c && typeof c === 'string') {
+          const t = c.trim();
+          if (t) catSet.add(t);
+        }
+      });
+    }
+    if (Array.isArray(hospital?.customPhotoCategories)) {
+      hospital.customPhotoCategories.forEach(c => {
+        if (c && typeof c === 'string') {
+          const t = c.trim();
+          if (t) catSet.add(t);
+        }
+      });
+    }
+    if (Array.isArray(formData?.photos)) {
+      formData.photos.forEach(p => {
+        if (p && typeof p === 'object' && p.category && typeof p.category === 'string') {
+          const t = p.category.trim();
+          if (t) catSet.add(t);
+        }
+      });
+    }
+    return Array.from(catSet);
+  }, [formData?.photos, formData?.customPhotoCategories, hospital?.customPhotoCategories]);
 
   // New FAQ Form State
   const [isAddingFaq, setIsAddingFaq] = useState(false);
@@ -540,6 +593,18 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const [isUploadingFaqIcon, setIsUploadingFaqIcon] = useState(false);
   const [isReorderFaqsModalOpen, setIsReorderFaqsModalOpen] = useState(false);
   const faqIconInputRef = useRef(null);
+
+  // FAQ Direct Care Desk & Helpline State
+  const [isSavingFaqCareDesk, setIsSavingFaqCareDesk] = useState(false);
+  const [faqCareDeskSavedMessage, setFaqCareDeskSavedMessage] = useState('');
+
+  // Bed Capacity & Verification Live State
+  const [isSavingCapacity, setIsSavingCapacity] = useState(false);
+  const [capacitySavedMessage, setCapacitySavedMessage] = useState('');
+
+  // About Facility State
+  const [isSavingDescription, setIsSavingDescription] = useState(false);
+  const [descriptionSavedMessage, setDescriptionSavedMessage] = useState('');
 
   // Direct Media Upload State
   const [uploadingMediaKey, setUploadingMediaKey] = useState(null);
@@ -577,8 +642,40 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     fetchHospitalAppointments();
     const handleUpdate = () => fetchHospitalAppointments(true);
     window.addEventListener('sehat_appointments_changed', handleUpdate);
+
+    // Cross-tab and cross-window sync
+    const handleStorage = (e) => {
+      if (
+        e.key === 'sehat_appointments_changed' ||
+        e.key === 'sehat_last_appointment_sync' ||
+        e.key === 'sehat_buddy_appointments'
+      ) {
+        fetchHospitalAppointments(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // BroadcastChannel sync across tabs & windows
+    let bc = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('sehat_appointments_sync');
+        bc.onmessage = () => fetchHospitalAppointments(true);
+      }
+    } catch {}
+
+    // Background silent poll every 4 seconds for real-time visibility without manual refresh
+    const pollTimer = setInterval(() => {
+      fetchHospitalAppointments(true);
+    }, 4000);
+
     return () => {
       window.removeEventListener('sehat_appointments_changed', handleUpdate);
+      window.removeEventListener('storage', handleStorage);
+      if (bc) {
+        try { bc.close(); } catch {}
+      }
+      clearInterval(pollTimer);
     };
   }, [fetchHospitalAppointments]);
 
@@ -661,6 +758,40 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       return true;
     });
   }, [hospitalAppointments, patientStatusFilter, selectedPreset, selectedYear, selectedMonth, selectedDay, patientSearch]);
+
+  // Sort patients strictly in ASCENDING order according to appointment date and slot time
+  const sortedPatients = useMemo(() => {
+    const parseSlotDateTime = (apt) => {
+      const rawDate = apt.slotDate || (apt.createdAt ? apt.createdAt.slice(0, 10) : '9999-12-31');
+      const rawTime = apt.slotTime || '';
+
+      let minutes = 720;
+      const match = String(rawTime).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match) {
+        let h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        const meridiem = match[3] ? match[3].toUpperCase() : null;
+        if (meridiem === 'PM' && h < 12) h += 12;
+        if (meridiem === 'AM' && h === 12) h = 0;
+        minutes = h * 60 + m;
+      }
+
+      const dateParts = rawDate.split('-').map(Number);
+      if (dateParts.length === 3 && dateParts[0] && dateParts[1] && dateParts[2]) {
+        return new Date(dateParts[0], dateParts[1] - 1, dateParts[2], Math.floor(minutes / 60), minutes % 60).getTime();
+      }
+      return 0;
+    };
+
+    return [...filteredPatients].sort((a, b) => {
+      const timeA = parseSlotDateTime(a);
+      const timeB = parseSlotDateTime(b);
+      if (timeA !== timeB) {
+        return timeA - timeB; // Ascending order: earliest time first
+      }
+      return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
+    });
+  }, [filteredPatients]);
 
   // Statistics for selected Year / Month / Day
   const patientStats = useMemo(() => {
@@ -1019,8 +1150,24 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       const curPhotosStr = JSON.stringify(formData.photos || []);
       const shouldSyncPhotos = !isDirtyRef.current && incomingPhotosStr !== curPhotosStr;
       const shouldSyncImage = !isDirtyRef.current && hospital.image !== undefined && hospital.image !== formData.image;
+      const incomingDesc = (hospital.description && hospital.description.trim())
+        ? hospital.description
+        : getDefaultHospitalDescription(hospital);
+      const shouldSyncDesc = !isDirtyRef.current && incomingDesc && incomingDesc !== formData.description;
 
-      if (shouldSyncProfile || shouldSyncPub || shouldSyncHome || shouldSyncPhotos || shouldSyncImage) {
+      const incomingFaqPhone = (hospital.faqPhone && hospital.faqPhone.trim()) ? hospital.faqPhone : (hospital.phone || '');
+      const incomingFaqTitle = (hospital.faqTitle && hospital.faqTitle.trim()) ? hospital.faqTitle : 'Have a Specific Question?';
+      const incomingFaqSubtitle = (hospital.faqSubtitle && hospital.faqSubtitle.trim()) ? hospital.faqSubtitle : 'Our hospital care desk can assist with admissions, insurance or appointments.';
+      const incomingFaqTiming = (hospital.faqTiming && hospital.faqTiming.trim()) ? hospital.faqTiming : '24x7 Helpline Available';
+
+      const shouldSyncFaq = !isDirtyRef.current && (
+        (incomingFaqPhone !== formData.faqPhone) ||
+        (incomingFaqTitle !== formData.faqTitle) ||
+        (incomingFaqSubtitle !== formData.faqSubtitle) ||
+        (incomingFaqTiming !== formData.faqTiming)
+      );
+
+      if (shouldSyncProfile || shouldSyncPub || shouldSyncHome || shouldSyncPhotos || shouldSyncImage || shouldSyncDesc || shouldSyncFaq) {
         setFormData(prev => ({
           ...prev,
           profileCompletion: hospital.profileCompletion !== undefined ? hospital.profileCompletion : prev.profileCompletion,
@@ -1028,7 +1175,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           showOnHome: shouldSyncHome ? Boolean(hospital.showOnHome) : prev.showOnHome,
           homeUpdatedAt: shouldSyncHome && hospital.homeUpdatedAt !== undefined ? Number(hospital.homeUpdatedAt) : prev.homeUpdatedAt,
           photos: shouldSyncPhotos ? (Array.isArray(hospital.photos) ? [...hospital.photos] : []) : prev.photos,
-          image: shouldSyncImage ? (hospital.image || '') : prev.image
+          image: shouldSyncImage ? (hospital.image || '') : prev.image,
+          description: shouldSyncDesc ? incomingDesc : prev.description,
+          faqPhone: shouldSyncFaq ? incomingFaqPhone : prev.faqPhone,
+          faqTitle: shouldSyncFaq ? incomingFaqTitle : prev.faqTitle,
+          faqSubtitle: shouldSyncFaq ? incomingFaqSubtitle : prev.faqSubtitle,
+          faqTiming: shouldSyncFaq ? incomingFaqTiming : prev.faqTiming
         }));
       }
       return;
@@ -1036,8 +1188,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
     initializedHospitalId.current = currentHospId;
     setFormData(createInitialHospitalFormData(hospital));
-    setErCases(Array.isArray(hospital?.erCases) ? hospital.erCases : INITIAL_ER_CASES);
-    setAmbulances(Array.isArray(hospital?.ambulances) ? hospital.ambulances : INITIAL_AMBULANCES);
   }, [hospital]);
 
   if (!hospital) {
@@ -1100,28 +1250,152 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     setSaveSuccess(false);
   };
 
+  // Specialities & Procedures lists & handlers
+  const clinicalSpecialitiesList = useMemo(() => {
+    return (specialitiesProcedures || []).filter(item => item.type === 'speciality');
+  }, [specialitiesProcedures]);
+
+  const surgicalProceduresList = useMemo(() => {
+    return (specialitiesProcedures || []).filter(item => item.type === 'procedure');
+  }, [specialitiesProcedures]);
+
+  const filteredClinicalSpecs = useMemo(() => {
+    if (!specSearchQuery.trim()) return clinicalSpecialitiesList;
+    const q = specSearchQuery.toLowerCase().trim();
+    return clinicalSpecialitiesList.filter(item =>
+      (item.name || '').toLowerCase().includes(q) ||
+      (item.description || '').toLowerCase().includes(q) ||
+      (Array.isArray(item.procedures) && item.procedures.some(p => p.toLowerCase().includes(q)))
+    );
+  }, [clinicalSpecialitiesList, specSearchQuery]);
+
+  const filteredSurgicalProcs = useMemo(() => {
+    if (!specSearchQuery.trim()) return surgicalProceduresList;
+    const q = specSearchQuery.toLowerCase().trim();
+    return surgicalProceduresList.filter(item =>
+      (item.name || '').toLowerCase().includes(q) ||
+      (item.description || '').toLowerCase().includes(q) ||
+      (Array.isArray(item.procedures) && item.procedures.some(p => p.toLowerCase().includes(q)))
+    );
+  }, [surgicalProceduresList, specSearchQuery]);
+
+  const handleOpenAddSpec = (type = 'speciality') => {
+    setEditingSpecItem(null);
+    setSpecModalDefaultType(type);
+    setIsSpecModalOpen(true);
+  };
+
+  const handleOpenEditSpec = (item) => {
+    setEditingSpecItem(item);
+    setSpecModalDefaultType(item.type || 'speciality');
+    setIsSpecModalOpen(true);
+  };
+
+  const handleSaveSpecModal = async (payload) => {
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    const itemPayload = {
+      ...payload,
+      hospitalId: targetHospId ? String(targetHospId) : '',
+      hospitalName: formData?.name || hospital?.name || ''
+    };
+
+    if (editingSpecItem) {
+      const idToUpdate = editingSpecItem._id || editingSpecItem.id;
+      await updateSpecialityProcedure(idToUpdate, itemPayload);
+
+      // If name changed, update hospital's specialties array
+      const oldName = editingSpecItem.name;
+      const newName = itemPayload.name;
+      if (oldName !== newName && Array.isArray(formData?.specialties)) {
+        const updatedSpecs = formData.specialties.map(s => s === oldName ? newName : s);
+        handleChange('specialties', updatedSpecs);
+        if (targetHospId) {
+          updateHospital(targetHospId, { specialties: updatedSpecs }).catch(() => {});
+        }
+      }
+    } else {
+      await addSpecialityProcedure(itemPayload);
+
+      // Also add new specialty name to the hospital's active specialties
+      const newName = itemPayload.name;
+      const currentSpecs = Array.isArray(formData?.specialties) ? formData.specialties : [];
+      if (!currentSpecs.includes(newName)) {
+        const updatedSpecs = [...currentSpecs, newName];
+        handleChange('specialties', updatedSpecs);
+        if (targetHospId) {
+          updateHospital(targetHospId, { specialties: updatedSpecs }).catch(() => {});
+        }
+      }
+    }
+    triggerSaveSuccess(3000);
+  };
+
+  const handleDeleteSpec = async (item) => {
+    const isProc = item.type === 'procedure';
+    const label = isProc ? 'surgical procedure' : 'clinical speciality';
+    if (!window.confirm(`Are you sure you want to permanently delete "${item.name}" from ${label}s? This will remove it from the hospital profile and database.`)) {
+      return;
+    }
+
+    try {
+      const idToDelete = item._id || item.id;
+      await deleteSpecialityProcedure(idToDelete);
+
+      // Also remove from hospital.specialties if present
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+      if (Array.isArray(formData?.specialties) && formData.specialties.includes(item.name)) {
+        const updatedSpecs = formData.specialties.filter(s => s !== item.name);
+        handleChange('specialties', updatedSpecs);
+        if (targetHospId) {
+          updateHospital(targetHospId, { specialties: updatedSpecs }).catch(() => {});
+        }
+      }
+      triggerSaveSuccess(3000);
+    } catch (err) {
+      console.error('Failed to delete speciality/procedure:', err);
+      alert('Failed to delete: ' + (err.message || 'Please try again.'));
+    }
+  };
+
   // Photos Gallery
   const handleAddPhoto = async () => {
     if (!newPhotoUrl.trim()) return;
+    const resolvedCat = isCustomPhotoCategory
+      ? (customPhotoCategory.trim() || 'Facility')
+      : (newPhotoCategory || 'Facility');
+
     const newPhoto = {
       url: newPhotoUrl.trim(),
       title: newPhotoTitle.trim() || `${formData.name || 'Hospital'} Facility`,
-      category: newPhotoCategory || 'Facility'
+      category: resolvedCat
     };
     const updatedPhotos = [...(formData.photos || []), newPhoto];
+    const updatedCustomCats = resolvedCat && !PHOTO_CATEGORIES.includes(resolvedCat)
+      ? Array.from(new Set([...(formData.customPhotoCategories || []), resolvedCat]))
+      : (formData.customPhotoCategories || []);
+
     setFormData(prev => ({
       ...prev,
-      photos: updatedPhotos
+      photos: updatedPhotos,
+      customPhotoCategories: updatedCustomCats
     }));
     setNewPhotoUrl('');
     setNewPhotoTitle('');
+    if (isCustomPhotoCategory) {
+      setNewPhotoCategory(resolvedCat);
+      setCustomPhotoCategory('');
+      setIsCustomPhotoCategory(false);
+    }
     setSaveSuccess(false);
 
     // Auto-persist immediately to MongoDB database
     const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
     if (targetHospId) {
       try {
-        await updateHospital(targetHospId, { photos: updatedPhotos });
+        await updateHospital(targetHospId, { 
+          photos: updatedPhotos,
+          customPhotoCategories: updatedCustomCats
+        });
         triggerSaveSuccess(3500);
       } catch (err) {
         console.error('Failed to auto-save added photo URL:', err);
@@ -1135,25 +1409,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       setIsUploadingGallery(true);
       const url = await api.uploadImage(galleryFile, 'sehatbuddy/gallery');
       if (url) {
+        const resolvedCat = isCustomPhotoCategory
+          ? (customPhotoCategory.trim() || 'Facility')
+          : (newPhotoCategory || 'Facility');
+
         const newPhoto = {
           url,
           title: newPhotoTitle.trim() || `${formData.name || 'Hospital'} Facility`,
-          category: newPhotoCategory || 'Facility'
+          category: resolvedCat
         };
         const updatedPhotos = [...(formData.photos || []), newPhoto];
+        const updatedCustomCats = resolvedCat && !PHOTO_CATEGORIES.includes(resolvedCat)
+          ? Array.from(new Set([...(formData.customPhotoCategories || []), resolvedCat]))
+          : (formData.customPhotoCategories || []);
+
         setFormData(prev => ({
           ...prev,
-          photos: updatedPhotos
+          photos: updatedPhotos,
+          customPhotoCategories: updatedCustomCats
         }));
         setGalleryFile(null);
         setGalleryFilePreview(null);
         setNewPhotoTitle('');
+        if (isCustomPhotoCategory) {
+          setNewPhotoCategory(resolvedCat);
+          setCustomPhotoCategory('');
+          setIsCustomPhotoCategory(false);
+        }
         setSaveSuccess(false);
 
         // Auto-persist immediately to MongoDB database
         const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
         if (targetHospId) {
-          await updateHospital(targetHospId, { photos: updatedPhotos });
+          await updateHospital(targetHospId, { 
+            photos: updatedPhotos,
+            customPhotoCategories: updatedCustomCats
+          });
           triggerSaveSuccess(3500);
         }
       }
@@ -1162,6 +1453,57 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
       alert(err.message || 'Failed to upload photo. Please try again.');
     } finally {
       setIsUploadingGallery(false);
+    }
+  };
+
+  const handleStartEditPhoto = (idx) => {
+    const photo = formData?.photos?.[idx];
+    if (!photo) return;
+    const curTitle = typeof photo === 'object' && photo.title ? photo.title : `Facility View #${idx + 1}`;
+    const curCat = typeof photo === 'object' && photo.category ? photo.category : 'Facility';
+    setEditingPhotoIdx(idx);
+    setEditingPhotoTitle(curTitle);
+    setEditingPhotoCategory(curCat);
+    setIsEditingCustomCategory(!PHOTO_CATEGORIES.includes(curCat));
+    setCustomEditingCategory(!PHOTO_CATEGORIES.includes(curCat) ? curCat : '');
+  };
+
+  const handleSavePhotoEdit = async (idx) => {
+    const finalCat = isEditingCustomCategory
+      ? (customEditingCategory.trim() || 'Facility')
+      : (editingPhotoCategory || 'Facility');
+
+    const updated = [...(formData.photos || [])];
+    const curr = updated[idx];
+    const updatedPhoto = {
+      url: typeof curr === 'string' ? curr : curr.url,
+      title: editingPhotoTitle.trim() || ((typeof curr === 'object' && curr?.title) ? curr.title : `${formData.name || 'Hospital'} Facility`),
+      category: finalCat
+    };
+    updated[idx] = updatedPhoto;
+    const updatedCustomCats = finalCat && !PHOTO_CATEGORIES.includes(finalCat)
+      ? Array.from(new Set([...(formData.customPhotoCategories || []), finalCat]))
+      : (formData.customPhotoCategories || []);
+
+    setFormData(prev => ({ 
+      ...prev, 
+      photos: updated,
+      customPhotoCategories: updatedCustomCats
+    }));
+    setEditingPhotoIdx(null);
+    setSaveSuccess(false);
+
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { 
+          photos: updated,
+          customPhotoCategories: updatedCustomCats
+        });
+        triggerSaveSuccess(3500);
+      } catch (err) {
+        console.error('Failed to update photo details:', err);
+      }
     }
   };
 
@@ -1364,6 +1706,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
   const handleOpenAddDoctor = () => {
     setDoctorToEdit({
       hospital: formData.name || hospital.name,
+      hospitalId: hospital?._id || hospital?.id || hospitalId,
       city: formData.city || hospital.city || 'Bengaluru',
       department: (formData.specialties && formData.specialties[0]) || 'Cardiology'
     });
@@ -1896,6 +2239,112 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
     }
   };
 
+  const handleSaveFaqCareDesk = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setIsSavingFaqCareDesk(true);
+    setFaqCareDeskSavedMessage('');
+    try {
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+      const faqPayload = {
+        faqPhone: (formData.faqPhone || '').trim(),
+        faqTitle: (formData.faqTitle || '').trim(),
+        faqSubtitle: (formData.faqSubtitle || '').trim(),
+        faqTiming: (formData.faqTiming || '').trim()
+      };
+      if (targetHospId) {
+        await updateHospital(targetHospId, faqPayload);
+      }
+      isDirtyRef.current = false;
+      setFaqCareDeskSavedMessage('FAQ Care Desk details saved successfully in real time!');
+      setTimeout(() => setFaqCareDeskSavedMessage(''), 4000);
+    } catch (err) {
+      console.error('Failed to save FAQ Care Desk details:', err);
+      alert('Failed to save FAQ Care Desk details: ' + (err.message || 'Please check connection.'));
+    } finally {
+      setIsSavingFaqCareDesk(false);
+    }
+  };
+
+  const handleSaveDescription = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setIsSavingDescription(true);
+    setDescriptionSavedMessage('');
+    try {
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+      const descPayload = {
+        description: (formData.description || '').trim()
+      };
+      if (targetHospId) {
+        await updateHospital(targetHospId, descPayload);
+      }
+      isDirtyRef.current = false;
+      setDescriptionSavedMessage('About Facility overview saved successfully!');
+      setTimeout(() => setDescriptionSavedMessage(''), 4000);
+    } catch (err) {
+      console.error('Failed to save description:', err);
+      alert('Failed to save description: ' + (err.message || 'Please check connection.'));
+    } finally {
+      setIsSavingDescription(false);
+    }
+  };
+
+  const handleToggleEmergency24x7 = async (nextVal) => {
+    handleChange('emergency24x7', nextVal);
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { emergency24x7: nextVal });
+        setCapacitySavedMessage(`24x7 Emergency status ${nextVal ? 'ENABLED' : 'RESTRICTED'} live!`);
+        setTimeout(() => setCapacitySavedMessage(''), 3500);
+        triggerSaveSuccess(3000);
+      } catch (err) {
+        console.error('Failed to update 24x7 emergency status:', err);
+      }
+    }
+  };
+
+  const handleToggleVerified = async (nextVal) => {
+    handleChange('isVerified', nextVal);
+    const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+    if (targetHospId) {
+      try {
+        await updateHospital(targetHospId, { isVerified: nextVal });
+        setCapacitySavedMessage(`Hospital Verification status ${nextVal ? 'VERIFIED' : 'STANDARD'} live!`);
+        setTimeout(() => setCapacitySavedMessage(''), 3500);
+        triggerSaveSuccess(3000);
+      } catch (err) {
+        console.error('Failed to update verification status:', err);
+      }
+    }
+  };
+
+  const handleSaveCapacityAndStatus = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    setIsSavingCapacity(true);
+    setCapacitySavedMessage('');
+    try {
+      const targetHospId = hospital?._id || hospitalId || hospitalData?._id || hospital?.id || hospitalData?.id;
+      const payload = {
+        totalBeds: Number(formData.totalBeds) || 0,
+        availableBeds: Number(formData.availableBeds) || 0,
+        emergency24x7: Boolean(formData.emergency24x7),
+        isVerified: Boolean(formData.isVerified)
+      };
+      if (targetHospId) {
+        await updateHospital(targetHospId, payload);
+      }
+      isDirtyRef.current = false;
+      setCapacitySavedMessage('Capacity and service readiness saved live!');
+      setTimeout(() => setCapacitySavedMessage(''), 4000);
+      triggerSaveSuccess(3000);
+    } catch (err) {
+      console.error('Failed to save capacity & status:', err);
+      alert('Failed to save capacity & status: ' + (err.message || 'Please check connection.'));
+    } finally {
+      setIsSavingCapacity(false);
+    }
+  };
+
   // Master Save Function
   const handleSaveAll = async (overridePayload = null) => {
     setIsSaving(true);
@@ -1960,9 +2409,12 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         description: (formData.description || '').trim(),
         image: formData.image,
         photos: Array.isArray(formData.photos) ? formData.photos : [],
+        customPhotoCategories: Array.isArray(formData.customPhotoCategories)
+          ? formData.customPhotoCategories
+          : availablePhotoCategories.filter(c => !PHOTO_CATEGORIES.includes(c)),
         specialties: Array.isArray(formData.specialties) ? formData.specialties : [],
         specialities: Array.isArray(formData.specialties) ? formData.specialties : [],
-        star_doctors: Array.isArray(formData.star_doctors) ? formData.star_doctors : [],
+        star_doctors: hospitalStarDoctors.map(d => d._id || d.id),
         staff_doctors: Array.isArray(formData.staff_doctors) ? formData.staff_doctors : [],
         staff_emails: Array.isArray(formData.staff_emails) ? formData.staff_emails : [],
         cashlessInsurance: Boolean(formData.cashlessInsurance),
@@ -1973,14 +2425,16 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           email: (formData.tpaEmail || '').trim(),
           preAuthTime: (formData.tpaPreAuthTime || '').trim()
         },
+        faqPhone: (formData.faqPhone || '').trim(),
+        faqTitle: (formData.faqTitle || '').trim(),
+        faqSubtitle: (formData.faqSubtitle || '').trim(),
+        faqTiming: (formData.faqTiming || '').trim(),
         instagram: (formData.instagram || '').trim(),
         facebook: (formData.facebook || '').trim(),
         youtube: (formData.youtube || '').trim(),
         website: (formData.website || '').trim(),
         reels: Array.isArray(formData.reels) ? formData.reels.filter(r => (typeof r === 'string' ? r.trim() : (r && r.url && r.url.trim()))) : [],
         youtube_videos: Array.isArray(formData.youtube_videos) ? formData.youtube_videos.filter(v => (typeof v === 'string' ? v.trim() : (v && v.url && v.url.trim()))) : [],
-        erCases: Array.isArray(erCases) ? erCases : [],
-        ambulances: Array.isArray(ambulances) ? ambulances : [],
         ...(cleanOverride || {})
       };
 
@@ -2439,7 +2893,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div className={styles.metricCardContent}>
                 <span className={styles.metricCardLabel}>Specialists & Doctors</span>
                 <div className={styles.metricCardNumberRow}>
-                  <strong className={styles.metricCardVal}>{formData.star_doctors?.length || 0}</strong>
+                  <strong className={styles.metricCardVal}>{hospitalStarDoctors.length}</strong>
                   <span className={styles.metricCardSub}>Star Docs</span>
                 </div>
                 <span className={styles.metricCardHint}>
@@ -2462,11 +2916,11 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div className={styles.metricCardContent}>
                 <span className={styles.metricCardLabel}>Departments & Care</span>
                 <div className={styles.metricCardNumberRow}>
-                  <strong className={styles.metricCardVal}>{formData.specialties?.length || 0}</strong>
-                  <span className={styles.metricCardSub}>Departments</span>
+                  <strong className={styles.metricCardVal}>{clinicalSpecialitiesList.length + surgicalProceduresList.length}</strong>
+                  <span className={styles.metricCardSub}>Specialities</span>
                 </div>
                 <span className={styles.metricCardHint}>
-                  Active patient care lines
+                  {clinicalSpecialitiesList.length} Clinical • {surgicalProceduresList.length} Surgical
                 </span>
               </div>
             </div>
@@ -2490,31 +2944,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 </div>
                 <span className={styles.metricCardHint}>
                   {patientStats.upcoming} Pending • {patientStats.visited} Completed
-                </span>
-              </div>
-            </div>
-
-            <div
-              className={`${styles.metricCard} ${activeTab === 'er-fleet' ? styles.metricCardActive : ''}`}
-              onClick={() => {
-                setActiveTab('er-fleet');
-                window.scrollTo({ top: 460, behavior: 'smooth' });
-              }}
-              title="Click to view ER Triage & Ambulance Fleet"
-            >
-              <div className={styles.metricCardIcon} style={{ background: '#fef2f2', color: '#dc2626' }}>
-                <Siren size={20} />
-              </div>
-              <div className={styles.metricCardContent}>
-                <span className={styles.metricCardLabel}>ER & Ambulance Fleet</span>
-                <div className={styles.metricCardNumberRow}>
-                  <strong className={styles.metricCardVal}>
-                    {ambulances.filter(a => a.status === 'Available').length}
-                  </strong>
-                  <span className={styles.metricCardSub}>Ambulances Ready</span>
-                </div>
-                <span className={styles.metricCardHint}>
-                  {erCases.length} Active ER Triage cases
                 </span>
               </div>
             </div>
@@ -2562,7 +2991,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           >
             <Stethoscope size={15} />
             <span>Departments & Specialties</span>
-            <span className={styles.tabBadge}>{formData.specialties.length}</span>
+            <span className={styles.tabBadge}>{clinicalSpecialitiesList.length + surgicalProceduresList.length}</span>
           </button>
 
           <button
@@ -2575,7 +3004,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           >
             <Sparkles size={15} />
             <span>Star Doctors & Staff</span>
-            <span className={styles.tabBadge}>{formData.star_doctors.length}</span>
+            <span className={styles.tabBadge}>{hospitalStarDoctors.length}</span>
           </button>
 
           <button
@@ -2640,19 +3069,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
             <MessageSquare size={15} />
             <span>Public Reviews</span>
             <span className={styles.tabBadge}>{hospitalReviews.length}</span>
-          </button>
-
-          <button
-            type="button"
-            className={`${styles.navTab} ${activeTab === 'er-fleet' ? styles.navTabActive : ''}`}
-            onClick={() => {
-              setActiveTab('er-fleet');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-          >
-            <Siren size={15} />
-            <span>ER & Fleet</span>
-            <span className={styles.tabBadge}>{erCases.length} Active</span>
           </button>
         </div>
       </div>
@@ -2798,26 +3214,27 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Star Rating (Out of 5.0)</label>
                   <input
-                    type="number"
-                    step="0.1"
-                    min="1"
-                    max="5"
-                    className={styles.inputField}
-                    value={formData.rating ? formData.rating : ''}
-                    placeholder="e.g. 4.8"
-                    onChange={(e) => handleChange('rating', e.target.value)}
+                    type="text"
+                    readOnly
+                    className={`${styles.inputField} ${styles.readOnlyField}`}
+                    value={reviewStats.total > 0 ? reviewStats.rating : 0}
+                    placeholder="0"
+                    title="Star rating is automatically calculated and fetched live from verified public reviews (Read-only)."
                   />
+                  <span className={styles.helperText}>Live fetched from public reviews (Read-only)</span>
                 </div>
 
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Reviews Text</label>
                   <input
                     type="text"
-                    className={styles.inputField}
-                    value={formData.reviews || ''}
-                    onChange={(e) => handleChange('reviews', e.target.value)}
-                    placeholder="e.g. 1,400+ Reviews"
+                    readOnly
+                    className={`${styles.inputField} ${styles.readOnlyField}`}
+                    value={reviewStats.reviewsText || '0 Reviews'}
+                    placeholder="0 Reviews"
+                    title="Reviews text is automatically calculated and fetched live from verified public reviews (Read-only)."
                   />
+                  <span className={styles.helperText}>Live fetched from public reviews (Read-only)</span>
                 </div>
               </div>
             </div>
@@ -2834,7 +3251,23 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     Real-time available capacity and emergency readiness badges.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSaveCapacityAndStatus}
+                  disabled={isSavingCapacity}
+                  className={styles.faqDeskSaveBtn}
+                >
+                  <Save size={15} />
+                  <span>{isSavingCapacity ? 'Saving Status...' : 'Save Capacity & Status'}</span>
+                </button>
               </div>
+
+              {capacitySavedMessage && (
+                <div className={styles.faqHelplineSuccessBanner} style={{ marginTop: '10px' }}>
+                  <CheckCircle2 size={15} />
+                  <span>{capacitySavedMessage}</span>
+                </div>
+              )}
 
               <div className={styles.gridTwo}>
                 <div className={styles.formGroup}>
@@ -2884,8 +3317,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <label className={styles.switch}>
                     <input
                       type="checkbox"
-                      checked={formData.emergency24x7}
-                      onChange={(e) => handleChange('emergency24x7', e.target.checked)}
+                      checked={Boolean(formData.emergency24x7)}
+                      onChange={(e) => handleToggleEmergency24x7(e.target.checked)}
                     />
                     <span className={styles.slider} />
                   </label>
@@ -2899,8 +3332,8 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   <label className={styles.switch}>
                     <input
                       type="checkbox"
-                      checked={formData.isVerified}
-                      onChange={(e) => handleChange('isVerified', e.target.checked)}
+                      checked={Boolean(formData.isVerified)}
+                      onChange={(e) => handleToggleVerified(e.target.checked)}
                     />
                     <span className={styles.slider} />
                   </label>
@@ -2956,7 +3389,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
             {/* Facility Description */}
             <div className={styles.cardSection}>
-              <div className={styles.sectionHeader}>
+              <div className={styles.sectionHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <h2 className={styles.sectionTitle}>
                     <Edit3 size={20} color="#2563eb" />
@@ -2966,13 +3399,42 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     Comprehensive write-up explaining hospital highlights, awards, and center background.
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleSaveDescription}
+                  disabled={isSavingDescription}
+                  style={{
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 18px',
+                    fontSize: '0.86rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 6px rgba(37, 99, 235, 0.25)'
+                  }}
+                >
+                  <Save size={15} />
+                  <span>{isSavingDescription ? 'Saving...' : 'Save Description'}</span>
+                </button>
               </div>
+
+              {descriptionSavedMessage && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '0.86rem', fontWeight: 600, padding: '8px 14px', borderRadius: '8px', marginBottom: '14px' }}>
+                  <CheckCircle2 size={15} />
+                  <span>{descriptionSavedMessage}</span>
+                </div>
+              )}
 
               <div className={styles.formGroup}>
                 <textarea
                   className={styles.textareaField}
                   rows={6}
-                  value={formData.description}
+                  value={formData.description || ''}
                   onChange={(e) => handleChange('description', e.target.value)}
                   placeholder="Enter full hospital description. Paragraphs will be cleanly formatted with an expandable 'Show More' toggle on the hospital profile..."
                 />
@@ -3303,16 +3765,79 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       </div>
 
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Category</label>
-                        <select
-                          className={styles.selectField}
-                          value={newPhotoCategory}
-                          onChange={(e) => setNewPhotoCategory(e.target.value)}
-                        >
-                          {PHOTO_CATEGORIES.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className={styles.formLabel} style={{ marginBottom: 0 }}>Category</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomPhotoCategory(prev => !prev);
+                              if (isCustomPhotoCategory) setCustomPhotoCategory('');
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#2563eb',
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              padding: 0,
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            {isCustomPhotoCategory ? 'Choose from list' : '+ Write custom'}
+                          </button>
+                        </div>
+                        {isCustomPhotoCategory ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <input
+                              type="text"
+                              className={styles.inputField}
+                              value={customPhotoCategory}
+                              onChange={(e) => setCustomPhotoCategory(e.target.value)}
+                              placeholder="e.g. Pharmacy, NICU, Dialysis"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomPhotoCategory(false);
+                                setCustomPhotoCategory('');
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                border: '1.5px solid #cbd5e1',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Back to predefined category list"
+                            >
+                              List
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            className={styles.selectField}
+                            value={newPhotoCategory}
+                            onChange={(e) => {
+                              if (e.target.value === '__custom__') {
+                                setIsCustomPhotoCategory(true);
+                                setCustomPhotoCategory('');
+                              } else {
+                                setNewPhotoCategory(e.target.value);
+                              }
+                            }}
+                          >
+                            {availablePhotoCategories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                            <option value="__custom__">+ Write Custom Category...</option>
+                          </select>
+                        )}
                       </div>
                     </div>
 
@@ -3376,16 +3901,79 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       </div>
 
                       <div className={styles.formGroup}>
-                        <label className={styles.formLabel}>Category</label>
-                        <select
-                          className={styles.selectField}
-                          value={newPhotoCategory}
-                          onChange={(e) => setNewPhotoCategory(e.target.value)}
-                        >
-                          {PHOTO_CATEGORIES.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                        </select>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <label className={styles.formLabel} style={{ marginBottom: 0 }}>Category</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCustomPhotoCategory(prev => !prev);
+                              if (isCustomPhotoCategory) setCustomPhotoCategory('');
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#2563eb',
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              padding: 0,
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            {isCustomPhotoCategory ? 'Choose from list' : '+ Write custom'}
+                          </button>
+                        </div>
+                        {isCustomPhotoCategory ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <input
+                              type="text"
+                              className={styles.inputField}
+                              value={customPhotoCategory}
+                              onChange={(e) => setCustomPhotoCategory(e.target.value)}
+                              placeholder="e.g. Pharmacy, NICU, Dialysis"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsCustomPhotoCategory(false);
+                                setCustomPhotoCategory('');
+                              }}
+                              style={{
+                                padding: '8px 12px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                border: '1.5px solid #cbd5e1',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                              title="Back to predefined category list"
+                            >
+                              List
+                            </button>
+                          </div>
+                        ) : (
+                          <select
+                            className={styles.selectField}
+                            value={newPhotoCategory}
+                            onChange={(e) => {
+                              if (e.target.value === '__custom__') {
+                                setIsCustomPhotoCategory(true);
+                                setCustomPhotoCategory('');
+                              } else {
+                                setNewPhotoCategory(e.target.value);
+                              }
+                            }}
+                          >
+                            {availablePhotoCategories.map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                            <option value="__custom__">+ Write Custom Category...</option>
+                          </select>
+                        )}
                       </div>
                     </div>
 
@@ -3455,6 +4043,15 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                         </label>
                         <button
                           type="button"
+                          className={styles.photoEditBtn}
+                          style={{ position: 'static' }}
+                          onClick={() => handleStartEditPhoto(idx)}
+                          title="Edit photo category & title"
+                        >
+                          <Edit3 size={14} />
+                        </button>
+                        <button
+                          type="button"
                           className={styles.photoDeleteBtn}
                           style={{ position: 'static' }}
                           disabled={deletingPhotoIdx === idx}
@@ -3471,12 +4068,162 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     </div>
 
                     <div className={styles.photoMeta}>
-                      <span className={styles.categoryTag}>
-                        {typeof photo === 'object' && photo.category ? photo.category : 'Facility'}
-                      </span>
-                      <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>
-                        {typeof photo === 'object' && photo.title ? photo.title : `Facility View #${idx + 1}`}
-                      </strong>
+                      {editingPhotoIdx === idx ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                              Category
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsEditingCustomCategory(prev => !prev);
+                                if (isEditingCustomCategory) setCustomEditingCategory('');
+                              }}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                color: '#2563eb',
+                                fontSize: '0.72rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                padding: 0,
+                                textDecoration: 'underline'
+                              }}
+                            >
+                              {isEditingCustomCategory ? 'Choose standard' : '+ Write custom'}
+                            </button>
+                          </div>
+                          {isEditingCustomCategory ? (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <input
+                                type="text"
+                                className={styles.inputField}
+                                style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+                                value={customEditingCategory}
+                                onChange={(e) => setCustomEditingCategory(e.target.value)}
+                                placeholder="Custom category..."
+                                autoFocus
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsEditingCustomCategory(false);
+                                  setEditingPhotoCategory(PHOTO_CATEGORIES[0]);
+                                }}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '0.74rem',
+                                  background: '#f1f5f9',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                List
+                              </button>
+                            </div>
+                          ) : (
+                            <select
+                              className={styles.selectField}
+                              style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+                              value={editingPhotoCategory}
+                              onChange={(e) => {
+                                if (e.target.value === '__custom__') {
+                                  setIsEditingCustomCategory(true);
+                                  setCustomEditingCategory('');
+                                } else {
+                                  setEditingPhotoCategory(e.target.value);
+                                }
+                              }}
+                            >
+                              {availablePhotoCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                              ))}
+                              <option value="__custom__">+ Write Custom Category...</option>
+                            </select>
+                          )}
+
+                          <label style={{ fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>
+                            Photo Title
+                          </label>
+                          <input
+                            type="text"
+                            className={styles.inputField}
+                            style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+                            value={editingPhotoTitle}
+                            onChange={(e) => setEditingPhotoTitle(e.target.value)}
+                            placeholder="Photo title"
+                          />
+
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleSavePhotoEdit(idx)}
+                              style={{
+                                flex: 1,
+                                padding: '6px 10px',
+                                background: '#2563eb',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '0.78rem',
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingPhotoIdx(null)}
+                              style={{
+                                padding: '6px 10px',
+                                background: '#f1f5f9',
+                                color: '#475569',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: '6px',
+                                fontSize: '0.78rem',
+                                fontWeight: 600,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <span className={styles.categoryTag}>
+                              {typeof photo === 'object' && photo.category ? photo.category : 'Facility'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditPhoto(idx)}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#2563eb',
+                                cursor: 'pointer',
+                                padding: '2px 4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '3px',
+                                fontSize: '0.74rem',
+                                fontWeight: 600
+                              }}
+                              title="Edit photo category & title"
+                            >
+                              <Edit3 size={12} />
+                              <span>Edit</span>
+                            </button>
+                          </div>
+                          <strong style={{ fontSize: '0.86rem', color: '#0f172a' }}>
+                            {typeof photo === 'object' && photo.title ? photo.title : `Facility View #${idx + 1}`}
+                          </strong>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -3531,93 +4278,397 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div>
                 <h2 className={styles.sectionTitle}>
                   <Stethoscope size={20} color="#2563eb" />
-                  Departments & Key Clinical Specialties
+                  Specialities, Procedures & Departments
                 </h2>
                 <p className={styles.sectionSubtitle}>
-                  Add or remove specialties offered at this facility. Badges are interactive on the hospital page.
+                  Add, modify, and delete clinical specialities, surgical procedures, and facility departments displayed on the public hospital page.
                 </p>
               </div>
-            </div>
 
-            {/* Current Active Specialties */}
-            <label className={styles.formLabel}>Current Specialties ({formData.specialties.length})</label>
-            <div className={styles.badgeWrap}>
-              {formData.specialties.map((spec, idx) => (
-                <span key={idx} className={styles.tagBadge}>
-                  <Stethoscope size={13} />
-                  <span>{spec}</span>
-                  <button
-                    type="button"
-                    className={styles.tagRemoveBtn}
-                    onClick={() => handleRemoveSpecialty(spec)}
-                    title={`Remove ${spec}`}
-                  >
-                    <X size={14} />
-                  </button>
-                </span>
-              ))}
-              {formData.specialties.length === 0 && (
-                <span style={{ fontSize: '0.88rem', color: '#64748b', fontStyle: 'italic', padding: '6px 0' }}>
-                  No departments added yet. Select from the quick-add list below or type a custom specialty.
-                </span>
-              )}
-            </div>
-
-            {/* Add Custom Specialty Input */}
-            <div style={{ marginTop: '24px' }}>
-              <label className={styles.formLabel}>Add Custom Department</label>
-              <div style={{ display: 'flex', gap: '10px', maxWidth: '500px', marginTop: '6px' }}>
-                <input
-                  type="text"
-                  className={styles.inputField}
-                  value={customSpecialtyInput}
-                  onChange={(e) => setCustomSpecialtyInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddSpecialty(customSpecialtyInput);
-                    }
-                  }}
-                  placeholder="e.g. Pediatric Cardiology"
-                />
+              <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   type="button"
-                  onClick={() => handleAddSpecialty(customSpecialtyInput)}
-                  style={{
-                    background: '#2563eb',
-                    color: 'white',
-                    border: 'none',
-                    padding: '8px 18px',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
+                  className={styles.addSpecBtn}
+                  onClick={() => handleOpenAddSpec(specialtySubTab === 'surgical' ? 'procedure' : 'speciality')}
                 >
-                  <Plus size={16} />
-                  <span>Add</span>
+                  <Plus size={15} />
+                  <span>
+                    {specialtySubTab === 'surgical' ? 'Add Surgical Procedure' : 'Add Clinical Speciality'}
+                  </span>
                 </button>
               </div>
             </div>
 
-            {/* Quick Pick List */}
-            <div style={{ marginTop: '24px' }}>
-              <label className={styles.formLabel}>Quick-Add Common Medical Specialties</label>
-              <div className={styles.quickPickWrap}>
-                {DEFAULT_SPECIALTIES.filter(s => !formData.specialties.includes(s)).map((spec, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className={styles.quickPickBtn}
-                    onClick={() => handleAddSpecialty(spec)}
-                  >
-                    + {spec}
-                  </button>
-                ))}
-              </div>
+            {/* Sub-Tabs Switcher */}
+            <div className={styles.specSubTabsNav}>
+              <button
+                type="button"
+                className={`${styles.specSubTabBtn} ${specialtySubTab === 'clinical' ? styles.specSubTabBtnActive : ''}`}
+                onClick={() => setSpecialtySubTab('clinical')}
+              >
+                <Stethoscope size={15} />
+                <span>Clinical Specialities</span>
+                <span className={styles.specSubTabBadge}>{clinicalSpecialitiesList.length}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`${styles.specSubTabBtn} ${specialtySubTab === 'surgical' ? styles.specSubTabBtnActive : ''}`}
+                onClick={() => setSpecialtySubTab('surgical')}
+              >
+                <Sparkles size={15} />
+                <span>Surgical Procedures</span>
+                <span className={styles.specSubTabBadge}>{surgicalProceduresList.length}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`${styles.specSubTabBtn} ${specialtySubTab === 'badges' ? styles.specSubTabBtnActive : ''}`}
+                onClick={() => setSpecialtySubTab('badges')}
+              >
+                <Layers size={15} />
+                <span>Quick Department Badges</span>
+                <span className={styles.specSubTabBadge}>{formData.specialties.length}</span>
+              </button>
             </div>
+
+            {/* SUB-TAB 1: CLINICAL SPECIALITIES */}
+            {specialtySubTab === 'clinical' && (
+              <div>
+                <div className={styles.specToolbar}>
+                  <div className={styles.specSearchWrap}>
+                    <Search size={16} className={styles.specSearchIcon} />
+                    <input
+                      type="text"
+                      className={styles.specSearchInput}
+                      placeholder="Search clinical specialities by name, procedure..."
+                      value={specSearchQuery}
+                      onChange={(e) => setSpecSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className={styles.addSpecBtn}
+                    onClick={() => handleOpenAddSpec('speciality')}
+                  >
+                    <Plus size={15} />
+                    <span>Add Clinical Speciality</span>
+                  </button>
+                </div>
+
+                {filteredClinicalSpecs.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                    <Stethoscope size={36} color="#94a3b8" style={{ marginBottom: '8px' }} />
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#334155' }}>No Clinical Specialities Found</h3>
+                    <p style={{ margin: '4px 0 16px', fontSize: '0.84rem', color: '#64748b' }}>
+                      {specSearchQuery ? 'No clinical specialities match your search query.' : 'Add your first clinical speciality to display it on the public profile.'}
+                    </p>
+                    <button
+                      type="button"
+                      className={styles.addSpecBtn}
+                      onClick={() => handleOpenAddSpec('speciality')}
+                    >
+                      <Plus size={15} />
+                      <span>Add First Speciality</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className={styles.specGrid}>
+                    {filteredClinicalSpecs.map((item) => {
+                      const theme = getItemTheme(item);
+                      return (
+                        <div key={item.id || item._id} className={styles.specCard}>
+                          <div>
+                            <div className={styles.specCardHeader}>
+                              <div className={styles.specCardTitleCol}>
+                                <div
+                                  className={styles.specIconBox}
+                                  style={{ background: theme.iconBg, border: `1px solid ${theme.iconBorder}` }}
+                                >
+                                  <RenderMedicalIcon iconType={item.icon || item.name} color={theme.accent} size={22} />
+                                </div>
+                                <div>
+                                  <h4 className={styles.specCardTitle}>{item.name}</h4>
+                                  <span
+                                    className={styles.specCardTypeBadge}
+                                    style={{ background: theme.badgeBg, color: theme.badgeText }}
+                                  >
+                                    Clinical Speciality
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className={styles.specActions}>
+                                <button
+                                  type="button"
+                                  className={styles.specActionBtn}
+                                  onClick={() => handleOpenEditSpec(item)}
+                                  title={`Edit ${item.name}`}
+                                >
+                                  <Edit3 size={13} />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.specActionBtnDanger}
+                                  onClick={() => handleDeleteSpec(item)}
+                                  title={`Delete ${item.name}`}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {item.description && (
+                              <p className={styles.specCardDesc}>{item.description}</p>
+                            )}
+
+                            {Array.isArray(item.procedures) && item.procedures.length > 0 && (
+                              <div className={styles.specProceduresWrap}>
+                                {item.procedures.map((proc, pIdx) => (
+                                  <span key={pIdx} className={styles.specProcChip}>
+                                    {proc}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={styles.specInsuranceRow}>
+                            <span className={styles.specInsurancePill}>
+                              <ShieldCheck size={12} />
+                              <span>{item.insuranceDetails?.coveragePercent || '100% Cashless Available'}</span>
+                            </span>
+                            <span className={styles.specTimePill}>
+                              <Clock size={12} />
+                              <span>{item.insuranceDetails?.preAuthHours || '30 Mins Pre-Approval'}</span>
+                            </span>
+                            {item.insuranceDetails?.estimatedCostRange && (
+                              <span className={styles.specCostPill}>
+                                <span>{item.insuranceDetails.estimatedCostRange}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 2: SURGICAL PROCEDURES */}
+            {specialtySubTab === 'surgical' && (
+              <div>
+                <div className={styles.specToolbar}>
+                  <div className={styles.specSearchWrap}>
+                    <Search size={16} className={styles.specSearchIcon} />
+                    <input
+                      type="text"
+                      className={styles.specSearchInput}
+                      placeholder="Search surgical procedures by name, technique..."
+                      value={specSearchQuery}
+                      onChange={(e) => setSpecSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className={styles.addSpecBtn}
+                    onClick={() => handleOpenAddSpec('procedure')}
+                  >
+                    <Plus size={15} />
+                    <span>Add Surgical Procedure</span>
+                  </button>
+                </div>
+
+                {filteredSurgicalProcs.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                    <Sparkles size={36} color="#94a3b8" style={{ marginBottom: '8px' }} />
+                    <h3 style={{ margin: 0, fontSize: '1rem', color: '#334155' }}>No Surgical Procedures Found</h3>
+                    <p style={{ margin: '4px 0 16px', fontSize: '0.84rem', color: '#64748b' }}>
+                      {specSearchQuery ? 'No surgical procedures match your search query.' : 'Add your first surgical procedure or day-care surgery to display it on the public profile.'}
+                    </p>
+                    <button
+                      type="button"
+                      className={styles.addSpecBtn}
+                      onClick={() => handleOpenAddSpec('procedure')}
+                    >
+                      <Plus size={15} />
+                      <span>Add First Procedure</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className={styles.specGrid}>
+                    {filteredSurgicalProcs.map((item) => {
+                      const theme = getItemTheme(item);
+                      return (
+                        <div key={item.id || item._id} className={styles.specCard}>
+                          <div>
+                            <div className={styles.specCardHeader}>
+                              <div className={styles.specCardTitleCol}>
+                                <div
+                                  className={styles.specIconBox}
+                                  style={{ background: theme.iconBg, border: `1px solid ${theme.iconBorder}` }}
+                                >
+                                  <RenderMedicalIcon iconType={item.icon || item.name} color={theme.accent} size={22} />
+                                </div>
+                                <div>
+                                  <h4 className={styles.specCardTitle}>{item.name}</h4>
+                                  <span
+                                    className={styles.specCardTypeBadge}
+                                    style={{ background: '#eff6ff', color: '#1d4ed8' }}
+                                  >
+                                    Surgical Procedure
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className={styles.specActions}>
+                                <button
+                                  type="button"
+                                  className={styles.specActionBtn}
+                                  onClick={() => handleOpenEditSpec(item)}
+                                  title={`Edit ${item.name}`}
+                                >
+                                  <Edit3 size={13} />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  className={styles.specActionBtnDanger}
+                                  onClick={() => handleDeleteSpec(item)}
+                                  title={`Delete ${item.name}`}
+                                >
+                                  <Trash2 size={13} />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {item.description && (
+                              <p className={styles.specCardDesc}>{item.description}</p>
+                            )}
+
+                            {Array.isArray(item.procedures) && item.procedures.length > 0 && (
+                              <div className={styles.specProceduresWrap}>
+                                {item.procedures.map((proc, pIdx) => (
+                                  <span key={pIdx} className={styles.specProcChip}>
+                                    {proc}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className={styles.specInsuranceRow}>
+                            <span className={styles.specInsurancePill}>
+                              <ShieldCheck size={12} />
+                              <span>{item.insuranceDetails?.coveragePercent || '100% Cashless Covered'}</span>
+                            </span>
+                            <span className={styles.specTimePill}>
+                              <Clock size={12} />
+                              <span>{item.insuranceDetails?.preAuthHours || '30 Mins Pre-Approval'}</span>
+                            </span>
+                            {item.insuranceDetails?.estimatedCostRange && (
+                              <span className={styles.specCostPill}>
+                                <span>{item.insuranceDetails.estimatedCostRange}</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB-TAB 3: QUICK DEPARTMENT BADGES */}
+            {specialtySubTab === 'badges' && (
+              <div>
+                <label className={styles.formLabel}>Current Hero Specialties ({formData.specialties.length})</label>
+                <div className={styles.badgeWrap}>
+                  {formData.specialties.map((spec, idx) => (
+                    <span key={idx} className={styles.tagBadge}>
+                      <Stethoscope size={13} />
+                      <span>{spec}</span>
+                      <button
+                        type="button"
+                        className={styles.tagRemoveBtn}
+                        onClick={() => handleRemoveSpecialty(spec)}
+                        title={`Remove ${spec}`}
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                  {formData.specialties.length === 0 && (
+                    <span style={{ fontSize: '0.88rem', color: '#64748b', fontStyle: 'italic', padding: '6px 0' }}>
+                      No departments added yet. Select from the quick-add list below or type a custom specialty.
+                    </span>
+                  )}
+                </div>
+
+                {/* Add Custom Specialty Input */}
+                <div style={{ marginTop: '24px' }}>
+                  <label className={styles.formLabel}>Add Custom Department Tag</label>
+                  <div style={{ display: 'flex', gap: '10px', maxWidth: '500px', marginTop: '6px' }}>
+                    <input
+                      type="text"
+                      className={styles.inputField}
+                      value={customSpecialtyInput}
+                      onChange={(e) => setCustomSpecialtyInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSpecialty(customSpecialtyInput);
+                        }
+                      }}
+                      placeholder="e.g. Pediatric Cardiology"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleAddSpecialty(customSpecialtyInput)}
+                      style={{
+                        background: '#2563eb',
+                        color: 'white',
+                        border: 'none',
+                        padding: '8px 18px',
+                        borderRadius: '8px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Plus size={16} />
+                      <span>Add</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Pick List */}
+                <div style={{ marginTop: '24px' }}>
+                  <label className={styles.formLabel}>Quick-Add Common Medical Specialties</label>
+                  <div className={styles.quickPickWrap}>
+                    {DEFAULT_SPECIALTIES.filter(s => !formData.specialties.includes(s)).map((spec, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={styles.quickPickBtn}
+                        onClick={() => handleAddSpecialty(spec)}
+                      >
+                        + {spec}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {/* TAB 4: STAR DOCTORS & STAFF */}
@@ -3672,14 +4723,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   onClick={() => setDoctorFilter('star')}
                 >
                   ⭐ Star Doctors ({hospitalStarDoctors.length})
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.doctorFilterPill} ${doctorFilter === 'all' ? styles.doctorFilterPillActive : ''}`}
-                  onClick={() => setDoctorFilter('all')}
-                  title="View all registered doctors in the system"
-                >
-                  All System Doctors ({(doctors || []).length})
                 </button>
               </div>
             </div>
@@ -3736,23 +4779,20 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                             </>
                           )}
                         </div>
-                        {doc.hospital && (() => {
-                          const isAnotherHospital = !isDoctorAffiliatedWithHospital(doc, currentHospitalTarget);
-                          return (
-                            <div style={{ fontSize: '0.72rem', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <Building2 size={11} color={isAnotherHospital ? '#dc2626' : '#64748b'} />
-                              <span style={{ 
-                                overflow: 'hidden', 
-                                textOverflow: 'ellipsis', 
-                                whiteSpace: 'nowrap',
-                                color: isAnotherHospital ? '#dc2626' : '#64748b',
-                                fontWeight: isAnotherHospital ? 600 : 400
-                              }}>
-                                {doc.hospital} {isAnotherHospital ? '(Other Hospital)' : ''}
-                              </span>
-                            </div>
-                          );
-                        })()}
+                        {doc.hospital && (
+                          <div style={{ fontSize: '0.72rem', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Building2 size={11} color="#64748b" />
+                            <span style={{ 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              whiteSpace: 'nowrap',
+                              color: '#64748b',
+                              fontWeight: 500
+                            }}>
+                              {doc.hospital}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -3760,12 +4800,11 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                       {(() => {
                         const canonicalDocId = getDoctorCanonicalId(doc) || String(doc.id || doc._id);
                         const isDocToggling = togglingDoctorIds.has(canonicalDocId);
-                        const isAnotherHospital = Boolean(doc.hospital && !isDoctorAffiliatedWithHospital(doc, currentHospitalTarget));
                         return (
                           <PopularDoctorActionButtons
                             doctor={doc}
                             isPopular={isSelected}
-                            disabled={isDocToggling || (isAnotherHospital && !isSelected)}
+                            disabled={isDocToggling}
                             onSetPopular={(targetVal, extra) => handleSetHospitalStarDoctor(doc, targetVal, extra)}
                           />
                         );
@@ -3803,14 +4842,14 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               <div style={{ textAlign: 'center', padding: '36px 20px', color: '#64748b', background: '#f8fafc', borderRadius: '10px', marginTop: '16px' }}>
                 <Stethoscope size={36} color="#cbd5e1" style={{ marginBottom: '8px' }} />
                 <p style={{ margin: 0, fontWeight: 600 }}>
-                  {doctorFilter === 'hospital'
-                    ? `No doctors are currently affiliated with ${formData.name || hospital?.name || 'this hospital'}.`
-                    : (doctorFilter === 'star' ? 'No star doctors selected for this hospital yet.' : 'No doctors found matching your criteria.')}
+                  {doctorFilter === 'star'
+                    ? 'No star doctors selected for this hospital yet.'
+                    : `No doctors are currently affiliated with ${formData.name || hospital?.name || 'this hospital'}.`}
                 </p>
                 <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#94a3b8' }}>
-                  {doctorFilter === 'hospital'
-                    ? 'Click "+ Add New Doctor" to create doctors for this hospital, or switch to "All System Doctors" to link an existing doctor.'
-                    : 'Click "+ Add Doctor Now" or select doctors from the list.'}
+                  {doctorFilter === 'star'
+                    ? 'Promote doctors to Star Doctors using the checkmark button.'
+                    : 'Click "+ Add New Doctor" to create doctors for this hospital.'}
                 </p>
                 <button
                   type="button"
@@ -4892,20 +5931,112 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         {/* TAB 7: HOSPITAL FAQS */}
         {activeTab === 'faqs' && (
           <div id="section-faqs" className={styles.cardSection}>
-            {isHospitalView && (
-              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '12px 18px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <HelpCircle size={20} color="#2563eb" />
-                <span style={{ fontSize: '0.88rem', color: '#1e40af', fontWeight: 500 }}>
-                  <strong>Preview Only:</strong> Hospital FAQs are published by the platform administrator. You can search, filter by category, and preview all official facility FAQs below.
-                </span>
+            {/* FAQ Direct Helpline & Care Desk Settings */}
+            <div className={styles.faqHelplineCard}>
+              <div className={styles.faqHelplineHeader}>
+                <div className={styles.faqHelplineIconWrap}>
+                  <PhoneCall size={20} color="#2563eb" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <h3 className={styles.faqHelplineTitle}>Patient FAQ Care Desk & Direct Helpline</h3>
+                  <p className={styles.faqHelplineSubtitle}>
+                    Configure the dedicated inquiry phone number, operational hours, and assistance message displayed alongside your hospital FAQs on the public page.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveFaqCareDesk}
+                  disabled={isSavingFaqCareDesk}
+                  className={styles.faqHelplineSaveBtn}
+                >
+                  <Save size={15} />
+                  <span>{isSavingFaqCareDesk ? 'Saving...' : 'Save Helpline Details'}</span>
+                </button>
               </div>
-            )}
+
+              {faqCareDeskSavedMessage && (
+                <div className={styles.faqHelplineSuccessBanner}>
+                  <CheckCircle2 size={15} />
+                  <span>{faqCareDeskSavedMessage}</span>
+                </div>
+              )}
+
+              <div className={styles.gridTwo} style={{ marginTop: '16px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    <Phone size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: '-2px' }} />
+                    FAQ Care Desk Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    placeholder="e.g. 7007825557 or 1800-123-456"
+                    value={formData.faqPhone || ''}
+                    onChange={(e) => handleChange('faqPhone', e.target.value)}
+                  />
+                  <span className={styles.fieldHint}>
+                    Overrides the general hospital contact number specifically in the public FAQ section. If left blank, defaults to main hospital phone.
+                  </span>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    <Clock size={14} style={{ display: 'inline', marginRight: '6px', verticalAlign: '-2px' }} />
+                    Helpline Operational Hours / Timing
+                  </label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    placeholder="e.g. 24x7 Helpline Available or 8:00 AM – 9:00 PM"
+                    value={formData.faqTiming || ''}
+                    onChange={(e) => handleChange('faqTiming', e.target.value)}
+                  />
+                  <span className={styles.fieldHint}>
+                    Displays availability hours below the helpline call button on the public page.
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.gridTwo} style={{ marginTop: '12px' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    FAQ Support Heading / Title
+                  </label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    placeholder="e.g. Have a Specific Question?"
+                    value={formData.faqTitle || ''}
+                    onChange={(e) => handleChange('faqTitle', e.target.value)}
+                  />
+                  <span className={styles.fieldHint}>
+                    Prominent heading on the FAQ care desk card on public profile.
+                  </span>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    FAQ Support Subtitle / Assistance Details
+                  </label>
+                  <input
+                    type="text"
+                    className={styles.inputField}
+                    placeholder="e.g. Our hospital care desk can assist with admissions, insurance or appointments."
+                    value={formData.faqSubtitle || ''}
+                    onChange={(e) => handleChange('faqSubtitle', e.target.value)}
+                  />
+                  <span className={styles.fieldHint}>
+                    Short description of support services provided by this care desk.
+                  </span>
+                </div>
+              </div>
+            </div>
 
             <div className={styles.sectionHeader}>
               <div>
                 <h2 className={styles.sectionTitle}>
                   <HelpCircle size={20} color="#2563eb" />
-                  Frequently Asked Questions (Hospital FAQs) {isHospitalView ? '— Preview' : ''}
+                  Frequently Asked Questions (Hospital FAQs)
                 </h2>
                 <p className={styles.sectionSubtitle}>
                   Essential answers regarding admission, 100% cashless mediclaim, visiting hours, and documentation.
@@ -4913,7 +6044,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {hospitalFaqs.length > 1 && !isHospitalView && (
+                {hospitalFaqs.length > 1 && (
                   <button
                     type="button"
                     onClick={() => setIsReorderFaqsModalOpen(true)}
@@ -4937,7 +6068,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   </button>
                 )}
 
-                {!isAddingFaq && !isHospitalView && (
+                {!isAddingFaq && (
                   <button
                     type="button"
                     onClick={() => {
@@ -5562,13 +6693,13 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPatients.map((apt) => {
+                    {sortedPatients.map((apt) => {
                       const aptId = apt._id || apt.id;
                       const pName = apt.userData?.name || apt.patientName || 'Patient';
                       const pPhone = apt.userData?.phone || apt.patientPhone || 'N/A';
                       const pEmail = apt.userData?.email || apt.patientEmail || '';
-                      const pAge = apt.userData?.age || apt.patientAge || '';
-                      const pGender = apt.userData?.gender || apt.patientGender || '';
+                      const pAge = apt.userData?.age || apt.patientAge || apt.age || '';
+                      const pGender = apt.userData?.gender || apt.patientGender || apt.gender || '';
                       const dept = apt.department || 'General Medicine';
                       const symptoms = apt.userData?.symptoms || apt.symptoms || 'General Consultation';
                       const slotDate = apt.slotDate || (apt.createdAt ? apt.createdAt.slice(0, 10) : 'Scheduled');
@@ -5595,9 +6726,26 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
 
                           <td>
                             <div>
-                              <strong style={{ fontSize: '0.92rem', color: '#0f172a', display: 'block' }}>
-                                {pName} {pAge && <span style={{ fontSize: '0.78rem', color: '#64748b', fontWeight: 500 }}>({pAge} yrs{pGender ? `, ${pGender}` : ''})</span>}
-                              </strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>
+                                  {pName}
+                                </strong>
+                                {pAge ? (
+                                  <span style={{
+                                    fontSize: '0.72rem',
+                                    fontWeight: 700,
+                                    background: '#e0f2fe',
+                                    color: '#0369a1',
+                                    border: '1px solid #bae6fd',
+                                    padding: '1px 6px',
+                                    borderRadius: '4px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center'
+                                  }}>
+                                    Age: {pAge} yrs{pGender && pGender !== 'Not specified' ? ` • ${pGender}` : ''}
+                                  </span>
+                                ) : null}
+                              </div>
                               <div style={{ display: 'flex', gap: '10px', fontSize: '0.78rem', color: '#475569', marginTop: '3px' }}>
                                 <a href={`tel:${pPhone}`} style={{ color: '#2563eb', textDecoration: 'none' }}>
                                   📞 {pPhone}
@@ -5746,7 +6894,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                   ) : (
                     <>
                       <Plus size={15} />
-                      <span>+ Add Public Review</span>
+                      <span>Add Public Review</span>
                     </>
                   )}
                 </button>
@@ -6047,7 +7195,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                     style={{ margin: '0 auto' }}
                   >
                     <Plus size={15} />
-                    <span>+ Add First Public Review</span>
+                    <span>Add First Public Review</span>
                   </button>
                 )}
               </div>
@@ -6180,128 +7328,6 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
           </div>
         )}
 
-        {/* TAB 10: EMERGENCY & FLEET */}
-        {activeTab === 'er-fleet' && (
-          <div id="section-er" className={styles.cardSection}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <h2 className={styles.sectionTitle}>
-                  <Siren size={20} color="#dc2626" />
-                  Emergency Operations (ER) & Ambulance Fleet
-                </h2>
-                <p className={styles.sectionSubtitle}>
-                  Real-time emergency triage admissions, critical patient bed allocation, and ambulance dispatch.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px', marginTop: '16px' }}>
-              {/* ER Queue */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <AlertTriangle size={18} color="#dc2626" />
-                    Active Emergency Triage (ER)
-                  </h3>
-                  <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: '999px', fontSize: '0.74rem', fontWeight: 700 }}>
-                    LIVE
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {erCases.length === 0 ? (
-                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                      <AlertTriangle size={28} color="#cbd5e1" style={{ marginBottom: '6px' }} />
-                      <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 600, color: '#64748b' }}>No Active ER Triage Cases</p>
-                      <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>Incoming emergency triage admissions will appear here in real-time</p>
-                    </div>
-                  ) : (
-                    erCases.map((c) => (
-                      <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                            {c.patient} <span style={{ fontSize: '0.78rem', color: '#64748b' }}>({c.age} yrs)</span>
-                          </div>
-                          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                            {c.condition} • Bed: {c.bedAssigned}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{
-                            display: 'inline-block',
-                            fontSize: '0.72rem',
-                            fontWeight: 700,
-                            padding: '3px 8px',
-                            borderRadius: '6px',
-                            background: c.triage.includes('Red') ? '#fee2e2' : c.triage.includes('Yellow') ? '#fef3c7' : '#dcfce7',
-                            color: c.triage.includes('Red') ? '#dc2626' : c.triage.includes('Yellow') ? '#d97706' : '#15803d'
-                          }}>
-                            {c.triage}
-                          </span>
-                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '3px' }}>
-                            ETA: {c.eta}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Ambulance Fleet */}
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ margin: 0, fontSize: '1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Siren size={18} color="#2563eb" />
-                    Ambulance Rescue Fleet
-                  </h3>
-                  <span style={{ background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '999px', fontSize: '0.74rem', fontWeight: 700 }}>
-                    {ambulances.filter(a => a.status === 'Available').length} Available
-                  </span>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {ambulances.length === 0 ? (
-                    <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1' }}>
-                      <Siren size={28} color="#cbd5e1" style={{ marginBottom: '6px' }} />
-                      <p style={{ margin: 0, fontSize: '0.86rem', fontWeight: 600, color: '#64748b' }}>No Ambulances Registered</p>
-                      <p style={{ margin: '4px 0 0', fontSize: '0.76rem', color: '#94a3b8' }}>Registered ambulance units and rescue fleet will appear here</p>
-                    </div>
-                  ) : (
-                    ambulances.map((amb) => (
-                      <div key={amb.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>
-                            {amb.id} — {amb.type}
-                          </div>
-                          <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
-                            Driver: {amb.driver} ({amb.phone}) • {amb.location}
-                          </div>
-                        </div>
-                        <div>
-                          {amb.status === 'Available' ? (
-                            <button
-                              type="button"
-                              onClick={() => handleDispatchAmbulance(amb.id)}
-                              style={{ background: '#2563eb', color: '#ffffff', border: 'none', padding: '5px 12px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                              Dispatch
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: '0.74rem', fontWeight: 600, color: amb.status === 'Dispatched' ? '#d97706' : '#94a3b8' }}>
-                              {amb.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
       </div>
 
       {/* MEDIA PREVIEW MODAL */}
@@ -6418,6 +7444,18 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
         title="Delete Doctor"
         message="Are you sure you want to permanently delete this doctor? They will be removed from this hospital and doctor directory."
         itemName={deleteDoctorModalState.doctor?.name}
+      />
+
+      {/* Speciality & Procedure Modal */}
+      <SpecialityProcedureModal
+        isOpen={isSpecModalOpen}
+        onClose={() => {
+          setIsSpecModalOpen(false);
+          setEditingSpecItem(null);
+        }}
+        onSave={handleSaveSpecModal}
+        itemToEdit={editingSpecItem}
+        defaultType={specModalDefaultType}
       />
     </div>
   );

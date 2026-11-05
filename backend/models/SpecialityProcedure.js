@@ -1,12 +1,15 @@
 import mongoose from 'mongoose';
 
 const specialityProcedureSchema = new mongoose.Schema({
+  id: { type: String },
   name: { type: String, required: true },
   type: { 
     type: String, 
     enum: ['speciality', 'procedure'], 
     required: true 
   },
+  hospitalId: { type: String, default: '' },
+  hospitalName: { type: String, default: '' },
   icon: { type: String, default: 'Bot' },
   description: { type: String, default: '' },
   isPopular: { type: Boolean, default: true },

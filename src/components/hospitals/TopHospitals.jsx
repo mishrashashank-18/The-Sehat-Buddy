@@ -109,6 +109,11 @@ const TopHospitals = ({ onNavigate }) => {
                           Est. {hospital.establishedYear}
                         </span>
                       )}
+                      {hospital.emergency24x7 && (
+                        <span className={styles.featurePill} style={{ color: '#059669', background: '#ecfdf5', borderColor: '#a7f3d0', fontWeight: 600 }}>
+                          24x7 ER
+                        </span>
+                      )}
                     </div>
 
                     {hospital.specialties && hospital.specialties.length > 0 && (

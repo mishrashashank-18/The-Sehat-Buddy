@@ -2014,6 +2014,10 @@ export const DataProvider = ({ children }) => {
             acceptedInsurances: updatedData.acceptedInsurances !== undefined ? updatedData.acceptedInsurances : hosp.acceptedInsurances,
             tpaHelpdesk: updatedData.tpaHelpdesk !== undefined ? updatedData.tpaHelpdesk : hosp.tpaHelpdesk,
             insuranceHelpline: updatedData.insuranceHelpline !== undefined ? updatedData.insuranceHelpline : hosp.insuranceHelpline,
+            faqPhone: updatedData.faqPhone !== undefined ? updatedData.faqPhone : (hosp.faqPhone || ''),
+            faqTitle: updatedData.faqTitle !== undefined ? updatedData.faqTitle : (hosp.faqTitle || ''),
+            faqSubtitle: updatedData.faqSubtitle !== undefined ? updatedData.faqSubtitle : (hosp.faqSubtitle || ''),
+            faqTiming: updatedData.faqTiming !== undefined ? updatedData.faqTiming : (hosp.faqTiming || ''),
             specialties: Array.isArray(updatedData.specialties)
               ? updatedData.specialties
               : (Array.isArray(updatedData.specialities)
@@ -2031,6 +2035,7 @@ export const DataProvider = ({ children }) => {
             reels: updatedData.reels !== undefined ? updatedData.reels : (hosp.reels || []),
             youtube_videos: updatedData.youtube_videos !== undefined ? updatedData.youtube_videos : (hosp.youtube_videos || []),
             photos: updatedData.photos !== undefined ? updatedData.photos : (hosp.photos || []),
+            customPhotoCategories: updatedData.customPhotoCategories !== undefined ? updatedData.customPhotoCategories : (hosp.customPhotoCategories || []),
             star_doctors: updatedData.star_doctors !== undefined ? updatedData.star_doctors : (hosp.star_doctors || []),
             staff_emails: updatedData.staff_emails !== undefined ? updatedData.staff_emails : (hosp.staff_emails || []),
             staff_doctors: updatedData.staff_doctors !== undefined ? updatedData.staff_doctors : (hosp.staff_doctors || []),
@@ -2629,7 +2634,18 @@ export const DataProvider = ({ children }) => {
   }, [refreshReviews]);
 
   // Specialities & Procedures CRUD
-  const addSpecialityProcedure = (itemData) => {
+  const addSpecialityProcedure = async (itemData) => {
+    try {
+      const saved = await api.addSpecialityProcedure(itemData);
+      if (saved && (saved._id || saved.id)) {
+        const withId = { ...saved, id: saved._id || saved.id };
+        setSpecialitiesProcedures(prev => [...prev.filter(s => !matchesId(s, withId.id)), withId]);
+        broadcastSync(STORAGE_KEY_SPECIALITIES, withId);
+        return withId;
+      }
+    } catch (e) {
+      console.warn('Backend save notice, saving locally:', e.message);
+    }
     const newItem = {
       ...itemData,
       id: itemData.id || itemData._id || `sp-${Date.now()}`,
@@ -2645,28 +2661,34 @@ export const DataProvider = ({ children }) => {
       }
     };
     setSpecialitiesProcedures(prev => [...prev, newItem]);
-    api.addSpecialityProcedure(newItem).then(saved => {
-      if (saved && saved._id) {
-        setSpecialitiesProcedures(prev => prev.map(s => s.id === newItem.id ? { ...saved, id: saved._id } : s));
-      }
-    }).catch(() => {});
+    broadcastSync(STORAGE_KEY_SPECIALITIES, newItem);
     return newItem;
   };
 
-  const updateSpecialityProcedure = (id, updatedData) => {
+  const updateSpecialityProcedure = async (id, updatedData) => {
+    let savedItem = null;
+    try {
+      savedItem = await api.updateSpecialityProcedure(id, updatedData);
+    } catch (e) {
+      console.warn('Backend update notice, updating locally:', e.message);
+    }
     setSpecialitiesProcedures(prev => prev.map(s => {
       if (matchesId(s, id)) {
-        const merged = { ...s, ...updatedData };
-        api.updateSpecialityProcedure(id, merged).catch(() => {});
+        const merged = savedItem ? { ...s, ...savedItem, id: savedItem._id || savedItem.id || id } : { ...s, ...updatedData };
         return merged;
       }
       return s;
     }));
+    return savedItem || updatedData;
   };
 
-  const deleteSpecialityProcedure = (id) => {
+  const deleteSpecialityProcedure = async (id) => {
+    try {
+      await api.deleteSpecialityProcedure(id);
+    } catch (e) {
+      console.warn('Backend delete notice, deleting locally:', e.message);
+    }
     setSpecialitiesProcedures(prev => prev.filter(s => !matchesId(s, id)));
-    api.deleteSpecialityProcedure(id).catch(() => {});
   };
 
   // 10. Branding & Site Identity CRUD

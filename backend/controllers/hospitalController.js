@@ -525,7 +525,18 @@ export const registerHospital = async (req, res) => {
       description: description || '', 
       specialities: Array.isArray(parsedSpecialities) ? parsedSpecialities : [], 
       image: image || '',
-      photos: Array.isArray(req.body.photos) ? req.body.photos : [],
+      photos: Array.isArray(req.body.photos) ? req.body.photos.map(p => {
+        if (typeof p === 'string' && p.trim()) return { url: p.trim(), title: 'Hospital Facility', category: 'Facility' };
+        if (p && typeof p === 'object' && p.url) {
+          return {
+            url: String(p.url).trim(),
+            title: String(p.title || 'Hospital Facility').trim(),
+            category: String(p.category || 'Facility').trim()
+          };
+        }
+        return null;
+      }).filter(Boolean) : [],
+      customPhotoCategories: Array.isArray(req.body.customPhotoCategories) ? req.body.customPhotoCategories.map(c => String(c).trim()).filter(Boolean) : [],
       rating: rating !== undefined && rating !== null && !isNaN(Number(rating)) ? Number(rating) : 0,
       reviews: reviews || '0 Reviews',
       totalBeds: bedValidation.total,
@@ -551,6 +562,10 @@ export const registerHospital = async (req, res) => {
         preAuthTime: ''
       },
       insuranceHelpline: req.body.insuranceHelpline || '',
+      faqPhone: req.body.faqPhone || '',
+      faqTitle: req.body.faqTitle || '',
+      faqSubtitle: req.body.faqSubtitle || '',
+      faqTiming: req.body.faqTiming || '',
       latitude: latitude !== undefined && latitude !== '' ? Number(latitude) : undefined,
       longitude: longitude !== undefined && longitude !== '' ? Number(longitude) : undefined,
       instagram: req.body.instagram || '',
@@ -840,7 +855,8 @@ export const updateHospital = async (req, res) => {
       'name', 'email', 'address', 'city', 'state', 'zip', 'description',
       'rating', 'reviews', 'emergency24x7', 'establishedYear',
       'cashlessInsurance', 'insuranceHelpline', 'latitude', 'longitude',
-      'instagram', 'facebook', 'youtube', 'website', 'erCases', 'ambulances'
+      'instagram', 'facebook', 'youtube', 'website', 'erCases', 'ambulances',
+      'customPhotoCategories', 'faqPhone', 'faqTitle', 'faqSubtitle', 'faqTiming'
     ];
 
     allowedFields.forEach((field) => {
@@ -884,11 +900,13 @@ export const updateHospital = async (req, res) => {
     }
 
     // Publication Status & Verification Workflow
-    if (isAdmin) {
+    if (isAdmin || req.user?.role === 'hospital') {
       if (req.body.isVerified !== undefined) {
         hospital.isVerified = Boolean(req.body.isVerified);
         hospital.markModified('isVerified');
       }
+    }
+    if (isAdmin) {
       if (req.body.publicationStatus !== undefined && ['draft', 'pending_review', 'published', 'suspended'].includes(req.body.publicationStatus)) {
         hospital.publicationStatus = req.body.publicationStatus;
         hospital.markModified('publicationStatus');
@@ -1165,9 +1183,20 @@ export const updateHospital = async (req, res) => {
       hospital.star_doctors = uniqueStarDoctors;
       hospital.markModified('star_doctors');
     }
+    let sanitizedPhotos = null;
     if (req.body.photos !== undefined) {
-      const rawPhotos = Array.isArray(req.body.photos) ? req.body.photos : [];
-      const sanitizedPhotos = rawPhotos.map(p => {
+      let rawPhotos = [];
+      if (Array.isArray(req.body.photos)) {
+        rawPhotos = req.body.photos;
+      } else if (typeof req.body.photos === 'string') {
+        try {
+          const parsed = JSON.parse(req.body.photos);
+          if (Array.isArray(parsed)) rawPhotos = parsed;
+        } catch {
+          rawPhotos = [];
+        }
+      }
+      sanitizedPhotos = rawPhotos.map(p => {
         if (typeof p === 'string' && p.trim()) {
           return { url: p.trim(), title: 'Hospital Facility', category: 'Facility' };
         }
@@ -1203,6 +1232,30 @@ export const updateHospital = async (req, res) => {
       }
       hospital.photos = sanitizedPhotos;
       hospital.markModified('photos');
+
+      // Persist any custom written photo categories into hospital.customPhotoCategories
+      const standardCats = ['Exterior', 'Interior', 'Critical Care & ICU', 'Operation Theater (OT)', 'Patient Rooms & Suites', 'Radiology & Diagnostics', 'Emergency & Trauma', 'Reception & Lobby', 'Facility'];
+      const customCatsFromPhotos = sanitizedPhotos
+        .map(p => p.category)
+        .filter(c => c && !standardCats.includes(c));
+      const existingCustomCats = Array.isArray(hospital.customPhotoCategories) ? hospital.customPhotoCategories : [];
+      const incomingCustomCats = Array.isArray(req.body.customPhotoCategories)
+        ? req.body.customPhotoCategories
+        : (typeof req.body.customPhotoCategories === 'string'
+            ? req.body.customPhotoCategories.split(',').map(c => c.trim()).filter(Boolean)
+            : []);
+      const mergedCustomCats = Array.from(new Set([...existingCustomCats, ...customCatsFromPhotos, ...incomingCustomCats].map(c => String(c).trim()).filter(Boolean)));
+      hospital.customPhotoCategories = mergedCustomCats;
+      hospital.markModified('customPhotoCategories');
+    } else if (req.body.customPhotoCategories !== undefined) {
+      const incomingCustomCats = Array.isArray(req.body.customPhotoCategories)
+        ? req.body.customPhotoCategories
+        : (typeof req.body.customPhotoCategories === 'string'
+            ? req.body.customPhotoCategories.split(',').map(c => c.trim()).filter(Boolean)
+            : []);
+      const existingCustomCats = Array.isArray(hospital.customPhotoCategories) ? hospital.customPhotoCategories : [];
+      hospital.customPhotoCategories = Array.from(new Set([...existingCustomCats, ...incomingCustomCats].map(c => String(c).trim()).filter(Boolean)));
+      hospital.markModified('customPhotoCategories');
     }
     if (req.body.cashlessInsurance !== undefined) {
       hospital.cashlessInsurance = Boolean(req.body.cashlessInsurance);
@@ -1272,6 +1325,7 @@ export const updateHospital = async (req, res) => {
             fresh.showOnHome = Boolean(req.body.showOnHome);
             if (hospital.homeUpdatedAt) fresh.homeUpdatedAt = hospital.homeUpdatedAt;
           }
+          if (req.body.isVerified !== undefined) fresh.isVerified = Boolean(req.body.isVerified);
           if (isAdmin && req.body.publicationStatus !== undefined) fresh.publicationStatus = req.body.publicationStatus;
           if (isAdmin && req.body.status !== undefined) fresh.status = req.body.status;
           if (req.body.totalBeds !== undefined) fresh.totalBeds = Number(req.body.totalBeds);
@@ -1283,7 +1337,8 @@ export const updateHospital = async (req, res) => {
             const phoneValidation = normalizeAndValidatePhone(req.body.phone);
             if (phoneValidation.valid) fresh.phone = phoneValidation.normalized;
           }
-          if (req.body.photos !== undefined) fresh.photos = Array.isArray(req.body.photos) ? req.body.photos : [];
+          if (req.body.photos !== undefined) fresh.photos = sanitizedPhotos !== null ? sanitizedPhotos : (Array.isArray(req.body.photos) ? req.body.photos : []);
+          if (hospital.customPhotoCategories) fresh.customPhotoCategories = hospital.customPhotoCategories;
           if (req.body.specialities !== undefined) fresh.specialities = Array.isArray(req.body.specialities) ? req.body.specialities : [];
           else if (req.body.specialties !== undefined) fresh.specialities = Array.isArray(req.body.specialties) ? req.body.specialties : [];
           if (incomingImage !== undefined) fresh.image = incomingImage || '';

@@ -741,8 +741,22 @@ export const updateDoctor = async (req, res) => {
       }
 
       if (req.body.hospital !== undefined) {
+        const oldHospital = doctor.hospital;
         doctor.hospital = req.body.hospital;
         doctor.markModified('hospital');
+
+        if (req.body.hospital !== oldHospital) {
+          const docIdStr = doctor._id.toString();
+          const docId = doctor.id || docIdStr;
+          Hospital.updateMany(
+            { name: { $ne: req.body.hospital } },
+            {
+              $pull: {
+                star_doctors: { $in: [docIdStr, docId, doctor._id] }
+              }
+            }
+          ).catch(() => {});
+        }
       }
 
       if (req.body.degree !== undefined || req.body.qualifications !== undefined) {

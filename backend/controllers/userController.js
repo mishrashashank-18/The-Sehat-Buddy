@@ -438,6 +438,33 @@ export const bookHospitalAppointment = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Hospital ID, date, and time slot are required' });
     }
 
+    if (!symptoms || !String(symptoms).trim()) {
+      return res.status(400).json({ success: false, message: 'Symptoms or reason for hospital visit is required' });
+    }
+
+    // Check if requested time slot has already passed for today
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${yyyy}-${mm}-${dd}`;
+    if (slotDate < todayStr) {
+      return res.status(400).json({ success: false, message: `The date ${slotDate} is in the past. Please choose today or an upcoming date.` });
+    }
+    if (slotDate === todayStr) {
+      const match = String(slotTime).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+      if (match) {
+        let h = parseInt(match[1], 10);
+        const m = parseInt(match[2], 10);
+        const period = (match[3] || 'AM').toUpperCase();
+        if (period === 'PM' && h < 12) h += 12;
+        if (period === 'AM' && h === 12) h = 0;
+        if ((h * 60 + m) <= (now.getHours() * 60 + now.getMinutes())) {
+          return res.status(400).json({ success: false, message: `The time slot ${slotTime} has already passed for today. Please select an upcoming slot.` });
+        }
+      }
+    }
+
     let hospital = null;
     if (mongoose.Types.ObjectId.isValid(hospitalId)) {
       hospital = await Hospital.findById(hospitalId);
@@ -503,6 +530,33 @@ export const bookHospitalAppointment = async (req, res) => {
     const hospitalName = hospital?.name || 'Hospital Center';
     const hospitalAddress = hospital?.address || '';
 
+    // Enforce: One person can only book ONE appointment per day
+    const sameDayConditions = [];
+    if (clientPhone && clientPhone !== 'N/A') {
+      sameDayConditions.push({ 'userData.phone': clientPhone });
+    }
+    if (clientEmail) {
+      sameDayConditions.push({ 'userData.email': clientEmail });
+    }
+    if (user && user._id) {
+      sameDayConditions.push({ userId: user._id.toString() });
+    }
+
+    if (sameDayConditions.length > 0) {
+      const existingPersonBookingToday = await Appointment.findOne({
+        slotDate,
+        cancelled: { $ne: true },
+        status: { $ne: 'Cancelled' },
+        $or: sameDayConditions
+      });
+      if (existingPersonBookingToday) {
+        return res.status(400).json({
+          success: false,
+          message: `An active appointment is already booked for ${clientName} on ${slotDate} at ${existingPersonBookingToday.slotTime}. Only one booking per person per day is allowed.`
+        });
+      }
+    }
+
     const newAppointment = await Appointment.create({
       userId: user ? user._id.toString() : `guest_${Date.now()}`,
       hospitalId: hospital ? hospital._id.toString() : hospitalId,
@@ -511,6 +565,8 @@ export const bookHospitalAppointment = async (req, res) => {
       slotTime,
       department: department || 'General Medicine',
       appointmentType: 'hospital',
+      age: clientAge,
+      gender: clientGender,
       userData: {
         _id: user ? user._id.toString() : null,
         name: clientName,
@@ -518,7 +574,7 @@ export const bookHospitalAppointment = async (req, res) => {
         phone: clientPhone,
         age: clientAge,
         gender: clientGender,
-        symptoms: (symptoms || 'Hospital OPD Consultation').trim()
+        symptoms: symptoms.trim()
       },
       hospitalData: {
         _id: hospital ? hospital._id.toString() : hospitalId,
@@ -531,10 +587,14 @@ export const bookHospitalAppointment = async (req, res) => {
       docData: docData,
       amount: 0,
       status: 'Confirmed',
-      symptoms: (symptoms || 'Hospital OPD Consultation').trim(),
+      symptoms: symptoms.trim(),
       consultationType: consultationType || 'Hospital OPD Visit',
       date: Date.now()
     });
+
+    if (user && clientAge && !user.age) {
+      User.findByIdAndUpdate(user._id, { age: clientAge, ...(clientGender ? { gender: clientGender } : {}) }).catch(() => {});
+    }
 
     if (clientEmail) {
       sendEmail({

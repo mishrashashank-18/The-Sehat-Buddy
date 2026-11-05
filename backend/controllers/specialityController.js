@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import SpecialityProcedure from '../models/SpecialityProcedure.js';
 import { broadcastDbChange } from '../services/storageMonitor.js';
 
@@ -242,6 +243,8 @@ export const createSpecialityProcedure = async (req, res) => {
     const {
       name,
       type,
+      hospitalId,
+      hospitalName,
       icon,
       description,
       isPopular,
@@ -258,6 +261,8 @@ export const createSpecialityProcedure = async (req, res) => {
     const item = await SpecialityProcedure.create({
       name,
       type,
+      hospitalId: hospitalId || '',
+      hospitalName: hospitalName || '',
       icon: icon || 'Bot',
       description: description || '',
       isPopular: isPopular !== undefined ? isPopular : true,
@@ -281,13 +286,44 @@ export const createSpecialityProcedure = async (req, res) => {
   }
 };
 
+const findSpecialityItem = async (paramId) => {
+  if (!paramId) return null;
+  const cleanId = String(paramId).trim();
+  if (mongoose.Types.ObjectId.isValid(cleanId)) {
+    const byMongoId = await SpecialityProcedure.findById(cleanId);
+    if (byMongoId) return byMongoId;
+  }
+  return await SpecialityProcedure.findOne({
+    $or: [
+      { id: cleanId },
+      { name: new RegExp(`^${cleanId}$`, 'i') }
+    ]
+  });
+};
+
 export const updateSpecialityProcedure = async (req, res) => {
   try {
-    const item = await SpecialityProcedure.findById(req.params.id);
+    const item = await findSpecialityItem(req.params.id);
     if (!item) {
       return res.status(404).json({ success: false, message: 'Speciality / Procedure not found' });
     }
-    Object.assign(item, req.body);
+    if (req.body.name !== undefined) item.name = String(req.body.name).trim();
+    if (req.body.type !== undefined) item.type = req.body.type;
+    if (req.body.icon !== undefined) item.icon = req.body.icon;
+    if (req.body.description !== undefined) item.description = req.body.description;
+    if (req.body.hospitalId !== undefined) item.hospitalId = req.body.hospitalId;
+    if (req.body.hospitalName !== undefined) item.hospitalName = req.body.hospitalName;
+    if (req.body.isPopular !== undefined) item.isPopular = Boolean(req.body.isPopular);
+    if (req.body.order !== undefined) item.order = Number(req.body.order);
+    if (req.body.insuranceCovered !== undefined) item.insuranceCovered = Boolean(req.body.insuranceCovered);
+    if (req.body.insuranceDetails !== undefined) {
+      item.insuranceDetails = { ...item.insuranceDetails, ...req.body.insuranceDetails };
+      item.markModified('insuranceDetails');
+    }
+    if (req.body.procedures !== undefined && Array.isArray(req.body.procedures)) {
+      item.procedures = req.body.procedures;
+      item.markModified('procedures');
+    }
     const updated = await item.save();
     broadcastDbChange('specialityprocedures', 'update', updated._id, updated);
     res.json({ success: true, message: 'Updated successfully', data: updated });
@@ -298,7 +334,7 @@ export const updateSpecialityProcedure = async (req, res) => {
 
 export const deleteSpecialityProcedure = async (req, res) => {
   try {
-    const item = await SpecialityProcedure.findById(req.params.id);
+    const item = await findSpecialityItem(req.params.id);
     if (!item) {
       return res.status(404).json({ success: false, message: 'Speciality / Procedure not found' });
     }

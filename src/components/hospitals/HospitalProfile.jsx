@@ -846,6 +846,16 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
     (h.email && String(hospitalId).includes('@') && h.email.toLowerCase() === String(hospitalId).toLowerCase())
   ) || hospitals[0];
 
+  const hospitalSpecialtiesList = useMemo(() => {
+    if (Array.isArray(hospital?.specialties) && hospital.specialties.length > 0) {
+      return hospital.specialties.filter(Boolean);
+    }
+    if (Array.isArray(hospital?.specialities) && hospital.specialities.length > 0) {
+      return hospital.specialities.filter(Boolean);
+    }
+    return [];
+  }, [hospital?.specialties, hospital?.specialities]);
+
   // Gallery Photos for Slider & Showcase
   const defaultFacilityPhotos = useMemo(() => [
     {
@@ -951,18 +961,6 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
   const [showReviewLoginPrompt, setShowReviewLoginPrompt] = useState(false);
 
   const handleOpenBooking = (dept = null) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    let userObj = null;
-    try {
-      const u = localStorage.getItem('user');
-      if (u) userObj = JSON.parse(u);
-    } catch {}
-
-    if (!token && !userObj && !user) {
-      setPreselectedDept(dept);
-      setShowLoginPrompt(true);
-      return;
-    }
     setPreselectedDept(dept);
     setIsBookingModalOpen(true);
   };
@@ -1126,6 +1124,10 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
       // 1. Check if matching doctor exists in global doctors collection
       const matchedGlobal = (doctors || []).find(d => isDoctorInStarList(d, [sd]));
       if (matchedGlobal) {
+        // STRICT GUARD: If doctor has been moved to a different hospital, exclude them
+        if (!isDoctorAffiliatedWithHospital(matchedGlobal, hospital)) {
+          return null;
+        }
         return {
           ...matchedGlobal,
           id: matchedGlobal._id || matchedGlobal.id,
@@ -1138,6 +1140,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
 
       // 2. If sd is already a populated doctor object from backend
       if (typeof sd === 'object' && sd !== null && (sd._id || sd.id || sd.name)) {
+        if (!isDoctorAffiliatedWithHospital(sd, hospital)) {
+          return null;
+        }
         return {
           ...sd,
           id: sd._id || sd.id,
@@ -1334,7 +1339,7 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                 </div>
                 <div className={styles.contactItemText}>
                   <span className={styles.contactLabel}>Availability</span>
-                  <strong>24x7 Emergency Ready</strong>
+                  <strong>{hospital.emergency24x7 ? '24x7 Emergency Ready' : 'Standard Working Hours'}</strong>
                 </div>
               </div>
             </div>
@@ -1370,8 +1375,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     </button>
                   )}
                 </div>
-                <div className={styles.verifiedPill}>
-                  <ShieldCheck size={15} /> {hospital.isVerified !== false ? 'Verified Healthcare Partner' : 'Standard Healthcare Listing'}
+                <div className={hospital.isVerified ? styles.verifiedPill : styles.verifiedPillUnverified}>
+                  <ShieldCheck size={15} color={hospital.isVerified ? '#0284c7' : '#64748b'} />
+                  <span>{hospital.isVerified ? 'Verified Healthcare Partner' : 'Standard Healthcare Listing'}</span>
                 </div>
               </div>
               <div className={styles.rating}>
@@ -1403,9 +1409,9 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                     <Bed size={16} />
                     <span>{hospital.totalBeds || 100} Inpatient Beds</span>
                   </div>
-                  <div className={styles.statPillEmergency}>
-                    <Clock size={16} />
-                    <span>{hospital.emergency24x7 !== false ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
+                  <div className={hospital.emergency24x7 ? styles.statPillEmergencyActive : styles.statPillEmergencyRestricted}>
+                    <Clock size={16} color={hospital.emergency24x7 ? '#16a34a' : '#dc2626'} />
+                    <span>{hospital.emergency24x7 ? '24x7 Trauma & ER Ready' : 'Emergency Restricted'}</span>
                   </div>
                   <div className={styles.statPillEst}>
                     <Calendar size={16} />
@@ -1455,28 +1461,25 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
               </div>
             </div>
 
-            <div className={styles.specialtiesSection}>
-              <div className={styles.sectionSubLabel}>DEPARTMENTS & KEY SPECIALTIES</div>
-              <div className={styles.specialtiesWrap}>
-                {(hospital.specialties && hospital.specialties.length > 0
-                  ? hospital.specialties
-                  : (hospital.specialities && hospital.specialities.length > 0
-                      ? hospital.specialities
-                      : ['Cardiology', 'Neurology', 'Orthopedics', 'Nephrology', 'General Surgery'])
-                ).map((spec, i) => (
-                  <span
-                    key={i}
-                    className={styles.modernSpecBadge}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => handleOpenBooking(spec)}
-                    title={`Click to book appointment in ${spec}`}
-                  >
-                    <Stethoscope size={13} className={styles.specIcon} />
-                    <span>{spec}</span>
-                  </span>
-                ))}
+            {hospitalSpecialtiesList.length > 0 && (
+              <div className={styles.specialtiesSection}>
+                <div className={styles.sectionSubLabel}>DEPARTMENTS & KEY SPECIALTIES</div>
+                <div className={styles.specialtiesWrap}>
+                  {hospitalSpecialtiesList.map((spec, i) => (
+                    <span
+                      key={i}
+                      className={styles.modernSpecBadge}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleOpenBooking(spec)}
+                      title={`Click to book appointment in ${spec}`}
+                    >
+                      <Stethoscope size={13} className={styles.specIcon} />
+                      <span>{spec}</span>
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className={styles.aboutBox}>
               <div className={styles.sectionSubLabel}>ABOUT THIS FACILITY</div>
@@ -1537,13 +1540,15 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
             </button>
           )}
 
-          <button
-            type="button"
-            className={`${styles.practoNavTab} ${activeProfileTab === 'specialities' ? styles.practoNavTabActive : ''}`}
-            onClick={() => scrollToHospitalSection('hospital-specialities', 'specialities')}
-          >
-            Specialities & Procedures
-          </button>
+          {hospitalSpecialtiesList.length > 0 && (
+            <button
+              type="button"
+              className={`${styles.practoNavTab} ${activeProfileTab === 'specialities' ? styles.practoNavTabActive : ''}`}
+              onClick={() => scrollToHospitalSection('hospital-specialities', 'specialities')}
+            >
+              Specialities & Procedures
+            </button>
+          )}
 
           {(displayVideos.length > 0 || displayReels.length > 0) && (
             <button
@@ -1669,9 +1674,11 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
         )}
 
         {/* SECTION 2: SPECIALITIES & CLINICAL PROCEDURES */}
-        <div id="hospital-specialities">
-          <SpecialitiesProceduresSection onNavigate={onNavigate} />
-        </div>
+        {hospitalSpecialtiesList.length > 0 && (
+          <div id="hospital-specialities">
+            <SpecialitiesProceduresSection onNavigate={onNavigate} hospital={hospital} />
+          </div>
+        )}
 
         {/* SECTION 3: INSTAGRAM REELS */}
         {parsedReels.length > 0 && (
@@ -1810,18 +1817,18 @@ const HospitalProfile = ({ hospitalId, onNavigate }) => {
                       <MessageSquare size={18} color="#2563eb" />
                     </div>
                     <div>
-                      <h4 className={styles.faqSupportTitle}>Have a Specific Question?</h4>
-                      <p className={styles.faqSupportSub}>Our hospital care desk can assist with admissions, insurance or appointments.</p>
+                      <h4 className={styles.faqSupportTitle}>{hospital.faqTitle || 'Have a Specific Question?'}</h4>
+                      <p className={styles.faqSupportSub}>{hospital.faqSubtitle || 'Our hospital care desk can assist with admissions, insurance or appointments.'}</p>
                     </div>
                   </div>
                   <div className={styles.faqSupportActions}>
-                    <a href={`tel:${hospital.phone || '+911800123456'}`} className={styles.faqSupportPhoneBtn}>
+                    <a href={`tel:${hospital.faqPhone || hospital.phone || '+911800123456'}`} className={styles.faqSupportPhoneBtn}>
                       <Phone size={14} />
-                      <span>Call Hospital: {hospital.phone || '+91 1800 123 456'}</span>
+                      <span>{hospital.faqPhone ? `Call FAQ Desk: ${hospital.faqPhone}` : `Call Hospital: ${hospital.phone || '+91 1800 123 456'}`}</span>
                     </a>
                     <div className={styles.faqSupportHours}>
                       <Clock size={12} color="#64748b" />
-                      <span>24x7 Helpline Available</span>
+                      <span>{hospital.faqTiming || '24x7 Helpline Available'}</span>
                     </div>
                   </div>
                 </div>

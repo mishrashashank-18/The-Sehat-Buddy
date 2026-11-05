@@ -18,7 +18,7 @@ import InsuranceCheckModal from '../insurance/InsuranceCheckModal';
 import styles from './SpecialitiesProceduresSection.module.css';
 
 // Dynamic category theme mapping for rich visual cues and pastel tints
-const getItemTheme = (item) => {
+export const getItemTheme = (item) => {
   const name = (item?.name || '').toLowerCase();
   const icon = (item?.icon || '').toLowerCase();
 
@@ -133,7 +133,7 @@ const getItemTheme = (item) => {
 };
 
 // Premium high-fidelity SVG icons with colored strokes
-const RenderMedicalIcon = ({ iconType, color = '#2563eb', size = 26 }) => {
+export const RenderMedicalIcon = ({ iconType, color = '#2563eb', size = 26 }) => {
   const norm = (iconType || '').toLowerCase();
 
   if (norm.includes('bot') || norm.includes('robotic')) {
@@ -234,7 +234,7 @@ const RenderMedicalIcon = ({ iconType, color = '#2563eb', size = 26 }) => {
   );
 };
 
-const SpecialitiesProceduresSection = ({ onNavigate }) => {
+const SpecialitiesProceduresSection = ({ onNavigate, hospital = null }) => {
   const { specialitiesProcedures } = useData();
   const [activeTab, setActiveTab] = useState('specialities'); // 'specialities' | 'procedures'
   const [searchQuery, setSearchQuery] = useState('');
@@ -243,13 +243,56 @@ const SpecialitiesProceduresSection = ({ onNavigate }) => {
   const [isInsuranceModalOpen, setIsInsuranceModalOpen] = useState(false);
   const [insurancePreSelect, setInsurancePreSelect] = useState(null);
 
+  // When attached to a specific hospital profile, filter by its configured specialties
+  const hospitalSpecialties = useMemo(() => {
+    if (!hospital) return null;
+    const raw = Array.isArray(hospital.specialties) && hospital.specialties.length > 0
+      ? hospital.specialties
+      : (Array.isArray(hospital.specialities) && hospital.specialities.length > 0
+          ? hospital.specialities
+          : []);
+    return raw.map(s => String(s || '').trim()).filter(Boolean);
+  }, [hospital?.specialties, hospital?.specialities]);
+
   const specialitiesList = useMemo(() => {
-    return (specialitiesProcedures || []).filter(item => item.type === 'speciality');
-  }, [specialitiesProcedures]);
+    const all = (specialitiesProcedures || []).filter(item => item.type === 'speciality');
+    const hospId = String(hospital?.id || hospital?._id || '');
+    const hospitalSpecific = all.filter(item => hospId && String(item.hospitalId || '') === hospId);
+
+    if (hospitalSpecific.length > 0) {
+      const globalCatalog = all.filter(item => !item.hospitalId);
+      const combined = [...hospitalSpecific];
+      const names = new Set(hospitalSpecific.map(i => i.name.toLowerCase()));
+      globalCatalog.forEach(item => {
+        if (!names.has(item.name.toLowerCase())) {
+          combined.push(item);
+        }
+      });
+      return combined;
+    }
+
+    return all;
+  }, [specialitiesProcedures, hospital?.id, hospital?._id]);
 
   const proceduresList = useMemo(() => {
-    return (specialitiesProcedures || []).filter(item => item.type === 'procedure');
-  }, [specialitiesProcedures]);
+    const all = (specialitiesProcedures || []).filter(item => item.type === 'procedure');
+    const hospId = String(hospital?.id || hospital?._id || '');
+    const hospitalSpecific = all.filter(item => hospId && String(item.hospitalId || '') === hospId);
+
+    if (hospitalSpecific.length > 0) {
+      const globalCatalog = all.filter(item => !item.hospitalId);
+      const combined = [...hospitalSpecific];
+      const names = new Set(hospitalSpecific.map(i => i.name.toLowerCase()));
+      globalCatalog.forEach(item => {
+        if (!names.has(item.name.toLowerCase())) {
+          combined.push(item);
+        }
+      });
+      return combined;
+    }
+
+    return all;
+  }, [specialitiesProcedures, hospital?.id, hospital?._id]);
 
   const currentRawList = activeTab === 'specialities' ? specialitiesList : proceduresList;
 

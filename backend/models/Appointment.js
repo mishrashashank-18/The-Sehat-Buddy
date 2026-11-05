@@ -6,6 +6,8 @@ const appointmentSchema = new mongoose.Schema({
   hospitalId: { type: String, required: false, index: true },
   slotDate: { type: String, required: true },
   slotTime: { type: String, required: true },
+  age: { type: Number, default: null },
+  gender: { type: String, default: null },
   userData: { type: Object, required: true },
   docData: { type: Object, default: null },
   hospitalData: { type: Object, default: null },

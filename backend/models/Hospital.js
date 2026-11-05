@@ -65,6 +65,7 @@ const hospitalSchema = new mongoose.Schema({
     category: { type: String, default: 'facility' },
     createdAt: { type: Date, default: Date.now }
   }],
+  customPhotoCategories: [{ type: String, trim: true }],
   star_doctors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],
   staff_emails: [{ type: String }],
   staff_doctors: [{
@@ -79,6 +80,10 @@ const hospitalSchema = new mongoose.Schema({
     preAuthTime: { type: String, default: '' }
   },
   insuranceHelpline: { type: String, default: '' },
+  faqPhone: { type: String, default: '' },
+  faqTitle: { type: String, default: '' },
+  faqSubtitle: { type: String, default: '' },
+  faqTiming: { type: String, default: '' },
   latitude: { type: Number },
   longitude: { type: Number },
   erCases: { type: [mongoose.Schema.Types.Mixed], default: [] },

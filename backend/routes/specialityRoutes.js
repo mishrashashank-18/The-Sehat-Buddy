@@ -5,13 +5,14 @@ import {
   updateSpecialityProcedure,
   deleteSpecialityProcedure
 } from '../controllers/specialityController.js';
-import { protect, requireAdmin } from '../middleware/authMiddleware.js';
+import { protect, requireRole } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+const requireHospitalOrAdmin = requireRole('admin', 'hospital');
 
 router.get('/', getSpecialitiesProcedures);
-router.post('/', protect, requireAdmin, createSpecialityProcedure);
-router.put('/:id', protect, requireAdmin, updateSpecialityProcedure);
-router.delete('/:id', protect, requireAdmin, deleteSpecialityProcedure);
+router.post('/', protect, requireHospitalOrAdmin, createSpecialityProcedure);
+router.put('/:id', protect, requireHospitalOrAdmin, updateSpecialityProcedure);
+router.delete('/:id', protect, requireHospitalOrAdmin, deleteSpecialityProcedure);
 
 export default router;
