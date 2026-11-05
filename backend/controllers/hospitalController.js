@@ -1086,10 +1086,13 @@ export const updateHospital = async (req, res) => {
                       folder: 'sehatbuddy/reels'
                     });
                     if (cldRes && cldRes.secure_url) {
+                      const posterUrl = cldRes.secure_url.includes('/video/upload/')
+                        ? cldRes.secure_url.replace('/video/upload/', '/video/upload/so_0/').replace(/\.[^/.]+$/, '.jpg')
+                        : cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg');
                       updatedReels[i] = {
                         url: cldRes.secure_url,
                         // Preserve explicit empty coverPhoto if admin removed it
-                        coverPhoto: (curCover === '' ? '' : (curCover || cldRes.secure_url.replace(/\.[^/.]+$/, '.jpg')))
+                        coverPhoto: (curCover === '' ? '' : (curCover || posterUrl))
                       };
                       changed = true;
                     }

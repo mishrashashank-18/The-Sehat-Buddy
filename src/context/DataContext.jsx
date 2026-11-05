@@ -719,6 +719,9 @@ export const DataProvider = ({ children }) => {
             localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(mapped));
             broadcastSync(STORAGE_KEY_HOSPITALS, mapped);
           } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: mapped }));
+          }
           return mapped;
         });
       }
@@ -1059,14 +1062,19 @@ export const DataProvider = ({ children }) => {
                     localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
                     broadcastSync(STORAGE_KEY_HOSPITALS, updated);
                   } catch {}
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: updated }));
+                  }
                   return updated;
                 });
               } else if (payload.docId && payload.fullDocument) {
                 const hospData = payload.fullDocument;
                 setHospitals(prev => {
                   let hasDiff = false;
+                  let exists = false;
                   const updated = prev.map(h => {
                     if (matchesId(h, payload.docId)) {
+                      exists = true;
                       const currentHomeTs = Number(h.homeUpdatedAt || 0);
                       const incomingHomeTs = Number(hospData.homeUpdatedAt || 0);
                       const keepCurrentHome = currentHomeTs > incomingHomeTs && h.showOnHome !== undefined;
@@ -1093,12 +1101,15 @@ export const DataProvider = ({ children }) => {
                     }
                     return h;
                   });
-                  if (!hasDiff) return prev;
+                  const finalUpdated = exists ? updated : [{ ...hospData, id: hospData.id || hospData._id, _id: hospData._id || hospData.id }, ...prev];
                   try {
-                    localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(updated));
-                    broadcastSync(STORAGE_KEY_HOSPITALS, updated);
+                    localStorage.setItem(STORAGE_KEY_HOSPITALS, JSON.stringify(finalUpdated));
+                    broadcastSync(STORAGE_KEY_HOSPITALS, finalUpdated);
                   } catch {}
-                  return updated;
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: finalUpdated }));
+                  }
+                  return finalUpdated;
                 });
               } else {
                 refreshHospitals();
@@ -1385,7 +1396,12 @@ export const DataProvider = ({ children }) => {
           window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: data }));
         }
       }
-      else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data) && data.length > 0) setHospitals(prev => (isSame(prev, data) ? prev : data));
+      else if (key === STORAGE_KEY_HOSPITALS && Array.isArray(data) && data.length > 0) {
+        setHospitals(prev => (isSame(prev, data) ? prev : data));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: data }));
+        }
+      }
       else if (key === STORAGE_KEY_BRANDING && typeof data === 'object') setBranding(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_HERO && typeof data === 'object') setHeroContent(prev => (isSame(prev, data) ? prev : data));
       else if (key === STORAGE_KEY_SERVICES && Array.isArray(data)) setServices(prev => (isSame(prev, data) ? prev : data));
@@ -1414,7 +1430,12 @@ export const DataProvider = ({ children }) => {
             window.dispatchEvent(new CustomEvent('sehat_doctors_updated', { detail: parsed }));
           }
         }
-        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed) && parsed.length > 0) setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
+        else if (e.key === STORAGE_KEY_HOSPITALS && Array.isArray(parsed) && parsed.length > 0) {
+          setHospitals(prev => (isSame(prev, parsed) ? prev : parsed));
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: parsed }));
+          }
+        }
         else if (e.key === STORAGE_KEY_BRANDING) setBranding(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_HERO) setHeroContent(prev => (isSame(prev, parsed) ? prev : parsed));
         else if (e.key === STORAGE_KEY_SERVICES && Array.isArray(parsed)) setServices(prev => (isSame(prev, parsed) ? prev : parsed));
@@ -2060,6 +2081,9 @@ export const DataProvider = ({ children }) => {
         localStorage.setItem(STORAGE_KEY_HOSPITALS, serialized);
         broadcastSync(STORAGE_KEY_HOSPITALS, nextList);
       } catch {}
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: nextList }));
+      }
       return nextList;
     });
 
@@ -2106,6 +2130,9 @@ export const DataProvider = ({ children }) => {
             localStorage.setItem(STORAGE_KEY_HOSPITALS, serialized);
             broadcastSync(STORAGE_KEY_HOSPITALS, synced);
           } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('sehat_hospitals_updated', { detail: synced }));
+          }
           return synced;
         });
         try {

@@ -7,7 +7,24 @@ import { getHospitalRatingStats } from '../../utils/hospitalReviewUtils';
 import styles from './TopHospitals.module.css';
 
 const TopHospitals = ({ onNavigate }) => {
-  const { hospitals, reviews } = useData();
+  const { hospitals, reviews, refreshHospitals } = useData();
+  const [, setTick] = React.useState(0);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onUpdate = (e) => {
+      if (e?.detail?.collection === 'hospitals' && typeof refreshHospitals === 'function') {
+        refreshHospitals();
+      }
+      setTick(t => t + 1);
+    };
+    window.addEventListener('sehat_hospitals_updated', onUpdate);
+    window.addEventListener('sehat_db_change', onUpdate);
+    return () => {
+      window.removeEventListener('sehat_hospitals_updated', onUpdate);
+      window.removeEventListener('sehat_db_change', onUpdate);
+    };
+  }, [refreshHospitals]);
 
   const allHospitals = hospitals && hospitals.length > 0 ? hospitals : [];
   const totalHospitalsCount = allHospitals.filter(h => !h.publicationStatus || h.publicationStatus === 'published').length || allHospitals.length;

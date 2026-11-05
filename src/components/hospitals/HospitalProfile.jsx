@@ -241,6 +241,7 @@ const SocialInstagramIcon = ({ size = 18 }) => (
     <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
   </svg>
 );
+const Instagram = SocialInstagramIcon;
 
 const SocialFacebookIcon = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -327,12 +328,12 @@ export const getCloudinaryVideoPoster = (url) => {
   if (idx === -1) return '';
   const prefix = url.substring(0, idx + '/video/upload/'.length);
   const remainder = url.substring(idx + '/video/upload/'.length);
-  const versionMatch = remainder.match(/(v\d+\/.+?)\.(mp4|webm|mov|m4v)(\?.*)?$/i);
+  const versionMatch = remainder.match(/(v\d+\/.+?)(\.[^/.]+)?(\?.*)?$/i);
   if (versionMatch) {
     return prefix + 'so_0/' + versionMatch[1] + '.jpg';
   }
-  const pathMatch = remainder.replace(/^[^/]+\//, '').replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, '.jpg');
-  return prefix + 'so_0/' + pathMatch;
+  const clean = remainder.replace(/^[^/]+\//, '').replace(/(\.[^/.]*)?(\?.*)?$/i, '.jpg');
+  return prefix + 'so_0/' + clean;
 };
 
 const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
@@ -356,8 +357,11 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
   const [directVideoUrl, setDirectVideoUrl] = useState(() => (isDirect ? rawUrl : ''));
 
   const cloudinaryPoster = getCloudinaryVideoPoster(rawUrl);
-  const isInternalProxyCover = coverPhoto && (coverPhoto.includes('reel-cover') || coverPhoto.startsWith('api/') || coverPhoto.startsWith('/api/'));
-  const customCover = (!isBrokenInstagramDirectUrl && !isInternalProxyCover && coverPhoto) ? coverPhoto : '';
+  const cleanedCustomCover = (coverPhoto && coverPhoto.includes('cloudinary.com') && coverPhoto.includes('/video/upload/'))
+    ? getCloudinaryVideoPoster(coverPhoto)
+    : coverPhoto;
+  const isInternalProxyCover = cleanedCustomCover && (cleanedCustomCover.includes('reel-cover') || cleanedCustomCover.startsWith('api/') || cleanedCustomCover.startsWith('/api/'));
+  const customCover = (!isBrokenInstagramDirectUrl && !isInternalProxyCover && cleanedCustomCover) ? cleanedCustomCover : '';
   const fallbackProxyCover = rawUrl && rawUrl.includes('instagram.com')
     ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawUrl)}` : `/api/reel-cover?url=${encodeURIComponent(rawUrl)}`)
     : '';
@@ -398,12 +402,19 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
 
     if (enterTimerRef.current) clearTimeout(enterTimerRef.current);
     enterTimerRef.current = setTimeout(() => {
-      if (!isHoveredRef.current || !videoRef.current || videoError) return;
+      if (!isHoveredRef.current || !videoRef.current) return;
       setHasStarted(true);
+      setVideoError(false);
       if (!isPlaying) {
         setIsLoading(true);
       }
-      const playPromise = videoRef.current.play();
+
+      const v = videoRef.current;
+      v.muted = true;
+      v.defaultMuted = true;
+      v.playsInline = true;
+
+      const playPromise = v.play();
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
@@ -423,7 +434,7 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
             setIsLoading(false);
           });
       }
-    }, 90);
+    }, 40);
   };
 
   const handleMouseLeave = () => {
@@ -442,7 +453,7 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
           videoRef.current.currentTime = 0;
         } catch {}
       }
-    }, 100);
+    }, 60);
   };
 
   useEffect(() => {
@@ -468,13 +479,19 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
       {/* Hover Video Element at z-index 1 */}
       {videoSrc && !videoError && (
         <video
-          ref={videoRef}
+          ref={(el) => {
+            videoRef.current = el;
+            if (el) {
+              el.muted = true;
+              el.defaultMuted = true;
+            }
+          }}
           src={videoSrc}
           poster={effectiveCover || ''}
           muted
           playsInline
           loop
-          preload="metadata"
+          preload="auto"
           className={styles.reelHoverVideo}
           style={{
             position: 'absolute',
@@ -485,8 +502,20 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
             zIndex: 1,
             pointerEvents: 'none'
           }}
+          onPlay={() => {
+            if (isHoveredRef.current) {
+              setIsPlaying(true);
+              setIsLoading(false);
+            }
+          }}
           onPlaying={() => {
             if (isHoveredRef.current) {
+              setIsPlaying(true);
+              setIsLoading(false);
+            }
+          }}
+          onTimeUpdate={() => {
+            if (isHoveredRef.current && !isPlaying) {
               setIsPlaying(true);
               setIsLoading(false);
             }
@@ -550,7 +579,7 @@ const HospitalReelCard = React.memo(({ reelItem, idx, onOpen }) => {
       <div className={styles.reelGradientScrim} style={{ zIndex: 3, pointerEvents: 'none' }} />
 
       <div className={styles.reelTopBadge} style={{ zIndex: 4, pointerEvents: 'none' }}>
-        <Instagram size={14} />
+        <SocialInstagramIcon size={14} />
         <span>{isPlaying ? 'Playing' : 'Reel'}</span>
       </div>
     </div>
@@ -568,7 +597,9 @@ const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
 
   const customModalCover = typeof activeReel === 'object' ? (activeReel.coverPhoto || activeReel.primaryCover || '') : '';
   const isInternalModalProxy = customModalCover && (customModalCover.includes('reel-cover') || customModalCover.startsWith('api/') || customModalCover.startsWith('/api/'));
-  const cleanModalCover = (!isInternalModalProxy && customModalCover) ? customModalCover : '';
+  const cleanModalCover = (!isInternalModalProxy && customModalCover)
+    ? ((customModalCover.includes('cloudinary.com') && customModalCover.includes('/video/upload/')) ? getCloudinaryVideoPoster(customModalCover) : customModalCover)
+    : '';
   const cloudinaryModalPoster = getCloudinaryVideoPoster(rawTarget);
   const fallbackModalCover = rawTarget && rawTarget.includes('instagram.com')
     ? (API_BASE.startsWith('http') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(rawTarget)}` : `/api/reel-cover?url=${encodeURIComponent(rawTarget)}`)
@@ -777,7 +808,32 @@ const HospitalReelModalPlayer = ({ activeReel, onClose }) => {
 };
 
 const HospitalProfile = ({ hospitalId, onNavigate }) => {
-  const { hospitals, doctors, reviews, refreshReviews, deleteReview, faqs, faqSymbols = [], user } = useData();
+  const { hospitals, refreshHospitals, doctors, reviews, refreshReviews, deleteReview, faqs, faqSymbols = [], user } = useData();
+
+  // Instant real-time inter-tab & SSE listener for hospital updates (from Admin or Hospital Dashboard)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleRealtimeHospitalUpdate = (e) => {
+      const detail = e.detail;
+      if (detail && detail.collection === 'hospitals') {
+        const targetId = detail.docId || detail.fullDocument?._id || detail.fullDocument?.id;
+        if (matchesId({ _id: hospitalId, id: hospitalId }, targetId)) {
+          if (typeof refreshHospitals === 'function') {
+            refreshHospitals();
+          }
+        }
+      }
+    };
+
+    window.addEventListener('sehat_db_change', handleRealtimeHospitalUpdate);
+    window.addEventListener('sehat_hospitals_updated', handleRealtimeHospitalUpdate);
+
+    return () => {
+      window.removeEventListener('sehat_db_change', handleRealtimeHospitalUpdate);
+      window.removeEventListener('sehat_hospitals_updated', handleRealtimeHospitalUpdate);
+    };
+  }, [hospitalId, refreshHospitals]);
 
   const isAdmin = useMemo(() => {
     try {

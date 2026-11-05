@@ -186,6 +186,23 @@ const InstagramIcon = ({ size = 16, color = 'currentColor' }) => (
   </svg>
 );
 
+const normalizeReelCoverUrl = (coverUrl, videoUrl = '') => {
+  const target = coverUrl || videoUrl || '';
+  if (!target || typeof target !== 'string') return '';
+  if (target.includes('cloudinary.com') && target.includes('/video/upload/')) {
+    const idx = target.indexOf('/video/upload/');
+    const prefix = target.substring(0, idx + '/video/upload/'.length);
+    const remainder = target.substring(idx + '/video/upload/'.length);
+    const versionMatch = remainder.match(/(v\d+\/.+?)(\.[^/.]+)?(\?.*)?$/i);
+    if (versionMatch) {
+      return prefix + 'so_0/' + versionMatch[1] + '.jpg';
+    }
+    const clean = remainder.replace(/^[^/]+\//, '').replace(/(\.[^/.]*)?(\?.*)?$/i, '.jpg');
+    return prefix + 'so_0/' + clean;
+  }
+  return target;
+};
+
 // Helper to reliably parse reels whether stored as array of objects, array of strings, or whitespace/comma-delimited string
 const parseReels = (data) => {
   if (!data) return [];
@@ -5348,9 +5365,10 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                 ) : (
                   <div className={styles.previewCardGrid}>
                     {formData.reels.map((reel, idx) => {
-                      const cover = reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/')
+                      const rawCover = reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/')
                         ? reel.coverPhoto
                         : (reel.url && reel.url.includes('instagram.com') ? `${API_BASE}/reel-cover?url=${encodeURIComponent(reel.url)}` : (reel.coverPhoto || ''));
+                      const cover = normalizeReelCoverUrl(rawCover, reel.url);
                       const isVideo = reel.url && (reel.url.includes('cloudinary.com') || reel.url.match(/\.(mp4|webm|mov)(\?.*)?$/i));
                       return (
                         <div
@@ -5583,7 +5601,7 @@ export default function AdminHospitalEditPage({ hospitalId, onNavigate, isHospit
                           {reel.coverPhoto ? (
                             <div className={styles.coverPreviewWrap}>
                               <img
-                                src={reel.coverPhoto && !reel.coverPhoto.includes('instagram.com/p/') ? reel.coverPhoto : ''}
+                                src={normalizeReelCoverUrl(reel.coverPhoto, reel.url)}
                                 alt={`Reel #${idx + 1} Cover`}
                                 className={styles.coverPreviewThumb}
                                 onError={(e) => { e.target.style.display = 'none'; }}

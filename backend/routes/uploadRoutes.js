@@ -521,7 +521,9 @@ router.post('/video', protect, (req, res, next) => {
       const autoPlayUrl = rawUrl.includes('/video/upload/') && !rawUrl.includes('/video/upload/q_auto')
         ? rawUrl.replace('/video/upload/', '/video/upload/q_auto,f_auto/')
         : rawUrl;
-      const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
+      const coverPhoto = autoPlayUrl.includes('/video/upload/')
+        ? autoPlayUrl.replace(/\/video\/upload\/[^/]*\//, '/video/upload/so_0/').replace(/\.[^/.]+$/, '.jpg')
+        : autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
       if (uploadResult.public_id) {
         PendingMediaDeletion.deleteMany({ publicId: uploadResult.public_id }).catch(() => {});
@@ -774,23 +776,20 @@ router.post('/instagram-reel', protect, requireAdmin, async (req, res) => {
     const cleanUrl = String(url).trim().split('?')[0];
 
     // High-speed multi-threaded download: -N 4 with single-stream MP4 avoiding ffmpeg remux latency
-    const ytdlFlags = `--no-warnings --no-check-certificates --no-playlist --socket-timeout 10 -N 4 -f "b[ext=mp4]/b" --prefer-free-formats -o "${tempFilePath}" "${cleanUrl}"`;
+    const ytdlFlags = `--no-warnings --no-check-certificates --no-playlist --socket-timeout 8 -N 4 -f "b[ext=mp4]/b" --prefer-free-formats -o "${tempFilePath}" "${cleanUrl}"`;
     const isWindows = process.platform === 'win32';
-    const commands = [
-      `yt-dlp ${ytdlFlags}`,
-      `python3 -m yt_dlp ${ytdlFlags}`,
-      `python -m yt_dlp ${ytdlFlags}`
-    ];
+    const commands = [`yt-dlp ${ytdlFlags}`];
     if (isWindows) {
       commands.push(`py -m yt_dlp ${ytdlFlags}`);
     }
+    commands.push(`python3 -m yt_dlp ${ytdlFlags}`, `python -m yt_dlp ${ytdlFlags}`);
 
     let downloaded = false;
     let lastErr = null;
     let meaningfulErr = null;
     for (const cmd of commands) {
       try {
-        await execPromise(cmd, { timeout: 25000 });
+        await execPromise(cmd, { timeout: 15000 });
         if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
           downloaded = true;
           break;
@@ -800,6 +799,8 @@ router.post('/instagram-reel', protect, requireAdmin, async (req, res) => {
         const errMsg = e.message || String(e);
         if (errMsg.includes('Instagram') || errMsg.includes('empty media') || errMsg.includes('login') || errMsg.includes('cookies')) {
           meaningfulErr = e;
+          // If Instagram blocked media for unauthenticated session, fallback immediately instead of stalling for a minute
+          break;
         }
       }
     }
@@ -817,18 +818,38 @@ router.post('/instagram-reel', protect, requireAdmin, async (req, res) => {
 
     try {
       const cld = getCloudinary();
-      const uploadResult = await cld.uploader.upload(tempFilePath, {
+      const stats = fs.statSync(tempFilePath);
+      const isUnder25MB = stats.size < 25 * 1024 * 1024;
+      const uploadOptions = {
         resource_type: 'video',
         folder,
         quality: 'auto',
         eager_async: true
-      });
+      };
+
+      let uploadResult;
+      if (isUnder25MB) {
+        uploadResult = await cld.uploader.upload(tempFilePath, uploadOptions);
+      } else {
+        uploadResult = await new Promise((resolve, reject) => {
+          cld.uploader.upload_large(
+            tempFilePath,
+            { ...uploadOptions, chunk_size: 6000000 },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+        });
+      }
 
       const rawUrl = uploadResult.secure_url || uploadResult.url;
       const autoPlayUrl = rawUrl.includes('/video/upload/') && !rawUrl.includes('/video/upload/q_auto')
         ? rawUrl.replace('/video/upload/', '/video/upload/q_auto,f_auto/')
         : rawUrl;
-      const coverPhoto = autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
+      const coverPhoto = autoPlayUrl.includes('/video/upload/')
+        ? autoPlayUrl.replace(/\/video\/upload\/[^/]*\//, '/video/upload/so_0/').replace(/\.[^/.]+$/, '.jpg')
+        : autoPlayUrl.replace(/\.[^/.]+$/, '.jpg');
 
       if (uploadResult.public_id) {
         PendingMediaDeletion.deleteMany({ publicId: uploadResult.public_id }).catch(() => {});
