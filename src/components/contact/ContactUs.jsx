@@ -50,6 +50,9 @@ export default function ContactUs({ onNavigate }) {
   const helphoneNumber = helplineNumber;
   const helplineDesc = contactInfo?.helplineDesc || 'Direct 24/7 hotline for critical triage, live ICU & inpatient bed reservations across accredited partner hospitals.';
 
+  const primaryEmail = contactInfo?.emails?.find(e => e.isPrimary)?.email || contactInfo?.emails?.[0]?.email || contactInfo?.email || 'contactus@thesehatbuddy.com';
+  const emailLabel = contactInfo?.emails?.find(e => e.isPrimary)?.label || contactInfo?.emails?.[0]?.label || 'Patient Support & Inquiries';
+
   const liveImage = contactInfo?.image !== undefined ? contactInfo.image : DEFAULT_IMAGE;
   const photoBadge = contactInfo?.photoBadge || '40+ Network Hospitals • Bengaluru Care Hub';
 
@@ -67,6 +70,7 @@ export default function ContactUs({ onNavigate }) {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedEmail, setCopiedEmail] = useState(false);
   const [activePolicyType, setActivePolicyType] = useState(null);
 
   const handleCopy = () => {
@@ -74,6 +78,14 @@ export default function ContactUs({ onNavigate }) {
       navigator.clipboard.writeText(helphoneNumber);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleCopyEmail = () => {
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(primaryEmail);
+      setCopiedEmail(true);
+      setTimeout(() => setCopiedEmail(false), 2000);
     }
   };
 
@@ -100,7 +112,7 @@ export default function ContactUs({ onNavigate }) {
       if (api.submitInquiry) {
         await api.submitInquiry(formData);
       }
-      setSuccessMsg(`Thank you, ${formData.name}! Your inquiry has been received. Our care desk will get in touch shortly.`);
+      setSuccessMsg(`Thank you, ${formData.name}! Your inquiry has been sent to our care desk at contactus@thesehatbuddy.com. An acknowledgment has been dispatched to your email, and our care desk will contact you promptly.`);
       setFormData({
         name: '',
         email: '',
@@ -171,6 +183,42 @@ export default function ContactUs({ onNavigate }) {
                 >
                   {copied ? <Check size={13} color="#059669" /> : <Copy size={13} />}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Support & Inquiries Email Card */}
+            <div className={styles.helplineCard} style={{ marginTop: '14px' }}>
+              <div className={styles.helplineHeader}>
+                <div className={styles.helplineIconWrap} style={{ background: '#ecfdf5', color: '#059669' }}>
+                  <Mail size={18} />
+                </div>
+                <span className={styles.helplineTitle}>{emailLabel}</span>
+                <span className={styles.helplineTag} style={{ background: '#dcfce7', color: '#15803d' }}>Official</span>
+              </div>
+
+              <p className={styles.helplineDesc}>
+                Official desk for patient inquiries, consultations, partner tie-ups, and corporate healthcare solutions.
+              </p>
+
+              <div className={styles.helplineActionRow}>
+                <a href={`mailto:${primaryEmail}`} className={styles.phoneLink}>
+                  <Mail size={18} className={styles.phoneLinkIcon} />
+                  <span>{primaryEmail}</span>
+                </a>
+                <span className={styles.vDivider} />
+                <a href={`mailto:${primaryEmail}`} className={styles.btnCallNow} style={{ background: '#059669' }}>
+                  <Mail size={13} />
+                  <span>Email Now</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyEmail}
+                  className={styles.btnCopy}
+                  title="Copy Email Address"
+                >
+                  {copiedEmail ? <Check size={13} color="#059669" /> : <Copy size={13} />}
+                  <span>{copiedEmail ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
             </div>

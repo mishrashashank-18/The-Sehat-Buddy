@@ -43,8 +43,9 @@ transporter.verify((err) => {
  */
 export const sendEmail = async (options) => {
     const mailOptions = {
-        from: `Sehat Buddy <${process.env.EMAIL_FROM}>`,
+        from: `The Sehat Buddy <${process.env.EMAIL_FROM}>`,
         to: options.email,
+        replyTo: options.replyTo || options.reply_to || undefined,
         subject: options.subject,
         text: options.message,
         html: options.html,

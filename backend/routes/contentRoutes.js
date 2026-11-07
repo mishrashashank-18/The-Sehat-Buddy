@@ -124,14 +124,18 @@ router.post('/inquiry', async (req, res) => {
     // 2. Broadcast change for real-time dashboards
     try {
       broadcastDbChange('inquiries', 'create', savedInquiry._id, savedInquiry);
+      broadcastDbChange('contents', 'update', 'inquiry', { type: 'inquiry', data: savedInquiry });
     } catch {}
 
     // 3. Send email alerts if email provider is configured
-    if (process.env.EMAIL_FROM) {
-      // Alert administrator
+    if (process.env.EMAIL_FROM || process.env.BREVO_API_KEY) {
+      const contactRecipient = (process.env.CONTACT_EMAIL || 'contactus@thesehatbuddy.com').trim();
+
+      // Alert administrator & care desk at contactus@thesehatbuddy.com
       sendEmail({
-        email: process.env.EMAIL_FROM,
-        subject: `[Sehat Buddy Inquiry] ${savedInquiry.category} - ${savedInquiry.name}`,
+        email: contactRecipient,
+        replyTo: savedInquiry.email,
+        subject: `[The Sehat Buddy Inquiry] ${savedInquiry.priority} - ${savedInquiry.category} - ${savedInquiry.name}`,
         message: `Name: ${savedInquiry.name}\nEmail: ${savedInquiry.email}\nPhone: ${savedInquiry.phone || 'N/A'}\nPriority: ${savedInquiry.priority}\nCategory: ${savedInquiry.category}\n\nMessage:\n${savedInquiry.message}`,
         html: `
           <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 600px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
@@ -147,9 +151,36 @@ router.post('/inquiry', async (req, res) => {
             <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
             <p><strong>Message:</strong></p>
             <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${savedInquiry.message}</div>
+            <p style="margin-top: 20px; font-size: 12px; color: #64748b;">💡 You can directly click <strong>Reply</strong> to respond back to this patient at ${savedInquiry.email}.</p>
           </div>
         `
-      }).catch(emailErr => console.warn('Inquiry admin email notice failed:', emailErr.message));
+      }).catch(emailErr => console.warn('Inquiry contact desk email notice failed:', emailErr.message));
+
+      // Forward a backup copy to process.env.EMAIL_FROM if different
+      if (process.env.EMAIL_FROM && process.env.EMAIL_FROM.toLowerCase().trim() !== contactRecipient.toLowerCase()) {
+        sendEmail({
+          email: process.env.EMAIL_FROM,
+          replyTo: savedInquiry.email,
+          subject: `[The Sehat Buddy Inquiry Backup] ${savedInquiry.priority} - ${savedInquiry.category} - ${savedInquiry.name}`,
+          message: `Name: ${savedInquiry.name}\nEmail: ${savedInquiry.email}\nPhone: ${savedInquiry.phone || 'N/A'}\nPriority: ${savedInquiry.priority}\nCategory: ${savedInquiry.category}\n\nMessage:\n${savedInquiry.message}`,
+          html: `
+            <div style="font-family: Arial, sans-serif; padding: 24px; color: #1e293b; max-width: 600px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+              <div style="border-bottom: 2px solid #2563eb; padding-bottom: 12px; margin-bottom: 16px;">
+                <h2 style="color: #2563eb; margin: 0; font-size: 20px;">The Sehat Buddy • New Patient Inquiry (Backup Copy)</h2>
+              </div>
+              <p>Sent to primary desk: <strong>${contactRecipient}</strong></p>
+              <p><strong>Name:</strong> ${savedInquiry.name}</p>
+              <p><strong>Email:</strong> <a href="mailto:${savedInquiry.email}">${savedInquiry.email}</a></p>
+              <p><strong>Phone:</strong> ${savedInquiry.phone || 'N/A'}</p>
+              <p><strong>Category:</strong> ${savedInquiry.category}</p>
+              <p><strong>Priority:</strong> ${savedInquiry.priority}</p>
+              <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+              <p><strong>Message:</strong></p>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 14px; border-radius: 8px; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${savedInquiry.message}</div>
+            </div>
+          `
+        }).catch(() => {});
+      }
 
       // Patient confirmation receipt email
       sendEmail({

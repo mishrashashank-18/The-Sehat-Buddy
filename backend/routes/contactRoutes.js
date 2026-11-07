@@ -31,7 +31,7 @@ export const DEFAULT_CONTACT_DATA = {
     { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 4321', isPrimary: true }
   ],
   emails: [
-    { id: 'email-1', label: 'Patient Support', email: 'care@thesehatbuddy.com', isPrimary: true }
+    { id: 'email-1', label: 'Patient Support & Inquiries', email: 'contactus@thesehatbuddy.com', isPrimary: true }
   ],
   workingHours: 'Mon – Sat: 8:00 AM – 8:00 PM'
 };

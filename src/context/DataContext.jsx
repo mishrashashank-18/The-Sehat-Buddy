@@ -40,6 +40,9 @@ export const DEFAULT_CONTACT_INFO = {
   photoBadge: '40+ Network Hospitals • Bengaluru Care Hub',
   phones: [
     { id: 'phone-1', label: 'Helpline & Emergency', number: '+91 98765 4321', isPrimary: true }
+  ],
+  emails: [
+    { id: 'email-1', label: 'Support & Inquiries', email: 'contactus@thesehatbuddy.com', isPrimary: true }
   ]
 };
 
