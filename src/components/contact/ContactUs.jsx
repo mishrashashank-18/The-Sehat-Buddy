@@ -102,6 +102,11 @@ export default function ContactUs({ onNavigate }) {
       setErrorMsg('Please enter a valid email address.');
       return;
     }
+    const cleanPhoneDigits = (formData.phone || '').replace(/\D/g, '').slice(0, 10);
+    if (formData.phone && cleanPhoneDigits.length !== 10) {
+      setErrorMsg('Please enter a valid 10-digit mobile number.');
+      return;
+    }
     if (!formData.message.trim()) {
       setErrorMsg('Please write your message or query.');
       return;
@@ -315,9 +320,14 @@ export default function ContactUs({ onNavigate }) {
                     <input
                       type="tel"
                       className={styles.inputField}
-                      placeholder="e.g. +91 98765 43210"
+                      placeholder="e.g. 98765 43210 (10 digits)"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      maxLength={10}
+                      inputMode="numeric"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setFormData({ ...formData, phone: val });
+                      }}
                     />
                   </div>
                 </div>

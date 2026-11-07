@@ -105,7 +105,7 @@ router.post('/inquiry', async (req, res) => {
 
     const cleanName = String(name).trim();
     const cleanEmail = String(email).trim().toLowerCase();
-    const cleanPhone = String(phone || '').trim();
+    const cleanPhone = String(phone || '').replace(/\D/g, '').slice(0, 10);
     const cleanCategory = String(category || 'General Inquiries & Feedback').trim();
     const cleanPriority = String(priority || 'Normal').trim();
     const cleanMessage = String(message).trim();
