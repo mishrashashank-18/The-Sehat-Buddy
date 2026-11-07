@@ -168,7 +168,7 @@ export const protect = async (req, res, next) => {
       req.user = {
         id: adminDoc ? adminDoc._id.toString() : 'admin_dev_local',
         role: 'admin',
-        email: adminDoc ? adminDoc.email : 'admin@sehatbuddy.com',
+        email: adminDoc ? adminDoc.email : 'admin@thesehatbuddy.com',
         name: adminDoc ? adminDoc.name : 'Super Admin',
         doc: adminDoc
       };
@@ -221,7 +221,7 @@ export const optionalProtect = async (req, res, next) => {
       req.user = {
         id: 'admin_dev_local',
         role: 'admin',
-        email: 'admin@sehatbuddy.com',
+        email: 'admin@thesehatbuddy.com',
         name: 'Super Admin'
       };
       return next();

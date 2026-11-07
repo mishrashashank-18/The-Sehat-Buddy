@@ -1800,7 +1800,7 @@ const LoginPage = ({ role, setView }) => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        placeholder="admin@sehatbuddy.com"
+                        placeholder="admin@thesehatbuddy.com"
                         autoFocus
                       />
                     </div>
@@ -1883,7 +1883,7 @@ const LoginPage = ({ role, setView }) => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        placeholder="admin@sehatbuddy.com"
+                        placeholder="admin@thesehatbuddy.com"
                         autoFocus
                       />
                     </div>
