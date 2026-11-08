@@ -1178,10 +1178,10 @@ const DoctorProfile = ({ doctorId, onNavigate }) => {
   // Derived booking status for currently selected date
   const todayDateStr = React.useMemo(() => getLocalDateString(new Date()), []);
   const isDoctorOnLeaveToday = React.useMemo(() => {
-    if (doctor?.availabilityStatus === 'On Leave' || doctor?.available === false) return true;
+    if (doctor?.availabilityStatus === 'On Leave') return true;
     if (doctor?.dateWiseSlots?.[todayDateStr] === 'off' || doctor?.dateWiseSlots?.[todayDateStr]?.isOff === true) return true;
     return false;
-  }, [doctor?.availabilityStatus, doctor?.available, doctor?.dateWiseSlots, todayDateStr]);
+  }, [doctor?.availabilityStatus, doctor?.dateWiseSlots, todayDateStr]);
 
   const activeDateObj = dateOptions[selectedDateIdx] || dateOptions[0];
   const isDayOff = Boolean(activeDateObj && activeDateObj.isDayOff);

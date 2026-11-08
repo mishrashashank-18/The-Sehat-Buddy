@@ -70,7 +70,7 @@ const DoctorCard = ({ doctor, onNavigate, showBookNow }) => {
       <div className={styles.info}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
           <h3 className={styles.name}>{doctor.name}</h3>
-          {(doctor.availabilityStatus === 'On Leave' || doctor.available === false) && (
+          {doctor.availabilityStatus === 'On Leave' && (
             <span style={{ fontSize: '0.68rem', fontWeight: 700, background: '#fee2e2', color: '#b91c1c', border: '1px solid #fca5a5', padding: '1px 7px', borderRadius: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}>
               On Leave
             </span>

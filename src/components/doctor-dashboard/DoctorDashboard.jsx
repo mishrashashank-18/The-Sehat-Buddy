@@ -663,7 +663,7 @@ const DoctorDashboard = ({ onNavigate }) => {
 
   // Status: 'Available' | 'Busy' | 'On Leave'
   const [availabilityStatus, setAvailabilityStatus] = useState(() => {
-    return activeDoctor.availabilityStatus || (activeDoctor.available === false ? 'On Leave' : 'Available');
+    return activeDoctor.availabilityStatus || 'Available';
   });
 
   const lastStatusMutationRef = React.useRef(0);
@@ -676,12 +676,8 @@ const DoctorDashboard = ({ onNavigate }) => {
     }
     if (activeDoctor?.availabilityStatus) {
       setAvailabilityStatus(activeDoctor.availabilityStatus);
-    } else if (activeDoctor?.available === false) {
-      setAvailabilityStatus('On Leave');
-    } else if (activeDoctor?.available === true) {
-      setAvailabilityStatus('Available');
     }
-  }, [activeDoctor?.availabilityStatus, activeDoctor?.available, activeDoctor?.id, activeDoctor?._id]);
+  }, [activeDoctor?.availabilityStatus, activeDoctor?.id, activeDoctor?._id]);
 
   const handleSetAvailabilityStatus = (newStatus) => {
     // 1. Instant optimistic update - 0ms UI response
@@ -703,7 +699,6 @@ const DoctorDashboard = ({ onNavigate }) => {
         try {
           await updateDoctor(docId, {
             availabilityStatus: newStatus,
-            available: true,
             statusUpdatedAt: now
           });
         } catch (err) {
@@ -972,8 +967,7 @@ const DoctorDashboard = ({ onNavigate }) => {
       const docId = activeDoctor?._id || activeDoctor?.id;
       if (docId) {
         updateDoctor(docId, {
-          availabilityStatus: 'On Leave',
-          available: false
+          availabilityStatus: 'On Leave'
         }).catch(() => {});
       }
     }

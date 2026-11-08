@@ -1866,19 +1866,23 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                     width: '7px',
                                     height: '7px',
                                     borderRadius: '50%',
-                                    backgroundColor: doc.available === false || doc.availabilityStatus === 'On Leave'
+                                    backgroundColor: doc.available === false
+                                      ? '#64748b'
+                                      : doc.availabilityStatus === 'On Leave'
                                       ? '#ef4444'
                                       : doc.availabilityStatus === 'Busy'
                                       ? '#f59e0b'
                                       : '#10b981',
-                                    boxShadow: `0 0 6px ${doc.available === false || doc.availabilityStatus === 'On Leave' ? '#ef4444' : doc.availabilityStatus === 'Busy' ? '#f59e0b' : '#10b981'}`,
+                                    boxShadow: `0 0 6px ${doc.available === false ? '#64748b' : doc.availabilityStatus === 'On Leave' ? '#ef4444' : doc.availabilityStatus === 'Busy' ? '#f59e0b' : '#10b981'}`,
                                     flexShrink: 0
                                   }}
                                 />
                                 <span style={{
                                   fontSize: '0.73rem',
                                   fontWeight: 700,
-                                  color: doc.available === false || doc.availabilityStatus === 'On Leave'
+                                  color: doc.available === false
+                                    ? '#475569'
+                                    : doc.availabilityStatus === 'On Leave'
                                     ? '#dc2626'
                                     : doc.availabilityStatus === 'Busy'
                                     ? '#b45309'
@@ -1886,7 +1890,7 @@ const AdminPanel = ({ onExit, onNavigate }) => {
                                   letterSpacing: '0.02em',
                                   textTransform: 'uppercase'
                                 }}>
-                                  {doc.available === false || doc.availabilityStatus === 'On Leave' ? 'On Leave' : (doc.availabilityStatus === 'Busy' ? 'In Surgery / Busy' : 'Available')}
+                                  {doc.available === false ? 'De-listed' : (doc.availabilityStatus === 'On Leave' ? 'On Leave' : (doc.availabilityStatus === 'Busy' ? 'In Surgery / Busy' : 'Available'))}
                                 </span>
                               </div>
                               <span className={styles.availabilityText} style={{ fontSize: '0.79rem', color: '#475569' }} title={formatDoctorAvailability(doc)}>

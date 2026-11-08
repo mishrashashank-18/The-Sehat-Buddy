@@ -908,7 +908,7 @@ export const updateDoctorProfile = async (req, res) => {
     const allowedFields = [
       'name', 'specialization', 'specialty', 'experience', 'jobTitle', 'about', 'fees', 'price',
       'address', 'hospital', 'qualifications', 'degree', 'contact_number', 'phone', 'instagram',
-      'facebook', 'linkedin', 'twitter', 'available', 'availabilityStatus', 'statusUpdatedAt',
+      'facebook', 'linkedin', 'twitter', 'availabilityStatus', 'statusUpdatedAt',
       'licenseNumber', 'awards', 'certifications', 'memberships',
       'careerExperience', 'tags', 'reels', 'youtube_videos', 'rating', 'reviews', 'faqs',
       'availableDays', 'scheduleDays', 'availableSlots', 'slotDuration', 'slots_booked', 'dayWiseSlots', 'dateWiseSlots', 'image',

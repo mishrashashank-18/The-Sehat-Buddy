@@ -93,7 +93,7 @@ const resolveDoctorSlotsForDate = (doctor, dateObj) => {
   // Check overall doctor status
   const today = new Date();
   const isToday = dateObj.toDateString() === today.toDateString();
-  if (isToday && (doctor.availabilityStatus === 'On Leave' || doctor.available === false)) {
+  if (isToday && doctor.availabilityStatus === 'On Leave') {
     return {
       isAvailable: false,
       isOff: true,
